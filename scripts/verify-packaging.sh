@@ -44,6 +44,7 @@ require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_WEB_LISTEN=0.0.0.0:8081'
 [ -x "$ROOT/scripts/storage-loopback-smoke.sh" ] || { echo "storage loopback smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
+require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'
 if command -v systemd-analyze >/dev/null 2>&1; then
 	systemd-analyze verify "$SYSTEMD"/*.service
 fi

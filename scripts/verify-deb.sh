@@ -34,7 +34,7 @@ require_path() {
 	}
 }
 
-for binary in lumonasd lumonas-web lumonas-privd; do
+for binary in lumonasd lumonas-web lumonas-privd lumonas-recover; do
 	require_path "./usr/lib/lumonas/$binary"
 	dpkg-deb -c "$PACKAGE" | awk -v path="./usr/lib/lumonas/$binary" '$6 == path { print $1 }' | grep -E '^-rwx' >/dev/null 2>&1 || {
 		echo "$binary is not executable in the package" >&2

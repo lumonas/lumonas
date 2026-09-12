@@ -19,6 +19,7 @@ jobs:
       - run: test -z "$(gofmt -l $(find cmd internal -name '*.go'))"
       - run: go vet ./...
       - run: go test ./...
+      - run: go build ./cmd/lumonas-recover
       - run: python3 scripts/check-openapi.py
 
   frontend:

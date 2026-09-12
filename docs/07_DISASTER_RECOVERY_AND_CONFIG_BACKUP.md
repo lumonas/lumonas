@@ -15,6 +15,20 @@ system SSD fails
 → verify
 ```
 
+The offline package includes `lumonas-recover`. It is plan-only by default:
+
+```sh
+lumonas-recover --bundle /media/recovery/latest.mrb --key-file /media/recovery/key
+```
+
+Applying state requires an explicit `--apply` and an absolute mounted target
+root. Writes are atomic and path/symlink checked:
+
+```sh
+lumonas-recover --bundle /media/recovery/latest.mrb --key-file /media/recovery/key \
+  --root /mnt/new-system --apply
+```
+
 User data disks remain untouched throughout discovery and planning.
 
 ## Recovery layers
