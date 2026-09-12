@@ -178,6 +178,15 @@ Retention example:
 
 A backup is not “healthy” merely because the file exists.
 
+The release recovery smoke test performs the corresponding end-to-end check:
+it validates the bundle checksums and encrypted payload in the offline ISO,
+applies it only to a blank replacement system disk, and then inspects the
+powered-off filesystem. The fixture contains a real SQLite snapshot with an
+operator, file user, group membership, share, protocol access rule, and
+committed configuration generation. It also restores and checks the Compose
+stack, stable disk identities, mergerfs and SnapRAID configuration, ACL
+metadata, and encrypted secret payload.
+
 Verify:
 
 - checksum;

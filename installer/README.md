@@ -9,4 +9,6 @@ make package
 bash installer/build-iso.sh 0.1.0-dev
 ```
 
-The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. CI publishes the ISO with checksums, SBOM, and release signatures. Debian base package pinning, repository signing, and the recovery boot menu remain release-hardening work.
+The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. CI publishes the ISO with checksums, SBOM, and release signatures. With `LUMONAS_ENABLE_RECOVERY_SMOKE=true`, the image also boots an offline recovery fixture against a blank replacement disk and verifies the restored SQLite state, users, shares, ACLs, Compose stack, mergerfs/SnapRAID configuration, encrypted secret payload, and recovery result before powering off.
+
+The recovery fixture is deliberately generated from the production SQLite migrations and store APIs, rather than a fake database header. Run `make recovery-fixture` to build it locally, or let `make qemu-recovery-smoke` build it automatically.

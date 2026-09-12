@@ -66,6 +66,8 @@ Tagged releases run a Debian 13 previous-to-current package upgrade smoke test a
 
 The ISO pipeline boots the generated offline image under QEMU with a blank replacement disk and checks the real health, readiness, and server endpoints before publishing the artifact. Release CI also performs a full offline system-disk recovery: it supplies a separate recovery medium, restores into the blank disk, powers the guest off, and verifies the recovered state directly from the image.
 
+The recovery gate uses a real migrated SQLite fixture containing users, groups, a share, protocol ACLs, and a committed configuration generation. It verifies those records alongside Docker Compose, mergerfs, SnapRAID, stable disk identities, encrypted secrets, and the recovery result after the replacement system disk is powered off.
+
 Release CI includes a security gate that checks tracked files for high-confidence credential formats and runs secret-redaction plus privileged-operation rejection tests.
 
 Release CI also runs pinned Go/frontend dependency checks and scans the catalog

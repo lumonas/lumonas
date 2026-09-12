@@ -127,6 +127,12 @@ Pass if:
 - network mapping;
 - all return correctly.
 
+The release-blocking Debian 13 QEMU recovery test exercises this path against a
+blank replacement disk. Its fixture is created through the production SQLite
+migrations and verifies restored users/groups, share protocol ACLs, committed
+configuration generation, Compose YAML, mergerfs/SnapRAID configuration, disk
+identity metadata, encrypted secrets, and the recovery result after shutdown.
+
 ## M. Incomplete Docker backup
 
 One app has no appdata protection.

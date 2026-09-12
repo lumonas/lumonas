@@ -91,4 +91,16 @@ grep -Fx 'recovery-applied' "$TARGET_MOUNT/recovery-success" >/dev/null
 grep -F 'fixture-nas' "$TARGET_MOUNT/var/lib/lumonas/recovery/restored/desired-state.json" >/dev/null
 grep -F 'example/media:latest' "$TARGET_MOUNT/srv/lumonas/docker/stacks/media/compose.yaml" >/dev/null
 grep -F 'fixture-encrypted-secret' "$TARGET_MOUNT/var/lib/lumonas/secrets/recovered-secrets.bin" >/dev/null
-echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, verified restore, API ready)"
+grep -F 'share-media' "$TARGET_MOUNT/var/lib/lumonas/shares.json" >/dev/null
+grep -F 'operator' "$TARGET_MOUNT/etc/lumonas/recovery/users.json" >/dev/null
+grep -F 'media' "$TARGET_MOUNT/etc/lumonas/recovery/users.json" >/dev/null
+grep -F '"generation":2' "$TARGET_MOUNT/etc/lumonas/recovery/config-generation.json" >/dev/null
+grep -F 'data d1 /srv/disks/serial_DATA1' "$TARGET_MOUNT/etc/lumonas/snapraid.conf" >/dev/null
+grep -F 'fuse.mergerfs' "$TARGET_MOUNT/etc/lumonas/recovery/mergerfs.conf" >/dev/null
+grep -F 'serial:PARITY' "$TARGET_MOUNT/etc/lumonas/recovery/disk-identities.json" >/dev/null
+grep -F '"level":"write"' "$TARGET_MOUNT/etc/lumonas/acl/share-media.json" >/dev/null
+grep -a -F 'operator' "$TARGET_MOUNT/var/lib/lumonas/lumonas.db" >/dev/null
+grep -a -F 'share-media' "$TARGET_MOUNT/var/lib/lumonas/lumonas.db" >/dev/null
+grep -F '"databaseRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/null
+grep -F '"secretsRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/null
+echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, users/shares/Compose/SnapRAID restored, API ready)"

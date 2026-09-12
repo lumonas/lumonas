@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all test test-go test-web check-openapi build build-go build-web package api-smoke storage-loopback iso-smoke qemu-recovery-smoke security-smoke dependency-smoke container-scan systemd-smoke upgrade-smoke qemu-image qemu-smoke verify-release
+.PHONY: all test test-go test-web check-openapi build build-go build-web package recovery-fixture api-smoke storage-loopback iso-smoke qemu-recovery-smoke security-smoke dependency-smoke container-scan systemd-smoke upgrade-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -34,6 +34,10 @@ package:
 	bash packaging/build-deb.sh $(VERSION)
 	bash scripts/verify-deb.sh lumonas_$(VERSION)_amd64.deb
 
+recovery-fixture:
+	mkdir -p build
+	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o build/lumonas-recovery-fixture ./cmd/lumonas-recovery-fixture
+
 api-smoke:
 	bash scripts/api-smoke.sh
 
@@ -43,8 +47,8 @@ storage-loopback:
 iso-smoke:
 	LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_ISO_ASSERT=true bash scripts/iso-smoke.sh
 
-qemu-recovery-smoke:
-	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_RECOVERY_ASSERT=true bash scripts/qemu-recovery-smoke.sh
+qemu-recovery-smoke: recovery-fixture
+	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_RECOVERY_FIXTURE="$(CURDIR)/build/lumonas-recovery-fixture" LUMONAS_RECOVERY_ASSERT=true bash scripts/qemu-recovery-smoke.sh
 
 security-smoke:
 	bash scripts/security-smoke.sh

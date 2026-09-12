@@ -51,6 +51,7 @@ require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_ENABLE_RECOVERY_SMOKE'
 [ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
 require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'
+require_line "$ROOT/Makefile" 'recovery-fixture:'
 require_line "$ROOT/Makefile" 'security-smoke:'
 require_line "$ROOT/Makefile" 'systemd-smoke:'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
@@ -59,6 +60,10 @@ require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'
 require_line "$ROOT/packaging/debian/control" 'avahi-daemon'
 require_line "$ROOT/packaging/debian/control" 'vsftpd'
 require_line "$ROOT/installer/build-iso.sh" 'vsftpd'
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'config-generation.json'
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'fuse.mergerfs'
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'databaseRestored'
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'secretsRestored'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'vsftpd'
 for dropin in smbd.service.d/lumonas.conf rsync.service.d/lumonas.conf vsftpd.service.d/lumonas.conf; do
 	[ -f "$ROOT/packaging/systemd/$dropin" ] || { echo "missing service drop-in: $dropin" >&2; exit 1; }
