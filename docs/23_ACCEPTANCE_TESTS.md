@@ -344,6 +344,11 @@ Pass if the upgrade stops `lumonas-web`, `lumonasd`, the privileged workers,
 and broker before unpacking, then starts the broker, workers, daemon, and web
 service in dependency order.
 
+The same upgrade must show that `lumonas-migrate` is packaged, runs as the
+`lumonas` service user before startup, creates or upgrades the configured
+SQLite database, and returns a failing package transaction when migrations
+cannot be applied.
+
 ## AJ. Systemd sandbox policy
 
 Run `LUMONAS_REQUIRE_SYSTEMD_SECURITY=true bash scripts/systemd-security-smoke.sh`

@@ -69,6 +69,20 @@ fi
 if [ ! -e /etc/docker/daemon.json ] && [ -f /etc/docker/daemon.json.lumonas ]; then
 	install -o root -g root -m 0644 /etc/docker/daemon.json.lumonas /etc/docker/daemon.json
 fi
+
+# Apply the SQLite schema before any service starts. Read only this one
+# setting instead of sourcing the administrator-owned env file as shell code.
+database_path=$(awk -F= '$1 == "LUMONAS_DB_PATH" { value=substr($0, index($0, "=") + 1) } END { if (value != "") print value }' /etc/lumonas/lumonasd.env)
+database_path=${database_path:-/var/lib/lumonas/lumonas.db}
+case "$database_path" in
+	/*) ;;
+	*) echo "LUMONAS_DB_PATH must be an absolute path" >&2; exit 1 ;;
+esac
+case "$database_path" in
+	*[!A-Za-z0-9_./-]*) echo "LUMONAS_DB_PATH contains unsupported characters" >&2; exit 1 ;;
+esac
+runuser -u lumonas -- /usr/lib/lumonas/lumonas-migrate --db "$database_path"
+
 # prerm stops the dependency graph before an upgrade so the newly unpacked
 # binaries are used immediately. Start in dependency order after reloading the
 # units; the || true behavior keeps dpkg usable in chroots without PID 1.

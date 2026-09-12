@@ -18,6 +18,7 @@ GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${LUMONAS_GOARCH:-amd64}" CGO_ENABLED="${L
 GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${LUMONAS_GOARCH:-amd64}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-web" "$ROOT/cmd/lumonas-web"
 GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${LUMONAS_GOARCH:-amd64}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-privd" "$ROOT/cmd/lumonas-privd"
 GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${LUMONAS_GOARCH:-amd64}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-recover" "$ROOT/cmd/lumonas-recover"
+GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${LUMONAS_GOARCH:-amd64}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-migrate" "$ROOT/cmd/lumonas-migrate"
 (cd "$ROOT/web" && pnpm build)
 bash "$ROOT/scripts/frontend-runtime-smoke.sh"
 cp -R "$ROOT/web/dist/." "$OUT/usr/share/lumonas/web/"

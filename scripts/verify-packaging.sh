@@ -119,6 +119,9 @@ require_line "$ROOT/Makefile" 'upgrade-smoke:'
 [ -x "$ROOT/scripts/permission-smoke.sh" ] || { echo "permission smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/log-retention-smoke.sh" ] || { echo "log retention smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'
+require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-migrate'
+require_line "$ROOT/packaging/debian/postinst" 'lumonas-migrate'
+require_line "$ROOT/packaging/debian/postinst" 'runuser -u lumonas'
 require_line "$ROOT/packaging/debian/control" 'avahi-daemon'
 require_line "$ROOT/packaging/debian/control" 'vsftpd'
 require_line "$ROOT/packaging/debian/control" 'xfsprogs'

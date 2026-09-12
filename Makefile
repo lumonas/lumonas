@@ -35,6 +35,7 @@ build-go:
 	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/lumonas-web ./cmd/lumonas-web
 	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/lumonas-privd ./cmd/lumonas-privd
 	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/lumonas-recover ./cmd/lumonas-recover
+	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/lumonas-migrate ./cmd/lumonas-migrate
 
 build-web:
 	cd web && pnpm build

@@ -20,6 +20,7 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go build ./cmd/lumonas-recover
+      - run: go build ./cmd/lumonas-migrate
       - run: python3 scripts/check-openapi.py
       - run: python3 scripts/check-api-contract.py
 

@@ -44,6 +44,8 @@ test -f /etc/docker/daemon.json
 test "$(stat -c "%U:%G:%a" /etc/lumonas/runtime.env)" = "root:lumonas:640"
 test -x /usr/lib/lumonas/lumonasd
 test -x /usr/lib/lumonas/lumonas-recover
+test -x /usr/lib/lumonas/lumonas-migrate
+test -f /var/lib/lumonas/lumonas.db
 test -f /lib/systemd/system/lumonas-runtime.service
 test -f /lib/systemd/system/lumonasd.service
 test -f /lib/systemd/system/lumonas-web.service

@@ -254,6 +254,12 @@ The Debian maintainer scripts stop services in dependent-to-provider order
 dependency order afterward. A packaging smoke test checks both the script
 ordering and that `prerm` is included in the generated `.deb`.
 
+Before that dependency graph is started, `postinst` runs the packaged
+`lumonas-migrate` binary as the unprivileged `lumonas` user. It reads only the
+validated `LUMONAS_DB_PATH` setting, applies the production SQLite migration
+chain, and fails the package transaction if migration cannot complete. This
+keeps schema upgrades explicit and makes a broken migration release-blocking.
+
 ## Installer matrix
 
 - UEFI;
