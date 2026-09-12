@@ -50,6 +50,8 @@ import {
   connections,
   createDiagnosticJob,
   firewall,
+  interfaces,
+  wifiNetworks,
   type NetworkConnection,
 } from '@/mocks/network'
 import { alertRules, notificationChannels, scheduledJobs, services } from '@/mocks/system'
@@ -720,21 +722,25 @@ export const handlers = [
 
   http.get(`${BASE}/network/connections`, () => HttpResponse.json(connections)),
 
+  http.get(`${BASE}/network/interfaces`, () => HttpResponse.json(interfaces)),
+
+  http.get(`${BASE}/network/wifi/scan`, () =>
+    HttpResponse.json({ available: true, networks: wifiNetworks }),
+  ),
+
   http.post(`${BASE}/network/connections`, async ({ request }) => {
     const body = (await request.json()) as Partial<NetworkConnection>
-    if (!body.id || !body.name || !body.interface) {
+    if (!body.name || (body.type !== 'wifi' && !body.interface)) {
       return new HttpResponse(null, { status: 422 })
     }
-    if (connections.some((c) => c.id === body.id)) {
-      return new HttpResponse(null, { status: 409 })
-    }
     const connection: NetworkConnection = {
-      id: body.id,
+      id: body.id ?? `connection-${++runtime.jobCounter}`,
       name: body.name,
-      interface: body.interface,
+      interface: body.interface ?? '',
       type: body.type ?? 'ethernet',
       enabled: body.enabled ?? true,
-      status: 'saved (not activated)',
+      status: 'pending-checkpoint',
+      ...(body.type === 'wifi' ? { ssid: body.ssid, wifiOpen: body.wifiOpen } : {}),
       ipv4: body.ipv4 ?? { method: 'auto' },
       ipv6: body.ipv6 ?? { method: 'disabled' },
     }

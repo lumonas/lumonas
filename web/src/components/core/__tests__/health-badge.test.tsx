@@ -22,6 +22,11 @@ describe('HealthBadge', () => {
     render(<HealthBadge state="healthy" variant="text" />)
     expect(screen.getByText('Healthy')).toBeInTheDocument()
   })
+
+  it('renders a fallback instead of crashing for unmapped states', () => {
+    render(<HealthBadge state={'bogus' as never} />)
+    expect(screen.getByText('Unknown')).toBeInTheDocument()
+  })
 })
 
 describe('HealthDot', () => {

@@ -1,9 +1,9 @@
-import { HEALTH } from '@/components/core/health'
+import { HEALTH, HEALTH_FALLBACK } from '@/components/core/health'
 import { cn } from '@/lib/utils'
 import type { HealthState } from '@/api/types'
 
 export function HealthDot({ state, className }: { state: HealthState; className?: string }) {
-  const { color } = HEALTH[state]
+  const { color } = HEALTH[state] ?? HEALTH_FALLBACK
   return (
     <span
       aria-hidden
@@ -31,7 +31,7 @@ export function HealthBadge({
   withIcon?: boolean
   className?: string
 }) {
-  const { label, color, Icon } = HEALTH[state]
+  const { label, color, Icon } = HEALTH[state] ?? HEALTH_FALLBACK
   if (variant === 'text') {
     return (
       <span className={cn('inline-flex items-center gap-2 text-sm', className)}>

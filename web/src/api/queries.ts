@@ -43,6 +43,9 @@ import type {
   WireGuardStatus,
   TailscaleStatus,
   SSHKey,
+  NetworkConnection,
+  NetworkInterface,
+  WiFiScanResult,
 } from '@/api/types'
 
 export const queryKeys = {
@@ -806,5 +809,76 @@ export function useRemoveSSHKey() {
       void qc.invalidateQueries({ queryKey: ['admin', 'ssh', 'keys'] })
       toast.success('SSH key removed')
     },
+  })
+}
+
+export function useNetworkInterfaces() {
+  return useQuery({
+    queryKey: queryKeys.networkInterfaces,
+    queryFn: () => apiGet<NetworkInterface[]>('/network/interfaces'),
+    throwOnError: false,
+  })
+}
+
+export function useNetworkConnections() {
+  return useQuery({
+    queryKey: queryKeys.networkConnections,
+    queryFn: () => apiGet<NetworkConnection[]>('/network/connections'),
+    throwOnError: false,
+  })
+}
+
+export function useWiFiScan(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.wifiScan,
+    queryFn: () => apiGet<WiFiScanResult>('/network/wifi/scan'),
+    enabled,
+    staleTime: 10_000,
+    throwOnError: false,
+  })
+}
+
+function invalidateNetwork(qc: ReturnType<typeof useQueryClient>) {
+  void qc.invalidateQueries({ queryKey: queryKeys.networkConnections })
+  void qc.invalidateQueries({ queryKey: queryKeys.activity })
+  void qc.invalidateQueries({ queryKey: queryKeys.jobs })
+}
+
+export type ConnectionPayload = Omit<NetworkConnection, 'id' | 'generation' | 'status'> & {
+  reauthenticated: boolean
+}
+
+export function useCreateNetworkConnection() {
+  const qc = useQueryClient()
+  return useMutation<NetworkConnection, Error, ConnectionPayload>({
+    mutationFn: (input) => apiPost<NetworkConnection>('/network/connections', input),
+    onSuccess: (_data, input) => {
+      toast.success(`Connection “${input.name}” saved — apply it to activate`)
+      invalidateNetwork(qc)
+    },
+  })
+}
+
+export function useUpdateNetworkConnection() {
+  const qc = useQueryClient()
+  return useMutation<NetworkConnection, Error, ConnectionPayload & { id: string }>({
+    mutationFn: ({ id, ...input }) => apiPatch<NetworkConnection>(`/network/connections/${id}`, input),
+    onSuccess: (data) => {
+      toast.success(`Connection “${data.name}” updated — apply it to activate`)
+      invalidateNetwork(qc)
+    },
+  })
+}
+
+export function useApplyNetworkConnection() {
+  const qc = useQueryClient()
+  return useMutation<{ operationId?: string }, Error, { id: string; wifiPassword?: string }>({
+    mutationFn: ({ id, wifiPassword }) =>
+      apiPost<{ operationId?: string }>(`/network/connections/${id}/apply`, {
+        reauthenticated: true,
+        timeoutSeconds: 60,
+        ...(wifiPassword != null ? { wifiPassword } : {}),
+      }),
+    onSuccess: () => invalidateNetwork(qc),
   })
 }

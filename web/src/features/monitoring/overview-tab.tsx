@@ -1,5 +1,6 @@
 import { Cpu, MemoryStick, Network, HardDrive } from 'lucide-react'
 import { useServices } from '@/api/queries'
+import type { ServiceStatus } from '@/api/types'
 import { HealthBadge } from '@/components/core/health-badge'
 import { Sparkline } from '@/components/core/sparkline'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,10 +8,11 @@ import { useMetricsStore } from '@/stores/metrics'
 import { formatBytes, formatUptime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
-const SERVICE_STATE: Record<string, 'healthy' | 'attention' | 'offline'> = {
+const SERVICE_STATE: Record<ServiceStatus['state'], 'healthy' | 'attention' | 'offline'> = {
   running: 'healthy',
   degraded: 'attention',
   stopped: 'offline',
+  unknown: 'attention',
 }
 
 export function MonitoringOverviewTab() {
@@ -99,14 +101,14 @@ export function MonitoringOverviewTab() {
         <CardContent>
           <ul className="flex flex-col divide-y rounded-lg border">
             {(services ?? []).map((service) => (
-              <li key={service.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <li key={service.id ?? service.name} className="flex items-center justify-between gap-3 px-3 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{service.name}</p>
                   {service.detail ? (
                     <p className={cn('truncate text-xs text-muted-foreground')}>{service.detail}</p>
                   ) : null}
                 </div>
-                <HealthBadge state={SERVICE_STATE[service.state]} />
+                <HealthBadge state={SERVICE_STATE[service.state] ?? 'attention'} />
               </li>
             ))}
           </ul>

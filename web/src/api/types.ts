@@ -152,7 +152,7 @@ export interface NetInterfaceMetrics {
 export interface ServiceStatus {
   id: string
   name: string
-  state: 'running' | 'stopped' | 'degraded'
+  state: 'running' | 'stopped' | 'degraded' | 'unknown'
   detail?: string
 }
 

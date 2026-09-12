@@ -20,3 +20,11 @@ export const HEALTH: Record<
   critical: { label: 'Critical', color: 'critical', Icon: CircleX },
   offline: { label: 'Offline', color: 'offline', Icon: CircleMinus },
 }
+
+// Fallback for states that are not in HEALTH (e.g. unexpected API values) so
+// a missing mapping can never crash rendering.
+export const HEALTH_FALLBACK: { label: string; color: HealthColor; Icon: LucideIcon } = {
+  label: 'Unknown',
+  color: 'offline',
+  Icon: CircleMinus,
+}

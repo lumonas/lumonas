@@ -5,9 +5,48 @@ export interface NetworkConnection {
   type?: string
   enabled: boolean
   status: string
-  ipv4: { method: string }
+  ipv4: { method: string; addresses?: string[]; gateway?: string; dns?: string[] }
   ipv6: { method: string }
+  ssid?: string
+  wifiOpen?: boolean
+  mtu?: number
+  parent?: string
+  vlanId?: number
+  members?: string[]
 }
+
+export interface NetworkInterface {
+  name: string
+  mac?: string
+  mtu: number
+  up: boolean
+  loopback: boolean
+  wireless: boolean
+  addresses: string[]
+}
+
+export const interfaces: NetworkInterface[] = [
+  { name: 'eth0', mac: 'aa:bb:cc:dd:ee:01', mtu: 1500, up: true, loopback: false, wireless: false, addresses: ['192.168.1.50/24'] },
+  { name: 'eth1', mac: 'aa:bb:cc:dd:ee:02', mtu: 1500, up: false, loopback: false, wireless: false, addresses: [] },
+  { name: 'wlan0', mac: 'aa:bb:cc:dd:ee:03', mtu: 1500, up: true, loopback: false, wireless: true, addresses: [] },
+  { name: 'lo', mtu: 65536, up: true, loopback: true, wireless: false, addresses: ['127.0.0.1/8'] },
+]
+
+export interface WiFiNetwork {
+  ssid: string
+  signal: number
+  channel: number
+  band?: string
+  security: string
+  secure: boolean
+}
+
+export const wifiNetworks: WiFiNetwork[] = [
+  { ssid: 'HomeNet', signal: 82, channel: 36, band: '5 GHz', security: 'WPA2', secure: true },
+  { ssid: 'HomeNet-IoT', signal: 74, channel: 6, band: '2.4 GHz', security: 'WPA2', secure: true },
+  { ssid: 'FreeGuest', signal: 61, channel: 11, band: '2.4 GHz', security: '', secure: false },
+  { ssid: 'Neighbour_5G', signal: 33, channel: 44, band: '5 GHz', security: 'WPA3', secure: true },
+]
 
 export interface ServiceBinding {
   service: string
@@ -53,6 +92,17 @@ export const connections: NetworkConnection[] = [
     status: 'activated',
     ipv4: { method: 'auto' },
     ipv6: { method: 'auto' },
+  },
+  {
+    id: 'wifi-home',
+    name: 'Home Wi-Fi',
+    interface: 'wlan0',
+    type: 'wifi',
+    enabled: true,
+    status: 'activated',
+    ssid: 'HomeNet',
+    ipv4: { method: 'auto' },
+    ipv6: { method: 'disabled' },
   },
 ]
 
