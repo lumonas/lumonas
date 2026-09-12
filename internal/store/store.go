@@ -32,6 +32,14 @@ type AuditEntry struct {
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
+type ConfigGeneration struct {
+	ID          int64
+	PlanHash    string
+	State       string
+	CreatedAt   time.Time
+	CommittedAt *time.Time
+}
+
 func Open(path string) (*Store, error) {
 	if path == "" {
 		path = "/var/lib/mynas/mynas.db"
@@ -167,6 +175,39 @@ func (s *Store) CurrentGeneration() int64 {
 	var generation int64
 	_, _ = fmt.Sscan(value, &generation)
 	return generation
+}
+
+func (s *Store) ConfigGenerations(limit int) ([]ConfigGeneration, error) {
+	if limit < 1 || limit > 500 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`SELECT generation,plan_hash,state,created_at,committed_at FROM config_generations ORDER BY generation DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]ConfigGeneration, 0)
+	for rows.Next() {
+		var value ConfigGeneration
+		var created string
+		var committed sql.NullString
+		if err := rows.Scan(&value.ID, &value.PlanHash, &value.State, &created, &committed); err != nil {
+			return nil, err
+		}
+		value.CreatedAt, err = time.Parse(timeFormat, created)
+		if err != nil {
+			return nil, err
+		}
+		if committed.Valid {
+			parsed, parseErr := time.Parse(timeFormat, committed.String)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			value.CommittedAt = &parsed
+		}
+		result = append(result, value)
+	}
+	return result, rows.Err()
 }
 
 func (s *Store) BeginGeneration(planHash string) (int64, error) {

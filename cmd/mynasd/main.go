@@ -198,6 +198,26 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.runBackupNow(w, r)
 	case r.Method == http.MethodPost && endpoint == "/backups/verify":
 		s.verifyBackupNow(w, r)
+	case r.Method == http.MethodGet && endpoint == "/backup/readiness":
+		s.backupReadiness(w, r)
+	case r.Method == http.MethodGet && endpoint == "/backup/jobs":
+		s.backupJobs(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/backup/jobs/") && strings.HasSuffix(endpoint, "/run"):
+		s.runBackupJob(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodGet && endpoint == "/backup/destinations":
+		s.listBackupDestinations(w, r)
+	case r.Method == http.MethodGet && endpoint == "/backup/generations":
+		s.backupGenerations(w, r)
+	case r.Method == http.MethodGet && endpoint == "/backup/restore/plan":
+		s.backupRestorePlan(w, r)
+	case r.Method == http.MethodGet && endpoint == "/updates/status":
+		s.updatesStatus(w, r)
+	case r.Method == http.MethodPost && endpoint == "/updates/apply":
+		s.applyUpdate(w, r)
+	case r.Method == http.MethodPost && endpoint == "/updates/rollback":
+		s.rollbackUpdate(w, r)
+	case r.Method == http.MethodPost && endpoint == "/updates/health":
+		s.updateHealth(w, r)
 	case r.Method == http.MethodGet && endpoint == "/jobs":
 		s.listJobs(w)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/jobs/"):
@@ -278,6 +298,24 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.updateManagedShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/shares/"):
 		s.deleteManagedShare(w, r, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/files":
+		s.listFiles(w, r)
+	case r.Method == http.MethodPost && endpoint == "/files/mkdir":
+		s.makeDirectory(w, r)
+	case r.Method == http.MethodPost && endpoint == "/files/rename":
+		s.renameFile(w, r)
+	case r.Method == http.MethodPost && endpoint == "/files/delete":
+		s.deleteFiles(w, r)
+	case r.Method == http.MethodPost && endpoint == "/files/transfer":
+		s.transferFiles(w, r)
+	case r.Method == http.MethodPost && endpoint == "/files/upload":
+		s.uploadFile(w, r)
+	case r.Method == http.MethodGet && endpoint == "/files/recycle":
+		s.listRecycleBin(w, r)
+	case r.Method == http.MethodPost && endpoint == "/files/recycle/restore":
+		s.restoreRecycleBin(w, r)
+	case r.Method == http.MethodPost && endpoint == "/files/recycle/purge":
+		s.purgeRecycleBin(w, r)
 	case r.Method == http.MethodGet && endpoint == "/events/stream":
 		s.stream(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/summary":
