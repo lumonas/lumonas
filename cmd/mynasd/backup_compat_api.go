@@ -1,10 +1,15 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/backup"
+	"github.com/lumonas/lumonas/internal/recovery"
 )
 
 // These handlers keep the first UI API shape compatible while the richer
@@ -43,22 +48,42 @@ func (s *apiServer) backupJobs(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.backupActor(w, r, false); !ok {
 		return
 	}
+	destinations, err := s.store.ListBackupDestinations()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	runs, err := s.store.BackupRuns(50)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	values := make([]map[string]any, 0, len(runs))
-	for _, run := range runs {
-		status := model.Healthy
-		if run.State == "failed" {
-			status = model.Warning
-		}
+	values := make([]map[string]any, 0, len(destinations))
+	for _, destination := range destinations {
 		var lastRun map[string]any
-		if run.FinishedAt != nil {
-			lastRun = map[string]any{"status": status, "at": run.FinishedAt, "detail": run.Error}
+		if len(runs) > 0 {
+			run := runs[0]
+			status := "offline"
+			switch run.State {
+			case "verified":
+				status = "healthy"
+			case "failed":
+				status = "critical"
+			case "queued", "running":
+				status = "attention"
+			}
+			at := run.StartedAt
+			if run.FinishedAt != nil {
+				at = *run.FinishedAt
+			}
+			lastRun = map[string]any{"status": status, "at": at, "detail": run.Error}
 		}
-		values = append(values, map[string]any{"id": run.ID, "name": "Recovery bundle", "source": "configuration", "destinationId": "", "schedule": run.Trigger, "strategy": "verified snapshot", "jobType": "recovery.bundle", "lastRun": lastRun, "enabled": true})
+		values = append(values, map[string]any{
+			"id": destination.ID, "name": destination.Name, "source": "configuration",
+			"destinationId": destination.ID, "schedule": "On demand / automatic",
+			"strategy": "verified encrypted bundle", "jobType": "recovery.bundle",
+			"lastRun": lastRun, "enabled": destination.Enabled,
+		})
 	}
 	writeJSON(w, http.StatusOK, values)
 }
@@ -68,28 +93,30 @@ func (s *apiServer) runBackupJob(w http.ResponseWriter, r *http.Request, id stri
 	if !ok {
 		return
 	}
-	runs, err := s.store.BackupRuns(500)
+	destinations, err := s.store.ListBackupDestinations()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	for _, run := range runs {
-		if run.ID != id {
-			continue
+	valid := false
+	for _, destination := range destinations {
+		if destination.ID == id {
+			valid = true
+			break
 		}
-		run.Trigger = "manual"
-		run.State = "queued"
-		run.StartedAt = time.Now().UTC()
-		if err := s.store.SaveBackupRun(run); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		s.recordIdentityAudit(actor, "backup.run.request", run.ID, nil)
-		go s.executeBackup(run)
-		writeJSON(w, http.StatusAccepted, run)
+	}
+	if !valid {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "backup job not found"})
 		return
 	}
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "backup job not found"})
+	run := backup.Run{ID: newID("backup-run"), Trigger: "manual", Generation: s.currentGeneration(), State: "queued", StartedAt: time.Now().UTC()}
+	if err := s.store.SaveBackupRun(run); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordIdentityAudit(actor, "backup.run.request", run.ID, map[string]any{"destinationId": id})
+	go s.executeBackup(run)
+	writeJSON(w, http.StatusAccepted, map[string]any{"id": run.ID, "type": "backup", "title": "Configuration backup", "resourceId": id, "state": "queued", "progress": 0, "createdAt": run.StartedAt})
 }
 
 func (s *apiServer) backupGenerations(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +143,37 @@ func (s *apiServer) backupRestorePlan(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.backupActor(w, r, false); !ok {
 		return
 	}
-	s.recoveryPlan(w)
+	result := map[string]any{
+		"generationId":  s.currentGeneration(),
+		"interfaces":    []any{},
+		"apps":          []any{},
+		"dataDisksNote": "No verified recovery bundle is available yet; data disks will remain read-only until their stable identities are confirmed.",
+	}
+	key := s.recoveryKeyString()
+	bundle, err := os.ReadFile(filepath.Join(envOr("MYNAS_RECOVERY_DIR", "/var/lib/mynas/recovery"), "latest.mrb"))
+	if key == "" || err != nil {
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	plan, err := recovery.Plan(bundle, []byte(key))
+	if err != nil {
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	apps := make([]map[string]any, 0)
+	for _, name := range plan.Files {
+		if !strings.HasPrefix(name, "docker/stacks/") || !strings.HasSuffix(name, "/compose.yaml") {
+			continue
+		}
+		parts := strings.Split(name, "/")
+		if len(parts) == 4 {
+			apps = append(apps, map[string]any{"name": parts[2], "appdataAvailable": true})
+		}
+	}
+	result["generationId"] = plan.Manifest.Generation
+	result["apps"] = apps
+	result["dataDisksNote"] = fmt.Sprintf("Recovery bundle generation %d includes %d recorded disk identity(ies). Data disks will be imported read-only before any write operation.", plan.Manifest.Generation, len(plan.Manifest.DiskIDs))
+	writeJSON(w, http.StatusOK, result)
 }
 
 func readinessStatus(ready bool) string {
