@@ -27,6 +27,7 @@ import (
 	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/notify"
 	"github.com/lumonas/lumonas/internal/power"
+	"github.com/lumonas/lumonas/internal/privileged"
 	"github.com/lumonas/lumonas/internal/recovery"
 	"github.com/lumonas/lumonas/internal/services"
 	"github.com/lumonas/lumonas/internal/shares"
@@ -300,8 +301,9 @@ func (s *apiServer) protection(w http.ResponseWriter) {
 
 func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Action storage.Action `json:"action"`
-		DiskID string         `json:"diskId"`
+		Action         storage.Action `json:"action"`
+		DiskID         string         `json:"diskId"`
+		RequestedState map[string]any `json:"requestedState"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -327,6 +329,10 @@ func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
+	}
+	if input.RequestedState != nil {
+		plan.RequestedState = input.RequestedState
+		plan.PlanHash = storage.Hash(plan)
 	}
 	if err := s.store.SavePlan(plan); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -359,7 +365,42 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication and the storage safety unlock are required"})
 		return
 	}
-	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "execution is intentionally disabled until the privileged worker is connected; the immutable plan was accepted for review"})
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity revalidation unavailable"})
+		return
+	}
+	var actual *model.Disk
+	for index := range disks {
+		if disks[index].ID == plan.Target.DiskID {
+			actual = &disks[index]
+			break
+		}
+	}
+	if actual == nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "stable disk identity is no longer present"})
+		return
+	}
+	if err := storage.Validate(plan, *actual, time.Now().UTC(), s.currentGeneration()); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "storage plan revalidation failed: " + err.Error()})
+		return
+	}
+	expectedIdentity := map[string]string{"id": plan.Target.DiskID, "wwn": plan.Target.WWN, "serial": plan.Target.Serial, "model": plan.Target.Model, "filesystemUuid": plan.Target.FilesystemUUID, "sizeBytes": strconv.FormatUint(plan.Target.SizeBytes, 10)}
+	request := privileged.Request{Operation: string(plan.Action), PlanHash: plan.PlanHash, TargetDiskID: plan.Target.DiskID, ExpectedIdentity: expectedIdentity, ExpectedState: map[string]string{"currentPath": plan.ExpectedState.CurrentPath, "mounted": strconv.FormatBool(plan.ExpectedState.Mounted), "role": plan.ExpectedState.Role, "poolId": plan.ExpectedState.PoolID}, RequestedState: plan.RequestedState, ExpiresAt: plan.ExpiresAt, Confirmed: true}
+	broker := privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}
+	result, err := broker.Execute(r.Context(), request)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
+		return
+	}
+	plan.Status = "executed"
+	_ = s.store.SavePlan(plan)
+	s.publish("storage.operation.completed", "warning", &model.ResourceRef{Type: "disk", ID: plan.Target.DiskID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *apiServer) currentGeneration() int64 {
