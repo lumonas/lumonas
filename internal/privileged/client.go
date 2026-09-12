@@ -31,6 +31,8 @@ type ExpectedDisk struct {
 	Serial         string `json:"serial,omitempty"`
 	Model          string `json:"model,omitempty"`
 	SizeBytes      uint64 `json:"sizeBytes"`
+	GPTDiskGUID    string `json:"gptDiskGuid,omitempty"`
+	PartitionUUID  string `json:"partitionUuid,omitempty"`
 	FilesystemUUID string `json:"filesystemUuid,omitempty"`
 }
 

@@ -114,7 +114,7 @@ func (s *apiServer) confirmStoragePool(w http.ResponseWriter, r *http.Request, o
 	expected := make([]privileged.ExpectedDisk, 0, len(plan.Members))
 	branches := make([]any, 0, len(plan.Members))
 	for _, member := range plan.Members {
-		expected = append(expected, privileged.ExpectedDisk{ID: member.DiskID, WWN: member.WWN, Serial: member.Serial, Model: member.Model, SizeBytes: member.SizeBytes, FilesystemUUID: member.FilesystemUUID})
+		expected = append(expected, privileged.ExpectedDisk{ID: member.DiskID, WWN: member.WWN, Serial: member.Serial, Model: member.Model, SizeBytes: member.SizeBytes, GPTDiskGUID: member.GPTDiskGUID, PartitionUUID: member.PartitionUUID, FilesystemUUID: member.FilesystemUUID})
 		branches = append(branches, member.BranchPath)
 	}
 	request := privileged.Request{Operation: "pool.mount", OperationID: plan.OperationID, PlanHash: plan.PlanHash, ExpectedDisks: expected, RequestedState: map[string]any{"mountPath": plan.MountPath, "branches": branches, "policy": plan.Policy}, ExpiresAt: plan.ExpiresAt, Confirmed: true}

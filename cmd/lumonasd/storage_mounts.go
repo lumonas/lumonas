@@ -142,7 +142,7 @@ func expectedMountDisks(disks []model.Disk, entries []storage.MountEntry) ([]pri
 		if !ok {
 			return nil, fmt.Errorf("mount disk identity is no longer present: %s", id)
 		}
-		result = append(result, privileged.ExpectedDisk{ID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, FilesystemUUID: disk.FilesystemUUID})
+		result = append(result, privileged.ExpectedDisk{ID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, GPTDiskGUID: disk.GPTDiskGUID, PartitionUUID: disk.PartitionUUID, FilesystemUUID: disk.FilesystemUUID})
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
 	return result, nil

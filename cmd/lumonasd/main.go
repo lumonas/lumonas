@@ -930,7 +930,7 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "storage plan revalidation failed: " + err.Error()})
 		return
 	}
-	expectedIdentity := map[string]string{"id": plan.Target.DiskID, "wwn": plan.Target.WWN, "serial": plan.Target.Serial, "model": plan.Target.Model, "filesystemUuid": plan.Target.FilesystemUUID, "sizeBytes": strconv.FormatUint(plan.Target.SizeBytes, 10)}
+	expectedIdentity := map[string]string{"id": plan.Target.DiskID, "wwn": plan.Target.WWN, "serial": plan.Target.Serial, "model": plan.Target.Model, "gptDiskGuid": plan.Target.GPTDiskGUID, "partitionUuid": plan.Target.PartitionUUID, "filesystemUuid": plan.Target.FilesystemUUID, "sizeBytes": strconv.FormatUint(plan.Target.SizeBytes, 10)}
 	request := privileged.Request{Operation: string(plan.Action), PlanHash: plan.PlanHash, TargetDiskID: plan.Target.DiskID, ExpectedIdentity: expectedIdentity, ExpectedState: map[string]string{"currentPath": plan.ExpectedState.CurrentPath, "mounted": strconv.FormatBool(plan.ExpectedState.Mounted), "role": plan.ExpectedState.Role, "poolId": plan.ExpectedState.PoolID}, RequestedState: plan.RequestedState, ExpiresAt: plan.ExpiresAt, Confirmed: true}
 	broker := privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}
 	result, err := broker.Execute(r.Context(), request)

@@ -47,13 +47,13 @@ func TestPrivilegedProtocolRequiresConfirmationForTypedOperation(t *testing.T) {
 }
 
 func TestExecuteMountRevalidatesIdentityAndUsesAllowListedCommand(t *testing.T) {
-	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
+	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", GPTDiskGUID: "gpt-test", PartitionUUID: "part-test", SizeBytes: 100}
 	var command string
 	run := func(name string, args ...string) ([]byte, error) {
 		command = name + " " + strings.Join(args, " ")
 		return nil, nil
 	}
-	result := execute(request{Operation: "filesystem.mount", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"}, RequestedState: map[string]any{"mountPath": "/srv/disks/wwn-test", "filesystem": "ext4"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, run)
+	result := execute(request{Operation: "filesystem.mount", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "gptDiskGuid": "gpt-test", "partitionUuid": "part-test", "sizeBytes": "100"}, RequestedState: map[string]any{"mountPath": "/srv/disks/wwn-test", "filesystem": "ext4"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, run)
 	if !result.OK || command != "mount -t ext4 /dev/sda /srv/disks/wwn-test" {
 		t.Fatalf("unexpected result: %#v command=%q", result, command)
 	}

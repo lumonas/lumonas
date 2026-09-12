@@ -47,6 +47,8 @@ type expectedDisk struct {
 	Serial         string `json:"serial,omitempty"`
 	Model          string `json:"model,omitempty"`
 	SizeBytes      uint64 `json:"sizeBytes"`
+	GPTDiskGUID    string `json:"gptDiskGuid,omitempty"`
+	PartitionUUID  string `json:"partitionUuid,omitempty"`
 	FilesystemUUID string `json:"filesystemUuid,omitempty"`
 }
 type response struct {
@@ -521,7 +523,7 @@ func deviceHasMounts(path string, run command) bool {
 }
 
 func validateIdentity(disk model.Disk, expected map[string]string) error {
-	checks := map[string]string{"id": disk.ID, "wwn": disk.WWN, "serial": disk.Serial, "model": disk.Model, "filesystemUuid": disk.FilesystemUUID}
+	checks := map[string]string{"id": disk.ID, "wwn": disk.WWN, "serial": disk.Serial, "model": disk.Model, "gptDiskGuid": disk.GPTDiskGUID, "partitionUuid": disk.PartitionUUID, "filesystemUuid": disk.FilesystemUUID}
 	for key, value := range expected {
 		if actual, ok := checks[key]; ok && value != "" && actual != value {
 			return fmt.Errorf("disk identity mismatch for %s", key)
@@ -712,6 +714,12 @@ func validateExpectedDisk(actual model.Disk, expected expectedDisk) error {
 	}
 	if expected.SizeBytes != 0 && actual.SizeBytes != expected.SizeBytes {
 		return fmt.Errorf("pool disk %q capacity mismatch", expected.ID)
+	}
+	if expected.GPTDiskGUID != "" && actual.GPTDiskGUID != expected.GPTDiskGUID {
+		return fmt.Errorf("pool disk %q GPT disk GUID mismatch", expected.ID)
+	}
+	if expected.PartitionUUID != "" && actual.PartitionUUID != expected.PartitionUUID {
+		return fmt.Errorf("pool disk %q partition UUID mismatch", expected.ID)
 	}
 	if expected.FilesystemUUID != "" && actual.FilesystemUUID != expected.FilesystemUUID {
 		return fmt.Errorf("pool disk %q filesystem UUID mismatch", expected.ID)

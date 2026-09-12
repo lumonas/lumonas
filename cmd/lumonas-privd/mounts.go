@@ -98,7 +98,7 @@ func revalidateMountDisks(req request, entries []storage.MountEntry, discover fu
 		if !ok {
 			return fmt.Errorf("mount disk %q is no longer present", disk.ID)
 		}
-		identity := map[string]string{"id": disk.ID, "wwn": disk.WWN, "serial": disk.Serial, "model": disk.Model, "filesystemUuid": disk.FilesystemUUID}
+		identity := map[string]string{"id": disk.ID, "wwn": disk.WWN, "serial": disk.Serial, "model": disk.Model, "gptDiskGuid": disk.GPTDiskGUID, "partitionUuid": disk.PartitionUUID, "filesystemUuid": disk.FilesystemUUID}
 		if disk.SizeBytes != 0 {
 			identity["sizeBytes"] = fmt.Sprint(disk.SizeBytes)
 		}

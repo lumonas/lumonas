@@ -202,7 +202,7 @@ func expectedSnapraidDisks(disks []model.Disk, parityID string, dataIDs []string
 			return nil, fmt.Errorf("disk identity is no longer present: %s", id)
 		}
 		seen[id] = true
-		result = append(result, privileged.ExpectedDisk{ID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, FilesystemUUID: disk.FilesystemUUID})
+		result = append(result, privileged.ExpectedDisk{ID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, GPTDiskGUID: disk.GPTDiskGUID, PartitionUUID: disk.PartitionUUID, FilesystemUUID: disk.FilesystemUUID})
 	}
 	if len(result) == 0 {
 		return nil, fmt.Errorf("at least one stable SnapRAID disk identity is required")
