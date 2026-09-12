@@ -345,3 +345,10 @@ partition UUID while retaining the same device path and other metadata.
 
 Pass if confirmation and privileged execution reject the stale plan before any
 filesystem, pool, or protection command runs.
+
+## AK. Bounded integration command execution
+
+Run the WireGuard and SFTP command-boundary tests.
+
+Pass if exact command arguments and stdin are captured through injectable
+bounded runners, and no integration path constructs a shell command.

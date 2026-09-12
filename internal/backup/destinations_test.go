@@ -4,10 +4,37 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestSFTPCommandsUseBoundedRunnerAndValidatedArguments(t *testing.T) {
+	original := runSFTPCommand
+	t.Cleanup(func() { runSFTPCommand = original })
+	var commands []string
+	runSFTPCommand = func(_ context.Context, stdin io.Reader, command string, args ...string) ([]byte, error) {
+		data, _ := io.ReadAll(stdin)
+		commands = append(commands, command+" "+strings.Join(args, " ")+" :: "+string(data))
+		return nil, nil
+	}
+	destination := Destination{Type: DestinationSFTP, Target: "sftp://backup.example/base", Retention: DefaultRetention()}
+	credentials := Credentials{Username: "nas", PrivateKeyPath: "/etc/lumonas/key"}
+	if err := uploadSFTP(context.Background(), destination.Target, credentials, "/tmp/bundle.mrb", "recovery/latest.mrb"); err != nil {
+		t.Fatal(err)
+	}
+	if err := deleteSFTP(context.Background(), destination.Target, credentials, "recovery/latest.mrb"); err != nil {
+		t.Fatal(err)
+	}
+	if err := downloadSFTP(context.Background(), destination.Target, credentials, "recovery/latest.mrb", "/tmp/restored.mrb"); err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != 3 || !strings.Contains(commands[0], "sftp") || !strings.Contains(commands[0], "put /tmp/bundle.mrb /base/recovery/latest.mrb") || !strings.Contains(commands[1], "rm /base/recovery/latest.mrb") || !strings.Contains(commands[2], "get /base/recovery/latest.mrb /tmp/restored.mrb") {
+		t.Fatalf("unexpected SFTP commands: %v", commands)
+	}
+}
 
 func TestLocalUploadIsAtomicAndRejectsEscapes(t *testing.T) {
 	source := filepath.Join(t.TempDir(), "source.mrb")

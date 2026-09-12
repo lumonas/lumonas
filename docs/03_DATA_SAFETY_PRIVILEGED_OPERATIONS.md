@@ -64,6 +64,11 @@ revalidate those values in addition to WWN, serial, capacity, and filesystem
 UUID, so a replacement device cannot inherit a stale plan merely because its
 device path is unchanged.
 
+WireGuard and SFTP integrations also use the bounded command runner for
+stdin-bearing operations. Command names and arguments remain typed, while
+private keys and transfer instructions are passed through stdin without shell
+interpolation.
+
 ### Class D — destructive
 
 Examples:

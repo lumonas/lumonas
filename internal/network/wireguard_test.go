@@ -1,9 +1,31 @@
 package network
 
 import (
+	"context"
+	"io"
 	"strings"
 	"testing"
 )
+
+func TestApplyWireGuardConfigUsesBoundedCommandRunner(t *testing.T) {
+	original := runWireGuardCommand
+	t.Cleanup(func() { runWireGuardCommand = original })
+	var gotCommand string
+	var gotArgs []string
+	var gotStdin string
+	runWireGuardCommand = func(_ context.Context, stdin io.Reader, command string, args ...string) ([]byte, error) {
+		data, _ := io.ReadAll(stdin)
+		gotCommand, gotArgs, gotStdin = command, args, string(data)
+		return nil, nil
+	}
+	cfg := WireGuardConfig{PrivateKey: "private", Address: []string{"10.0.0.1/24"}}
+	if err := ApplyWireGuardConfig(context.Background(), "wg0", cfg); err != nil {
+		t.Fatal(err)
+	}
+	if gotCommand != "wg" || strings.Join(gotArgs, " ") != "set wg0 private-key /dev/stdin" || gotStdin != "private" {
+		t.Fatalf("unexpected wireguard command: %q %v stdin=%q", gotCommand, gotArgs, gotStdin)
+	}
+}
 
 func TestValidateWireGuardConfigRejectsMissingPrivateKey(t *testing.T) {
 	cfg := WireGuardConfig{

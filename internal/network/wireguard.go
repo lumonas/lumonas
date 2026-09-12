@@ -3,8 +3,8 @@ package network
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
-	"os/exec"
 	"strings"
 
 	"github.com/lumonas/lumonas/internal/runner"
@@ -37,17 +37,17 @@ type WireGuardStatus struct {
 	Connected  bool   `json:"connected"`
 }
 
+type wireGuardCommandRunner func(context.Context, io.Reader, string, ...string) ([]byte, error)
+
+var runWireGuardCommand wireGuardCommandRunner = runner.CombinedOutputContextWithStdin
+
 func GenerateWireGuardKeyPair() (string, string, error) {
 	privKey, err := runner.Output("wg", "genkey")
 	if err != nil {
 		return "", "", fmt.Errorf("wg genkey: %w", err)
 	}
 	priv := strings.TrimSpace(string(privKey))
-	ctx, cancel := runner.Context(nil)
-	defer cancel()
-	command := exec.CommandContext(ctx, "wg", "pubkey")
-	command.Stdin = strings.NewReader(priv + "\n")
-	pub, err := command.Output()
+	pub, err := runWireGuardCommand(context.Background(), strings.NewReader(priv+"\n"), "wg", "pubkey")
 	if err != nil {
 		return "", "", fmt.Errorf("wg pubkey: %w", err)
 	}
@@ -144,11 +144,7 @@ func ApplyWireGuardConfig(ctx context.Context, iface string, cfg WireGuardConfig
 	if err := ValidateWireGuardConfig(cfg); err != nil {
 		return err
 	}
-	bounded, cancel := runner.Context(ctx)
-	defer cancel()
-	cmd := exec.CommandContext(bounded, "wg", "set", iface, "private-key", "/dev/stdin")
-	cmd.Stdin = strings.NewReader(cfg.PrivateKey)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := runWireGuardCommand(ctx, strings.NewReader(cfg.PrivateKey), "wg", "set", iface, "private-key", "/dev/stdin"); err != nil {
 		return fmt.Errorf("wg set: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil

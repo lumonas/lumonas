@@ -137,6 +137,10 @@ Unsupported diagnostic kinds are rejected before any external command runs.
 Storage plan tests also mutate GPT disk GUID and partition UUID independently
 of the device path and require both single-disk and pool plans to fail closed.
 
+Network and backup integration tests replace the WireGuard and SFTP command
+runners and assert exact argv/stdin, proving these operations retain bounded
+execution without invoking a shell.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until

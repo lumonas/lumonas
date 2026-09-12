@@ -19,6 +19,7 @@ Deliver:
 - bounded journald retention policy checks.
 - typed bounded network diagnostic command runner.
 - GPT disk GUID and partition UUID revalidation across destructive plans.
+- bounded stdin-aware runners for WireGuard and SFTP integrations.
 
 Exit criteria:
 
