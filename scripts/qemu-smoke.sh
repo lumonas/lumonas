@@ -35,15 +35,25 @@ done
 
 IMAGE_FORMAT="${LUMONAS_QEMU_IMAGE_FORMAT:-raw}"
 run_qemu() {
+  data_a=data1
+  data_b=data2
+  data_c=data3
+  parity_disk=parity
+  if [ "${LUMONAS_QEMU_REORDER:-false}" = "true" ]; then
+    data_a=data3
+    data_b=data1
+    data_c=data2
+    parity_disk=parity
+  fi
 qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -m 2048 \
   -smp 2 \
   -drive "file=$LUMONAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT,serial=LUMONAS-SYSTEM" \
-  -drive "file=$DATA_DIR/data1.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA1" \
-  -drive "file=$DATA_DIR/data2.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA2" \
-  -drive "file=$DATA_DIR/data3.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA3" \
-  -drive "file=$DATA_DIR/parity.qcow2,if=virtio,format=qcow2,serial=LUMONAS-PARITY" \
+  -drive "file=$DATA_DIR/$data_a.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_a" | tr '[:lower:]' '[:upper:]')" \
+  -drive "file=$DATA_DIR/$data_b.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_b" | tr '[:lower:]' '[:upper:]')" \
+  -drive "file=$DATA_DIR/$data_c.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_c" | tr '[:lower:]' '[:upper:]')" \
+  -drive "file=$DATA_DIR/$parity_disk.qcow2,if=virtio,format=qcow2,serial=LUMONAS-PARITY" \
   -netdev user,id=n1,hostfwd=tcp::18080-:8081 \
   -device virtio-net-pci,netdev=n1 \
   -nographic \
@@ -90,8 +100,30 @@ for attempt in $(seq 1 60); do
          grep -F '"verified":true' "$RECOVERY_EXPORT_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_STATUS_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_PLAN_LOG" >/dev/null 2>&1; then
-        echo "QEMU appliance smoke test passed (disks=$disk_count, recovery=verified)"
-        exit 0
+        printf '%s\n' "$(grep -o '"id":"[^"]*"' "$LOG.disks" | sort)" >"$LOG.ids.initial"
+        kill "$QEMU_PID" 2>/dev/null || true
+        wait "$QEMU_PID" 2>/dev/null || true
+        LUMONAS_QEMU_REORDER=true run_qemu >"$LOG.reordered" 2>&1 &
+        QEMU_PID=$!
+        for reorder_attempt in $(seq 1 60); do
+          if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
+             curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null; then
+            printf '%s\n' "$(grep -o '"id":"[^"]*"' "$LOG.disks.reordered" | sort)" >"$LOG.ids.reordered"
+            if cmp -s "$LOG.ids.initial" "$LOG.ids.reordered"; then
+              echo "QEMU appliance smoke test passed (disks=$disk_count, recovery=verified, reorder=verified)"
+              exit 0
+            fi
+          fi
+          if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+            echo "QEMU exited during device reorder boot; log: $LOG.reordered" >&2
+            cat "$LOG.reordered" >&2 || true
+            exit 1
+          fi
+          sleep 2
+        done
+        echo "QEMU appliance device reorder verification failed" >&2
+        diff -u "$LOG.ids.initial" "$LOG.ids.reordered" >&2 || true
+        exit 1
       fi
     fi
   fi
