@@ -46,11 +46,16 @@ func TestFixtureBundlePassesFullRecoveryPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	appdata, err := buildFixtureAppdata()
+	if err != nil {
+		t.Fatal(err)
+	}
 	bundle, err := recovery.Create(recovery.Input{
 		Manifest:      recovery.Manifest{ConfigSchema: 1, LumoNASVersion: "fixture", NASUUID: "fixture-nas", Generation: 2, DiskIDs: []string{"serial:DATA1", "serial:DATA2", "serial:PARITY"}},
 		DesiredState:  []byte(`{"nasUuid":"fixture-nas","generation":2}`),
 		Database:      database,
-		Compose:       map[string][]byte{"media/compose.yaml": []byte("services:\n  media:\n    image: example/media:latest\n")},
+		Compose:       map[string][]byte{"media/compose.yaml": []byte("services:\n  media:\n    image: example/media:latest\n    volumes:\n      - /srv/lumonas/docker/appdata/media:/config\n")},
+		Appdata:       []recovery.AppdataPayload{{Stack: "media", ContainerPath: "/config", HostPath: "/srv/lumonas/docker/appdata/media", Archive: appdata}},
 		Files:         map[string][]byte{"storage/snapraid.conf": []byte("parity /srv/disks/serial_PARITY/snapraid.parity\n")},
 		EncryptedData: []byte("fixture-encrypted-secret"),
 	}, key)
@@ -64,7 +69,7 @@ func TestFixtureBundlePassesFullRecoveryPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan, err := recovery.Plan(bundle, key)
-	if err != nil || !plan.Verified || !plan.DatabaseValid || !plan.DesiredStateValid || !plan.ComposeValid || !plan.EncryptedSecrets {
+	if err != nil || !plan.Verified || !plan.DatabaseValid || !plan.DesiredStateValid || !plan.ComposeValid || !plan.EncryptedSecrets || len(plan.Appdata) != 1 {
 		t.Fatalf("fixture recovery plan is incomplete: %#v, %v", plan, err)
 	}
 }

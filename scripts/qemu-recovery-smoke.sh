@@ -103,6 +103,7 @@ mount -o loop,ro "$TARGET_RAW" "$TARGET_MOUNT"
 grep -Fx 'recovery-applied' "$TARGET_MOUNT/recovery-success" >/dev/null
 grep -F 'fixture-nas' "$TARGET_MOUNT/var/lib/lumonas/recovery/restored/desired-state.json" >/dev/null
 grep -F 'example/media:latest' "$TARGET_MOUNT/srv/lumonas/docker/stacks/media/compose.yaml" >/dev/null
+grep -F 'mode: fixture' "$TARGET_MOUNT/srv/lumonas/docker/appdata/media/config.yaml" >/dev/null
 grep -F 'fixture-encrypted-secret' "$TARGET_MOUNT/var/lib/lumonas/secrets/recovered-secrets.bin" >/dev/null
 grep -F 'share-media' "$TARGET_MOUNT/var/lib/lumonas/shares.json" >/dev/null
 grep -F 'operator' "$TARGET_MOUNT/etc/lumonas/recovery/users.json" >/dev/null
@@ -118,4 +119,4 @@ grep -F '"databaseRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/nul
 grep -F '"secretsRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/null
 grep -F 'operator' "$TARGET_MOUNT/restored-principals.json" >/dev/null
 grep -F 'share-media' "$TARGET_MOUNT/restored-shares.json" >/dev/null
-echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, users/shares/Compose/SnapRAID restored, API ready)"
+echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, users/shares/Compose/appdata/SnapRAID restored, API ready)"

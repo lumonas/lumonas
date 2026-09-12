@@ -24,6 +24,10 @@ func main() {
 	if err != nil {
 		fatal("create fixture database: %v", err)
 	}
+	appdata, err := buildFixtureAppdata()
+	if err != nil {
+		fatal("create fixture appdata: %v", err)
+	}
 	bundle, err := recovery.Create(recovery.Input{
 		Manifest: recovery.Manifest{
 			ConfigSchema:   1,
@@ -35,8 +39,11 @@ func main() {
 		DesiredState: []byte(`{"nasUuid":"fixture-nas","hostname":"recovered-nas","generation":2,"shares":["share-media"],"users":["operator","media"],"dockerStacks":["media"],"protection":{"parityDiskId":"serial:PARITY","dataDiskIds":["serial:DATA1","serial:DATA2"]}}`),
 		Database:     database,
 		Compose: map[string][]byte{
-			"media/compose.yaml": []byte("services:\n  media:\n    image: example/media:latest\n"),
+			"media/compose.yaml": []byte("services:\n  media:\n    image: example/media:latest\n    volumes:\n      - /srv/lumonas/docker/appdata/media:/config\n"),
 		},
+		Appdata: []recovery.AppdataPayload{{
+			Stack: "media", ContainerPath: "/config", HostPath: "/srv/lumonas/docker/appdata/media", Archive: appdata,
+		}},
 		Files: map[string][]byte{
 			"config/shares.json":            []byte("[{\"id\":\"share-media\",\"name\":\"Media\",\"path\":\"/srv/media\",\"enabled\":true,\"protocols\":[\"smb\",\"nfs\"]}]\n"),
 			"config/users.json":             []byte("[{\"name\":\"operator\",\"kind\":\"user\",\"managementRole\":\"admin\"},{\"name\":\"media\",\"kind\":\"user\",\"managementRole\":\"none\"}]\n"),
@@ -60,6 +67,18 @@ func main() {
 	if err := os.WriteFile(*keyPath, key, 0o600); err != nil {
 		fatal("write key: %v", err)
 	}
+}
+
+func buildFixtureAppdata() ([]byte, error) {
+	directory, err := os.MkdirTemp("", "lumonas-recovery-appdata-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(directory)
+	if err := os.WriteFile(filepath.Join(directory, "config.yaml"), []byte("mode: fixture\n"), 0o600); err != nil {
+		return nil, err
+	}
+	return recovery.ArchiveAppdata(directory, 1<<20)
 }
 
 func buildFixtureDatabase() ([]byte, error) {
