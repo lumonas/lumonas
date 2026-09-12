@@ -80,6 +80,11 @@ that administrator-owned environment files are readable by, but not writable
 to, the `lumonas` service account, while the runtime, recovery, disk, and pool
 directories remain writable by that account. This check is release-blocking.
 
+The disk API contract test populates every stable identity field and verifies
+that `/api/v1/disks` serializes those fields, including the current device
+path, WWN/GPT/partition/filesystem identifiers, mount state, and last-seen
+timestamp. OpenAPI and frontend types are kept aligned with that response.
+
 The daemon restart tests also verify that queued, preparing, and running jobs
 are failed closed when `lumonasd` starts again, and that an SSE client can
 resume from `Last-Event-ID` without receiving its cursor event twice. Host

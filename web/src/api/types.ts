@@ -16,9 +16,13 @@ export interface SmartSummary {
 export interface Disk {
   id: string
   name: string
+  currentPath?: string
   model: string
   serial: string
   wwn?: string
+  gptDiskGuid?: string
+  partitionUuid?: string
+  filesystemUuid?: string
   sizeBytes: number
   usedBytes?: number
   role: DiskRole

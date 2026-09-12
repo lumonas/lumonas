@@ -2747,11 +2747,23 @@ components:
           type: string
         name:
           type: string
+        currentPath:
+          type: string
         model:
           type: string
         serial:
           type: string
+        wwn:
+          type: string
+        gptDiskGuid:
+          type: string
+        partitionUuid:
+          type: string
+        filesystemUuid:
+          type: string
         sizeBytes:
+          type: integer
+        usedBytes:
           type: integer
         role:
           type: string
@@ -2769,6 +2781,11 @@ components:
           type: boolean
         poolId:
           type: string
+        standby:
+          type: boolean
+        lastSeen:
+          type: string
+          format: date-time
         smart:
           $ref: '#/components/schemas/SmartSummary'
 

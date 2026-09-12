@@ -287,3 +287,12 @@ documented group-readable modes, the `lumonas` account is non-root and cannot
 modify those files, and it can write only to the provisioned runtime,
 recovery, disk, pool, and appliance data directories. The package-permissions
 job is release-blocking.
+
+## AE. Disk API identity contract
+
+Run the backend disk contract test and the OpenAPI parity check.
+
+Pass if a disk response preserves stable identity fields (`wwn`, GPT disk
+GUID, partition UUID, filesystem UUID), the current path, mount state, and
+last-seen timestamp, and those fields are represented in the OpenAPI and
+frontend contracts.
