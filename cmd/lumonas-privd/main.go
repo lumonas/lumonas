@@ -86,9 +86,14 @@ func main() {
 		mode = 0o600
 	}
 	_ = os.Chmod(*socket, mode)
+	allowedGID := os.Getgid()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			continue
+		}
+		if !peerAllowed(conn, allowedGID) {
+			_ = conn.Close()
 			continue
 		}
 		if *worker == "" {

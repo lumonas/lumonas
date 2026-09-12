@@ -259,6 +259,10 @@ Never implement:
 - `ExecuteCommand`
 - `RunScriptAsRoot`
 
+The Unix socket is protected by ownership and mode, and Linux builds also
+verify `SO_PEERCRED` before parsing a request. Only UID 0 or the `lumonas`
+service group may connect; unrelated local processes are closed immediately.
+
 If an advanced terminal is offered, it is a separate explicitly authenticated admin feature, not the control channel used by normal product functions.
 
 ## Worker isolation

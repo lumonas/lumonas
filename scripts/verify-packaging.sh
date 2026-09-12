@@ -19,6 +19,7 @@ for unit in lumonas-web.service lumonasd.service lumonas-privd.service lumonas-p
 	require_line "$SYSTEMD/$unit" 'ProtectSystem=strict'
 	require_line "$SYSTEMD/$unit" 'MemoryMax='
 	require_line "$SYSTEMD/$unit" 'TasksMax='
+	require_line "$SYSTEMD/$unit" 'Group=lumonas'
 done
 
 require_line "$SYSTEMD/lumonas-web.service" 'User=lumonas'

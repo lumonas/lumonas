@@ -84,6 +84,7 @@ Recommended:
 - peer credential verification;
 - protobuf/gRPC or a small framed typed protocol;
 - no TCP listener for `lumonas-privd`;
+- Linux peer credentials (`SO_PEERCRED`) are checked in addition to socket mode;
 - requests include operation ID and immutable mutation plan hash.
 
 ## Desired-state configuration

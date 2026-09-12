@@ -47,6 +47,7 @@ apt-get install -y --no-install-recommends \
   network-manager docker.io docker-compose samba samba-common-bin avahi-daemon
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
+systemd-analyze verify /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service
 mkdir -p /etc/systemd/network /etc/systemd/system/lumonas-web.service.d
 cat >/etc/systemd/network/20-ethernet.network <<'NETWORK'
 [Match]
