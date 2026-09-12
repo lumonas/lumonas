@@ -56,10 +56,10 @@ After the Debian package and QEMU smoke test are reliable, the offline installer
 sudo MYNAS_DEB="$PWD/lumonas_0.1.0-dev_amd64.deb" bash installer/build-iso.sh 0.1.0-dev
 ```
 
-Storage mutations now use immutable plans, stable disk identity revalidation, explicit safety unlock/reauthentication, and the typed `mynas-privd` broker. Mount, unmount, format, and erase workers are allow-listed; SnapRAID jobs, NetworkManager checkpoints, and explicit power actions are also brokered with bounded confirmation. ACL mutation, scheduled power policy, and automatic recovery execution remain intentionally separate follow-up workers.
+Storage mutations now use immutable plans, stable disk identity revalidation, explicit safety unlock/reauthentication, and the typed `mynas-privd` broker. Mount, unmount, format, and erase workers are allow-listed; SnapRAID jobs, NetworkManager checkpoints, ACL changes, scheduled backup/power policy, and explicit power actions are brokered with bounded confirmation. Automatic recovery remains an explicit staged operation.
 
 Read-only host integrations include `lsblk`/SMART disk identity, mergerfs mount discovery, SnapRAID configuration inspection, NUT UPS telemetry (`MYNAS_UPS_NAMES` or `upsc -l`), systemd status, and Docker Compose inspection. Notifications can be tested through the authenticated `/api/v1/notifications/test` endpoint after setting a webhook or ntfy URL.
 
 Pool capacity is sampled once per UTC day into SQLite, retained for 180 days, and exposed through the read-only `/api/v1/capacity/forecast` endpoint. A forecast is withheld until at least three samples span a full day.
 
-Set both `MYNAS_WEB_TLS_CERT` and `MYNAS_WEB_TLS_KEY` in `/etc/mynas/mynas-web.env` to serve the web listener over local HTTPS. The package deliberately does not generate a certificate; the operator or installer must provision a local CA/certificate and protect its private key.
+Set both `MYNAS_WEB_TLS_CERT` and `MYNAS_WEB_TLS_KEY` in `/etc/mynas/mynas-web.env` to serve the web listener over local HTTPS. The package provisions an opt-in self-signed certificate at `/etc/mynas/tls/` when OpenSSL is available; replace it with a certificate issued by your local CA for trusted clients and protect the private key.

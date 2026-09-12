@@ -55,6 +55,7 @@ MYNAS_AUTH_REQUIRED=true \
 MYNAS_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
 MYNAS_CATALOG_FILE="$ROOT_DIR/catalog/apps.json" \
 MYNAS_STACK_ROOT="$TEMP_DIR/stacks" \
+MYNAS_RECOVERY_DIR="$TEMP_DIR/recovery" \
 "$MYNASD_BIN" -listen "$LISTEN_ADDR" >"$LOG_PATH" 2>&1 &
 SERVER_PID=$!
 
@@ -173,6 +174,7 @@ if [ "$status" != 200 ] || ! head -c 1 "$TEMP_DIR/disks.json" | grep '\[' >/dev/
 fi
 
 assert_authenticated_status_and_body GET /api/v1/settings 200 '"runtime"'
+assert_authenticated_status_and_body POST /api/v1/recovery/key 200 '"key"'
 assert_authenticated_status_and_body GET '/api/v1/power/shutdown/plan?action=poweroff' 200 '"name":"stop-jobs"'
 assert_authenticated_status_and_body POST /api/v1/updates/check 202 '"type":"updates.check"'
 
