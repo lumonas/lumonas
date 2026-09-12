@@ -85,6 +85,10 @@ that `/api/v1/disks` serializes those fields, including the current device
 path, WWN/GPT/partition/filesystem identifiers, mount state, and last-seen
 timestamp. OpenAPI and frontend types are kept aligned with that response.
 
+`check-api-contract.py` runs on every backend and installer-scripts job. It
+checks the stable Disk and LumoEvent field sets in OpenAPI and TypeScript, so
+route parity alone cannot hide a response-shape regression.
+
 The SSE envelope test round-trips an event containing correlation, operation,
 plan, actor, generation, resource, and payload data. This keeps the fields
 needed to trace a destructive operation from the initiating request through

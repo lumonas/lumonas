@@ -297,6 +297,9 @@ GUID, partition UUID, filesystem UUID), the current path, mount state, and
 last-seen timestamp, and those fields are represented in the OpenAPI and
 frontend contracts.
 
+The same gate checks the complete SSE envelope field set in OpenAPI and the
+frontend types, including correlation and operation metadata.
+
 ## AF. SSE observability envelope
 
 Run the event encoding test and resume an SSE client from `Last-Event-ID`.

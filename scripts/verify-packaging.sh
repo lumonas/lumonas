@@ -55,6 +55,7 @@ require_line "$ROOT/Makefile" 'recovery-fixture:'
 require_line "$ROOT/Makefile" 'security-smoke:'
 require_line "$ROOT/Makefile" 'systemd-smoke:'
 require_line "$ROOT/Makefile" 'permission-smoke:'
+require_line "$ROOT/Makefile" 'check-api-contract:'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/permission-smoke.sh" ] || { echo "permission smoke test must be executable" >&2; exit 1; }
