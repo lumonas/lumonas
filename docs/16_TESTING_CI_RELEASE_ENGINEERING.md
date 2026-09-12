@@ -159,6 +159,11 @@ The QEMU smoke fetches `/` through `lumonas-web` and checks the compiled title
 and React root markers, so a package with a healthy API but missing frontend
 assets fails the release gate.
 
+The frontend job and Debian builder also run `frontend-runtime-smoke.sh`. It
+requires the production title/root markers and rejects MSW bootstrap code in
+the emitted JavaScript, while leaving the mock service-worker asset available
+for the explicitly selected local demo mode.
+
 The black-box API smoke restarts `lumonasd` against the same SQLite database,
 verifies an interrupted SMART job is failed closed after startup, and resumes
 an authenticated SSE stream from a retained metrics event to replay the job

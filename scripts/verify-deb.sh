@@ -86,6 +86,11 @@ for path in \
 	require_path "$path"
 done
 
+if grep -R -n -E 'setupWorker|MOCK_ACTIVATE|msw/passthrough|VITE_USE_MOCKS' "$DATA_DIR/usr/share/lumonas/web/assets" >/dev/null 2>&1; then
+	echo "packaged frontend bundle contains the MSW bootstrap" >&2
+	exit 1
+fi
+
 python3 - "$DATA_DIR/usr/share/lumonas/build-manifest.json" "$(field Version)" "$(field Depends)" "$(field Recommends)" <<'PY'
 import json
 import sys

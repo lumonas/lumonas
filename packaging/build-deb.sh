@@ -19,6 +19,7 @@ GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${LUMONAS_GOARCH:-amd64}" CGO_ENABLED="${L
 GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${LUMONAS_GOARCH:-amd64}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-privd" "$ROOT/cmd/lumonas-privd"
 GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${LUMONAS_GOARCH:-amd64}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-recover" "$ROOT/cmd/lumonas-recover"
 (cd "$ROOT/web" && pnpm build)
+bash "$ROOT/scripts/frontend-runtime-smoke.sh"
 cp -R "$ROOT/web/dist/." "$OUT/usr/share/lumonas/web/"
 cp "$ROOT/packaging/systemd/"*.service "$OUT/lib/systemd/system/"
 cp "$ROOT/packaging/systemd/smbd.service.d/lumonas.conf" "$OUT/lib/systemd/system/smbd.service.d/"

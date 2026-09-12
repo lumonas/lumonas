@@ -67,10 +67,12 @@ require_line "$ROOT/scripts/qemu-smoke.sh" '<title>LumoNAS</title>'
 require_line "$ROOT/scripts/qemu-smoke.sh" '<div id="root"></div>'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'snapshot_disk_identities'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'device reorder did not change any transient device path'
+require_line "$ROOT/scripts/frontend-runtime-smoke.sh" 'production frontend bundle contains the MSW bootstrap'
 for worker in storage network power general; do
   require_line "$ROOT/scripts/qemu-smoke.sh" "lumonas-privd-$worker.service"
 done
 [ -x "$ROOT/scripts/storage-loopback-smoke.sh" ] || { echo "storage loopback smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/frontend-runtime-smoke.sh" ] || { echo "frontend runtime smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/share-config-smoke.sh" ] || { echo "share configuration smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/qemu-recovery-smoke.sh" ] || { echo "QEMU recovery smoke test must be executable" >&2; exit 1; }

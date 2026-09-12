@@ -416,6 +416,8 @@ the packaged web service.
 
 Pass if the response contains the compiled LumoNAS title and React root
 element, in addition to the API, SSE, service identity, and disk assertions.
+The production bundle smoke must also pass without MSW bootstrap code; mock
+handlers remain limited to the explicit local demo mode.
 
 ## AP. Wake-on-LAN command boundary
 
