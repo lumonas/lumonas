@@ -198,6 +198,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.notificationTest(w, r)
 	case r.Method == http.MethodGet && endpoint == "/system/metrics":
 		s.metrics(w)
+	case r.Method == http.MethodGet && endpoint == "/diagnostics/support-bundle":
+		s.supportBundle(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
 		s.networkInterfaces(w)
 	case r.Method == http.MethodGet && endpoint == "/network/connections":
