@@ -69,11 +69,18 @@ for attempt in $(seq 1 60); do
      curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
      curl -fsS http://127.0.0.1:18080/api/v1/system/metrics >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1; then
+     curl -fsS http://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
+     curl -fsS http://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
     disk_count=$(grep -o '"id"' "$LOG.disks" | wc -l | tr -d ' ')
-    if [ "$disk_count" -ge 5 ] && grep -F 'serial:LUMONAS-DATA1' "$LOG.disks" >/dev/null 2>&1; then
-      echo "QEMU appliance smoke test passed (disks=$disk_count)"
-      exit 0
+    if [ "$disk_count" -ge 5 ] && \
+       grep -F 'serial:LUMONAS-DATA1' "$LOG.disks" >/dev/null 2>&1 && \
+       grep -F 'lumonas-web.service' "$LOG.services" >/dev/null 2>&1; then
+      EVENTS_LOG="$LOG.events"
+      curl -fsS --max-time 5 -N http://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
+      if grep -F 'retry: 3000' "$EVENTS_LOG" >/dev/null 2>&1 && grep -F 'system.metrics' "$EVENTS_LOG" >/dev/null 2>&1; then
+        echo "QEMU appliance smoke test passed (disks=$disk_count)"
+        exit 0
+      fi
     fi
   fi
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then

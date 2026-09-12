@@ -9,4 +9,4 @@ make package
 bash installer/build-iso.sh 0.1.0-dev
 ```
 
-The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. Debian base package pinning, repository signing, and the recovery boot menu remain release-hardening work.
+The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. CI publishes the ISO with checksums, SBOM, and release signatures. Debian base package pinning, repository signing, and the recovery boot menu remain release-hardening work.

@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all test test-go test-web build build-go build-web package api-smoke qemu-image qemu-smoke
+.PHONY: all test test-go test-web build build-go build-web package api-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -38,3 +38,6 @@ qemu-image:
 
 qemu-smoke:
 	LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
+
+verify-release:
+	bash scripts/verify-release.sh build/releases
