@@ -36,6 +36,8 @@ type lsblkDevice struct {
 
 type CommandRunner func(name string, args ...string) ([]byte, error)
 
+var lookupCommand = exec.LookPath
+
 func SystemRunner(name string, args ...string) ([]byte, error) {
 	return runner.Output(name, args...)
 }
@@ -60,6 +62,7 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 		if d.Type != "disk" {
 			continue
 		}
+		d = enrichFromUdev(run, d)
 		rotational := asBool(d.Rota)
 		iface := d.Tran
 		if iface == "" {
@@ -88,6 +91,64 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 		}
 	}
 	return result, nil
+}
+
+// enrichFromUdev fills identity fields that can be absent from lsblk on
+// USB/SAS bridges or during early device discovery. It is deliberately
+// read-only and best-effort: lsblk remains the primary inventory source, while
+// udev properties add stable serial/WWN/GPT/filesystem metadata when present.
+func enrichFromUdev(run CommandRunner, device lsblkDevice) lsblkDevice {
+	if device.Path == "" {
+		return device
+	}
+	if _, err := lookupCommand("udevadm"); err != nil {
+		return device
+	}
+	output, err := run("udevadm", "info", "--query=property", "--name", device.Path)
+	if err != nil {
+		return device
+	}
+	properties := parseUdevProperties(string(output))
+	if device.WWN == "" {
+		device.WWN = firstProperty(properties, "ID_WWN", "ID_WWN_WITH_EXTENSION")
+	}
+	if device.Serial == "" {
+		device.Serial = firstProperty(properties, "ID_SERIAL_SHORT", "ID_SERIAL")
+	}
+	if device.Model == "" {
+		device.Model = firstProperty(properties, "ID_MODEL")
+	}
+	if device.UUID == "" {
+		device.UUID = firstProperty(properties, "ID_FS_UUID")
+	}
+	if device.PTUUID == "" {
+		device.PTUUID = firstProperty(properties, "ID_PART_TABLE_UUID")
+	}
+	if device.Tran == "" {
+		device.Tran = firstProperty(properties, "ID_BUS")
+	}
+	return device
+}
+
+func parseUdevProperties(output string) map[string]string {
+	properties := make(map[string]string)
+	for _, line := range strings.Split(output, "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(key) == "" {
+			continue
+		}
+		properties[strings.TrimSpace(key)] = strings.TrimSpace(value)
+	}
+	return properties
+}
+
+func firstProperty(properties map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(properties[key]); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func StableID(d lsblkDevice) string {

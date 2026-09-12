@@ -386,6 +386,12 @@ frontend types, including correlation and operation metadata.
 It also checks that all frontend query and mutation paths resolve to documented
 backend routes after normalizing dynamic path parameters.
 
+Run `scripts/disk-identity-smoke.sh`.
+
+Pass if missing identity fields are enriched from read-only udev properties,
+existing `lsblk` identity wins over fallback values, and the command arguments
+remain fixed to the device path rather than a shell expression.
+
 ## AF. SSE observability envelope
 
 Run the event encoding test and resume an SSE client from `Last-Event-ID`.

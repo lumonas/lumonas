@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -32,5 +33,40 @@ func TestStableIDFallsBackInSafeOrder(t *testing.T) {
 	}
 	if got := StableID(lsblkDevice{Path: "/dev/sda"}); got != "path:/dev/sda" {
 		t.Fatal(got)
+	}
+}
+
+func TestParseUdevPropertiesIgnoresMalformedLines(t *testing.T) {
+	got := parseUdevProperties("ID_WWN=wwn-udev\nmalformed\nID_SERIAL_SHORT=serial-udev\n")
+	want := map[string]string{"ID_WWN": "wwn-udev", "ID_SERIAL_SHORT": "serial-udev"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected udev properties: %#v", got)
+	}
+}
+
+func TestEnrichFromUdevFillsMissingStableIdentity(t *testing.T) {
+	previous := lookupCommand
+	lookupCommand = func(string) (string, error) { return "/usr/bin/udevadm", nil }
+	t.Cleanup(func() { lookupCommand = previous })
+	device := enrichFromUdev(func(name string, args ...string) ([]byte, error) {
+		if name != "udevadm" || !reflect.DeepEqual(args, []string{"info", "--query=property", "--name", "/dev/sdb"}) {
+			t.Fatalf("unexpected udev command %q %v", name, args)
+		}
+		return []byte("ID_WWN=wwn-udev\nID_SERIAL_SHORT=serial-udev\nID_MODEL=Bridge Disk\nID_FS_UUID=fs-udev\nID_PART_TABLE_UUID=gpt-udev\nID_BUS=usb\n"), nil
+	}, lsblkDevice{Path: "/dev/sdb"})
+	if device.WWN != "wwn-udev" || device.Serial != "serial-udev" || device.Model != "Bridge Disk" || device.UUID != "fs-udev" || device.PTUUID != "gpt-udev" || device.Tran != "usb" {
+		t.Fatalf("udev identity enrichment incomplete: %#v", device)
+	}
+}
+
+func TestEnrichFromUdevPreservesLsblkIdentity(t *testing.T) {
+	previous := lookupCommand
+	lookupCommand = func(string) (string, error) { return "/usr/bin/udevadm", nil }
+	t.Cleanup(func() { lookupCommand = previous })
+	device := enrichFromUdev(func(string, ...string) ([]byte, error) {
+		return []byte("ID_WWN=udev-wwn\nID_SERIAL_SHORT=udev-serial\n"), nil
+	}, lsblkDevice{Path: "/dev/sdb", WWN: "lsblk-wwn", Serial: "lsblk-serial"})
+	if device.WWN != "lsblk-wwn" || device.Serial != "lsblk-serial" {
+		t.Fatalf("lsblk identity was overwritten: %#v", device)
 	}
 }

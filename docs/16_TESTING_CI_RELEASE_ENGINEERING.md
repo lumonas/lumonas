@@ -124,6 +124,11 @@ Disk collection requests `PTUUID` from `lsblk` and uses the partition-table
 UUID as a stable fallback between serial and filesystem UUID. The collector
 contract test verifies both the command field and the resulting `gptDiskGuid`.
 
+When `lsblk` leaves identity fields empty, the read-only collector enriches the
+record from `udevadm info --query=property --name <device>`. The disk identity
+smoke covers WWN, serial, model, filesystem UUID, partition-table UUID, bus,
+and preservation of authoritative `lsblk` values.
+
 `check-api-contract.py` runs on every backend and installer-scripts job. It
 checks the stable Disk and LumoEvent field sets in OpenAPI and TypeScript, so
 route parity alone cannot hide a response-shape regression.

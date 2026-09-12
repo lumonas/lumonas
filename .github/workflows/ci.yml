@@ -90,6 +90,7 @@ jobs:
           go test -count=1
           ./cmd/lumonasd ./cmd/lumonas-privd ./internal/storage ./internal/recovery ./internal/privileged
           -run 'TestStoragePlanRequiresStableIdentityAndSafetyUnlock|TestPoolPlanPersistsAndRejectsReplacedDiskOnConfirmation|TestPoolPlanFailsClosedOnReorderedOrReplacedDisk|TestPlanRejectsExpiryMountAndGenerationRaces|TestApplyMountPersistenceRejectsStaleDiskIdentity|TestApplySnapraidConfigRevalidatesDiskIdentities|TestExecuteRequiresOperationIDForConfirmedStorageMutation|TestDestructiveStorageExecutionFailsClosedForMissingOrMountedDisk|TestDestructiveStorageExecutionFailsClosedWhenFindmntReportsMount|TestSnapraidMutationsFailClosedWhenCommandFails|TestRecoveryStageRequiresConfirmationAndExtractsBundle|TestBundleRoundTripAndEncryptedPayload|TestBundleTamperingFailsVerification|TestUpdateAPIRequiresVerifiedRecoveryAndSupportsABHealthRollback|TestClientRoundTrip|TestPruneJobsKeepsActiveAndNewestTerminalHistory'
+      - run: bash scripts/disk-identity-smoke.sh
 
   recovery-api:
     runs-on: ubuntu-latest
