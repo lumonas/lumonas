@@ -85,6 +85,11 @@ that `/api/v1/disks` serializes those fields, including the current device
 path, WWN/GPT/partition/filesystem identifiers, mount state, and last-seen
 timestamp. OpenAPI and frontend types are kept aligned with that response.
 
+The SSE envelope test round-trips an event containing correlation, operation,
+plan, actor, generation, resource, and payload data. This keeps the fields
+needed to trace a destructive operation from the initiating request through
+its persisted event and frontend delivery.
+
 The daemon restart tests also verify that queued, preparing, and running jobs
 are failed closed when `lumonasd` starts again, and that an SSE client can
 resume from `Last-Event-ID` without receiving its cursor event twice. Host

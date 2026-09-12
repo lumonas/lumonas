@@ -601,6 +601,11 @@ export interface LumoEvent<T = Record<string, unknown>> {
   type: string
   timestamp: string
   severity: 'info' | 'warning' | 'critical'
+  correlationId?: string
+  operationId?: string
+  planHash?: string
+  actor?: string
+  generation?: number
   resource?: { type: string; id: string }
   data: T
 }

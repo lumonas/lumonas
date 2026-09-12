@@ -296,3 +296,11 @@ Pass if a disk response preserves stable identity fields (`wwn`, GPT disk
 GUID, partition UUID, filesystem UUID), the current path, mount state, and
 last-seen timestamp, and those fields are represented in the OpenAPI and
 frontend contracts.
+
+## AF. SSE observability envelope
+
+Run the event encoding test and resume an SSE client from `Last-Event-ID`.
+
+Pass if the JSON event preserves `correlationId`, `operationId`, `planHash`,
+`actor`, `generation`, resource identity, schema version, and payload data,
+and the frontend event type exposes the same optional metadata.
