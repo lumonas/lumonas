@@ -341,6 +341,8 @@ Run the privileged storage safety tests and the Linux loopback smoke test.
 Pass if missing disks, mounted disks, and disks reported as mounted by
 `findmnt` are rejected before `mkfs` or `wipefs`, and the real loopback test
 can create both mergerfs branches and complete SnapRAID status cleanup.
+The same loopback gate formats and erases only a disposable test image,
+verifying filesystem UUID creation and signature removal.
 
 The same gate injects failed SnapRAID sync and scrub commands and requires
 both operations to finish failed without updating protection success metadata.

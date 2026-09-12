@@ -229,7 +229,9 @@ CI runs `scripts/storage-loopback-smoke.sh` as a release-blocking root-gated
 check. It uses only a temporary directory, verifies ext4 UUID stability after
 loop-device reattachment, rejects writes after read-only import, rejects an
 independent disk identity, and exercises XFS when the runner provides
-`mkfs.xfs`.
+`mkfs.xfs`. It also formats and erases a separate disposable loopback image,
+proving the real filesystem lifecycle tools work without ever targeting
+protected media.
 
 ## Fuzz/property tests
 

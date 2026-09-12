@@ -12,7 +12,7 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 0
 fi
 
-for command in blkid losetup mount umount mkfs.ext4 mkfs.xfs truncate findmnt mergerfs snapraid; do
+for command in blkid losetup mount umount mkfs.ext4 mkfs.xfs wipefs truncate findmnt mergerfs snapraid; do
 	command -v "$command" >/dev/null 2>&1 || {
 		echo "$command is required for loopback storage assertions" >&2
 		exit 1
@@ -105,6 +105,28 @@ mount -o ro "$XFS_LOOP" "$WORK/xfs-mount"
 findmnt -rn -o FSTYPE "$WORK/xfs-mount" | grep -Fx xfs >/dev/null
 umount "$WORK/xfs-mount"
 
+# Exercise the destructive filesystem lifecycle only on a disposable loopback
+# image. The release gate still relies on the broker/unit tests for identity,
+# plan expiry, and mounted-disk rejection; this proves the real tools mutate
+# and then clear test media as expected.
+MUTATION_IMAGE="$WORK/mutation.img"
+make_disk "$MUTATION_IMAGE" ext4
+MUTATION_LOOP=$LAST_LOOP
+MUTATION_UUID=$LAST_UUID
+[ -n "$MUTATION_UUID" ] || { echo "mutation disk identity discovery failed" >&2; exit 1; }
+if findmnt -rn -T "$MUTATION_LOOP" >/dev/null 2>&1; then
+	echo "mutation disk unexpectedly mounted before format" >&2
+	exit 1
+fi
+mkfs.ext4 -F "$MUTATION_LOOP" >/dev/null
+FORMATTED_UUID=$(blkid -s UUID -o value "$MUTATION_LOOP")
+[ -n "$FORMATTED_UUID" ] || { echo "format did not create a filesystem UUID" >&2; exit 1; }
+wipefs --all --force "$MUTATION_LOOP" >/dev/null
+if blkid "$MUTATION_LOOP" >/dev/null 2>&1; then
+	echo "erase did not remove filesystem signatures" >&2
+	exit 1
+fi
+
 mount "$EXT4_LOOP" "$WORK/branch-a"
 mount "$MISMATCH_LOOP" "$WORK/branch-b"
 mergerfs -o category.create=mfs,use_ino "$WORK/branch-a:$WORK/branch-b" "$WORK/pool"
@@ -121,4 +143,4 @@ data d2 $WORK/branch-b
 EOF
 snapraid -c "$SNAPRAID_CONFIG" status >/dev/null
 
-echo "loopback storage smoke test passed (ext4/xfs identity, read-only import, mergerfs pool, SnapRAID status, mismatch rejected)"
+echo "loopback storage smoke test passed (ext4/xfs identity, read-only import, format/erase, mergerfs pool, SnapRAID status, mismatch rejected)"
