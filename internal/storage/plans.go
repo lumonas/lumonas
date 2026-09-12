@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
@@ -15,6 +16,7 @@ type Action string
 
 const (
 	ActionFormat  Action = "filesystem.format"
+	ActionCreate  Action = "filesystem.create"
 	ActionErase   Action = "disk.erase"
 	ActionMount   Action = "filesystem.mount"
 	ActionUnmount Action = "filesystem.unmount"
@@ -109,18 +111,62 @@ func Validate(plan Plan, actual model.Disk, now time.Time, currentGeneration int
 	if plan.Target.FilesystemUUID != "" && actual.FilesystemUUID != plan.Target.FilesystemUUID {
 		return errors.New("filesystem UUID mismatch")
 	}
-	if (plan.Action == ActionFormat || plan.Action == ActionErase) && actual.Mounted {
+	if (plan.Action == ActionFormat || plan.Action == ActionCreate || plan.Action == ActionErase) && actual.Mounted {
 		return errors.New("target is currently mounted")
 	}
-	if (plan.Action == ActionFormat || plan.Action == ActionErase) && actual.PoolID != "" {
+	if (plan.Action == ActionFormat || plan.Action == ActionCreate || plan.Action == ActionErase) && actual.PoolID != "" {
 		return errors.New("target is currently assigned to a pool")
+	}
+	if plan.Action == ActionCreate {
+		if err := ValidateRequestedState(plan.Action, plan.Target.DiskID, plan.RequestedState); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
+// ValidateRequestedState checks the requestedState payload of a
+// filesystem.create operation: filesystem type, canonical branch mount path,
+// and optional filesystem label (12 characters fits ext4 and xfs limits).
+func ValidateRequestedState(action Action, diskID string, requested map[string]any) error {
+	if action != ActionCreate {
+		return nil
+	}
+	filesystem, _ := requested["filesystem"].(string)
+	if filesystem != "ext4" && filesystem != "xfs" {
+		return errors.New("filesystem must be ext4 or xfs")
+	}
+	mountPath, _ := requested["mountPath"].(string)
+	if filepath.Clean(mountPath) != DiskBranchPath(diskID) {
+		return errors.New("mountPath must be the canonical /srv/disks/<disk-id> branch path")
+	}
+	if label, _ := requested["label"].(string); label != "" && !ValidFilesystemLabel(label) {
+		return errors.New("filesystem label must be 1-12 alphanumeric, dot, underscore, or hyphen characters")
+	}
+	return nil
+}
+
+// ValidFilesystemLabel enforces a label that fits both ext4 (16 chars) and
+// xfs (12 chars) limits, starting with an alphanumeric character.
+func ValidFilesystemLabel(value string) bool {
+	if value == "" || len(value) > 12 {
+		return false
+	}
+	for index, char := range value {
+		alphanumeric := char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9'
+		if index == 0 && !alphanumeric {
+			return false
+		}
+		if !alphanumeric && char != '.' && char != '_' && char != '-' {
+			return false
+		}
+	}
+	return true
+}
+
 func supported(action Action) bool {
 	switch action {
-	case ActionFormat, ActionErase, ActionMount, ActionUnmount:
+	case ActionFormat, ActionCreate, ActionErase, ActionMount, ActionUnmount:
 		return true
 	default:
 		return false

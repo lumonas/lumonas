@@ -48,3 +48,36 @@ func TestPlanRejectsExpiryMountAndGenerationRaces(t *testing.T) {
 		t.Fatal("mounted destructive target should fail")
 	}
 }
+
+func TestCreatePlanValidatesRequestedState(t *testing.T) {
+	now := time.Now().UTC()
+	plan, err := NewPlan("op-3", ActionCreate, testDisk(), 7, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan.RequestedState = map[string]any{"filesystem": "ext4", "mountPath": DiskBranchPath(plan.Target.DiskID), "label": "media"}
+	plan.PlanHash = Hash(plan)
+	if err := Validate(plan, testDisk(), now.Add(time.Minute), 7); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRequestedState(ActionCreate, plan.Target.DiskID, map[string]any{"filesystem": "btrfs", "mountPath": DiskBranchPath(plan.Target.DiskID)}); err == nil {
+		t.Fatal("unsupported filesystem should fail")
+	}
+	if err := ValidateRequestedState(ActionCreate, plan.Target.DiskID, map[string]any{"filesystem": "ext4", "mountPath": "/mnt/other"}); err == nil {
+		t.Fatal("non-canonical mount path should fail")
+	}
+	if err := ValidateRequestedState(ActionCreate, plan.Target.DiskID, map[string]any{"filesystem": "ext4", "mountPath": DiskBranchPath(plan.Target.DiskID), "label": "-bad label"}); err == nil {
+		t.Fatal("invalid label should fail")
+	}
+	if err := ValidateRequestedState(ActionCreate, plan.Target.DiskID, map[string]any{"filesystem": "ext4", "mountPath": DiskBranchPath(plan.Target.DiskID), "label": "thirteenchars"}); err == nil {
+		t.Fatal("overlong label should fail")
+	}
+	if err := ValidateRequestedState(ActionMount, "x", map[string]any{"anything": true}); err != nil {
+		t.Fatalf("non-create actions skip requested-state validation: %v", err)
+	}
+	mounted := testDisk()
+	mounted.Mounted = true
+	if err := Validate(plan, mounted, now.Add(time.Minute), 7); err == nil {
+		t.Fatal("create on a mounted target should fail")
+	}
+}

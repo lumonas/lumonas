@@ -59,6 +59,51 @@ func TestExecuteMountRevalidatesIdentityAndUsesAllowListedCommand(t *testing.T) 
 	}
 }
 
+func TestExecuteCreateFormatsLabelsAndMounts(t *testing.T) {
+	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
+	commands := make([]string, 0)
+	result := execute(request{Operation: "filesystem.create", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"}, RequestedState: map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test", "label": "media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return nil, nil
+	})
+	if !result.OK {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	if len(commands) != 4 || commands[0] != "findmnt -rn -S /dev/sda" || commands[1] != "mkfs.ext4 -F -L media /dev/sda" || commands[2] != "mkdir -p /srv/disks/wwn-test" || commands[3] != "mount -t ext4 /dev/sda /srv/disks/wwn-test" {
+		t.Fatalf("unexpected commands: %v", commands)
+	}
+}
+
+func TestExecuteCreateEnforcesCanonicalPathFilesystemAndLabel(t *testing.T) {
+	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
+	discover := func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }
+	run := func(string, ...string) ([]byte, error) { return nil, nil }
+	base := request{Operation: "filesystem.create", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}
+	cases := []struct {
+		name     string
+		request  map[string]any
+		expected string
+	}{
+		{"foreign mount path", map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/other"}, "canonical"},
+		{"unsupported filesystem", map[string]any{"filesystem": "btrfs", "mountPath": "/srv/disks/wwn-test"}, "ext4 or xfs"},
+		{"invalid label", map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test", "label": "-bad label"}, "label is invalid"},
+	}
+	for _, testCase := range cases {
+		result := execute(request{Operation: base.Operation, PlanHash: base.PlanHash, TargetDiskID: base.TargetDiskID, ExpectedIdentity: base.ExpectedIdentity, RequestedState: testCase.request, ExpiresAt: base.ExpiresAt, Confirmed: true}, discover, run)
+		if result.OK || !strings.Contains(result.Error, testCase.expected) {
+			t.Fatalf("%s: expected rejection %q, got %#v", testCase.name, testCase.expected, result)
+		}
+	}
+}
+
+func TestExecuteCreateRejectsDestructiveTargets(t *testing.T) {
+	mounted := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100, Mounted: true}
+	result := execute(request{Operation: "filesystem.create", PlanHash: "hash", TargetDiskID: mounted.ID, ExpectedIdentity: map[string]string{"wwn": "test"}, RequestedState: map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{mounted}, nil }, func(string, ...string) ([]byte, error) { return nil, nil })
+	if result.OK || !strings.Contains(result.Error, "mounted") {
+		t.Fatalf("expected mounted target rejection: %#v", result)
+	}
+}
+
 func TestExecuteMountCanBeReadOnlyForImport(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
 	var command string

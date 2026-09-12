@@ -91,6 +91,35 @@ func TestStoragePlanRequiresStableIdentityAndSafetyUnlock(t *testing.T) {
 	}
 }
 
+func TestStorageCreatePlanValidatesRequestedStateAndSafety(t *testing.T) {
+	server := testServer(t)
+	invalid := httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.create","diskId":"wwn:test","requestedState":{"filesystem":"ext4","mountPath":"/mnt/other"}}`))
+	invalidResponse := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalidResponse, invalid)
+	if invalidResponse.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidResponse.Body.String(), "canonical") {
+		t.Fatalf("expected 422 canonical path rejection, got %d: %s", invalidResponse.Code, invalidResponse.Body.String())
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.create","diskId":"wwn:test","requestedState":{"filesystem":"ext4","mountPath":"/srv/disks/wwn_test","label":"media"}}`))
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected plan creation, got %d: %s", response.Code, response.Body.String())
+	}
+	var plan struct {
+		OperationID string `json:"operationId"`
+		PlanHash    string `json:"planHash"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&plan); err != nil {
+		t.Fatal(err)
+	}
+	confirm := httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/"+plan.OperationID+"/confirm", strings.NewReader(`{"planHash":"`+plan.PlanHash+`","reauthenticated":true}`))
+	confirmed := httptest.NewRecorder()
+	server.routes().ServeHTTP(confirmed, confirm)
+	if confirmed.Code != http.StatusLocked {
+		t.Fatalf("expected safety lock on confirm, got %d", confirmed.Code)
+	}
+}
+
 func TestAuthRequiredProtectsAPIButNotHealth(t *testing.T) {
 	server := testServer(t)
 	server.authRequired = true

@@ -245,10 +245,10 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		if err := validateIdentity(*target, req.ExpectedIdentity); err != nil {
 			return response{Error: err.Error()}
 		}
-		if (req.Operation == "filesystem.format" || req.Operation == "disk.erase") && (target.Mounted || target.PoolID != "") {
+		if (req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase") && (target.Mounted || target.PoolID != "") {
 			return response{Error: "target disk is mounted or assigned to a pool"}
 		}
-		if (req.Operation == "filesystem.format" || req.Operation == "disk.erase") && deviceHasMounts(target.CurrentPath, run) {
+		if (req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase") && deviceHasMounts(target.CurrentPath, run) {
 			return response{Error: "target device or one of its partitions is mounted"}
 		}
 		return executeStorage(req, *target, run)
@@ -532,6 +532,40 @@ func executeStorage(req request, disk model.Disk, run command) response {
 			return response{Error: "unmount failed"}
 		}
 		return response{OK: true, Data: map[string]string{"mountPath": target}}
+	case "filesystem.create":
+		filesystem := requestedString(req.RequestedState, "filesystem")
+		if filesystem != "ext4" && filesystem != "xfs" {
+			return response{Error: "filesystem must be ext4 or xfs"}
+		}
+		mountPath := requestedString(req.RequestedState, "mountPath")
+		if filepath.Clean(mountPath) != storage.DiskBranchPath(disk.ID) {
+			return response{Error: "mountPath must be the canonical /srv/disks/<disk-id> branch path"}
+		}
+		label := requestedString(req.RequestedState, "label")
+		if label != "" && !storage.ValidFilesystemLabel(label) {
+			return response{Error: "filesystem label is invalid"}
+		}
+		binary := "mkfs." + filesystem
+		args := []string{}
+		if filesystem == "ext4" {
+			args = append(args, "-F")
+		} else {
+			args = append(args, "-f")
+		}
+		if label != "" {
+			args = append(args, "-L", label)
+		}
+		args = append(args, path)
+		if _, err := run(binary, args...); err != nil {
+			return response{Error: "filesystem creation failed"}
+		}
+		if _, err := run("mkdir", "-p", mountPath); err != nil {
+			return response{Error: "mount path could not be created"}
+		}
+		if _, err := run("mount", "-t", filesystem, path, mountPath); err != nil {
+			return response{Error: "mount failed"}
+		}
+		return response{OK: true, Data: map[string]string{"filesystem": filesystem, "path": path, "mountPath": mountPath, "label": label}}
 	case "filesystem.format":
 		filesystem := requestedString(req.RequestedState, "filesystem")
 		if filesystem != "ext4" && filesystem != "xfs" {
