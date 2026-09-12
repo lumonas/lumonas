@@ -203,6 +203,9 @@ Likewise, onboarding may persist a requested parity/data layout as intent, but
 it must not queue the initial sync when configuration activation or identity
 validation fails.
 
+The privileged integration test also injects failed `snapraid sync` and
+`snapraid scrub` commands and verifies that both operations return failure.
+
 ## Import existing disks
 
 Scan read-only first.

@@ -67,6 +67,7 @@ Deliver:
 - config generation;
 - content replication;
 - sync/scrub/status;
+- fail-closed sync/scrub command outcomes;
 - safety mode;
 - scheduling;
 - job progress;

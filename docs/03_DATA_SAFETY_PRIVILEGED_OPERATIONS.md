@@ -49,6 +49,10 @@ Examples:
 
 Must show impact and support rollback/verification.
 
+SnapRAID sync and scrub failures are terminal operation failures: the
+privileged broker never converts a non-zero command result into success or
+updates the last-successful protection timestamp.
+
 ### Class D — destructive
 
 Examples:

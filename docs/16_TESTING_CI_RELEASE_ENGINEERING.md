@@ -122,6 +122,10 @@ The privileged safety contract also asserts that a missing target, an already
 mounted target, and a target reported by `findmnt` all fail before any
 destructive command is invoked.
 
+The release safety job additionally executes the SnapRAID sync and scrub
+failure contract, ensuring a non-zero command result cannot advance protection
+state.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until
