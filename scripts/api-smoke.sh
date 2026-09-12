@@ -175,6 +175,8 @@ fi
 
 assert_authenticated_status_and_body GET /api/v1/settings 200 '"runtime"'
 assert_authenticated_status_and_body POST /api/v1/recovery/key 200 '"key"'
+assert_authenticated_status_and_body POST /api/v1/recovery/export 201 '"verified":true'
+assert_authenticated_status_and_body GET /api/v1/recovery/status 200 '"verified":true'
 assert_authenticated_status_and_body GET '/api/v1/power/shutdown/plan?action=poweroff' 200 '"name":"stop-jobs"'
 assert_authenticated_status_and_body POST /api/v1/updates/check 202 '"type":"updates.check"'
 
