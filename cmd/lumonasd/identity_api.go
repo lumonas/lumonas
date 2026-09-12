@@ -12,7 +12,7 @@ import (
 )
 
 func (s *apiServer) identityActor(w http.ResponseWriter, r *http.Request, mutate bool) (string, bool) {
-	if !s.authRequired {
+	if !s.authEnabled() {
 		return "local", true
 	}
 	cookie, err := r.Cookie("lumonas_session")

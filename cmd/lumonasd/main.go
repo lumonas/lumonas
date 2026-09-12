@@ -49,6 +49,7 @@ type apiServer struct {
 	version              string
 	diskFunc             func() ([]model.Disk, error)
 	authRequired         bool
+	dynamicAuth          bool
 	dockerService        dockerruntime.Service
 	catalogFile          string
 	notificationMu       sync.Mutex
@@ -69,6 +70,21 @@ type apiServer struct {
 }
 
 var version = "0.1.0-dev"
+
+// authEnabled reports whether API requests must be authenticated. When the
+// daemon runs in dynamic mode (the production default), an explicit
+// LUMONAS_AUTH_REQUIRED wins; otherwise the API stays open only until the
+// first management user exists, so a freshly installed appliance is
+// reachable for onboarding but never left wide open on the LAN.
+func (s *apiServer) authEnabled() bool {
+	if s.authRequired || !s.dynamicAuth {
+		return s.authRequired
+	}
+	if value := os.Getenv("LUMONAS_AUTH_REQUIRED"); value != "" {
+		return value == "true"
+	}
+	return s.store.HasUsers()
+}
 
 // csrfBinding ties a CSRF token to the session digest it was issued for and
 // an expiry; tokens only verify for the matching session.
@@ -121,7 +137,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]csrfBinding), rateAttempts: make(map[string][]time.Time)}
+	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", dynamicAuth: true, corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]csrfBinding), rateAttempts: make(map[string][]time.Time)}
 	server.dockerService = dockerruntime.New(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"), nil)
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
 	server.reconcileUpdateBoot()
@@ -516,7 +532,7 @@ func (s *apiServer) authStatus(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("lumonas_session"); err == nil {
 		_, authenticated = s.store.SessionUser(cookie.Value)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"required": s.authRequired, "configured": s.store.HasUsers(), "authenticated": authenticated})
+	writeJSON(w, http.StatusOK, map[string]any{"required": s.authEnabled(), "configured": s.store.HasUsers(), "authenticated": authenticated})
 }
 
 func (s *apiServer) checkRateLimit(ip string) bool {
@@ -651,7 +667,7 @@ func (s *apiServer) authLogout(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.authRequired || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/login/2fa" || r.URL.Path == "/api/v1/auth/logout" {
+		if !s.authEnabled() || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/login/2fa" || r.URL.Path == "/api/v1/auth/logout" {
 			next.ServeHTTP(w, r)
 			return
 		}

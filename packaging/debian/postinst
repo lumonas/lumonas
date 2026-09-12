@@ -9,12 +9,12 @@ install -d -o lumonas -g lumonas -m 0750 /var/lib/lumonas /var/lib/lumonas/secre
 if getent group docker >/dev/null 2>&1; then usermod -aG docker lumonas || true; fi
 
 # Keep administrator-owned configuration across upgrades, but create a usable
-# first-boot baseline when this is a fresh installation. The service defaults
-# intentionally remain local-only until onboarding or an administrator changes
-# the listener.
+# first-boot baseline when this is a fresh installation. Authentication is
+# intentionally not pinned here: the daemon stays reachable until the first
+# management user is created (onboarding) and then requires login. Set
+# LUMONAS_AUTH_REQUIRED=false explicitly to opt out.
 if [ ! -f /etc/lumonas/lumonasd.env ]; then
 	cat >/etc/lumonas/lumonasd.env <<'ENV'
-LUMONAS_AUTH_REQUIRED=false
 LUMONAS_DB_PATH=/var/lib/lumonas/lumonas.db
 LUMONAS_RECOVERY_DIR=/var/lib/lumonas/recovery
 LUMONAS_STACK_ROOT=/srv/lumonas/docker/stacks

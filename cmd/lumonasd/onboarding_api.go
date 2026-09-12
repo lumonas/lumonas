@@ -32,7 +32,7 @@ type onboardingCompleteRequest struct {
 }
 
 func (s *apiServer) onboardingState(w http.ResponseWriter, r *http.Request) {
-	if s.authRequired {
+	if s.authEnabled() {
 		if _, ok := s.identityActor(w, r, false); !ok {
 			return
 		}

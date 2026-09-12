@@ -216,3 +216,62 @@ func TestIssueCSRFTokenBindsDigestNotRawSession(t *testing.T) {
 		t.Fatal("raw session token stored in memory")
 	}
 }
+
+func TestDynamicAuthClosesAfterFirstUser(t *testing.T) {
+	server := testServer(t)
+	server.dynamicAuth = true
+	server.authRequired = false
+	t.Setenv("LUMONAS_AUTH_REQUIRED", "")
+
+	// Fresh install: API is open so onboarding can create the first user.
+	rec := httptest.NewRecorder()
+	server.routes().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/status", nil))
+	var status struct {
+		Required      bool `json:"required"`
+		Configured    bool `json:"configured"`
+		Authenticated bool `json:"authenticated"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status.Required || status.Configured {
+		t.Fatalf("fresh install should be open for onboarding: %#v", status)
+	}
+
+	createManagementUser(t, server, "dynamic-owner", "correct-horse-battery")
+
+	// As soon as a management user exists the API requires a session.
+	rec = httptest.NewRecorder()
+	server.routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"kind":"user","name":"nope","password":"correct-horse-battery"}`)))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 after first user exists, got %d", rec.Code)
+	}
+
+	cookie, token := loginAs(t, server, "dynamic-owner", "correct-horse-battery")
+	rec = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/status", nil)
+	req.AddCookie(cookie)
+	server.routes().ServeHTTP(rec, req)
+	if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
+		t.Fatal(err)
+	}
+	if !status.Required || !status.Authenticated {
+		t.Fatalf("authenticated status wrong: %#v", status)
+	}
+	_ = token
+}
+
+func TestDynamicAuthExplicitEnvOptOutWins(t *testing.T) {
+	server := testServer(t)
+	server.dynamicAuth = true
+	server.authRequired = false
+	t.Setenv("LUMONAS_AUTH_REQUIRED", "false")
+
+	createManagementUser(t, server, "optout-owner", "correct-horse-battery")
+
+	rec := httptest.NewRecorder()
+	server.routes().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"kind":"user","name":"nope2","password":"correct-horse-battery"}`)))
+	if rec.Code == http.StatusUnauthorized {
+		t.Fatal("explicit LUMONAS_AUTH_REQUIRED=false should keep the API open")
+	}
+}
