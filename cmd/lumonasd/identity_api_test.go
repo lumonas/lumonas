@@ -14,7 +14,7 @@ func TestIdentityAPISeparatesFileAndManagementUsers(t *testing.T) {
 	server := testServer(t)
 
 	fileUserResponse := httptest.NewRecorder()
-	server.routes().ServeHTTP(fileUserResponse, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"media"}`)))
+	server.routes().ServeHTTP(fileUserResponse, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"media","password":"a-file-user-password"}`)))
 	if fileUserResponse.Code != http.StatusCreated {
 		t.Fatalf("file user creation failed: %d %s", fileUserResponse.Code, fileUserResponse.Body.String())
 	}
@@ -43,7 +43,7 @@ func TestIdentityAPIGroupMembershipAndGenerationConflict(t *testing.T) {
 	server := testServer(t)
 
 	user := httptest.NewRecorder()
-	server.routes().ServeHTTP(user, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"family"}`)))
+	server.routes().ServeHTTP(user, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"family","password":"a-file-user-password"}`)))
 	if user.Code != http.StatusCreated {
 		t.Fatalf("user creation failed: %d %s", user.Code, user.Body.String())
 	}

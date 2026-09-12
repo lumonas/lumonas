@@ -279,7 +279,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 	case "identity.system-user.ensure":
 		return ensureSystemUser(req, run)
 	case "samba.user.ensure":
-		return ensureSambaUser(req, run)
+		return ensureSambaUser(req, run, stdinCommandRunner)
 	case "snapraid.sync", "snapraid.scrub":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -839,6 +839,26 @@ func ensureSystemUser(req request, run command) response {
 	if !validUnixName(name) {
 		return response{Error: "system user name is invalid"}
 	}
+	if requestedBool(req.RequestedState, "disabled") {
+		if _, err := run("usermod", "-L", name); err != nil {
+			return response{Error: "system user lock failed"}
+		}
+		return response{OK: true, Data: map[string]string{"name": name, "state": "locked"}}
+	}
+	if requestedBool(req.RequestedState, "enable") {
+		if _, err := run("usermod", "-U", name); err != nil {
+			return response{Error: "system user unlock failed"}
+		}
+		return response{OK: true, Data: map[string]string{"name": name, "state": "unlocked"}}
+	}
+	// Account creation remains the default so existing callers keep working.
+	create := true
+	if _, exists := req.RequestedState["create"]; exists {
+		create = requestedBool(req.RequestedState, "create")
+	}
+	if !create {
+		return response{Error: "system user operation requires create, disabled, or enable"}
+	}
 	uid := requestedInt(req.RequestedState, "uid", 0)
 	gid := requestedInt(req.RequestedState, "gid", 0)
 	if uid < 100 || uid > 60000 || gid < 100 || gid > 60000 {
@@ -866,7 +886,10 @@ func ensureSystemUser(req request, run command) response {
 	return response{OK: true, Data: map[string]string{"name": name, "state": "configured"}}
 }
 
-func ensureSambaUser(req request, run command) response {
+// ensureSambaUser creates, rotates, disables, or enables a Samba account.
+// Passwords are supplied on standard input (pdbedit -t) so they never appear
+// in the process list or the broker log.
+func ensureSambaUser(req request, run command, stdinRun stdinRunner) response {
 	if !req.Confirmed {
 		return response{Error: "operation plan is not confirmed"}
 	}
@@ -874,14 +897,55 @@ func ensureSambaUser(req request, run command) response {
 	if !validUnixName(name) {
 		return response{Error: "Samba user name is invalid"}
 	}
-	args := []string{"-a", "-u", name}
-	if requestedBool(req.RequestedState, "disabled") {
-		args = []string{"-u", name, "-d"}
+	password, hasPassword := "", false
+	if value, exists := req.RequestedState["password"]; exists {
+		password, hasPassword = value.(string)
 	}
-	if _, err := run("pdbedit", args...); err != nil {
-		return response{Error: "Samba user configuration failed"}
+	disabled := requestedBool(req.RequestedState, "disabled")
+	if disabled && hasPassword && password != "" {
+		return response{Error: "Samba user password and disabled are mutually exclusive"}
 	}
-	return response{OK: true, Data: map[string]string{"name": name, "state": "configured"}}
+	switch {
+	case disabled:
+		if _, err := run("pdbedit", "-u", name, "-d"); err != nil {
+			return response{Error: "Samba user disable failed"}
+		}
+		return response{OK: true, Data: map[string]string{"name": name, "state": "disabled"}}
+	case requestedBool(req.RequestedState, "enable"):
+		if _, err := run("pdbedit", "-u", name, "-e"); err != nil {
+			return response{Error: "Samba user enable failed"}
+		}
+		return response{OK: true, Data: map[string]string{"name": name, "state": "enabled"}}
+	case requestedBool(req.RequestedState, "create"):
+		if !validSambaPassword(password) {
+			return response{Error: "Samba user password is invalid"}
+		}
+		if _, err := stdinRun("pdbedit", []string{"-a", "-t", "-u", name}, sambaPasswordStdin(password)); err != nil {
+			return response{Error: "Samba user configuration failed"}
+		}
+		return response{OK: true, Data: map[string]string{"name": name, "state": "configured"}}
+	case hasPassword && password != "":
+		if !validSambaPassword(password) {
+			return response{Error: "Samba user password is invalid"}
+		}
+		if _, err := stdinRun("pdbedit", []string{"-t", "-u", name}, sambaPasswordStdin(password)); err != nil {
+			return response{Error: "Samba user password rotation failed"}
+		}
+		return response{OK: true, Data: map[string]string{"name": name, "state": "rotated"}}
+	default:
+		return response{Error: "Samba user operation requires password, create, disabled, or enable"}
+	}
+}
+
+func sambaPasswordStdin(password string) string {
+	return password + "\n" + password + "\n"
+}
+
+func validSambaPassword(password string) bool {
+	if len(password) < 8 || len(password) > 128 {
+		return false
+	}
+	return !strings.ContainsAny(password, "\x00\n\r")
 }
 
 func applyACL(req request, run command) response {

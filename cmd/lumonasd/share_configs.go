@@ -67,15 +67,42 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 			validate      func(string) error
 		}{envOr("LUMONAS_SFTP_CONFIG", "/var/lib/lumonas/generated/sshd-sftp.conf"), content, validateGeneratedConfig})
 	}
+	staleFTPUsers := make([]preparedShareConfig, 0)
 	if protocols["ftp"] || protocols["ftps"] {
-		content, err := shares.RenderFTP(values)
+		ftp, err := shares.RenderFTPConfig(values, ftpOptions())
 		if err != nil {
 			return nil, err
 		}
+		userDirectory := envOr("LUMONAS_FTP_USER_DIR", "/var/lib/lumonas/generated/vsftpd-users")
 		configs = append(configs, struct {
 			path, content string
 			validate      func(string) error
-		}{envOr("LUMONAS_FTP_CONFIG", "/var/lib/lumonas/generated/ftp.conf"), content, validateGeneratedConfig})
+		}{envOr("LUMONAS_FTP_CONFIG", "/var/lib/lumonas/generated/ftp.conf"), ftp.Main, validateGeneratedConfig})
+		for username, content := range ftp.Users {
+			if !validFTPUserName(username) {
+				return nil, fmt.Errorf("FTP principal name %q is invalid", username)
+			}
+			configs = append(configs, struct {
+				path, content string
+				validate      func(string) error
+			}{filepath.Join(userDirectory, username), content, validateGeneratedConfig})
+		}
+		if entries, readErr := os.ReadDir(userDirectory); readErr == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				if _, mapped := ftp.Users[entry.Name()]; mapped {
+					continue
+				}
+				stalePath := filepath.Join(userDirectory, entry.Name())
+				previous, previousErr := os.ReadFile(stalePath)
+				if previousErr != nil {
+					continue
+				}
+				staleFTPUsers = append(staleFTPUsers, preparedShareConfig{path: stalePath, previous: previous, mode: 0o640, existed: true, remove: true})
+			}
+		}
 	}
 	if protocols["rsync"] {
 		content, err := shares.RenderRsync(values)
@@ -87,7 +114,8 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 			validate      func(string) error
 		}{envOr("LUMONAS_RSYNC_CONFIG", "/var/lib/lumonas/generated/rsync.conf"), content, validateGeneratedConfig})
 	}
-	prepared := make([]preparedShareConfig, 0, len(configs))
+	prepared := make([]preparedShareConfig, 0, len(configs)+len(staleFTPUsers))
+	prepared = append(prepared, staleFTPUsers...)
 	for _, config := range configs {
 		if err := os.MkdirAll(filepath.Dir(config.path), 0o750); err != nil {
 			cleanupShareConfigs(prepared)
@@ -152,7 +180,41 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 		}
 		prepared = append(prepared, item)
 	}
+	if !protocols["ftp"] && !protocols["ftps"] {
+		userDirectory := envOr("LUMONAS_FTP_USER_DIR", "/var/lib/lumonas/generated/vsftpd-users")
+		if entries, readErr := os.ReadDir(userDirectory); readErr == nil {
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				stalePath := filepath.Join(userDirectory, entry.Name())
+				previous, previousErr := os.ReadFile(stalePath)
+				if previousErr != nil {
+					continue
+				}
+				prepared = append(prepared, preparedShareConfig{path: stalePath, previous: previous, mode: 0o640, existed: true, remove: true})
+			}
+		}
+	}
 	return prepared, nil
+}
+
+func ftpOptions() shares.FTPOptions {
+	return shares.FTPOptions{
+		UserConfigDir: envOr("LUMONAS_FTP_USER_DIR", "/var/lib/lumonas/generated/vsftpd-users"),
+		TLSCertFile:   envOr("LUMONAS_WEB_TLS_CERT", "/etc/lumonas/tls/tls.crt"),
+		TLSKeyFile:    envOr("LUMONAS_WEB_TLS_KEY", "/etc/lumonas/tls/tls.key"),
+	}
+}
+
+func validFTPUserName(value string) bool {
+	for _, char := range value {
+		valid := char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '.' || char == '_' || char == '-'
+		if !valid {
+			return false
+		}
+	}
+	return value != ""
 }
 
 func activateShareConfigs(values []preparedShareConfig) error {
@@ -230,6 +292,8 @@ func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.Man
 				services["nfs-server.service"] = true
 			case "sftp":
 				services["ssh.service"] = true
+			case "ftp", "ftps":
+				services["vsftpd.service"] = true
 			}
 		}
 	}

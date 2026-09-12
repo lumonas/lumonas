@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/auth"
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/power"
 	"github.com/lumonas/lumonas/internal/updates"
@@ -25,7 +26,21 @@ func (s *apiServer) settings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.markCurrentSession(value, r)
 	writeJSON(w, http.StatusOK, value)
+}
+
+func (s *apiServer) revokeSession(w http.ResponseWriter, r *http.Request, id string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	if err := s.store.DeleteSessionByID(id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordIdentityAudit(actor, "settings.session.revoke", id, nil)
+	writeJSON(w, http.StatusNoContent, nil)
 }
 
 func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
@@ -72,13 +87,83 @@ func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) loadSettings() (map[string]any, error) {
+	var value map[string]any
 	if raw, ok := s.store.Meta(settingsMetaKey); ok {
-		var value map[string]any
-		if err := json.Unmarshal([]byte(raw), &value); err == nil && validSettings(value) {
-			return value, nil
+		var stored map[string]any
+		if err := json.Unmarshal([]byte(raw), &stored); err == nil && validSettings(stored) {
+			value = stored
 		}
 	}
-	return defaultSettings(s), nil
+	if value == nil {
+		value = defaultSettings(s)
+	}
+	s.refreshDynamicSettings(value)
+	return value, nil
+}
+
+// refreshDynamicSettings overwrites inventory-backed settings values that go
+// stale when persisted (docker update counts, ssh key count, live sessions).
+func (s *apiServer) refreshDynamicSettings(value map[string]any) {
+	if updates, ok := value["updates"].(map[string]any); ok {
+		if docker, ok := updates["docker"].(map[string]any); ok {
+			_, _, updateCount := s.dockerCounts()
+			docker["availableCount"] = updateCount
+		}
+	}
+	if security, ok := value["security"].(map[string]any); ok {
+		if ssh, ok := security["ssh"].(map[string]any); ok {
+			keys, err := readSSHKeys()
+			if err == nil {
+				ssh["keyCount"] = len(keys)
+			}
+		}
+		security["sessions"] = s.sessionViews("")
+	}
+}
+
+// sessionViews renders active sessions for the settings security panel. The
+// session whose cookie digest matches currentDigest is flagged as current.
+func (s *apiServer) sessionViews(currentDigest string) []map[string]any {
+	sessions, err := s.store.Sessions()
+	if err != nil {
+		return []map[string]any{}
+	}
+	views := make([]map[string]any, 0, len(sessions))
+	for _, session := range sessions {
+		views = append(views, map[string]any{
+			"id":           session.ID,
+			"device":       session.Username,
+			"ip":           "local",
+			"scope":        "management",
+			"lastActiveAt": session.CreatedAt.Format(time.RFC3339),
+			"expiresAt":    session.ExpiresAt.Format(time.RFC3339),
+			"current":      currentDigest != "" && session.ID == currentDigest,
+		})
+	}
+	return views
+}
+
+func (s *apiServer) markCurrentSession(value map[string]any, r *http.Request) {
+	cookie, err := r.Cookie("lumonas_session")
+	if err != nil {
+		return
+	}
+	digest := auth.TokenDigest(cookie.Value)
+	security, ok := value["security"].(map[string]any)
+	if !ok {
+		return
+	}
+	sessions, ok := security["sessions"].([]map[string]any)
+	if !ok {
+		return
+	}
+	for _, session := range sessions {
+		if session["id"] == digest {
+			session["current"] = true
+		} else if current, isBool := session["current"].(bool); isBool && current {
+			session["current"] = false
+		}
+	}
 }
 
 func defaultSettings(s *apiServer) map[string]any {
@@ -103,6 +188,10 @@ func defaultSettings(s *apiServer) map[string]any {
 		ups = append(ups, map[string]any{"name": unit.Name, "status": unit.Status, "chargePercent": unit.ChargePercent, "runtimeSec": unit.RuntimeSec, "onBattery": unit.OnBattery})
 	}
 	cancel()
+	keyCount := 0
+	if keys, err := readSSHKeys(); err == nil {
+		keyCount = len(keys)
+	}
 	return map[string]any{
 		"updates": map[string]any{
 			"core":   map[string]any{"channel": "stable", "current": s.version, "available": availableValue, "lastCheckedAt": now, "autoUpdate": false, "channelUrl": strings.TrimSpace(os.Getenv("LUMONAS_UPDATE_FEED_URL"))},
@@ -115,8 +204,32 @@ func defaultSettings(s *apiServer) map[string]any {
 			"dockerLogging": map[string]any{"driver": "json-file", "maxSizeMb": 10, "maxFiles": 3, "topConsumers": []any{}},
 		},
 		"power":    map[string]any{"maintenanceMode": false, "wol": wol, "ups": ups, "schedule": map[string]any{"enabled": false, "action": "shutdown", "time": "01:00", "days": "Daily"}},
-		"security": map[string]any{"https": map[string]any{"enabled": os.Getenv("LUMONAS_WEB_TLS_CERT") != "" && os.Getenv("LUMONAS_WEB_TLS_KEY") != "", "ca": "LumoNAS Local CA", "acme": false}, "ssh": map[string]any{"rootLogin": false, "passwordAuth": false, "keyCount": 0}, "sessions": []any{}},
+		"security": map[string]any{"https": map[string]any{"enabled": os.Getenv("LUMONAS_WEB_TLS_CERT") != "" && os.Getenv("LUMONAS_WEB_TLS_KEY") != "", "ca": "LumoNAS Local CA", "acme": false}, "ssh": map[string]any{"rootLogin": false, "passwordAuth": false, "keyCount": keyCount}, "sessions": []any{}},
 	}
+}
+
+// dockerCounts reports stack/running/update numbers from the Docker service.
+// Zero values are reported when Docker is unavailable or unconfigured (tests).
+func (s *apiServer) dockerCounts() (stacks, running, updates int) {
+	if s.dockerService.Run == nil {
+		return 0, 0, 0
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stackList, _ := s.dockerService.Stacks(ctx)
+	containers, _ := s.dockerService.Containers(ctx)
+	images, _ := s.dockerService.Images(ctx)
+	for _, container := range containers {
+		if container.State == "running" || container.State == "restarting" {
+			running++
+		}
+	}
+	for _, image := range images {
+		if image.UpdateAvailable {
+			updates++
+		}
+	}
+	return len(stackList), running, updates
 }
 
 func settingsUPSNames() []string {

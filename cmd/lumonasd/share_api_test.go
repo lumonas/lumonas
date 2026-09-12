@@ -88,7 +88,7 @@ func TestModernShareAPIContract(t *testing.T) {
 	t.Setenv("LUMONAS_SAMBA_CONFIG", t.TempDir()+"/generated/smb.conf")
 
 	user := httptest.NewRecorder()
-	server.routes().ServeHTTP(user, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"family"}`)))
+	server.routes().ServeHTTP(user, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"family","password":"a-file-user-password"}`)))
 	if user.Code != http.StatusCreated {
 		t.Fatalf("user creation failed: %d %s", user.Code, user.Body.String())
 	}

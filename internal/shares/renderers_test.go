@@ -24,9 +24,15 @@ func TestProtocolRenderersAndValidatedAtomicWrite(t *testing.T) {
 	if err != nil || !strings.Contains(sftp, "ChrootDirectory /srv/media") {
 		t.Fatalf("unexpected SFTP config %q err=%v", sftp, err)
 	}
-	ftp, err := RenderFTP(values)
-	if err != nil || !strings.Contains(ftp, "passive_start=40000") {
-		t.Fatalf("unexpected FTP config %q err=%v", ftp, err)
+	ftp, err := RenderFTPConfig(values, FTPOptions{UserConfigDir: "/var/lib/lumonas/generated/vsftpd-users", TLSCertFile: "/etc/lumonas/tls/tls.crt", TLSKeyFile: "/etc/lumonas/tls/tls.key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(ftp.Main, "pasv_min_port=40000") || !strings.Contains(ftp.Main, "pasv_max_port=40100") || !strings.Contains(ftp.Main, "ssl_enable=YES") || !strings.Contains(ftp.Main, "user_config_dir=/var/lib/lumonas/generated/vsftpd-users") {
+		t.Fatalf("unexpected FTP main config:\n%s", ftp.Main)
+	}
+	if user, ok := ftp.Users["family"]; !ok || !strings.Contains(user, "local_root=/srv/media") || !strings.Contains(user, "write_enable=NO") {
+		t.Fatalf("unexpected FTP user config: %#v", ftp.Users)
 	}
 	rsync, err := RenderRsync(values)
 	if err != nil || !strings.Contains(rsync, "read only = true") {

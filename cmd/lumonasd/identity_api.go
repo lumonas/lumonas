@@ -169,14 +169,26 @@ func (s *apiServer) createUser(w http.ResponseWriter, r *http.Request) {
 	if input.ManagementRole == "" && input.Type == "management" {
 		input.ManagementRole = identity.RoleOperator
 	}
+	input.ManagementRole = identity.NormalizeRole(input.ManagementRole)
 	if input.Kind != identity.KindUser && input.Kind != identity.KindService {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "users endpoint accepts user or service identities"})
+		return
+	}
+	if input.ManagementRole == identity.RoleNone && input.Kind == identity.KindUser && len(input.Password) < 8 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "file users require a password of at least 8 characters"})
 		return
 	}
 	principal, err := s.store.CreatePrincipal(identity.CreateInput{Kind: input.Kind, Name: input.Name, Password: input.Password, ManagementRole: input.ManagementRole})
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
+	}
+	if needsOSProvisioning(principal) {
+		if err := s.provisionNewFileIdentity(principal, input.Password); err != nil {
+			_ = s.store.DeletePrincipal(principal.ID)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "OS account provisioning failed: " + err.Error()})
+			return
+		}
 	}
 	if input.Group != "" {
 		if group, groupErr := s.store.PrincipalByName(input.Group); groupErr == nil && group.Kind == identity.KindGroup {
@@ -237,6 +249,12 @@ func (s *apiServer) updateUser(w http.ResponseWriter, r *http.Request, id string
 		writeJSON(w, statusForIdentityError(err), map[string]string{"error": err.Error()})
 		return
 	}
+	if input.Enabled != nil && needsOSProvisioning(principal) {
+		if err := s.synchronizeFileIdentityState(principal, *input.Enabled); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "identity state saved but OS account synchronization failed; retry: " + err.Error()})
+			return
+		}
+	}
 	s.recordIdentityAudit(actor, "identity.update", id, map[string]any{"enabled": principal.Enabled, "managementRole": principal.ManagementRole})
 	s.advanceGeneration("identity.update")
 	writeJSON(w, http.StatusOK, principal)
@@ -262,9 +280,20 @@ func (s *apiServer) setUserPassword(w http.ResponseWriter, r *http.Request, id s
 	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
 		return
 	}
+	principal, principalErr := s.store.Principal(id)
+	if principalErr != nil {
+		writeJSON(w, statusForIdentityError(principalErr), map[string]string{"error": principalErr.Error()})
+		return
+	}
 	if err := s.store.SetPrincipalPassword(id, input.Password); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
+	}
+	if needsOSProvisioning(principal) && principal.Kind == identity.KindUser {
+		if err := s.ensureFileIdentitySambaUser(principal.Name, map[string]any{"name": principal.Name, "password": input.Password}); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "password saved but Samba synchronization failed; retry: " + err.Error()})
+			return
+		}
 	}
 	s.recordIdentityAudit(actor, "identity.password.rotate", id, nil)
 	s.advanceGeneration("identity.password.rotate")
@@ -288,9 +317,17 @@ func (s *apiServer) deletePrincipal(w http.ResponseWriter, r *http.Request, id s
 	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
 		return
 	}
+	principal, principalErr := s.store.Principal(id)
+	if principalErr != nil && !errors.Is(principalErr, sql.ErrNoRows) {
+		writeJSON(w, statusForIdentityError(principalErr), map[string]string{"error": principalErr.Error()})
+		return
+	}
 	if err := s.store.DeletePrincipal(id); err != nil {
 		writeJSON(w, statusForIdentityError(err), map[string]string{"error": err.Error()})
 		return
+	}
+	if principal.ID != "" && needsOSProvisioning(principal) {
+		s.disableFileIdentityAccounts(principal)
 	}
 	s.recordIdentityAudit(actor, "identity.delete", id, nil)
 	s.advanceGeneration("identity.delete")

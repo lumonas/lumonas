@@ -257,3 +257,74 @@ func TestFirewallApplyValidatesBeforeActivation(t *testing.T) {
 		t.Fatalf("unexpected firewall apply: %#v commands=%v", result, commands)
 	}
 }
+
+func TestSambaUserProvisioningUsesStdinPasswords(t *testing.T) {
+	commands := make([]string, 0)
+	stdinCommands := make([]string, 0)
+	stdinPayload := ""
+	run := func(name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return nil, nil
+	}
+	stdinRun := func(name string, args []string, stdin string) ([]byte, error) {
+		stdinCommands = append(stdinCommands, name+" "+strings.Join(args, " "))
+		stdinPayload = stdin
+		return nil, nil
+	}
+	base := request{Operation: "samba.user.ensure", PlanHash: "samba", Confirmed: true}
+	created := ensureSambaUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: map[string]any{"name": "media", "create": true, "password": "a-file-user-password"}}, run, stdinRun)
+	if !created.OK || len(stdinCommands) != 1 || stdinCommands[0] != "pdbedit -a -t -u media" || stdinPayload != "a-file-user-password\na-file-user-password\n" {
+		t.Fatalf("unexpected create result %#v stdin=%v payload=%q", created, stdinCommands, stdinPayload)
+	}
+	rotated := ensureSambaUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: map[string]any{"name": "media", "password": "rotated-password-1"}}, run, stdinRun)
+	if !rotated.OK || len(stdinCommands) != 2 || stdinCommands[1] != "pdbedit -t -u media" || stdinPayload != "rotated-password-1\nrotated-password-1\n" {
+		t.Fatalf("unexpected rotation result %#v stdin=%v", rotated, stdinCommands)
+	}
+	disabled := ensureSambaUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: map[string]any{"name": "media", "disabled": true}}, run, stdinRun)
+	if !disabled.OK || len(commands) != 1 || commands[0] != "pdbedit -u media -d" {
+		t.Fatalf("unexpected disable result %#v commands=%v", disabled, commands)
+	}
+	enabled := ensureSambaUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: map[string]any{"name": "media", "enable": true}}, run, stdinRun)
+	if !enabled.OK || len(commands) != 2 || commands[1] != "pdbedit -u media -e" {
+		t.Fatalf("unexpected enable result %#v commands=%v", enabled, commands)
+	}
+}
+
+func TestSambaUserProvisioningRejectsUnsafeInput(t *testing.T) {
+	base := request{Operation: "samba.user.ensure", PlanHash: "samba", Confirmed: true}
+	run := func(string, ...string) ([]byte, error) { return nil, nil }
+	stdinRun := func(string, []string, string) ([]byte, error) { return nil, nil }
+	cases := []struct {
+		name     string
+		state    map[string]any
+		expected string
+	}{
+		{"short password", map[string]any{"name": "media", "create": true, "password": "short"}, "invalid"},
+		{"password with newline", map[string]any{"name": "media", "create": true, "password": "one\ntwo"}, "invalid"},
+		{"password and disabled", map[string]any{"name": "media", "disabled": true, "password": "a-file-user-password"}, "mutually exclusive"},
+		{"no actionable flag", map[string]any{"name": "media"}, "requires password"},
+	}
+	for _, testCase := range cases {
+		result := ensureSambaUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: testCase.state}, run, stdinRun)
+		if result.OK || !strings.Contains(result.Error, testCase.expected) {
+			t.Fatalf("%s: expected %q rejection, got %#v", testCase.name, testCase.expected, result)
+		}
+	}
+}
+
+func TestSystemUserLockAndUnlockAreAllowListed(t *testing.T) {
+	commands := make([]string, 0)
+	run := func(name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return nil, nil
+	}
+	base := request{Operation: "identity.system-user.ensure", PlanHash: "identity", Confirmed: true}
+	locked := ensureSystemUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: map[string]any{"name": "media", "disabled": true}}, run)
+	if !locked.OK || commands[len(commands)-1] != "usermod -L media" {
+		t.Fatalf("unexpected lock result %#v commands=%v", locked, commands)
+	}
+	unlocked := ensureSystemUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: map[string]any{"name": "media", "enable": true}}, run)
+	if !unlocked.OK || commands[len(commands)-1] != "usermod -U media" {
+		t.Fatalf("unexpected unlock result %#v commands=%v", unlocked, commands)
+	}
+}

@@ -57,7 +57,14 @@ func (s ManagedShare) Legacy() Share {
 		}
 		access[name] = rule.Level
 	}
-	return Share{ID: s.ID, Name: s.Name, Path: s.Path, Description: s.Description, Enabled: s.Enabled, Protocols: protocols, Access: access, Guest: s.Guest}
+	timemachine := false
+	for _, protocol := range s.Protocols {
+		if protocol.Name == "timemachine" {
+			timemachine = true
+			break
+		}
+	}
+	return Share{ID: s.ID, Name: s.Name, Path: s.Path, Description: s.Description, Enabled: s.Enabled, Protocols: protocols, Access: access, Guest: s.Guest, Timemachine: timemachine}
 }
 
 func (s ManagedShare) Validate() error {

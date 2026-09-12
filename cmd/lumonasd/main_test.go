@@ -15,6 +15,7 @@ import (
 	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/events"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/privileged"
 	"github.com/lumonas/lumonas/internal/recovery"
 	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
@@ -39,7 +40,7 @@ func testServer(t *testing.T) *apiServer {
 	}
 	return &apiServer{store: db, hub: events.NewHub(), version: "test", acknowledged: make(map[string]bool), diskFunc: func() ([]model.Disk, error) {
 		return []model.Disk{{ID: "wwn:test", Name: "sda", Role: "unknown", Health: model.Healthy, LastSeen: time.Now().UTC()}}, nil
-	}}
+	}, brokerExec: func(context.Context, privileged.Request) error { return nil }}
 }
 
 func TestAPIHealthAndDiskIdentity(t *testing.T) {

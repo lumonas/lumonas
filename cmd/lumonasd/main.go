@@ -58,6 +58,7 @@ type apiServer struct {
 	totpChallenges       map[string]totpChallenge
 	safetyMu             sync.Mutex
 	safetyUntil          time.Time
+	brokerExec           func(ctx context.Context, request privileged.Request) error
 }
 
 var version = "0.1.0-dev"
@@ -274,6 +275,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.settings(w, r)
 	case r.Method == http.MethodPatch && endpoint == "/settings":
 		s.updateSettings(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/settings/sessions/"):
+		s.revokeSession(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/ssh/keys":
 		s.listSSHKeys(w)
 	case r.Method == http.MethodPost && endpoint == "/ssh/keys":
@@ -1726,24 +1729,8 @@ func activityCategory(eventType string) string {
 func activityTitle(eventType string) string { return strings.ReplaceAll(eventType, ".", " ") }
 
 func (s *apiServer) dockerSummary(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	stacks, _ := s.dockerService.Stacks(ctx)
-	containers, _ := s.dockerService.Containers(ctx)
-	images, _ := s.dockerService.Images(ctx)
-	running := 0
-	updates := 0
-	for _, container := range containers {
-		if container.State == "running" || container.State == "restarting" {
-			running++
-		}
-	}
-	for _, image := range images {
-		if image.UpdateAvailable {
-			updates++
-		}
-	}
-	writeJSON(w, http.StatusOK, map[string]int{"stacks": len(stacks), "appsRunning": running, "updatesAvailable": updates})
+	stacks, running, updates := s.dockerCounts()
+	writeJSON(w, http.StatusOK, map[string]int{"stacks": stacks, "appsRunning": running, "updatesAvailable": updates})
 }
 
 func (s *apiServer) dockerApps(w http.ResponseWriter) {
@@ -1881,6 +1868,7 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 	defer cancel()
 	var input struct {
 		ComposeYAML string `json:"composeYaml"`
+		Backup      bool   `json:"backup"`
 	}
 	if r.Body != nil && r.ContentLength != 0 {
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -1896,6 +1884,11 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 	for _, stack := range stacks {
 		if stack.ID != stackID {
 			continue
+		}
+		if input.Backup {
+			// Pre-update safety net: snapshot the recoverable configuration
+			// before touching a running stack.
+			s.requestAutomaticBackup("pre-stack-update")
 		}
 		if input.ComposeYAML != "" {
 			updated, updateErr := s.dockerService.UpdateCompose(stack.Name, input.ComposeYAML)
