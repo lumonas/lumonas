@@ -125,6 +125,12 @@ Use loopback/virtual block devices to test:
 - mount;
 - identity reorder.
 
+CI runs `scripts/storage-loopback-smoke.sh` as a release-blocking root-gated
+check. It uses only a temporary directory, verifies ext4 UUID stability after
+loop-device reattachment, rejects writes after read-only import, rejects an
+independent disk identity, and exercises XFS when the runner provides
+`mkfs.xfs`.
+
 ## Fuzz/property tests
 
 Good candidates:

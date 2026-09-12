@@ -40,6 +40,8 @@ require_line "$ROOT/packaging/debian/postinst" '/etc/lumonas/tls/server.key'
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
 require_line "$ROOT/installer/build-iso.sh" 'dpkg-scanpackages'
 require_line "$ROOT/installer/build-iso.sh" 'lumonas-local.list'
+[ -x "$ROOT/scripts/storage-loopback-smoke.sh" ] || { echo "storage loopback smoke test must be executable" >&2; exit 1; }
+require_line "$ROOT/Makefile" 'storage-loopback:'
 if command -v systemd-analyze >/dev/null 2>&1; then
 	systemd-analyze verify "$SYSTEMD"/*.service
 fi

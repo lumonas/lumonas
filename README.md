@@ -58,6 +58,8 @@ sudo LUMONAS_DEB="$PWD/lumonas_0.1.0-dev_amd64.deb" bash installer/build-iso.sh 
 
 Storage mutations now use immutable plans, stable disk identity revalidation, explicit safety unlock/reauthentication, and the typed `lumonas-privd` broker. Mount, unmount, format, and erase workers are allow-listed; SnapRAID jobs, NetworkManager checkpoints, ACL changes, scheduled backup/power policy, and explicit power actions are brokered with bounded confirmation. Automatic recovery remains an explicit staged operation.
 
+The CI storage gate also exercises disposable loopback media: ext4 UUID stability, read-only import, mismatch rejection, and optional XFS import are verified before release artifacts can be promoted.
+
 Read-only host integrations include `lsblk`/SMART disk identity, mergerfs mount discovery, SnapRAID configuration inspection, NUT UPS telemetry (`LUMONAS_UPS_NAMES` or `upsc -l`), systemd status, and Docker Compose inspection. Notifications can be tested through the authenticated `/api/v1/notifications/test` endpoint after setting a webhook or ntfy URL.
 
 Pool capacity is sampled once per UTC day into SQLite, retained for 180 days, and exposed through the read-only `/api/v1/capacity/forecast` endpoint. A forecast is withheld until at least three samples span a full day.

@@ -11,6 +11,11 @@ Keep the first storage model intentionally simple.
 
 Btrfs/ZFS can be future modules.
 
+CI validates the supported filesystem boundary with disposable loopback media:
+ext4 UUID stability is checked across device reattachment, existing media is
+imported read-only, writes are rejected while read-only, and XFS import is
+exercised when the runner provides the toolchain.
+
 ## Physical disk model
 
 Store:
