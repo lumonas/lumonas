@@ -59,6 +59,7 @@ require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
 require_line "$ROOT/packaging/debian/postinst" 'LUMONAS_ZRAM_ENABLED=false'
 require_line "$ROOT/scripts/upgrade-service-order-smoke.sh" 'lumonas-runtime.service'
 require_line "$ROOT/scripts/permission-smoke.sh" '/etc/lumonas/runtime.env'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'lumonas-runtime.service'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.crt'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.key'
 if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1 || grep -F '/etc/lumonas/tls/tls.key' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1; then

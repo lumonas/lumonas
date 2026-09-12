@@ -47,7 +47,7 @@ apt-get install -y --no-install-recommends \
   network-manager docker.io docker-compose samba samba-common-bin vsftpd avahi-daemon
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
-systemd-analyze verify /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service
+systemd-analyze verify /lib/systemd/system/lumonas-runtime.service /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service
 mkdir -p /etc/NetworkManager/system-connections /etc/systemd/system/lumonas-web.service.d
 cat >/etc/NetworkManager/system-connections/qemu-ethernet.nmconnection <<'NETWORK'
 [connection]
