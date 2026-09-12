@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 type TailscaleStatus struct {
@@ -38,7 +40,7 @@ type TailscaleDNSName struct {
 }
 
 func TailscaleGetStatus(ctx context.Context) (*TailscaleStatus, error) {
-	out, err := exec.CommandContext(ctx, "tailscale", "status", "--json").CombinedOutput()
+	out, err := runner.CombinedOutputContext(ctx, "tailscale", "status", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("tailscale status: %w", err)
 	}
@@ -72,14 +74,14 @@ func TailscaleUp(ctx context.Context, hostname string, authKey string) error {
 	if authKey != "" {
 		args = append(args, "--authkey="+authKey)
 	}
-	if out, err := exec.CommandContext(ctx, "tailscale", args...).CombinedOutput(); err != nil {
+	if out, err := runner.CombinedOutputContext(ctx, "tailscale", args...); err != nil {
 		return fmt.Errorf("tailscale up: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 func TailscaleDown(ctx context.Context) error {
-	if out, err := exec.CommandContext(ctx, "tailscale", "down").CombinedOutput(); err != nil {
+	if out, err := runner.CombinedOutputContext(ctx, "tailscale", "down"); err != nil {
 		return fmt.Errorf("tailscale down: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
@@ -87,28 +89,28 @@ func TailscaleDown(ctx context.Context) error {
 
 func TailscaleSetExitNode(ctx context.Context, peerIP string) error {
 	args := []string{"set", "--exit-node=" + peerIP}
-	if out, err := exec.CommandContext(ctx, "tailscale", args...).CombinedOutput(); err != nil {
+	if out, err := runner.CombinedOutputContext(ctx, "tailscale", args...); err != nil {
 		return fmt.Errorf("tailscale set exit-node: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 func TailscaleClearExitNode(ctx context.Context) error {
-	if out, err := exec.CommandContext(ctx, "tailscale", "set", "--exit-node=none").CombinedOutput(); err != nil {
+	if out, err := runner.CombinedOutputContext(ctx, "tailscale", "set", "--exit-node=none"); err != nil {
 		return fmt.Errorf("tailscale clear exit-node: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 func TailscaleAdvertiseSubnet(ctx context.Context, cidr string) error {
-	if out, err := exec.CommandContext(ctx, "tailscale", "set", "--advertise-routes="+cidr).CombinedOutput(); err != nil {
+	if out, err := runner.CombinedOutputContext(ctx, "tailscale", "set", "--advertise-routes="+cidr); err != nil {
 		return fmt.Errorf("tailscale advertise subnet: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 func TailscaleDisableSubnet(ctx context.Context) error {
-	if out, err := exec.CommandContext(ctx, "tailscale", "set", "--advertise-routes=").CombinedOutput(); err != nil {
+	if out, err := runner.CombinedOutputContext(ctx, "tailscale", "set", "--advertise-routes="); err != nil {
 		return fmt.Errorf("tailscale disable subnet: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
@@ -131,7 +133,7 @@ type tailscaleJSON struct {
 }
 
 func TailscalePeers(ctx context.Context) ([]TailscalePeer, error) {
-	out, err := exec.CommandContext(ctx, "tailscale", "status", "--json").CombinedOutput()
+	out, err := runner.CombinedOutputContext(ctx, "tailscale", "status", "--json")
 	if err != nil {
 		return nil, fmt.Errorf("tailscale status: %w", err)
 	}

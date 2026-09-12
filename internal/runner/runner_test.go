@@ -1,0 +1,25 @@
+package runner
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestOutputContextHonorsParentDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	_, err := OutputContext(ctx, "sh", "-c", "sleep 1")
+	if err == nil || time.Since(started) > 500*time.Millisecond {
+		t.Fatalf("command was not bounded by parent context: err=%v elapsed=%s", err, time.Since(started))
+	}
+}
+
+func TestCombinedOutputPreservesCommandDiagnostics(t *testing.T) {
+	out, err := CombinedOutput("sh", "-c", "printf 'diagnostic' >&2; exit 7")
+	if err == nil || !strings.Contains(string(out), "diagnostic") {
+		t.Fatalf("expected bounded command diagnostics, output=%q err=%v", out, err)
+	}
+}

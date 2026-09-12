@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 type lsblkResponse struct {
@@ -35,7 +36,7 @@ type lsblkDevice struct {
 type CommandRunner func(name string, args ...string) ([]byte, error)
 
 func SystemRunner(name string, args ...string) ([]byte, error) {
-	return exec.Command(name, args...).Output()
+	return runner.Output(name, args...)
 }
 
 func Disks(run CommandRunner) ([]model.Disk, error) {

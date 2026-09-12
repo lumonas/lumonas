@@ -6,6 +6,8 @@ import (
 	"net"
 	"os/exec"
 	"strings"
+
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 type WireGuardPeer struct {
@@ -36,20 +38,16 @@ type WireGuardStatus struct {
 }
 
 func GenerateWireGuardKeyPair() (string, string, error) {
-	privKey, err := exec.Command("wg", "genkey").Output()
+	privKey, err := runner.Output("wg", "genkey")
 	if err != nil {
 		return "", "", fmt.Errorf("wg genkey: %w", err)
 	}
 	priv := strings.TrimSpace(string(privKey))
-	pubKey, err := exec.Command("wg", "pubkey").StdinPipe()
-	if err != nil {
-		return "", "", fmt.Errorf("wg pubkey pipe: %w", err)
-	}
-	if _, err := pubKey.Write([]byte(priv)); err != nil {
-		return "", "", fmt.Errorf("wg pubkey write: %w", err)
-	}
-	pubKey.Close()
-	pub, err := exec.Command("wg", "pubkey").Output()
+	ctx, cancel := runner.Context(nil)
+	defer cancel()
+	command := exec.CommandContext(ctx, "wg", "pubkey")
+	command.Stdin = strings.NewReader(priv + "\n")
+	pub, err := command.Output()
 	if err != nil {
 		return "", "", fmt.Errorf("wg pubkey: %w", err)
 	}
@@ -57,7 +55,7 @@ func GenerateWireGuardKeyPair() (string, string, error) {
 }
 
 func GeneratePresharedKey() (string, error) {
-	out, err := exec.Command("wg", "genpsk").Output()
+	out, err := runner.Output("wg", "genpsk")
 	if err != nil {
 		return "", fmt.Errorf("wg genpsk: %w", err)
 	}
@@ -146,7 +144,9 @@ func ApplyWireGuardConfig(ctx context.Context, iface string, cfg WireGuardConfig
 	if err := ValidateWireGuardConfig(cfg); err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, "wg", "set", iface, "private-key", "/dev/stdin")
+	bounded, cancel := runner.Context(ctx)
+	defer cancel()
+	cmd := exec.CommandContext(bounded, "wg", "set", iface, "private-key", "/dev/stdin")
 	cmd.Stdin = strings.NewReader(cfg.PrivateKey)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("wg set: %s: %w", strings.TrimSpace(string(out)), err)
@@ -155,7 +155,7 @@ func ApplyWireGuardConfig(ctx context.Context, iface string, cfg WireGuardConfig
 }
 
 func WireGuardShow(ctx context.Context, iface string) (*WireGuardStatus, error) {
-	out, err := exec.CommandContext(ctx, "wg", "show", iface).CombinedOutput()
+	out, err := runner.CombinedOutputContext(ctx, "wg", "show", iface)
 	if err != nil {
 		return nil, fmt.Errorf("wg show: %w", err)
 	}

@@ -202,6 +202,12 @@ correlation key. Events and audit rows persist first-class correlation,
 operation, plan-hash, actor, resource, and generation fields while preserving
 the original metadata payload for compatibility.
 
+Host integration commands use a shared bounded runner. Privileged commands,
+disk/SMART discovery, Docker, Samba validation, NetworkManager/WireGuard,
+Tailscale, and NUT calls inherit a finite deadline; NetworkManager
+checkpoints additionally remain bounded by their requested confirmation
+timeout.
+
 ## Release artifacts
 
 CI should produce:

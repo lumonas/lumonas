@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 type dockerContainer struct {
@@ -20,7 +21,7 @@ func DockerSummary() model.DockerSummary {
 	if _, err := exec.LookPath("docker"); err != nil {
 		return model.DockerSummary{}
 	}
-	out, err := exec.Command("docker", "ps", "--format", "{{json .}}", "-a").Output()
+	out, err := runner.Output("docker", "ps", "--format", "{{json .}}", "-a")
 	if err != nil {
 		return model.DockerSummary{}
 	}

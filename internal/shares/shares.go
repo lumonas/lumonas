@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 type Share struct {
@@ -168,8 +170,7 @@ func ValidateSamba(configPath string) error {
 	if _, err := exec.LookPath("testparm"); err != nil {
 		return nil
 	}
-	command := exec.Command("testparm", "-s", configPath)
-	if output, err := command.CombinedOutput(); err != nil {
+	if output, err := runner.CombinedOutput("testparm", "-s", configPath); err != nil {
 		return fmt.Errorf("testparm: %s", strings.TrimSpace(string(output)))
 	}
 	return nil

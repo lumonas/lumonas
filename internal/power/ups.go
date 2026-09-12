@@ -2,10 +2,11 @@ package power
 
 import (
 	"context"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
+
+	commandrunner "github.com/lumonas/lumonas/internal/runner"
 )
 
 // Runner is injectable so UPS discovery can be tested without a running NUT server.
@@ -26,7 +27,7 @@ type UPS struct {
 func Discover(ctx context.Context, names []string, runner Runner) []UPS {
 	if runner == nil {
 		runner = func(ctx context.Context, name string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, name, args...).Output()
+			return commandrunner.OutputContext(ctx, name, args...)
 		}
 	}
 	if len(names) == 0 {

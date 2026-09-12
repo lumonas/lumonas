@@ -22,6 +22,7 @@ import (
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/power"
+	commandrunner "github.com/lumonas/lumonas/internal/runner"
 	"github.com/lumonas/lumonas/internal/storage"
 )
 
@@ -202,8 +203,12 @@ func envOr(key, fallback string) string {
 
 type command func(string, ...string) ([]byte, error)
 
+var privilegedCommandTimeout = commandrunner.DefaultTimeout
+
 func commandRunner(name string, args ...string) ([]byte, error) {
-	return exec.Command(name, args...).CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), privilegedCommandTimeout)
+	defer cancel()
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
 func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, error), run command) response {
@@ -387,14 +392,17 @@ func beginNetworkCheckpoint(req request) response {
 	for _, key := range keys {
 		args = append(args, key, changes[key])
 	}
-	command := exec.Command("nmcli", args...)
+	checkpointContext, cancel := context.WithTimeout(context.Background(), time.Duration(timeout+10)*time.Second)
+	command := exec.CommandContext(checkpointContext, "nmcli", args...)
 	stdin, err := command.StdinPipe()
 	if err != nil {
+		cancel()
 		return response{Error: "network checkpoint input failed"}
 	}
 	command.Stdout = io.Discard
 	command.Stderr = io.Discard
 	if err := command.Start(); err != nil {
+		cancel()
 		return response{Error: "NetworkManager checkpoint could not start"}
 	}
 	done := make(chan error, 1)
@@ -403,6 +411,7 @@ func beginNetworkCheckpoint(req request) response {
 	checkpointState.Unlock()
 	go func() {
 		err := command.Wait()
+		cancel()
 		done <- err
 		checkpointState.Lock()
 		delete(checkpointState.items, req.OperationID)
@@ -437,7 +446,9 @@ func finishNetworkCheckpoint(req request) response {
 type stdinRunner func(name string, args []string, stdin string) ([]byte, error)
 
 func stdinCommandRunner(name string, args []string, stdin string) ([]byte, error) {
-	command := exec.Command(name, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), privilegedCommandTimeout)
+	defer cancel()
+	command := exec.CommandContext(ctx, name, args...)
 	if stdin != "" {
 		command.Stdin = strings.NewReader(stdin)
 	}

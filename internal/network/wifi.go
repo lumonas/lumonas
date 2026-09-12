@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 // CommandRunner executes an external command so tests can substitute canned
@@ -13,7 +15,7 @@ type CommandRunner func(name string, args ...string) ([]byte, error)
 
 // SystemRunner runs commands through the OS.
 func SystemRunner(name string, args ...string) ([]byte, error) {
-	return exec.Command(name, args...).Output()
+	return runner.Output(name, args...)
 }
 
 // WiFiNetwork is a single entry from a NetworkManager scan.

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 type Runner func(context.Context, string, ...string) ([]byte, error)
@@ -106,7 +108,7 @@ func New(root string, run Runner) Service {
 }
 
 func commandRunner(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).Output()
+	return runner.OutputContext(ctx, name, args...)
 }
 
 func (s Service) Available(ctx context.Context) bool {
