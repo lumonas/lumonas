@@ -43,7 +43,8 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   systemd systemd-sysv linux-image-amd64 grub-pc openssh-server curl ca-certificates \
-  iproute2 util-linux smartmontools lm-sensors nut mergerfs snapraid
+  iproute2 util-linux smartmontools lm-sensors nut mergerfs snapraid \
+  network-manager docker.io docker-compose samba samba-common-bin avahi-daemon
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
 mkdir -p /etc/systemd/network /etc/systemd/system/mynas-web.service.d
@@ -61,7 +62,7 @@ DROPIN
 cat >/etc/fstab <<'FSTAB'
 /dev/vda / ext4 defaults 0 1
 FSTAB
-systemctl enable systemd-networkd.service systemd-resolved.service mynas-privd.service mynasd.service mynas-web.service || true
+systemctl enable systemd-networkd.service systemd-resolved.service docker.service smbd.service avahi-daemon.service mynas-privd.service mynasd.service mynas-web.service || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 passwd -l root || true
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
