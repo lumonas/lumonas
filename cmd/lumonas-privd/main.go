@@ -74,6 +74,8 @@ var workerDial = func(socket string) (net.Conn, error) {
 	return net.DialTimeout("unix", socket, 3*time.Second)
 }
 
+var networkCheckpointCommand = exec.Command
+
 func main() {
 	socket := flag.String("socket", "/run/lumonas/privd.sock", "Unix socket path")
 	worker := flag.String("worker", "", "run as a restricted operation worker (storage, network, power, or general)")
@@ -490,7 +492,8 @@ func beginNetworkCheckpoint(req request) response {
 		args = append(args, key, changes[key])
 	}
 	checkpointContext, cancel := context.WithTimeout(context.Background(), time.Duration(timeout+10)*time.Second)
-	command := exec.CommandContext(checkpointContext, "nmcli", args...)
+	command := networkCheckpointCommand("nmcli", args...)
+	commandrunner.ConfigureProcessGroup(command)
 	stdin, err := command.StdinPipe()
 	if err != nil {
 		cancel()
@@ -507,7 +510,7 @@ func beginNetworkCheckpoint(req request) response {
 	checkpointState.items[req.OperationID] = activeCheckpoint{stdin: stdin, done: done}
 	checkpointState.Unlock()
 	go func() {
-		err := command.Wait()
+		err := waitProcessGroup(checkpointContext, command)
 		cancel()
 		done <- err
 		checkpointState.Lock()
@@ -515,6 +518,18 @@ func beginNetworkCheckpoint(req request) response {
 		checkpointState.Unlock()
 	}()
 	return response{OK: true, Data: map[string]any{"operationId": req.OperationID, "timeoutSeconds": timeout, "state": "pending-confirmation"}}
+}
+
+func waitProcessGroup(ctx context.Context, command *exec.Cmd) error {
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		commandrunner.KillProcessGroup(command)
+		return <-done
+	}
 }
 
 func finishNetworkCheckpoint(req request) response {

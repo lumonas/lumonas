@@ -135,7 +135,9 @@ are failed closed when `lumonasd` starts again, and that an SSE client can
 resume from `Last-Event-ID` without receiving its cursor event twice. Host
 integration commands use bounded contexts and process groups so a missing or
 wedged utility, including descendants that inherit its pipes, cannot keep a
-privileged request, job, or release smoke test alive indefinitely.
+privileged request, job, or release smoke test alive indefinitely. The
+interactive NetworkManager checkpoint path is covered separately because it
+keeps a confirmation pipe open while the checkpoint is pending.
 
 ## Destructive safety tests
 

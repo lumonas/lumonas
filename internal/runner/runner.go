@@ -12,6 +12,18 @@ import (
 
 const DefaultTimeout = 30 * time.Second
 
+// ConfigureProcessGroup makes an interactive command and its descendants
+// share a killable process group. It is exported for privileged operations
+// that must keep a stdin pipe open while still enforcing a deadline.
+func ConfigureProcessGroup(command *exec.Cmd) {
+	configureProcessGroup(command)
+}
+
+// KillProcessGroup terminates an interactive command and all descendants.
+func KillProcessGroup(command *exec.Cmd) {
+	killProcessGroup(command)
+}
+
 // Context derives a bounded context while preserving an earlier parent
 // deadline. Every integration command should use this before invoking an OS
 // binary so a broken daemon cannot hold an API or privileged worker forever.
