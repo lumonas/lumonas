@@ -2247,6 +2247,15 @@ func (s *apiServer) stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	_, _ = w.Write([]byte("retry: 3000\n\n"))
 	flusher.Flush()
+	if lastID := strings.TrimSpace(r.Header.Get("Last-Event-ID")); lastID != "" {
+		if missed, err := s.store.EventsAfter(lastID, 100); err == nil {
+			for _, event := range missed {
+				s.writeSSEEvent(w, flusher, event)
+			}
+		} else if s.log != nil {
+			s.log.Warn("event replay failed", "lastEventID", lastID, "error", err)
+		}
+	}
 	ch, unsubscribe := s.hub.Subscribe()
 	defer unsubscribe()
 	for {
@@ -2254,14 +2263,18 @@ func (s *apiServer) stream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case event := <-ch:
-			data, err := events.Encode(event)
-			if err != nil {
-				continue
-			}
-			fmt.Fprintf(w, "data: %s\n\n", data)
-			flusher.Flush()
+			s.writeSSEEvent(w, flusher, event)
 		}
 	}
+}
+
+func (s *apiServer) writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, event model.Event) {
+	data, err := events.Encode(event)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "id: %s\ndata: %s\n\n", event.ID, data)
+	flusher.Flush()
 }
 
 func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, data map[string]any) {

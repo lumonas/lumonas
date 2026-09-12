@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -421,6 +422,42 @@ func (s *Store) Events(limit int) ([]model.Event, error) {
 		limit = 100
 	}
 	rows, err := s.db.Query(`SELECT id,type,timestamp,severity,resource_type,resource_id,data_json FROM events ORDER BY timestamp DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]model.Event, 0)
+	for rows.Next() {
+		var event model.Event
+		var timestamp, data string
+		var resourceType, resourceID sql.NullString
+		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data); err != nil {
+			return nil, err
+		}
+		event.Timestamp, _ = parseTime(timestamp)
+		if resourceType.Valid && resourceID.Valid {
+			event.Resource = &model.ResourceRef{Type: resourceType.String, ID: resourceID.String}
+		}
+		if err := json.Unmarshal([]byte(data), &event.Data); err != nil {
+			event.Data = map[string]any{}
+		}
+		result = append(result, event)
+	}
+	return result, rows.Err()
+}
+
+// EventsAfter returns retained events written after the event identified by
+// lastID, in delivery order. SQLite's rowid gives the replay cursor a stable
+// insertion order without exposing a second sequence number in the API.
+func (s *Store) EventsAfter(lastID string, limit int) ([]model.Event, error) {
+	if strings.TrimSpace(lastID) == "" {
+		return nil, nil
+	}
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`SELECT e.id,e.type,e.timestamp,e.severity,e.resource_type,e.resource_id,e.data_json
+FROM events e WHERE e.rowid > (SELECT rowid FROM events WHERE id = ?) ORDER BY e.rowid ASC LIMIT ?`, lastID, limit)
 	if err != nil {
 		return nil, err
 	}
