@@ -1643,6 +1643,9 @@ func requestMiddleware(next http.Handler) http.Handler {
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
+	if status == http.StatusNoContent || status == http.StatusNotModified {
+		return
+	}
 	_ = json.NewEncoder(w).Encode(value)
 }
 func envOr(key, fallback string) string {

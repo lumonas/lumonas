@@ -113,3 +113,14 @@ func TestStorageSafetyUnlockExpiresServerSide(t *testing.T) {
 		t.Fatalf("lock status %d", lock.Code)
 	}
 }
+
+func TestWriteJSONOmitsBodyForNoContent(t *testing.T) {
+	response := httptest.NewRecorder()
+	writeJSON(response, http.StatusNoContent, map[string]string{"status": "sent"})
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", response.Code)
+	}
+	if response.Body.Len() != 0 {
+		t.Fatalf("expected empty 204 body, got %q", response.Body.String())
+	}
+}
