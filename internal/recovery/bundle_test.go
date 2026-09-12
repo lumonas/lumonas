@@ -40,3 +40,18 @@ func TestBundleTamperingFailsVerification(t *testing.T) {
 		t.Fatal("tampered bundle verified")
 	}
 }
+
+func TestBundleAllowsStorageConfigurationFiles(t *testing.T) {
+	bundle, err := Create(Input{
+		Manifest:     Manifest{LumoNASVersion: "test", NASUUID: "nas-1"},
+		DesiredState: []byte(`{"storage":"snapraid"}`),
+		Database:     []byte("sqlite"),
+		Files:        map[string][]byte{"storage/snapraid.conf": []byte("parity /srv/pools/parity\n")},
+	}, []byte("recovery-key"))
+	if err != nil {
+		t.Fatalf("storage configuration was rejected: %v", err)
+	}
+	if _, err := Verify(bundle, []byte("recovery-key")); err != nil {
+		t.Fatalf("storage configuration bundle did not verify: %v", err)
+	}
+}

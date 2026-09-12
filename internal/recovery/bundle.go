@@ -446,7 +446,7 @@ func allowedPayloadEntry(name string) bool {
 	case "desired-state.json", "lumonas.db", "encrypted-secrets.bin":
 		return true
 	}
-	for _, prefix := range []string{"docker/stacks/", "config/", "acl/", "certificates/", "encrypted-secrets/"} {
+	for _, prefix := range []string{"docker/stacks/", "config/", "storage/", "acl/", "certificates/", "encrypted-secrets/"} {
 		if strings.HasPrefix(name, prefix) {
 			return len(strings.TrimPrefix(name, prefix)) > 0
 		}
