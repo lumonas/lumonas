@@ -66,9 +66,14 @@ for attempt in $(seq 1 60); do
   if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/readyz >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/api/v1/server >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/api/v1/disks >/dev/null 2>&1; then
-    echo "QEMU appliance smoke test passed"
-    exit 0
+     curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
+     curl -fsS http://127.0.0.1:18080/api/v1/system/metrics >/dev/null 2>&1 && \
+     curl -fsS http://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1; then
+    disk_count=$(grep -o '"id"' "$LOG.disks" | wc -l | tr -d ' ')
+    if [ "$disk_count" -ge 5 ]; then
+      echo "QEMU appliance smoke test passed (disks=$disk_count)"
+      exit 0
+    fi
   fi
   if ! kill -0 "$QEMU_PID" 2>/dev/null; then
     echo "QEMU exited before readiness; log: $LOG" >&2

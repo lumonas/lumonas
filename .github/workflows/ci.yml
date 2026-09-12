@@ -87,6 +87,22 @@ jobs:
       - run: sudo MYNAS_DEB="$PWD/$(ls *.deb | head -n1)" MYNAS_QEMU_IMAGE="$PWD/build/qemu/mynas-debian13.raw" bash scripts/qemu-build-image.sh
       - run: MYNAS_QEMU_IMAGE="$PWD/build/qemu/mynas-debian13.raw" MYNAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
 
+  iso:
+    runs-on: ubuntu-latest
+    needs: [qemu-smoke]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumonas-deb
+          path: .
+      - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso
+      - run: sudo MYNAS_DEB="$PWD/$(ls *.deb | head -n1)" bash installer/build-iso.sh "${GITHUB_SHA::12}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumonas-iso
+          path: build/releases/*
+
   installer-scripts:
     runs-on: ubuntu-latest
     steps:
@@ -97,7 +113,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    needs: [package, qemu-smoke, installer-scripts]
+    needs: [package, qemu-smoke, iso, installer-scripts]
     permissions:
       contents: write
       id-token: write
@@ -106,6 +122,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: lumonas-deb
+          path: build/releases
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumonas-iso
           path: build/releases
       - uses: anchore/sbom-action/download-syft@v0
       - uses: sigstore/cosign-installer@v3
