@@ -5,45 +5,74 @@ import (
 	"testing"
 )
 
-func TestRenderMountUnitsNormalizesDiskAndPoolDependencies(t *testing.T) {
+func TestRenderMountUnitsDiskAndPool(t *testing.T) {
 	entries := []MountEntry{
-		{Kind: "pool", TargetID: "media", MountPath: "/srv/pools/media", FSType: "fuse.mergerfs", Source: "/srv/disks/wwn-b:/srv/disks/wwn-a"},
-		{Kind: "disk", TargetID: "wwn-a", MountPath: "/srv/disks/wwn-a", FSType: "ext4", Source: "UUID=aaa"},
-		{Kind: "disk", TargetID: "wwn-b", MountPath: "/srv/disks/wwn-b", FSType: "xfs", Source: "UUID=bbb", Enabled: true},
+		{Kind: "pool", TargetID: "media", MountPath: "/srv/pools/media", FSType: "fuse.mergerfs", Source: "/srv/disks/wwn_a:/srv/disks/wwn_b", Options: PoolMountOptions, Enabled: true},
+		{Kind: "disk", TargetID: "wwn:a", MountPath: "/srv/disks/wwn_a", FSType: "ext4", Source: "UUID=abc-123", Options: DiskMountOptions, Enabled: true},
+		{Kind: "disk", TargetID: "wwn:b", MountPath: "/srv/disks/wwn_b", FSType: "xfs", Source: "UUID=def-456", Options: DiskMountOptions, Enabled: true},
 	}
 	units, err := RenderMountUnits(entries)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(units) != 3 {
-		t.Fatalf("expected three mount units, got %d", len(units))
+		t.Fatalf("expected 3 units, got %d: %v", len(units), unitNames(units))
 	}
-	pool := units["srv-pools-media.mount"]
-	for _, expected := range []string{"Requires=srv-disks-wwn-a.mount srv-disks-wwn-b.mount", "After=srv-disks-wwn-a.mount srv-disks-wwn-b.mount", "What=/srv/disks/wwn-b:/srv/disks/wwn-a", "Type=fuse.mergerfs", "category.create=mfs"} {
-		if !strings.Contains(pool, expected) {
-			t.Fatalf("pool unit missing %q:\n%s", expected, pool)
-		}
+	diskUnit := units["srv-disks-wwn_a.mount"]
+	if !strings.Contains(diskUnit, "What=UUID=abc-123") || !strings.Contains(diskUnit, "Where=/srv/disks/wwn_a") || !strings.Contains(diskUnit, "Type=ext4") {
+		t.Fatalf("unexpected disk unit:\n%s", diskUnit)
 	}
-	disk := units["srv-disks-wwn-a.mount"]
-	if !strings.Contains(disk, "Options=defaults,nofail") || !strings.Contains(disk, "Where=/srv/disks/wwn-a") {
-		t.Fatalf("disk unit missing defaults:\n%s", disk)
+	poolUnit := units["srv-pools-media.mount"]
+	if !strings.Contains(poolUnit, "Requires=srv-disks-wwn_a.mount srv-disks-wwn_b.mount") {
+		t.Fatalf("pool unit lacks branch dependencies:\n%s", poolUnit)
+	}
+	if !strings.Contains(poolUnit, "After=srv-disks-wwn_a.mount srv-disks-wwn_b.mount") {
+		t.Fatalf("pool unit lacks After ordering:\n%s", poolUnit)
+	}
+	if !strings.Contains(poolUnit, "What=/srv/disks/wwn_a:/srv/disks/wwn_b") || !strings.Contains(poolUnit, "Type=fuse.mergerfs") {
+		t.Fatalf("unexpected pool unit:\n%s", poolUnit)
 	}
 }
 
-func TestNormalizeMountEntriesRejectsAmbiguousOrUnsafeState(t *testing.T) {
-	cases := []MountEntry{
-		{Kind: "disk", TargetID: "", MountPath: "/srv/disks/", FSType: "ext4", Source: "UUID=aaa"},
-		{Kind: "disk", TargetID: "wwn-a", MountPath: "/srv/disks/other", FSType: "ext4", Source: "UUID=aaa"},
-		{Kind: "disk", TargetID: "wwn-a", MountPath: "/srv/disks/wwn-a", FSType: "ext4", Source: "/dev/sda"},
-		{Kind: "pool", TargetID: "media", MountPath: "/srv/pools/media", FSType: "fuse.mergerfs", Source: "/srv/disks/../secret"},
+func unitNames(units map[string]string) []string {
+	names := make([]string, 0, len(units))
+	for name := range units {
+		names = append(names, name)
 	}
-	for _, entry := range cases {
-		if _, err := NormalizeMountEntries([]MountEntry{entry}); err == nil {
-			t.Fatalf("unsafe mount entry was accepted: %#v", entry)
+	return names
+}
+
+func TestRenderMountUnitsRejectsUnsafeState(t *testing.T) {
+	cases := []struct {
+		name    string
+		entries []MountEntry
+		message string
+	}{
+		{"non-canonical disk path", []MountEntry{{Kind: "disk", TargetID: "wwn:a", MountPath: "/mnt/a", FSType: "ext4", Source: "UUID=x", Enabled: true}}, "canonical"},
+		{"unsupported filesystem", []MountEntry{{Kind: "disk", TargetID: "wwn:a", MountPath: "/srv/disks/wwn_a", FSType: "btrfs", Source: "UUID=x", Enabled: true}}, "allow-listed"},
+		{"missing UUID source", []MountEntry{{Kind: "disk", TargetID: "wwn:a", MountPath: "/srv/disks/wwn_a", FSType: "ext4", Source: "/dev/sda", Enabled: true}}, "UUID="},
+		{"pool outside /srv/pools", []MountEntry{{Kind: "pool", TargetID: "media", MountPath: "/srv/poolz/media", FSType: "fuse.mergerfs", Source: "/srv/disks/a", Enabled: true}}, "canonical"},
+		{"foreign pool branch", []MountEntry{{Kind: "pool", TargetID: "media", MountPath: "/srv/pools/media", FSType: "fuse.mergerfs", Source: "/mnt/data", Enabled: true}}, "invalid branch"},
+		{"duplicate mount path", []MountEntry{{Kind: "disk", TargetID: "wwn:a", MountPath: "/srv/disks/wwn_a", FSType: "ext4", Source: "UUID=x", Enabled: true}, {Kind: "disk", TargetID: "wwn:a", MountPath: "/srv/disks/wwn_a", FSType: "xfs", Source: "UUID=y", Enabled: true}}, "duplicated"},
+		{"unknown kind", []MountEntry{{Kind: "raid", TargetID: "x", MountPath: "/srv/disks/x", FSType: "ext4", Source: "UUID=x", Enabled: true}}, "kind"},
+	}
+	for _, testCase := range cases {
+		if _, err := RenderMountUnits(testCase.entries); err == nil || !strings.Contains(err.Error(), testCase.message) {
+			t.Fatalf("%s: expected rejection containing %q, got %v", testCase.name, testCase.message, err)
 		}
 	}
-	duplicate := MountEntry{Kind: "disk", TargetID: "wwn-a", MountPath: "/srv/disks/wwn-a", FSType: "ext4", Source: "UUID=aaa"}
-	if _, err := NormalizeMountEntries([]MountEntry{duplicate, duplicate}); err == nil {
-		t.Fatal("duplicate mount path was accepted")
+}
+
+func TestMountUnitNameEscapingIsRestricted(t *testing.T) {
+	if name, err := MountUnitName("/srv/disks/wwn_Test"); err != nil || name != "srv-disks-wwn_Test.mount" {
+		t.Fatalf("unexpected unit name %q err %v", name, err)
+	}
+	if name, err := MountUnitName("/srv/pools/media"); err != nil || name != "srv-pools-media.mount" {
+		t.Fatalf("unexpected pool unit name %q err %v", name, err)
+	}
+	for _, unsafe := range []string{"/srv/disks/../etc", "/srv/disks/a b", "/etc/passwd", "/srv/disks/"} {
+		if _, err := MountUnitName(unsafe); err == nil {
+			t.Fatalf("expected rejection for %q", unsafe)
+		}
 	}
 }

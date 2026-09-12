@@ -129,6 +129,7 @@ func (s *apiServer) confirmStoragePool(w http.ResponseWriter, r *http.Request, o
 	}
 	s.advanceGeneration("storage.pool.mount")
 	s.publish("storage.pool.mounted", "info", &model.ResourceRef{Type: "pool", ID: plan.Name}, map[string]any{"operationId": plan.OperationID, "mountPath": plan.MountPath})
+	s.persistMountState("storage.pool.mount")
 	writeJSON(w, http.StatusAccepted, result)
 }
 
@@ -218,6 +219,7 @@ func (s *apiServer) confirmStoragePoolUnmount(w http.ResponseWriter, r *http.Req
 	}
 	s.advanceGeneration("storage.pool.unmount")
 	s.publish("storage.pool.unmounted", "warning", &model.ResourceRef{Type: "pool", ID: plan.PoolID}, map[string]any{"operationId": plan.OperationID, "mountPath": plan.MountPath})
+	s.persistMountState("storage.pool.unmount")
 	writeJSON(w, http.StatusAccepted, result)
 }
 
