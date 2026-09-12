@@ -412,3 +412,11 @@ management session.
 
 Pass if every mutation is rejected before the Docker command runs, while a
 successful mutation produces a correlated audit record.
+
+## AS. Release signature verification
+
+Run tagged-release artifact verification with Cosign available.
+
+Pass if every `.deb`, ISO, and QEMU artifact has a signature and verification
+bundle, and `cosign verify-blob` validates the artifact against the configured
+GitHub Actions OIDC issuer and tag workflow identity.

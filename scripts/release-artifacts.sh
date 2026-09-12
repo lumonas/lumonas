@@ -27,6 +27,9 @@ if [ "${LUMONAS_SIGN_ARTIFACTS:-false}" = "true" ]; then
   command -v cosign >/dev/null 2>&1 || { echo "cosign is required when LUMONAS_SIGN_ARTIFACTS=true" >&2; exit 1; }
 	for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw; do
     [ -f "$artifact" ] || continue
-    cosign sign-blob --yes --output-signature "$artifact.sig" "$artifact"
+    cosign sign-blob --yes \
+      --output-signature "$artifact.sig" \
+      --bundle "$artifact.bundle" \
+      "$artifact"
   done
 fi

@@ -294,6 +294,10 @@ CI should produce:
 - SBOM;
 - release notes.
 
+Tagged release verification must cryptographically verify each artifact’s
+Cosign bundle, including the GitHub Actions OIDC issuer and tag workflow
+identity. A signature file existing on disk is not sufficient.
+
 Dependency and container-image vulnerability scans are required before tagged
 release publication, in addition to the generated SBOM and signatures.
 

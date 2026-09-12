@@ -291,7 +291,13 @@ jobs:
       - uses: anchore/sbom-action/download-syft@v0
       - uses: sigstore/cosign-installer@v3
       - run: LUMONAS_REQUIRE_SBOM=true LUMONAS_SIGN_ARTIFACTS=true bash scripts/release-artifacts.sh build/releases
-      - run: LUMONAS_REQUIRE_SBOM=true LUMONAS_REQUIRE_SIGNATURES=true bash scripts/verify-release.sh build/releases
+      - name: Verify release signatures and provenance
+        env:
+          LUMONAS_REQUIRE_SBOM: true
+          LUMONAS_REQUIRE_SIGNATURES: true
+          LUMONAS_COSIGN_CERTIFICATE_IDENTITY_REGEXP: "${{ github.server_url }}/${{ github.repository }}/.github/workflows/.+@refs/tags/${{ github.ref_name }}"
+          LUMONAS_COSIGN_CERTIFICATE_OIDC_ISSUER: https://token.actions.githubusercontent.com
+        run: bash scripts/verify-release.sh build/releases
       - uses: softprops/action-gh-release@v2
         with:
           files: build/releases/*

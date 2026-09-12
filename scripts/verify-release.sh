@@ -9,6 +9,9 @@ CHECKSUMS="$RELEASE_DIR/SHA256SUMS"
 [ -s "$CHECKSUMS" ] || { echo "release checksums are missing: $CHECKSUMS" >&2; exit 1; }
 
 artifact_count=0
+if [ "${LUMONAS_REQUIRE_SIGNATURES:-false}" = "true" ]; then
+	command -v cosign >/dev/null 2>&1 || { echo "cosign is required for signature verification" >&2; exit 1; }
+fi
 for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw; do
 	[ -f "$artifact" ] || continue
 	artifact_count=$((artifact_count + 1))
@@ -24,6 +27,21 @@ for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2
 	if [ "${LUMONAS_REQUIRE_SIGNATURES:-false}" = "true" ] && [ ! -s "$artifact.sig" ]; then
 		echo "signature is missing: $artifact.sig" >&2
 		exit 1
+	fi
+	if [ "${LUMONAS_REQUIRE_SIGNATURES:-false}" = "true" ] && [ ! -s "$artifact.bundle" ]; then
+		echo "Cosign verification bundle is missing: $artifact.bundle" >&2
+		exit 1
+	fi
+	if [ "${LUMONAS_REQUIRE_SIGNATURES:-false}" = "true" ]; then
+		identity="${LUMONAS_COSIGN_CERTIFICATE_IDENTITY_REGEXP:-}"
+		issuer="${LUMONAS_COSIGN_CERTIFICATE_OIDC_ISSUER:-}"
+		if [ -n "$identity" ] && [ -n "$issuer" ]; then
+			cosign verify-blob "$artifact" --bundle "$artifact.bundle" \
+				--certificate-identity-regexp "$identity" \
+				--certificate-oidc-issuer "$issuer" >/dev/null
+		else
+			cosign verify-blob "$artifact" --bundle "$artifact.bundle" >/dev/null
+		fi
 	fi
 done
 

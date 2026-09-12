@@ -33,6 +33,8 @@ Deliver:
 - bounded offline Docker image import through the controlled backend.
 - Docker mutations require management authorization and produce request audit
   records.
+- release verification validates Cosign bundles and GitHub Actions provenance,
+  not only signature-file presence.
 
 Exit criteria:
 
