@@ -80,7 +80,7 @@ func Validate(share Share) error {
 	}
 	for _, protocol := range share.Protocols {
 		switch protocol {
-		case "smb", "nfs", "sftp", "ftp", "rsync":
+		case "smb", "nfs", "sftp", "ftp", "ftps", "rsync":
 		default:
 			return fmt.Errorf("unsupported share protocol %q", protocol)
 		}
