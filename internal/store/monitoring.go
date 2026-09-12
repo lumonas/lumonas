@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/monitoring"
@@ -70,8 +69,8 @@ func (s *Store) AlertRule(id string) (monitoring.AlertRule, error) {
 }
 
 func (s *Store) SaveAlertRule(rule monitoring.AlertRule) error {
-	if rule.ID == "" || rule.Name == "" || rule.Severity == "" {
-		return fmt.Errorf("invalid alert rule")
+	if err := rule.Validate(); err != nil {
+		return err
 	}
 	if err := s.ensureMonitoringSchema(); err != nil {
 		return err

@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/lumonas/lumonas/internal/monitoring"
 )
 
 func TestNotificationChannelAPIStoresSecretsWithoutReturningThem(t *testing.T) {
@@ -29,5 +31,18 @@ func TestNotificationRuleAPIValidatesRequiredFields(t *testing.T) {
 	server.routes().ServeHTTP(invalid, httptest.NewRequest(http.MethodPost, "/api/v1/notification-rules", strings.NewReader(`{"severity":"warning"}`)))
 	if invalid.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected rule validation, got %d: %s", invalid.Code, invalid.Body.String())
+	}
+}
+
+func TestNotificationRoutingHonorsSeverityAndCategoryRoutes(t *testing.T) {
+	server := testServer(t)
+	if err := server.store.SaveAlertRule(monitoring.AlertRule{ID: "rule-disk", Name: "Disk temperature", Condition: "disk temperature is high", Severity: "warning", Routes: []string{"channel-ntfy"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if routes := server.notificationRoutes("disk.temperature.changed", "critical"); !routes["channel-ntfy"] || routes["channel-slack"] {
+		t.Fatalf("unexpected disk routes: %#v", routes)
+	}
+	if routes := server.notificationRoutes("docker.container.unhealthy", "critical"); routes["channel-ntfy"] {
+		t.Fatalf("disk route leaked into Docker event: %#v", routes)
 	}
 }

@@ -1,6 +1,11 @@
 package monitoring
 
-import "time"
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
 
 type AlertRule struct {
 	ID              string     `json:"id"`
@@ -10,6 +15,32 @@ type AlertRule struct {
 	Routes          []string   `json:"routes"`
 	Enabled         bool       `json:"enabled"`
 	LastTriggeredAt *time.Time `json:"lastTriggeredAt,omitempty"`
+}
+
+func (r AlertRule) Validate() error {
+	if strings.TrimSpace(r.ID) == "" || strings.TrimSpace(r.Name) == "" || strings.TrimSpace(r.Condition) == "" {
+		return errors.New("alert rule id, name, and condition are required")
+	}
+	switch strings.ToLower(strings.TrimSpace(r.Severity)) {
+	case "info", "attention", "warning", "critical":
+	default:
+		return fmt.Errorf("unsupported alert rule severity %q", r.Severity)
+	}
+	if len(r.Routes) == 0 {
+		return errors.New("alert rule requires at least one route")
+	}
+	seen := make(map[string]bool, len(r.Routes))
+	for _, route := range r.Routes {
+		route = strings.TrimSpace(route)
+		if route == "" || strings.ContainsAny(route, "\x00\r\n") {
+			return errors.New("alert rule contains an invalid route")
+		}
+		if seen[route] {
+			return fmt.Errorf("alert rule contains duplicate route %q", route)
+		}
+		seen[route] = true
+	}
+	return nil
 }
 
 type NotificationChannel struct {
