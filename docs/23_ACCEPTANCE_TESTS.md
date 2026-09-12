@@ -266,8 +266,8 @@ release job fails when the verifier is unavailable.
 
 Boot the Debian appliance and query `/api/v1/services`.
 
-Pass if the three LumoNAS services are active/running and
-`lumonas-web.service` reports `user: lumonas`.
+Pass if the three LumoNAS services and the runtime provisioning unit are
+active/running, and `lumonas-web.service` reports `user: lumonas`.
 
 ## X. Package manifest
 

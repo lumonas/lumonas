@@ -86,6 +86,7 @@ require_line "$ROOT/scripts/qemu-smoke.sh" '<div id="root"></div>'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'snapshot_disk_identities'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'device reorder did not change any transient device path'
 require_line "$ROOT/scripts/qemu-smoke.sh" '"tmpfs"'
+require_line "$ROOT/scripts/qemu-smoke.sh" 'lumonas-runtime.service'
 require_line "$ROOT/scripts/frontend-runtime-smoke.sh" 'production frontend bundle contains the MSW bootstrap'
 for worker in storage network power general; do
   require_line "$ROOT/scripts/qemu-smoke.sh" "lumonas-privd-$worker.service"
