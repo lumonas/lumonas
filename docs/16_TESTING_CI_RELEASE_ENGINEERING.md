@@ -398,6 +398,10 @@ verification requires this manifest, compares its source commit with
 `github.sha` and its source epoch with that commit's timestamp. It also
 rejects any artifact added or removed without regenerating the manifest.
 
+The generated ISO and QEMU images embed versioned Debian package inventories
+under `/usr/share/doc/lumonas/`, including the source epoch and every installed
+package version, so an artifact can be audited after boot or offline inspection.
+
 HTTP requests receive a generated `X-Request-ID` and carry the same
 correlation ID in context. API-created jobs persist it, and privileged calls
 inherit it; daemon-created jobs use their stable job ID as the fallback

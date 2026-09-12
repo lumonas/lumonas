@@ -130,6 +130,9 @@ the web service is owned by the unprivileged `lumonas` user.
 Each Debian package includes a verified build manifest with source, toolchain,
 lockfile, catalog, and dependency metadata.
 
+Generated ISO and QEMU appliances also include versioned Debian package
+inventories with the reproducible source epoch and exact installed versions.
+
 Host integration commands are executed through bounded contexts, including
 privileged storage/network operations, disk and SMART discovery, Docker,
 Samba validation, WireGuard, Tailscale, and NUT.

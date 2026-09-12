@@ -103,6 +103,13 @@ $REPO_SOURCE
 APT
 apt-get update -o Dir::Etc::sourcelist="sources.list.d/lumonas-local.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" || true
 apt-get install -y --allow-downgrades lumonas || dpkg -i /opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb
+mkdir -p /usr/share/doc/lumonas
+{
+  echo "formatVersion=1"
+  echo "sourceDateEpoch=$SOURCE_DATE_EPOCH"
+  echo "packages:"
+  dpkg-query -W -f='\${Package}\t\${Version}\n' | sort
+} >/usr/share/doc/lumonas/iso-package-manifest.txt
 cat >/etc/lumonas/lumonas-web.env <<'ENV'
 LUMONAS_WEB_LISTEN=0.0.0.0:8081
 LUMONAS_WEB_ROOT=/usr/share/lumonas/web

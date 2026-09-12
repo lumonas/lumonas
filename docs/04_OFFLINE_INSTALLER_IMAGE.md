@@ -51,6 +51,11 @@ ISO manifests record this value, and the embedded APT `Release` metadata uses
 it for its date, so release metadata is reproducible from the checked-out
 source rather than the build machine clock.
 
+The installed ISO and QEMU appliance also carry versioned Debian package
+inventories at `/usr/share/doc/lumonas/iso-package-manifest.txt` and
+`/usr/share/doc/lumonas/qemu-package-manifest.txt`. Each inventory records the
+source epoch and the exact package versions present in the image.
+
 ## Image build approach
 
 Recommended evolution:
