@@ -23,3 +23,16 @@ func TestCombinedOutputPreservesCommandDiagnostics(t *testing.T) {
 		t.Fatalf("expected bounded command diagnostics, output=%q err=%v", out, err)
 	}
 }
+
+func TestCombinedOutputContextKillsDescendantsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	_, err := CombinedOutputContext(ctx, "sh", "-c", "sleep 10 & wait")
+	if err == nil {
+		t.Fatal("expected command cancellation")
+	}
+	if elapsed := time.Since(started); elapsed > 750*time.Millisecond {
+		t.Fatalf("command group outlived cancellation: elapsed=%s err=%v", elapsed, err)
+	}
+}

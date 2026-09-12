@@ -133,8 +133,9 @@ its persisted event and frontend delivery.
 The daemon restart tests also verify that queued, preparing, and running jobs
 are failed closed when `lumonasd` starts again, and that an SSE client can
 resume from `Last-Event-ID` without receiving its cursor event twice. Host
-integration commands use bounded contexts so a missing or wedged utility
-cannot keep a job or release smoke test alive indefinitely.
+integration commands use bounded contexts and process groups so a missing or
+wedged utility, including descendants that inherit its pipes, cannot keep a
+privileged request, job, or release smoke test alive indefinitely.
 
 ## Destructive safety tests
 

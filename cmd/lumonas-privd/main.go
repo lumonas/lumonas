@@ -259,7 +259,10 @@ var privilegedCommandTimeout = commandrunner.DefaultTimeout
 func commandRunner(name string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), privilegedCommandTimeout)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	// Terminate the complete process group on timeout. A privileged utility
+	// may spawn helpers that inherit stdout/stderr; leaving those descendants
+	// alive would keep the broker request and its API job blocked.
+	return commandrunner.CombinedOutputContext(ctx, name, args...)
 }
 
 func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, error), run command) response {

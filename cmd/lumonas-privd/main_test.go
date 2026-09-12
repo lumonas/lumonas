@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"net"
 	"strings"
@@ -10,7 +11,40 @@ import (
 
 	"github.com/lumonas/lumonas/internal/collector"
 	"github.com/lumonas/lumonas/internal/model"
+	commandrunner "github.com/lumonas/lumonas/internal/runner"
 )
+
+func TestCommandRunnerKillsDescendantsAfterTimeout(t *testing.T) {
+	previousTimeout := privilegedCommandTimeout
+	privilegedCommandTimeout = 30 * time.Millisecond
+	defer func() { privilegedCommandTimeout = previousTimeout }()
+
+	started := time.Now()
+	_, err := commandRunner("sh", "-c", "sleep 10 & wait")
+	if err == nil {
+		t.Fatal("expected privileged command timeout")
+	}
+	if elapsed := time.Since(started); elapsed > 750*time.Millisecond {
+		t.Fatalf("timed-out command retained a descendant: elapsed=%s err=%v", elapsed, err)
+	}
+}
+
+func TestCommandRunnerUsesCallerCancellation(t *testing.T) {
+	previousTimeout := privilegedCommandTimeout
+	privilegedCommandTimeout = time.Minute
+	defer func() { privilegedCommandTimeout = previousTimeout }()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	_, err := commandrunner.CombinedOutputContext(ctx, "sh", "-c", "sleep 10 & wait")
+	if err == nil {
+		t.Fatal("expected caller cancellation")
+	}
+	if elapsed := time.Since(started); elapsed > 750*time.Millisecond {
+		t.Fatalf("caller cancellation retained a descendant: elapsed=%s err=%v", elapsed, err)
+	}
+}
 
 func TestPrivilegedProtocolRejectsUnknownOperation(t *testing.T) {
 	server, client := net.Pipe()
