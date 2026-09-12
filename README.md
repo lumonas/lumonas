@@ -62,6 +62,8 @@ The CI storage gate also exercises disposable loopback media: ext4 UUID stabilit
 
 Event, audit, capacity, and job history retention are bounded so long-running appliances do not grow SQLite state without limit.
 
+Tagged releases run a Debian 13 previous-to-current package upgrade smoke test and verify that administrator configuration survives the upgrade.
+
 The ISO pipeline boots the generated offline image under QEMU with a blank replacement disk and checks the real health, readiness, and server endpoints before publishing the artifact.
 
 Offline recovery includes the plan-first `lumonas-recover` utility. Restoration requires explicit `--apply` plus an absolute target root and writes verified configuration, Compose state, the SQLite database, and encrypted secrets atomically.

@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all test test-go test-web check-openapi build build-go build-web package api-smoke storage-loopback iso-smoke qemu-image qemu-smoke verify-release
+.PHONY: all test test-go test-web check-openapi build build-go build-web package api-smoke storage-loopback iso-smoke upgrade-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -42,6 +42,9 @@ storage-loopback:
 
 iso-smoke:
 	LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_ISO_ASSERT=true bash scripts/iso-smoke.sh
+
+upgrade-smoke:
+	bash scripts/upgrade-smoke.sh "$(OLD_DEB)" "$(NEW_DEB)"
 
 qemu-image:
 	sudo LUMONAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh

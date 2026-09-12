@@ -96,6 +96,11 @@ Before significant LumoNAS update:
 6. health-check;
 7. expose rollback when architecture permits.
 
+Tagged releases also run a Debian 13 container upgrade smoke test from the
+previous release package to the current package. It verifies idempotent
+post-install behavior, preservation of administrator-owned environment values,
+runtime directories, service units, and the recovery utility.
+
 ## A/B system safety primitive
 
 Long-term preferred design:
