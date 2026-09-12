@@ -57,6 +57,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureEventSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate event schema: %w", err)
+	}
 	if err := s.ensureIdentitySchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate identity schema: %w", err)
@@ -123,7 +127,8 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY, type TEXT NOT NULL, timestamp TEXT NOT NULL,
-  severity TEXT NOT NULL, resource_type TEXT, resource_id TEXT, data_json TEXT NOT NULL
+  severity TEXT NOT NULL, resource_type TEXT, resource_id TEXT, data_json TEXT NOT NULL,
+  schema_version INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS config_generations (
   generation INTEGER PRIMARY KEY, state TEXT NOT NULL, plan_hash TEXT NOT NULL,
@@ -405,6 +410,9 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state
 }
 
 func (s *Store) SaveEvent(e model.Event) error {
+	if e.SchemaVersion < 1 {
+		e.SchemaVersion = 1
+	}
 	data, err := json.Marshal(e.Data)
 	if err != nil {
 		return err
@@ -413,7 +421,7 @@ func (s *Store) SaveEvent(e model.Event) error {
 	if e.Resource != nil {
 		rt, ri = e.Resource.Type, e.Resource.ID
 	}
-	_, err = s.db.Exec(`INSERT OR REPLACE INTO events(id,type,timestamp,severity,resource_type,resource_id,data_json) VALUES(?,?,?,?,?,?,?)`, e.ID, e.Type, e.Timestamp.Format(timeFormat), e.Severity, rt, ri, string(data))
+	_, err = s.db.Exec(`INSERT OR REPLACE INTO events(id,type,timestamp,severity,resource_type,resource_id,data_json,schema_version) VALUES(?,?,?,?,?,?,?,?)`, e.ID, e.Type, e.Timestamp.Format(timeFormat), e.Severity, rt, ri, string(data), e.SchemaVersion)
 	return err
 }
 
@@ -421,7 +429,7 @@ func (s *Store) Events(limit int) ([]model.Event, error) {
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT id,type,timestamp,severity,resource_type,resource_id,data_json FROM events ORDER BY timestamp DESC LIMIT ?`, limit)
+	rows, err := s.db.Query(`SELECT id,type,timestamp,severity,resource_type,resource_id,data_json,schema_version FROM events ORDER BY timestamp DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -431,7 +439,7 @@ func (s *Store) Events(limit int) ([]model.Event, error) {
 		var event model.Event
 		var timestamp, data string
 		var resourceType, resourceID sql.NullString
-		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data); err != nil {
+		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data, &event.SchemaVersion); err != nil {
 			return nil, err
 		}
 		event.Timestamp, _ = parseTime(timestamp)
@@ -456,7 +464,7 @@ func (s *Store) EventsAfter(lastID string, limit int) ([]model.Event, error) {
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT e.id,e.type,e.timestamp,e.severity,e.resource_type,e.resource_id,e.data_json
+	rows, err := s.db.Query(`SELECT e.id,e.type,e.timestamp,e.severity,e.resource_type,e.resource_id,e.data_json,e.schema_version
 FROM events e WHERE e.rowid > (SELECT rowid FROM events WHERE id = ?) ORDER BY e.rowid ASC LIMIT ?`, lastID, limit)
 	if err != nil {
 		return nil, err
@@ -467,7 +475,7 @@ FROM events e WHERE e.rowid > (SELECT rowid FROM events WHERE id = ?) ORDER BY e
 		var event model.Event
 		var timestamp, data string
 		var resourceType, resourceID sql.NullString
-		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data); err != nil {
+		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data, &event.SchemaVersion); err != nil {
 			return nil, err
 		}
 		event.Timestamp, _ = parseTime(timestamp)
