@@ -3,6 +3,7 @@ package runner
 
 import (
 	"context"
+	"io"
 	"os/exec"
 	"time"
 )
@@ -36,5 +37,36 @@ func CombinedOutput(name string, args ...string) ([]byte, error) {
 func CombinedOutputContext(parent context.Context, name string, args ...string) ([]byte, error) {
 	ctx, cancel := Context(parent)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	return combinedOutputContext(ctx, nil, name, args...)
+}
+
+// CombinedOutputContextWithStdin is the stdin-aware counterpart to
+// CombinedOutputContext. It uses the same bounded process-group execution so
+// commands that spawn descendants cannot keep pipes open after cancellation.
+func CombinedOutputContextWithStdin(parent context.Context, stdin io.Reader, name string, args ...string) ([]byte, error) {
+	ctx, cancel := Context(parent)
+	defer cancel()
+	return combinedOutputContext(ctx, stdin, name, args...)
+}
+
+func combinedOutputContext(ctx context.Context, stdin io.Reader, name string, args ...string) ([]byte, error) {
+	command := exec.Command(name, args...)
+	configureProcessGroup(command)
+	if stdin != nil {
+		command.Stdin = stdin
+	}
+
+	if err := command.Start(); err != nil {
+		return nil, err
+	}
+
+	output, done := collectCombinedOutput(command)
+	select {
+	case err := <-done:
+		return output(), err
+	case <-ctx.Done():
+		killProcessGroup(command)
+		<-done
+		return output(), ctx.Err()
+	}
 }

@@ -242,8 +242,12 @@ func (s *apiServer) loginTwoFactor(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	csrfToken := newID("csrf")
+	s.csrfMu.Lock()
+	s.csrfTokens[csrfToken] = expires.Unix()
+	s.csrfMu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: "lumonas_session", Value: token, Path: "/", Expires: expires, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: os.Getenv("LUMONAS_COOKIE_SECURE") == "true"})
-	writeJSON(w, http.StatusOK, map[string]any{"username": challenge.Username, "expiresAt": expires})
+	writeJSON(w, http.StatusOK, map[string]any{"username": challenge.Username, "expiresAt": expires, "csrfToken": csrfToken})
 }
 
 func twoFactorUserID(endpoint string) string {

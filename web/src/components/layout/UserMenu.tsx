@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useTheme } from '@/theme/ThemeProvider'
-import { useAuthStore } from '@/stores/auth'
+import { apiPost } from '@/api/client'
 import { useUiStore } from '@/stores/ui'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -20,7 +20,6 @@ export function UserMenu() {
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen)
   const density = useUiStore((s) => s.density)
   const setDensity = useUiStore((s) => s.setDensity)
-  const logout = useAuthStore((s) => s.logout)
   const navigate = useNavigate()
 
   return (
@@ -63,8 +62,14 @@ export function UserMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={async () => {
-            await logout()
+            try {
+              await apiPost('/auth/logout')
+            } catch {
+              void 0
+            }
             toast('Signed out')
+            // A full reload re-runs AuthGate, which re-checks the session cookie.
+            window.location.assign('/')
             navigate('/')
           }}
         >

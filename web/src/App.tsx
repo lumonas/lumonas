@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
@@ -13,7 +13,6 @@ import { FilesPage } from '@/features/files/FilesPage'
 import { MonitoringPage } from '@/features/monitoring/MonitoringPage'
 import { NetworkPage } from '@/features/network/NetworkPage'
 import { OnboardingPage } from '@/features/onboarding/OnboardingPage'
-import { PlaceholderPage } from '@/features/placeholder/PlaceholderPage'
 import { SharesPage } from '@/features/shares/SharesPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { StoragePage } from '@/features/storage/StoragePage'
@@ -76,7 +75,7 @@ function RoutedApp() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="updates" element={<UpdatesPage />} />
           <Route path="users" element={<UsersPage />} />
-          <Route path="*" element={<PlaceholderPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
       )}

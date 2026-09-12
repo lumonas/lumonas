@@ -41,6 +41,7 @@ export interface Disk {
 export interface PoolMember {
   diskId: string
   enabled: boolean
+  branchPath?: string
 }
 
 export interface Pool {
@@ -402,6 +403,154 @@ export interface UPSStatus {
   loadPercent?: number
   runtimeSec?: number
   onBattery: boolean
+}
+
+export interface StorageMount {
+  kind: 'disk' | 'pool'
+  targetId: string
+  mountPath: string
+  fstype: string
+  source: string
+  options: string
+  enabled: boolean
+}
+
+export interface StorageSafety {
+  state: 'locked' | 'unlocked'
+  unlockedUntil: string | null
+}
+
+export interface ProtectionConfig {
+  configPath: string
+  configured: boolean
+  parityDiskIds: string[]
+  dataDiskIds: string[]
+}
+
+export interface PoolMemberPlan {
+  diskId: string
+  wwn?: string
+  serial?: string
+  model?: string
+  sizeBytes: number
+  filesystemUuid?: string
+  branchPath: string
+}
+
+export interface PoolPlan {
+  operationId: string
+  name: string
+  mountPath: string
+  policy: string
+  members: PoolMemberPlan[]
+  configGeneration: number
+  expiresAt: string
+  planHash: string
+  status: string
+}
+
+export interface PoolUnmountPlan {
+  operationId: string
+  poolId: string
+  name: string
+  mountPath: string
+  configGeneration: number
+  expiresAt: string
+  planHash: string
+  status: string
+}
+
+export interface StorageOperationTarget {
+  diskId: string
+  wwn?: string
+  serial?: string
+  model?: string
+  sizeBytes: number
+  filesystemUuid?: string
+}
+
+export interface StorageOperationPlan {
+  operationId: string
+  action: string
+  target: StorageOperationTarget
+  requestedState: Record<string, unknown>
+  dependencySnapshot: string[]
+  configGeneration: number
+  expiresAt: string
+  planHash: string
+  status: string
+}
+
+export interface RecoveryManifest {
+  formatVersion: number
+  configSchema: number
+  lumonasVersion: string
+  nasUuid: string
+  generation: number
+  createdAt: string
+  diskIds: string[]
+  checksums: Record<string, string>
+}
+
+export interface RecoveryStatus {
+  configured: boolean
+  latestPath: string
+  verified: boolean
+  manifest?: RecoveryManifest
+  warnings?: string[]
+}
+
+export interface RecoveryPlan {
+  manifest: RecoveryManifest
+  files: string[]
+  verified: boolean
+  databaseValid: boolean
+  desiredStateValid: boolean
+  composeValid: boolean
+  encryptedSecrets: boolean
+  warnings?: string[]
+}
+
+export interface NotificationDelivery {
+  id: string
+  channelId: string
+  eventType: string
+  state: string
+  attemptedAt: string
+  error?: string
+}
+
+export interface AuditEntry {
+  id: string
+  timestamp: string
+  actor: string
+  action: string
+  outcome: string
+  resourceType?: string
+  resourceId?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface CapacityForecast {
+  resourceId: string
+  totalBytes: number
+  usedBytes: number
+  sampleCount: number
+  windowDays: number
+  growthBytesPerDay: number
+  daysToNinetyPercent?: number | null
+  available: boolean
+  message?: string
+}
+
+export interface SupportSession {
+  id: string
+  device: string
+  ip: string
+  scope: string
+  lastActiveAt: string
+  expiresAt?: string
+  current: boolean
 }
 
 export interface UPSPolicy {

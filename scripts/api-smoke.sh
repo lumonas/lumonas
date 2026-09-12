@@ -119,10 +119,13 @@ assert_authenticated_status_and_body() {
 		status=$(curl -sS -o "$response_path" -w '%{http_code}' \
 			-c "$COOKIE_JAR" -b "$COOKIE_JAR" \
 			-X "$method" -H 'Content-Type: application/json' \
+			${CSRF_TOKEN:+-H "X-CSRF-Token: $CSRF_TOKEN"} \
 			-d "$request_body" "$BASE_URL$endpoint")
 	else
 		status=$(curl -sS -o "$response_path" -w '%{http_code}' \
-			-c "$COOKIE_JAR" -b "$COOKIE_JAR" -X "$method" "$BASE_URL$endpoint")
+			-c "$COOKIE_JAR" -b "$COOKIE_JAR" \
+			${CSRF_TOKEN:+-H "X-CSRF-Token: $CSRF_TOKEN"} \
+			-X "$method" "$BASE_URL$endpoint")
 	fi
 	if [ "$status" != "$expected" ]; then
 		echo "$method $endpoint: expected HTTP $expected, got $status" >&2
@@ -153,6 +156,13 @@ status=$(curl -sS -o "$TEMP_DIR/login.json" -w '%{http_code}' \
 	"$BASE_URL/api/v1/auth/login")
 if [ "$status" != 200 ] || ! grep -F '"username":"admin"' "$TEMP_DIR/login.json" >/dev/null 2>&1; then
 	echo "valid login failed (HTTP $status)" >&2
+	sed -n '1,120p' "$TEMP_DIR/login.json" >&2
+	exit 1
+fi
+
+CSRF_TOKEN=$(sed -n 's/.*"csrfToken":"\([^"]*\)".*/\1/p' "$TEMP_DIR/login.json")
+if [ -z "$CSRF_TOKEN" ]; then
+	echo "login response did not contain csrfToken" >&2
 	sed -n '1,120p' "$TEMP_DIR/login.json" >&2
 	exit 1
 fi

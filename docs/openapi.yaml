@@ -834,8 +834,28 @@ paths:
       responses:
         '200':
           description: Logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    type: string
+                  expiresAt:
+                    type: string
+                    format: date-time
+                  csrfToken:
+                    type: string
+                    description: CSRF token to include in X-CSRF-Token header for subsequent mutations
         '401':
           description: Invalid credentials
+        '429':
+          description: Too many login attempts
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying
 
   /auth/login/2fa:
     post:
@@ -855,6 +875,19 @@ paths:
       responses:
         '200':
           description: Logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    type: string
+                  expiresAt:
+                    type: string
+                    format: date-time
+                  csrfToken:
+                    type: string
+                    description: CSRF token to include in X-CSRF-Token header for subsequent mutations
         '401':
           description: Invalid or expired verification code
 

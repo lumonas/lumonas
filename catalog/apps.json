@@ -72,5 +72,483 @@
       "stopServices": ["homeassistant"],
       "startServices": ["homeassistant"]
     }
+  },
+  {
+    "id": "nextcloud",
+    "name": "Nextcloud",
+    "category": "Cloud",
+    "tagline": "Self-hosted cloud storage and productivity",
+    "description": "A safe home for all your data with file sync, sharing, and collaboration tools.",
+    "accent": "primary",
+    "upstream": "https://nextcloud.com",
+    "image": "nextcloud:30",
+    "ports": [8080],
+    "popular": true,
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8080"},
+      {"id":"DATA","label":"Data storage","type":"storage_ref","required":true,"containerPath":"/var/www/html/data","defaultResource":"share-cloud"},
+      {"id":"DB_PASSWORD","label":"Database password","type":"secret","required":true},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/var/www/html", "/var/www/html/data", "/var/lib/postgresql/data"],
+    "dbDumpContainer": "nextcloud-db",
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/var/www/html", "/var/www/html/data", "/var/lib/postgresql/data"],
+      "stopServices": ["nextcloud", "nextcloud-db", "nextcloud-redis"],
+      "startServices": ["nextcloud-db", "nextcloud-redis", "nextcloud"],
+      "dbDump": {"container": "nextcloud-db", "command": "pg_dump -U nextcloud -d nextcloud", "timeout": 300},
+      "dbRestore": {"container": "nextcloud-db", "command": "psql -U nextcloud -d nextcloud", "timeout": 300}
+    }
+  },
+  {
+    "id": "pihole",
+    "name": "Pi-hole",
+    "category": "Network",
+    "tagline": "Network-wide ad blocker",
+    "description": "Protect your devices from unwanted content by blocking at the DNS level.",
+    "accent": "success",
+    "upstream": "https://pi-hole.net",
+    "image": "pihole/pihole:2024.11.0",
+    "ports": [80],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"80"},
+      {"id":"DNS","label":"Upstream DNS","type":"text","required":true,"defaultValue":"1.1.1.1","description":"DNS server to forward non-blocked queries to"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/etc/pihole", "/var/log/pihole"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/etc/pihole", "/var/log/pihole"],
+      "stopServices": ["pihole"],
+      "startServices": ["pihole"]
+    }
+  },
+  {
+    "id": "vaultwarden",
+    "name": "Vaultwarden",
+    "category": "Security",
+    "tagline": "Lightweight password manager",
+    "description": "Alternative Bitwarden-compatible server written in Rust.",
+    "accent": "warning",
+    "upstream": "https://github.com/dani-garcia/vaultwarden",
+    "image": "vaultwarden/server:1.32.5",
+    "ports": [8222],
+    "popular": true,
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8222"},
+      {"id":"DATA","label":"Data storage","type":"storage_ref","required":true,"containerPath":"/data","defaultResource":"apps"},
+      {"id":"ADMIN_TOKEN","label":"Admin token","type":"secret","required":false,"description":"Token for the admin panel"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/data"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/data"],
+      "stopServices": ["vaultwarden"],
+      "startServices": ["vaultwarden"]
+    }
+  },
+  {
+    "id": "traefik",
+    "name": "Traefik",
+    "category": "Network",
+    "tagline": "Modern reverse proxy and load balancer",
+    "description": "HTTP reverse proxy with automatic service discovery and HTTPS.",
+    "accent": "info",
+    "upstream": "https://traefik.io",
+    "image": "traefik:v3.2",
+    "ports": [80, 443, 8080],
+    "form": [
+      {"id":"HTTP_PORT","label":"HTTP port","type":"port","required":true,"defaultValue":"80"},
+      {"id":"HTTPS_PORT","label":"HTTPS port","type":"port","required":true,"defaultValue":"443"},
+      {"id":"DASHBOARD_PORT","label":"Dashboard port","type":"port","required":true,"defaultValue":"8080"},
+      {"id":"CONFIG","label":"Configuration storage","type":"storage_ref","required":true,"containerPath":"/etc/traefik","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/etc/traefik", "/letsencrypt"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/etc/traefik", "/letsencrypt"],
+      "stopServices": ["traefik"],
+      "startServices": ["traefik"]
+    }
+  },
+  {
+    "id": "portainer",
+    "name": "Portainer",
+    "category": "System",
+    "tagline": "Docker management UI",
+    "description": "Visual management for your Docker environments.",
+    "accent": "info",
+    "upstream": "https://portainer.io",
+    "image": "portainer/portainer-ce:2.21.5",
+    "ports": [9000],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"9000"},
+      {"id":"DATA","label":"Data storage","type":"storage_ref","required":true,"containerPath":"/data","defaultResource":"apps"}
+    ],
+    "appdataPaths": ["/data"],
+    "recovery": {
+      "strategy": "none",
+      "appdataPaths": ["/data"],
+      "stopServices": ["portainer"],
+      "startServices": ["portainer"]
+    }
+  },
+  {
+    "id": "radarr",
+    "name": "Radarr",
+    "category": "Media",
+    "tagline": "Movie collection manager",
+    "description": "Usenet and BitTorrent movie downloader with library management.",
+    "accent": "info",
+    "upstream": "https://radarr.video",
+    "image": "linuxserver/radarr:5.17",
+    "ports": [7878],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"7878"},
+      {"id":"CONFIG","label":"Configuration","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
+      {"id":"MEDIA","label":"Movie library","type":"storage_ref","required":true,"containerPath":"/movies","defaultResource":"share-media"},
+      {"id":"DOWNLOADS","label":"Downloads","type":"storage_ref","required":true,"containerPath":"/downloads","defaultResource":"share-media"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/config"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["radarr"],
+      "startServices": ["radarr"]
+    }
+  },
+  {
+    "id": "sonarr",
+    "name": "Sonarr",
+    "category": "Media",
+    "tagline": "TV series manager",
+    "description": "Usenet and BitTorrent TV show downloader with library management.",
+    "accent": "info",
+    "upstream": "https://sonarr.tv",
+    "image": "linuxserver/sonarr:4.0",
+    "ports": [8989],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8989"},
+      {"id":"CONFIG","label":"Configuration","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
+      {"id":"MEDIA","label":"TV library","type":"storage_ref","required":true,"containerPath":"/tv","defaultResource":"share-media"},
+      {"id":"DOWNLOADS","label":"Downloads","type":"storage_ref","required":true,"containerPath":"/downloads","defaultResource":"share-media"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/config"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["sonarr"],
+      "startServices": ["sonarr"]
+    }
+  },
+  {
+    "id": "overseerr",
+    "name": "Overseerr",
+    "category": "Media",
+    "tagline": "Media request management",
+    "description": "Request management and media discovery for Jellyfin/Plex.",
+    "accent": "primary",
+    "upstream": "https://overseerr.dev",
+    "image": "linuxserver/overseerr:1.34.0",
+    "ports": [5055],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"5055"},
+      {"id":"CONFIG","label":"Configuration","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/config"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["overseerr"],
+      "startServices": ["overseerr"]
+    }
+  },
+  {
+    "id": "tautulli",
+    "name": "Tautulli",
+    "category": "Media",
+    "tagline": "Plex monitoring and analytics",
+    "description": "Monitoring and tracking tool for Plex Media Server.",
+    "accent": "info",
+    "upstream": "https://tautulli.com",
+    "image": "linuxserver/tautulli:2.15",
+    "ports": [8181],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8181"},
+      {"id":"CONFIG","label":"Configuration","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/config"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["tautulli"],
+      "startServices": ["tautulli"]
+    }
+  },
+  {
+    "id": "bazarr",
+    "name": "Bazarr",
+    "category": "Media",
+    "tagline": "Subtitle downloader",
+    "description": "Companion application to Sonarr and Radarr for managing and downloading subtitles.",
+    "accent": "info",
+    "upstream": "https://bazarr.media",
+    "image": "linuxserver/bazarr:1.5",
+    "ports": [6767],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"6767"},
+      {"id":"CONFIG","label":"Configuration","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
+      {"id":"MEDIA","label":"Media library","type":"storage_ref","required":true,"containerPath":"/media","defaultResource":"share-media"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/config"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["bazarr"],
+      "startServices": ["bazarr"]
+    }
+  },
+  {
+    "id": "paperless-ngx",
+    "name": "Paperless-ngx",
+    "category": "Documents",
+    "tagline": "Document management system",
+    "description": "Scan, index and archive all your physical documents.",
+    "accent": "success",
+    "upstream": "https://paperless-ngx.com",
+    "image": "ghcr.io/paperless-ngx/paperless-ngx:2.13",
+    "ports": [8000],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8000"},
+      {"id":"DATA","label":"Document storage","type":"storage_ref","required":true,"containerPath":"/usr/src/paperless/data","defaultResource":"share-documents"},
+      {"id":"MEDIA","label":"Media storage","type":"storage_ref","required":true,"containerPath":"/usr/src/paperless/media","defaultResource":"share-documents"},
+      {"id":"CONSUME","label":"Consume folder","type":"storage_ref","required":true,"containerPath":"/usr/src/paperless/consume","defaultResource":"share-documents"},
+      {"id":"SECRET_KEY","label":"Secret key","type":"secret","required":true},
+      {"id":"DB_PASSWORD","label":"Database password","type":"secret","required":true},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/usr/src/paperless/data", "/usr/src/paperless/media", "/var/lib/postgresql/data"],
+    "dbDumpContainer": "paperless-db",
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/usr/src/paperless/data", "/usr/src/paperless/media", "/var/lib/postgresql/data"],
+      "stopServices": ["paperless-webserver", "paperless-worker", "paperless-scheduler", "paperless-db", "paperless-redis"],
+      "startServices": ["paperless-db", "paperless-redis", "paperless-webserver", "paperless-worker", "paperless-scheduler"],
+      "dbDump": {"container": "paperless-db", "command": "pg_dump -U paperless -d paperless", "timeout": 300},
+      "dbRestore": {"container": "paperless-db", "command": "psql -U paperless -d paperless", "timeout": 300}
+    }
+  },
+  {
+    "id": "uptime-kuma",
+    "name": "Uptime Kuma",
+    "category": "Monitoring",
+    "tagline": "Uptime monitoring tool",
+    "description": "A self-hosted monitoring tool with a clean UI.",
+    "accent": "success",
+    "upstream": "https://uptime.kuma.pet",
+    "image": "louislam/uptime-kuma:1.21",
+    "ports": [3001],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"3001"},
+      {"id":"DATA","label":"Data storage","type":"storage_ref","required":true,"containerPath":"/app/data","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/app/data"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/app/data"],
+      "stopServices": ["uptime-kuma"],
+      "startServices": ["uptime-kuma"]
+    }
+  },
+  {
+    "id": "grafana",
+    "name": "Grafana",
+    "category": "Monitoring",
+    "tagline": "Analytics and dashboards",
+    "description": "Open source analytics and monitoring solution.",
+    "accent": "warning",
+    "upstream": "https://grafana.com",
+    "image": "grafana/grafana:11.3.0",
+    "ports": [3000],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"3000"},
+      {"id":"DATA","label":"Data storage","type":"storage_ref","required":true,"containerPath":"/var/lib/grafana","defaultResource":"apps"},
+      {"id":"GF_SECURITY_ADMIN_PASSWORD","label":"Admin password","type":"secret","required":true},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/var/lib/grafana"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/var/lib/grafana"],
+      "stopServices": ["grafana"],
+      "startServices": ["grafana"]
+    }
+  },
+  {
+    "id": "watchtower",
+    "name": "Watchtower",
+    "category": "System",
+    "tagline": "Auto-update Docker containers",
+    "description": "Automatically update running Docker containers when new images are available.",
+    "accent": "attention",
+    "upstream": "https://containrrr.dev/watchtower",
+    "image": "containrrr/watchtower:1.7",
+    "ports": [],
+    "form": [
+      {"id":"INTERVAL","label":"Poll interval (sec)","type":"text","required":true,"defaultValue":"86400","description":"How often to check for updates"},
+      {"id":"SCHEDULE","label":"Cron schedule","type":"text","required":false,"defaultValue":"","description":"Optional cron expression (e.g. 0 4 * * *)"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": [],
+    "recovery": {
+      "strategy": "none",
+      "stopServices": ["watchtower"],
+      "startServices": ["watchtower"]
+    }
+  },
+  {
+    "id": "organizr",
+    "name": "Organizr",
+    "category": "System",
+    "tagline": "Self-hosted dashboard",
+    "description": "A way to organize your self-hosted services with a single sign-on portal.",
+    "accent": "info",
+    "upstream": "https://organizr.tv",
+    "image": "linuxserver/organizr:2.1",
+    "ports": [80],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"80"},
+      {"id":"DATA","label":"Data storage","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/config"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["organizr"],
+      "startServices": ["organizr"]
+    }
+  },
+  {
+    "id": "homarr",
+    "name": "Homarr",
+    "category": "System",
+    "tagline": "Home server dashboard",
+    "description": "A sleek and modern dashboard for managing your self-hosted services.",
+    "accent": "primary",
+    "upstream": "https://homarr.dev",
+    "image": "ghcr.io/homarr-labs/homarr:1.0",
+    "ports": [7575],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"7575"},
+      {"id":"DATA","label":"Data storage","type":"storage_ref","required":true,"containerPath":"/appdata","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/appdata"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/appdata"],
+      "stopServices": ["homarr"],
+      "startServices": ["homarr"]
+    }
+  },
+  {
+    "id": "authelia",
+    "name": "Authelia",
+    "category": "Security",
+    "tagline": "Single sign-on and 2FA",
+    "description": "An open-source authentication and authorization server with 2FA and SSO.",
+    "accent": "warning",
+    "upstream": "https://www.authelia.com",
+    "image": "authelia/authelia:4.38",
+    "ports": [9091],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"9091"},
+      {"id":"CONFIG","label":"Configuration","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/config"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["authelia"],
+      "startServices": ["authelia"]
+    }
+  },
+  {
+    "id": "prometheus",
+    "name": "Prometheus",
+    "category": "Monitoring",
+    "tagline": "Metrics collection and alerting",
+    "description": "Open-source systems monitoring and alerting toolkit.",
+    "accent": "warning",
+    "upstream": "https://prometheus.io",
+    "image": "prom/prometheus:v2.54.1",
+    "ports": [9090],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"9090"},
+      {"id":"DATA","label":"Data storage","type":"storage_ref","required":true,"containerPath":"/prometheus","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/prometheus"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/prometheus"],
+      "stopServices": ["prometheus"],
+      "startServices": ["prometheus"]
+    }
+  },
+  {
+    "id": "netdata",
+    "name": "Netdata",
+    "category": "Monitoring",
+    "tagline": "Real-time system monitoring",
+    "description": "Open-source real-time performance and health monitoring.",
+    "accent": "success",
+    "upstream": "https://www.netdata.cloud",
+    "image": "netdata/netdata:v1.47.5",
+    "ports": [19999],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"19999"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": ["/var/lib/netdata", "/var/cache/netdata"],
+    "recovery": {
+      "strategy": "none",
+      "stopServices": ["netdata"],
+      "startServices": ["netdata"]
+    }
+  },
+  {
+    "id": "vaultwarden-backup",
+    "name": "Vaultwarden Backup",
+    "category": "System",
+    "tagline": "Automated Vaultwarden backups",
+    "description": "Automatic backup solution for Vaultwarden data.",
+    "accent": "success",
+    "upstream": "https://github.com/tigattack/vaultwarden-backup",
+    "image": "tigattack/vaultwarden-backup:1.8",
+    "ports": [],
+    "form": [
+      {"id":"VAULTWARDEN_DATA","label":"Vaultwarden data","type":"storage_ref","required":true,"containerPath":"/vaultwarden/data","defaultResource":"apps"},
+      {"id":"BACKUP_DATA","label":"Backup destination","type":"storage_ref","required":true,"containerPath":"/backup","defaultResource":"share-backups"},
+      {"id":"CRON","label":"Backup cron","type":"text","required":true,"defaultValue":"0 3 * * *","description":"Cron expression for backup schedule"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ],
+    "appdataPaths": [],
+    "recovery": {
+      "strategy": "none",
+      "stopServices": ["vaultwarden-backup"],
+      "startServices": ["vaultwarden-backup"]
+    }
   }
 ]

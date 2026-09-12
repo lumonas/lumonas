@@ -1,5 +1,5 @@
 import { KeyRound, Lock, ShieldCheck } from 'lucide-react'
-import { useSettings, useUpdateSettings } from '@/api/queries'
+import { useRevokeSession, useSettings, useUpdateSettings } from '@/api/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,6 +10,7 @@ import { timeAgo } from '@/lib/format'
 export function SecurityTab() {
   const { data: settings } = useSettings()
   const updateSettings = useUpdateSettings()
+  const revokeSession = useRevokeSession()
   if (!settings) return null
   const { security } = settings
 
@@ -137,15 +138,8 @@ export function SecurityTab() {
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs"
-                  disabled={session.current}
-                  onClick={() =>
-                    updateSettings.mutate({
-                      section: 'security',
-                      patch: {
-                        sessions: security.sessions.filter((s) => s.id !== session.id),
-                      },
-                    })
-                  }
+                  disabled={session.current || revokeSession.isPending}
+                  onClick={() => revokeSession.mutate(session.id)}
                 >
                   Revoke
                 </Button>

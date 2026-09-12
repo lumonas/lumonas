@@ -30,6 +30,7 @@ import {
 import { AlertBanner } from '@/components/core/alert-banner'
 import { EmptyState } from '@/components/core/empty-state'
 import { PageHeader } from '@/components/core/page-header'
+import { FileSearchDialog } from '@/features/files/file-search'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -246,6 +247,7 @@ export function FilesPage() {
       <PageHeader
         title="Files"
         description="Administrative file management inside your shares — large transfers run as background jobs."
+        actions={<FileSearchDialog />}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">

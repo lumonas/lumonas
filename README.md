@@ -83,6 +83,10 @@ the web service is owned by the unprivileged `lumonas` user.
 Each Debian package includes a verified build manifest with source, toolchain,
 lockfile, catalog, and dependency metadata.
 
+Host integration commands are executed through bounded contexts, including
+privileged storage/network operations, disk and SMART discovery, Docker,
+Samba validation, WireGuard, Tailscale, and NUT.
+
 Offline recovery includes the plan-first `lumonas-recover` utility. Restoration requires explicit `--apply` plus an absolute target root and writes verified configuration, Compose state, the SQLite database, and encrypted secrets atomically.
 
 Management sessions can be reviewed and revoked by token digest, while Time Machine shares render Samba fruit support only when explicitly enabled.
@@ -94,3 +98,14 @@ Read-only host integrations include `lsblk`/SMART disk identity, mergerfs mount 
 Pool capacity is sampled once per UTC day into SQLite, retained for 180 days, and exposed through the read-only `/api/v1/capacity/forecast` endpoint. A forecast is withheld until at least three samples span a full day.
 
 Set both `LUMONAS_WEB_TLS_CERT` and `LUMONAS_WEB_TLS_KEY` in `/etc/lumonas/lumonas-web.env` to serve the web listener over local HTTPS. The package provisions an opt-in self-signed certificate at `/etc/lumonas/tls/` when OpenSSL is available; replace it with a certificate issued by your local CA for trusted clients and protect the private key.
+
+## Security Features
+
+LumoNAS includes several security features for production deployments:
+
+- **HTTPS by default**: Self-signed certificate generated on first install
+- **CSRF protection**: Tokens generated on login, required for all mutations
+- **Rate limiting**: 5 login attempts per 5-minute window per IP
+- **CORS configuration**: Configurable via `LUMONAS_CORS_ORIGINS` environment variable
+- **Security headers**: X-Frame-Options, CSP, HSTS, Referrer-Policy
+- **Request size limits**: 32 MB JSON, 2 GB multipart uploads

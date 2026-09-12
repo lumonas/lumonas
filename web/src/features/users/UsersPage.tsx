@@ -1,15 +1,35 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, ShieldCheck, ShieldOff, Users } from 'lucide-react'
-import { useToggleUser, useUsers } from '@/api/queries'
+import { KeyRound, Plus, ShieldCheck, ShieldOff, Trash2, Users } from 'lucide-react'
+import {
+  useCreateGroup,
+  useDeleteGroup,
+  useDeleteUser,
+  usePrincipals,
+  useSetGroupMembers,
+  useSetUserPassword,
+  useToggleUser,
+  useUsers,
+} from '@/api/queries'
 import { PageHeader } from '@/components/core/page-header'
 import { ResourceTable, type Column } from '@/components/core/resource-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { CreateUserDialog } from '@/features/users/create-user-dialog'
 import { TwoFactorDialog } from '@/features/users/twofactor-dialog'
+import { toast } from 'sonner'
 import { timeAgo } from '@/lib/format'
 import type { FileUser, ManagementUser } from '@/api/types'
 
@@ -23,8 +43,19 @@ export function UsersPage() {
   const [searchParams] = useSearchParams()
   const { data: users, isLoading } = useUsers()
   const toggleUser = useToggleUser()
+  const createGroup = useCreateGroup()
+  const deleteGroup = useDeleteGroup()
+  const setMembers = useSetGroupMembers()
+  const setUserPassword = useSetUserPassword()
+  const deleteUser = useDeleteUser()
+  const { data: principals } = usePrincipals()
   const [createOpen, setCreateOpen] = useState(searchParams.get('create') === '1')
   const [twoFactorUser, setTwoFactorUser] = useState<ManagementUser | null>(null)
+  const [passwordUser, setPasswordUser] = useState<ManagementUser | null>(null)
+  const [password, setPassword] = useState('')
+  const [deleteUserTarget, setDeleteUserTarget] = useState<ManagementUser | null>(null)
+  const [groupName, setGroupName] = useState('')
+  const [membersTarget, setMembersTarget] = useState<string | null>(null)
 
   const managementColumns: Column<ManagementUser>[] = [
     {
@@ -90,6 +121,30 @@ export function UsersPage() {
           onCheckedChange={(next) => toggleUser.mutate({ id: u.id, enabled: next })}
           aria-label={`Toggle ${u.username}`}
         />
+      ),
+    },
+    {
+      id: 'actions',
+      header: '',
+      cell: (u) => (
+        <div className="flex justify-end gap-1">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={`Set password for ${u.username}`}
+            onClick={() => { setPasswordUser(u); setPassword('') }}
+          >
+            <KeyRound />
+          </Button>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={`Delete ${u.username}`}
+            onClick={() => setDeleteUserTarget(u)}
+          >
+            <Trash2 />
+          </Button>
+        </div>
       ),
     },
   ]
@@ -187,6 +242,28 @@ export function UsersPage() {
               <Users className="size-4" />
               Groups
             </CardTitle>
+            <form
+              className="flex items-center gap-1.5"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (!groupName.trim()) return
+                createGroup.mutate(groupName.trim(), {
+                  onSuccess: () => setGroupName(''),
+                })
+              }}
+            >
+              <Input
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+                placeholder="new-group"
+                className="h-8 w-36 text-xs"
+                aria-label="New group name"
+              />
+              <Button type="submit" size="sm" variant="outline" className="h-8 text-xs" disabled={!groupName.trim() || createGroup.isPending}>
+                <Plus />
+                Create
+              </Button>
+            </form>
           </CardHeader>
           <CardContent>
             <ul className="flex flex-col divide-y rounded-lg border">
@@ -195,10 +272,25 @@ export function UsersPage() {
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{group.name}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {group.members.join(', ')}
+                      {group.members.join(', ') || 'No members'}
                     </p>
                   </div>
-                  <Badge variant="secondary">{group.members.length} members</Badge>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Badge variant="secondary">{group.members.length} members</Badge>
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setMembersTarget(group.id)}>
+                      Members
+                    </Button>
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      aria-label={`Delete group ${group.name}`}
+                      onClick={() => {
+                        if (confirm(`Delete group “${group.name}”?`)) deleteGroup.mutate(group.id)
+                      }}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -227,6 +319,111 @@ export function UsersPage() {
 
       <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} />
       <TwoFactorDialog user={twoFactorUser} open={twoFactorUser !== null} onOpenChange={(open) => { if (!open) setTwoFactorUser(null) }} />
+
+      <Dialog open={passwordUser != null} onOpenChange={(open) => { if (!open) { setPasswordUser(null); setPassword('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Set password — {passwordUser?.username}</DialogTitle>
+            <DialogDescription>Minimum 12 characters. The hash is stored, never the password.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="user-password">New password</Label>
+            <Input
+              id="user-password"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { setPasswordUser(null); setPassword('') }}>Cancel</Button>
+            <Button
+              disabled={password.length < 12 || setUserPassword.isPending}
+              onClick={() => {
+                if (!passwordUser) return
+                setUserPassword.mutate(
+                  { id: passwordUser.id, password },
+                  { onSuccess: () => { setPasswordUser(null); setPassword('') } },
+                )
+              }}
+            >
+              Save password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteUserTarget != null} onOpenChange={(open) => { if (!open) setDeleteUserTarget(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete {deleteUserTarget?.username}?</DialogTitle>
+            <DialogDescription>
+              This removes the identity. Principals referenced by access rules or group membership
+              cannot be deleted, and the last enabled management user is protected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteUserTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteUser.isPending}
+              onClick={() => {
+                if (!deleteUserTarget) return
+                deleteUser.mutate(deleteUserTarget.id, {
+                  onSuccess: () => {
+                    toast.success(`Deleted — ${deleteUserTarget.username}`)
+                    setDeleteUserTarget(null)
+                  },
+                })
+              }}
+            >
+              {deleteUser.isPending ? 'Deleting…' : 'Delete user'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={membersTarget != null} onOpenChange={(open) => { if (!open) setMembersTarget(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Members of {users?.groups.find((g) => g.id === membersTarget)?.name}</DialogTitle>
+            <DialogDescription>Members are file users and services; groups cannot nest.</DialogDescription>
+          </DialogHeader>
+          <div className="flex max-h-64 flex-col gap-1 overflow-auto rounded-md border p-2">
+            {(principals ?? [])
+              .filter((principal) => principal.type !== 'group')
+              .map((principal) => {
+                const group = users?.groups.find((candidate) => candidate.id === membersTarget)
+                const isMember = group?.members.includes(principal.name) ?? false
+                return (
+                  <label key={principal.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-muted/40">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-primary"
+                      checked={isMember}
+                      onChange={() => {
+                        if (!membersTarget || !group) return
+                        const memberIds = isMember
+                          ? (group.members.filter((name) => name !== principal.name))
+                          : [...group.members, principal.name]
+                        const ids = memberIds
+                          .map((name) => (principals ?? []).find((candidate) => candidate.name === name)?.id)
+                          .filter((id): id is string => id != null)
+                        setMembers.mutate({ id: membersTarget, memberIds: ids })
+                      }}
+                    />
+                    <span className="truncate">{principal.name}</span>
+                    <span className="ml-auto text-xs text-muted-foreground">{principal.type}</span>
+                  </label>
+                )
+              })}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setMembersTarget(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

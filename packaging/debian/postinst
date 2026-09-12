@@ -29,9 +29,10 @@ if [ ! -f /etc/lumonas/lumonas-web.env ]; then
 LUMONAS_WEB_LISTEN=127.0.0.1:8081
 LUMONAS_WEB_ROOT=/usr/share/lumonas/web
 LUMONAS_API_URL=http://127.0.0.1:8080
-# Set both values to enable local HTTPS after provisioning a trusted cert.
-LUMONAS_WEB_TLS_CERT=
-LUMONAS_WEB_TLS_KEY=
+# Enable HTTPS using the self-signed certificate generated below.
+LUMONAS_WEB_TLS_CERT=/etc/lumonas/tls/server.crt
+LUMONAS_WEB_TLS_KEY=/etc/lumonas/tls/server.key
+LUMONAS_COOKIE_SECURE=true
 ENV
 	chown root:lumonas /etc/lumonas/lumonas-web.env
 	chmod 0640 /etc/lumonas/lumonas-web.env

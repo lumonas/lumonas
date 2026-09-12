@@ -6,6 +6,7 @@ import {
   HardDrive,
   LayoutDashboard,
   Network,
+  RefreshCcwDot,
   Settings,
   Share2,
   Users,
@@ -27,6 +28,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/backups', label: 'Backups', Icon: Archive },
   { to: '/network', label: 'Network', Icon: Network },
   { to: '/monitoring', label: 'Monitoring', Icon: Activity },
+  { to: '/updates', label: 'Updates', Icon: RefreshCcwDot },
   { to: '/users', label: 'Users', Icon: Users },
   { to: '/settings', label: 'Settings', Icon: Settings },
 ]

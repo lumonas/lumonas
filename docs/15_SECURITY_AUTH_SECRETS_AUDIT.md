@@ -95,6 +95,51 @@ Default local HTTPS path:
 - allow user certificate import;
 - ACME optional when network/domain conditions allow.
 
+## CORS Configuration
+
+Cross-Origin Resource Sharing (CORS) is configured via the `LUMONAS_CORS_ORIGINS` environment variable.
+
+- **Default**: Same-origin only (no cross-origin requests allowed)
+- **Configuration**: Comma-separated list of allowed origins
+- **Example**: `LUMONAS_CORS_ORIGINS=http://localhost:5173,https://nas.example.com`
+
+When enabled, the server sets `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`, and `Access-Control-Allow-Credentials` headers.
+
+## CSRF Protection
+
+CSRF tokens are generated on login and must be included in all state-changing requests (POST, PUT, PATCH, DELETE).
+
+- **Token generation**: Included in login response as `csrfToken` field
+- **Token usage**: Include as `X-CSRF-Token` header on mutations
+- **Token expiry**: Tokens expire with the session (12 hours)
+- **Storage**: In-memory map with automatic cleanup
+
+## Rate Limiting
+
+Authentication endpoints are rate-limited to prevent brute-force attacks:
+
+- **Login endpoint**: 5 attempts per 5-minute window per IP
+- **Response**: HTTP 429 with `Retry-After` header
+- **Scope**: Per-IP tracking using `X-Forwarded-For` or direct connection
+
+## Request Body Size Limits
+
+API endpoints enforce request body size limits:
+
+- **JSON requests**: 32 MB maximum
+- **Multipart uploads**: 2 GB maximum
+- **Response**: HTTP 413 Payload Too Large when exceeded
+
+## Security Response Headers
+
+All API responses include security headers:
+
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy: frame-ancestors 'none'`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Strict-Transport-Security: max-age=63072000; includeSubDomains` (HTTPS only)
+
 ## SSH
 
 Recommended defaults:

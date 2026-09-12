@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ApiError, apiDelete, apiGet, apiMultipart, apiPatch, apiPost } from '@/api/client'
+import { ApiError, apiDelete, apiGet, apiMultipart, apiPatch, apiPut, apiPost } from '@/api/client'
 import { useLogsStore } from '@/stores/logs'
 import type {
   ActivityEvent,
   Alert,
   AlertRule,
+  AuditEntry,
   BackupDestination,
   BackupJob,
+  CapacityForecast,
   CatalogApp,
   ConfigGeneration,
   DockerContainer,
@@ -24,18 +26,27 @@ import type {
   LogLine,
   ManagementUser,
   NotificationChannel,
+  NotificationDelivery,
   OnboardingState,
   DiskRole,
   Pool,
+  PoolPlan,
+  PoolUnmountPlan,
   Principal,
   Protection,
+  ProtectionConfig,
   AppSettings,
   RecycleEntry,
+  RecoveryPlan,
   RecoveryReadiness,
+  RecoveryStatus,
   RestorePlan,
   ServerInfo,
   ServiceStatus,
   Share,
+  StorageMount,
+  StorageOperationPlan,
+  StorageSafety,
   SystemMetrics,
   UPSStatus,
   UPSPolicy,
@@ -82,6 +93,16 @@ export const queryKeys = {
   generations: ['backup', 'generations'] as const,
   restorePlan: ['backup', 'restore-plan'] as const,
   settings: ['settings'] as const,
+  storageMounts: ['storage', 'mounts'] as const,
+  storageSafety: ['storage', 'safety'] as const,
+  protectionConfig: ['storage', 'protection', 'config'] as const,
+  recoveryStatus: ['recovery', 'status'] as const,
+  recoveryPlan: ['recovery', 'plan'] as const,
+  notificationDeliveries: ['notifications', 'deliveries'] as const,
+  notificationRules: ['notification-rules'] as const,
+  audit: ['audit'] as const,
+  capacityForecast: ['capacity', 'forecast'] as const,
+  groups: ['groups'] as const,
   ups: ['power', 'ups'] as const,
   upsPolicy: ['power', 'ups-policy'] as const,
   wireguardStatus: ['network', 'wireguard', 'status'] as const,
@@ -90,6 +111,7 @@ export const queryKeys = {
   networkConnections: ['network', 'connections'] as const,
   networkBindings: ['network', 'bindings'] as const,
   networkFirewall: ['network', 'firewall'] as const,
+  networkDiagnostic: (id: string) => ['network', 'diagnostics', id] as const,
   wifiScan: ['network', 'wifi-scan'] as const,
 }
 
@@ -707,6 +729,17 @@ export function useSettings() {
   return useQuery({ queryKey: queryKeys.settings, queryFn: () => apiGet<AppSettings>('/settings') })
 }
 
+export function useRevokeSession() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<void>(`/settings/sessions/${id}`),
+    onSuccess: () => {
+      toast.success('Session revoked')
+      void qc.invalidateQueries({ queryKey: queryKeys.settings })
+    },
+  })
+}
+
 export function useUpdateSettings() {
   const qc = useQueryClient()
   return useMutation({
@@ -922,5 +955,382 @@ export function useApplyNetworkConnection() {
         ...(wifiPassword != null ? { wifiPassword } : {}),
       }),
     onSuccess: () => invalidateNetwork(qc),
+  })
+}
+
+// --- Storage write-plane ---
+
+export function useStorageMounts() {
+  return useQuery({
+    queryKey: queryKeys.storageMounts,
+    queryFn: () => apiGet<{ entries: StorageMount[] }>('/storage/mounts'),
+    select: (data) => data.entries,
+  })
+}
+
+export function useStorageSafety() {
+  return useQuery({
+    queryKey: queryKeys.storageSafety,
+    queryFn: () => apiGet<StorageSafety>('/storage/safety'),
+  })
+}
+
+export function useUnlockStorageSafety() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiPost<StorageSafety>('/storage/safety/unlock', { reauthenticated: true }),
+    onSuccess: (safety) => {
+      toast.success('Storage safety unlocked for 15 minutes')
+      qc.setQueryData(queryKeys.storageSafety, safety)
+    },
+  })
+}
+
+export function useLockStorageSafety() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiPost<StorageSafety>('/storage/safety/lock', {}),
+    onSuccess: (safety) => {
+      toast.success('Storage safety locked')
+      qc.setQueryData(queryKeys.storageSafety, safety)
+    },
+  })
+}
+
+export function useProtectionConfig() {
+  return useQuery({
+    queryKey: queryKeys.protectionConfig,
+    queryFn: () => apiGet<ProtectionConfig>('/storage/protection/config'),
+  })
+}
+
+export function useUpdateProtectionConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { parityDiskId: string; dataDiskIds: string[] }) =>
+      apiPut<{ configPath: string; config: string }>('/storage/protection/config', input),
+    onSuccess: () => {
+      toast.success('SnapRAID configuration saved')
+      void qc.invalidateQueries({ queryKey: queryKeys.protectionConfig })
+      void qc.invalidateQueries({ queryKey: queryKeys.protection })
+    },
+  })
+}
+
+export interface PoolPlanInput {
+  name: string
+  diskIds: string[]
+  expectedGeneration?: number | null
+}
+
+export function usePlanPool() {
+  return useMutation({
+    mutationFn: (input: PoolPlanInput) => apiPost<PoolPlan>('/storage/pools/plan', input),
+  })
+}
+
+export function useConfirmPool() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { operationId: string; planHash: string }) =>
+      apiPost<{ ok: boolean }>(`/storage/pools/${input.operationId}/confirm`, {
+        planHash: input.planHash,
+        reauthenticated: true,
+        storageSafetyUnlocked: true,
+      }),
+    onSuccess: () => {
+      toast.success('Pool operation accepted — check activity for progress')
+      void qc.invalidateQueries({ queryKey: queryKeys.pools })
+      void qc.invalidateQueries({ queryKey: queryKeys.storageMounts })
+      void qc.invalidateQueries({ queryKey: queryKeys.disks })
+    },
+  })
+}
+
+export function usePlanPoolUnmount() {
+  return useMutation({
+    mutationFn: (input: { name: string; expectedGeneration?: number | null }) =>
+      apiPost<PoolUnmountPlan>('/storage/pools/unmount/plan', input),
+  })
+}
+
+export function useConfirmPoolUnmount() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { operationId: string; planHash: string }) =>
+      apiPost<{ ok: boolean }>(`/storage/pools/unmount/${input.operationId}/confirm`, {
+        planHash: input.planHash,
+        reauthenticated: true,
+        storageSafetyUnlocked: true,
+      }),
+    onSuccess: () => {
+      toast.success('Pool unmount accepted')
+      void qc.invalidateQueries({ queryKey: queryKeys.pools })
+      void qc.invalidateQueries({ queryKey: queryKeys.storageMounts })
+    },
+  })
+}
+
+export type StorageOperationAction =
+  | 'filesystem.format'
+  | 'filesystem.create'
+  | 'filesystem.mount'
+  | 'filesystem.unmount'
+  | 'disk.erase'
+
+export interface StorageOperationInput {
+  action: StorageOperationAction
+  diskId: string
+  requestedState?: Record<string, unknown>
+}
+
+export function usePlanStorageOperation() {
+  return useMutation({
+    mutationFn: (input: StorageOperationInput) =>
+      apiPost<StorageOperationPlan>('/storage/operations/plan', input),
+  })
+}
+
+export function useConfirmStorageOperation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { operationId: string; planHash: string }) =>
+      apiPost<{ ok: boolean }>(`/storage/operations/${input.operationId}/confirm`, {
+        planHash: input.planHash,
+        reauthenticated: true,
+        storageSafetyUnlocked: true,
+      }),
+    onSuccess: () => {
+      toast.success('Storage operation completed')
+      void qc.invalidateQueries({ queryKey: queryKeys.disks })
+      void qc.invalidateQueries({ queryKey: queryKeys.pools })
+      void qc.invalidateQueries({ queryKey: queryKeys.storageMounts })
+      void qc.invalidateQueries({ queryKey: queryKeys.protection })
+      void qc.invalidateQueries({ queryKey: queryKeys.protectionConfig })
+      void qc.invalidateQueries({ queryKey: queryKeys.jobs })
+    },
+  })
+}
+
+// --- Recovery center ---
+
+export function useRecoveryStatus() {
+  return useQuery({
+    queryKey: queryKeys.recoveryStatus,
+    queryFn: () => apiGet<RecoveryStatus>('/recovery/status'),
+  })
+}
+
+export function useRecoveryPlan() {
+  return useQuery({
+    queryKey: queryKeys.recoveryPlan,
+    queryFn: () => apiGet<RecoveryPlan>('/recovery/plan'),
+    throwOnError: false,
+  })
+}
+
+export function useExportRecovery() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiPost<{ path: string; verified: boolean }>('/recovery/export', {}),
+    onSuccess: () => {
+      toast.success('Recovery bundle exported and verified')
+      void qc.invalidateQueries({ queryKey: queryKeys.recoveryStatus })
+      void qc.invalidateQueries({ queryKey: queryKeys.recoveryPlan })
+      void qc.invalidateQueries({ queryKey: queryKeys.backupReadiness })
+    },
+  })
+}
+
+export function useStageRestore() {
+  return useMutation({
+    mutationFn: () =>
+      apiPost<{ directory: string; files: string[]; verified: boolean }>(
+        '/recovery/restore/stage',
+        { confirmed: true, reauthenticated: true },
+      ),
+  })
+}
+
+// --- Notifications management ---
+
+export function useUpdateNotificationChannel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      id: string
+      label?: string
+      target?: string
+      enabled?: boolean
+      credentials?: { token?: string; username?: string; password?: string; address?: string }
+    }) => apiPatch<NotificationChannel>(`/notification-channels/${input.id}`, input),
+    onSuccess: (channel) => {
+      toast.success(`Notification channel saved — ${channel.label}`)
+      void qc.invalidateQueries({ queryKey: queryKeys.notificationChannels })
+    },
+  })
+}
+
+export function useDeleteNotificationChannel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<void>(`/notification-channels/${id}`),
+    onSuccess: () => {
+      toast.success('Notification channel deleted')
+      void qc.invalidateQueries({ queryKey: queryKeys.notificationChannels })
+    },
+  })
+}
+
+export function useNotificationDeliveries() {
+  return useQuery({
+    queryKey: queryKeys.notificationDeliveries,
+    queryFn: () => apiGet<NotificationDelivery[]>('/notification-deliveries?limit=50'),
+  })
+}
+
+export function useNotificationRules() {
+  return useQuery({
+    queryKey: queryKeys.notificationRules,
+    queryFn: () => apiGet<AlertRule[]>('/notification-rules'),
+  })
+}
+
+export function useSaveNotificationRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string; condition: string; severity?: AlertRule['severity']; routes?: string[] }) =>
+      apiPost<AlertRule>('/notification-rules', input),
+    onSuccess: (rule) => {
+      toast.success(`Notification rule saved — ${rule.name}`)
+      void qc.invalidateQueries({ queryKey: queryKeys.notificationRules })
+    },
+  })
+}
+
+export function useToggleNotificationRule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (rule: AlertRule) =>
+      apiPatch<AlertRule>(`/notification-rules/${rule.id}`, { enabled: !rule.enabled }),
+    onSuccess: (rule) => {
+      toast.success(rule.enabled ? `Rule enabled — ${rule.name}` : `Rule disabled — ${rule.name}`)
+      void qc.invalidateQueries({ queryKey: queryKeys.notificationRules })
+    },
+  })
+}
+
+// --- Admin extras ---
+
+export function useAudit() {
+  return useQuery({
+    queryKey: queryKeys.audit,
+    queryFn: () => apiGet<AuditEntry[]>('/audit?limit=100'),
+  })
+}
+
+export function useCapacityForecast(days = 30) {
+  return useQuery({
+    queryKey: [...queryKeys.capacityForecast, days],
+    queryFn: () => apiGet<CapacityForecast[]>(`/capacity/forecast?days=${days}`),
+    throwOnError: false,
+  })
+}
+
+export function useGroups() {
+  return useQuery({
+    queryKey: queryKeys.groups,
+    queryFn: () => apiGet<Principal[]>('/groups'),
+    throwOnError: false,
+  })
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => apiPost<Principal>('/groups', { name }),
+    onSuccess: (group) => {
+      toast.success(`Group created — ${group.name}`)
+      void qc.invalidateQueries({ queryKey: queryKeys.groups })
+      void qc.invalidateQueries({ queryKey: queryKeys.users })
+    },
+  })
+}
+
+export function useDeleteGroup() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<void>(`/groups/${id}`),
+    onSuccess: () => {
+      toast.success('Group deleted')
+      void qc.invalidateQueries({ queryKey: queryKeys.groups })
+      void qc.invalidateQueries({ queryKey: queryKeys.users })
+    },
+  })
+}
+
+export function useSetGroupMembers() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; memberIds: string[] }) =>
+      apiPut<Principal[]>(`/groups/${input.id}/members`, { memberIds: input.memberIds }),
+    onSuccess: () => {
+      toast.success('Group members updated')
+      void qc.invalidateQueries({ queryKey: queryKeys.groups })
+      void qc.invalidateQueries({ queryKey: queryKeys.users })
+    },
+  })
+}
+
+export function useSetUserPassword() {
+  return useMutation({
+    mutationFn: (input: { id: string; password: string }) =>
+      apiPost<void>(`/users/${input.id}/password`, { password: input.password }),
+    onSuccess: () => toast.success('Password updated'),
+  })
+}
+
+export function useDeleteUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<void>(`/users/${id}`),
+    onSuccess: () => {
+      toast.success('User deleted')
+      void qc.invalidateQueries({ queryKey: queryKeys.users })
+    },
+  })
+}
+
+export function useFileSearch(query: string) {
+  return useQuery({
+    queryKey: [...queryKeys.files(null, ''), 'search', query],
+    queryFn: () => apiGet<FileEntry[]>(`/files/search?q=${encodeURIComponent(query)}`),
+    enabled: query.trim().length >= 2,
+    throwOnError: false,
+  })
+}
+
+export interface Checkpoint {
+  operationId: string
+  expiresAt?: string
+  status?: string
+}
+
+export function useBeginCheckpoint() {
+  return useMutation({
+    mutationFn: () => apiPost<Checkpoint>('/network/checkpoints', { timeoutSeconds: 120 }),
+    onSuccess: () => toast.success('Network checkpoint opened'),
+  })
+}
+
+export function useCheckpointAction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; action: 'commit' | 'rollback' }) =>
+      apiPost<{ ok: boolean }>(`/network/checkpoints/${input.id}/${input.action}`, {}),
+    onSuccess: (_data, input) => {
+      toast.success(input.action === 'commit' ? 'Checkpoint committed' : 'Checkpoint rolled back')
+      void qc.invalidateQueries({ queryKey: queryKeys.networkConnections })
+    },
   })
 }

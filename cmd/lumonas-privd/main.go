@@ -10,12 +10,14 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/collector"
@@ -89,20 +91,39 @@ func main() {
 	}
 	_ = os.Chmod(*socket, mode)
 	allowedGID := os.Getgid()
+	var wg sync.WaitGroup
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan struct{})
+	go func() {
+		<-stop
+		listener.Close()
+		close(done)
+	}()
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			continue
+			select {
+			case <-done:
+				wg.Wait()
+				return
+			default:
+				continue
+			}
 		}
 		if !peerAllowed(conn, allowedGID) {
 			_ = conn.Close()
 			continue
 		}
-		if *worker == "" {
-			go serve(conn)
-		} else {
-			go serveWorker(conn, *worker)
-		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if *worker == "" {
+				serve(conn)
+			} else {
+				serveWorker(conn, *worker)
+			}
+		}()
 	}
 }
 

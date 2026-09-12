@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"io/fs"
 	"log/slog"
@@ -8,8 +9,11 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"time"
 )
 
 func main() {
@@ -31,14 +35,29 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("lumonas-web listening", "listen", *listen, "root", *root, "https", *cert != "")
-	var serveErr error
-	if *cert != "" {
-		serveErr = http.ListenAndServeTLS(*listen, *cert, *key, handler)
-	} else {
-		serveErr = http.ListenAndServe(*listen, handler)
+	srv := &http.Server{Addr: *listen, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
+	go func() {
+		if *cert != "" {
+			if err := srv.ListenAndServeTLS(*cert, *key); err != nil && err != http.ErrServerClosed {
+				logger.Error("lumonas-web stopped", "error", err)
+				os.Exit(1)
+			}
+		} else {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Error("lumonas-web stopped", "error", err)
+				os.Exit(1)
+			}
+		}
+	}()
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+	<-stop
+	logger.Info("lumonas-web shutting down")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("shutdown error", "error", err)
 	}
-	logger.Error("lumonas-web stopped", "error", serveErr)
-	os.Exit(1)
 }
 
 func newHandler(root string, target *url.URL) http.Handler {
@@ -50,7 +69,13 @@ func newHandlerWithTransport(root string, target *url.URL, transport http.RoundT
 	proxy.Transport = transport
 	static := http.FileServer(http.Dir(root))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+		if r.URL.Path == "/healthz" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"ok"}`))
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/readyz" {
 			proxy.ServeHTTP(w, r)
 			return
 		}

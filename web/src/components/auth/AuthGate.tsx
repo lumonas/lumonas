@@ -1,7 +1,9 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { setCsrfToken } from '../../api/client'
 
 type AuthStatus = { required: boolean; configured: boolean; authenticated: boolean }
 type TwoFactorChallenge = { challengeId: string }
+type LoginResponse = { username: string; expiresAt: string; csrfToken: string }
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus | null>(null)
@@ -40,6 +42,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
       return
     }
     if (!response.ok) { setError('Invalid credentials'); return }
+    const data = (await response.json()) as LoginResponse
+    if (data.csrfToken) {
+      setCsrfToken(data.csrfToken)
+    }
     setPassword('')
     await load()
   }
@@ -50,6 +56,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
     setError('')
     const response = await fetch('/api/v1/auth/login/2fa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ challengeId: challenge.challengeId, code: code.trim() }) })
     if (!response.ok) { setError('Invalid verification code'); return }
+    const data = (await response.json()) as LoginResponse
+    if (data.csrfToken) {
+      setCsrfToken(data.csrfToken)
+    }
     setChallenge(null)
     setCode('')
     setPassword('')

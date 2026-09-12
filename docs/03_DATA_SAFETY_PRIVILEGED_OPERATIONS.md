@@ -53,6 +53,11 @@ SnapRAID sync and scrub failures are terminal operation failures: the
 privileged broker never converts a non-zero command result into success or
 updates the last-successful protection timestamp.
 
+Network diagnostics use the same command boundary: ping and traceroute are
+typed allow-listed operations with direct argument passing, finite context
+deadlines, bounded output, and an injectable runner for tests. They never
+construct shell commands, and unsupported or failed probes remain failures.
+
 ### Class D — destructive
 
 Examples:

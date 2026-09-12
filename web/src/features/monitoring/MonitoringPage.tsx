@@ -2,15 +2,19 @@ import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/core/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AlertsTab } from '@/features/monitoring/alerts-tab'
+import { AuditTab } from '@/features/monitoring/audit-tab'
 import { JobsTab } from '@/features/monitoring/jobs-tab'
 import { MonitoringOverviewTab } from '@/features/monitoring/overview-tab'
+import { NotificationsTab } from '@/features/monitoring/notifications-tab'
 import { TimelineTab } from '@/features/monitoring/timeline-tab'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'alerts', label: 'Alerts' },
   { value: 'jobs', label: 'Jobs' },
+  { value: 'notifications', label: 'Notifications' },
   { value: 'activity', label: 'Activity' },
+  { value: 'audit', label: 'Audit' },
 ] as const
 
 export function MonitoringPage() {
@@ -41,7 +45,9 @@ export function MonitoringPage() {
         <TabsContent value="overview"><MonitoringOverviewTab /></TabsContent>
         <TabsContent value="alerts"><AlertsTab /></TabsContent>
         <TabsContent value="jobs"><JobsTab /></TabsContent>
+        <TabsContent value="notifications"><NotificationsTab /></TabsContent>
         <TabsContent value="activity"><TimelineTab /></TabsContent>
+        <TabsContent value="audit"><AuditTab /></TabsContent>
       </Tabs>
     </div>
   )

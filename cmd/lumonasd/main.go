@@ -58,6 +58,11 @@ type apiServer struct {
 	safetyMu             sync.Mutex
 	safetyUntil          time.Time
 	brokerExec           func(ctx context.Context, request privileged.Request) error
+	corsOrigins          []string
+	csrfTokens           map[string]int64
+	csrfMu               sync.Mutex
+	rateMu               sync.Mutex
+	rateAttempts         map[string][]time.Time
 }
 
 var version = "0.1.0-dev"
@@ -82,7 +87,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true"}
+	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]int64), rateAttempts: make(map[string][]time.Time)}
 	server.dockerService = dockerruntime.New(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"), nil)
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
 	server.reconcileUpdateBoot()
@@ -131,7 +136,7 @@ func (s *apiServer) routes() http.Handler {
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/api/v1/", s.api)
-	return requestMiddleware(s.authMiddleware(mux))
+	return s.requestMiddleware(s.authMiddleware(mux))
 }
 
 func (s *apiServer) healthz(w http.ResponseWriter, _ *http.Request) {
@@ -476,7 +481,53 @@ func (s *apiServer) authStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"required": s.authRequired, "configured": s.store.HasUsers(), "authenticated": authenticated})
 }
 
+func (s *apiServer) checkRateLimit(ip string) bool {
+	s.rateMu.Lock()
+	defer s.rateMu.Unlock()
+	now := time.Now()
+	window := 5 * time.Minute
+	maxAttempts := 5
+	attempts := s.rateAttempts[ip]
+	var valid []time.Time
+	for _, t := range attempts {
+		if now.Sub(t) < window {
+			valid = append(valid, t)
+		}
+	}
+	if len(valid) >= maxAttempts {
+		return false
+	}
+	s.rateAttempts[ip] = append(valid, now)
+	// Clean up stale IPs with no valid attempts
+	for key, attempts := range s.rateAttempts {
+		if len(attempts) == 0 {
+			delete(s.rateAttempts, key)
+		}
+	}
+	return true
+}
+
+func (s *apiServer) cleanupExpiredCSRFTokens() {
+	s.csrfMu.Lock()
+	defer s.csrfMu.Unlock()
+	now := time.Now().Unix()
+	for token, expires := range s.csrfTokens {
+		if now > expires {
+			delete(s.csrfTokens, token)
+		}
+	}
+}
+
 func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
+	ip := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		ip = strings.Split(forwarded, ",")[0]
+	}
+	if !s.checkRateLimit(ip) {
+		w.Header().Set("Retry-After", "300")
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
+		return
+	}
 	var input struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -509,8 +560,12 @@ func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	csrfToken := newID("csrf")
+	s.csrfMu.Lock()
+	s.csrfTokens[csrfToken] = expires.Unix()
+	s.csrfMu.Unlock()
 	http.SetCookie(w, &http.Cookie{Name: "lumonas_session", Value: token, Path: "/", Expires: expires, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: os.Getenv("LUMONAS_COOKIE_SECURE") == "true"})
-	writeJSON(w, http.StatusOK, map[string]any{"username": input.Username, "expiresAt": expires})
+	writeJSON(w, http.StatusOK, map[string]any{"username": input.Username, "expiresAt": expires, "csrfToken": csrfToken})
 }
 
 func (s *apiServer) authLogout(w http.ResponseWriter, r *http.Request) {
@@ -535,6 +590,20 @@ func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 		if _, ok := s.store.SessionUser(cookie.Value); !ok {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired session"})
 			return
+		}
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+			csrfToken := r.Header.Get("X-CSRF-Token")
+			if csrfToken == "" {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "CSRF token required"})
+				return
+			}
+			s.csrfMu.Lock()
+			expires, exists := s.csrfTokens[csrfToken]
+			s.csrfMu.Unlock()
+			if !exists || time.Now().Unix() > expires {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "invalid or expired CSRF token"})
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
@@ -2454,19 +2523,50 @@ func auditableEvent(kind string) bool {
 	}
 }
 
-func requestMiddleware(next http.Handler) http.Handler {
+func (s *apiServer) requestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
 		correlationID := trace.NewCorrelationID()
 		w.Header().Set("X-Request-ID", correlationID)
 		r = r.WithContext(trace.WithCorrelationID(r.Context(), correlationID))
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			if len(s.corsOrigins) == 0 {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+			} else {
+				for _, allowed := range s.corsOrigins {
+					if origin == allowed {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+						w.Header().Set("Vary", "Origin")
+						break
+					}
+				}
+			}
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 		if r.Method == http.MethodOptions {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+				if err := r.ParseMultipartForm(2 << 30); err != nil {
+					writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+					return
+				}
+			} else {
+				r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+			}
+		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -2491,6 +2591,20 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+func parseCORSOrigins() []string {
+	raw := os.Getenv("LUMONAS_CORS_ORIGINS")
+	if raw == "" {
+		return nil
+	}
+	var origins []string
+	for _, o := range strings.Split(raw, ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			origins = append(origins, o)
+		}
+	}
+	return origins
 }
 func newID(prefix string) string {
 	var buf [8]byte

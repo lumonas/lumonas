@@ -6,7 +6,6 @@ const PROGRESS_KEY = 'lumonas-onboarding-progress'
 interface OnboardingStoreState {
   done: boolean
   complete: () => void
-  reset: () => void
 }
 
 export const useOnboardingStore = create<OnboardingStoreState>((set) => ({
@@ -15,11 +14,6 @@ export const useOnboardingStore = create<OnboardingStoreState>((set) => ({
     localStorage.setItem(FLAG_KEY, '1')
     localStorage.removeItem(PROGRESS_KEY)
     set({ done: true })
-  },
-  reset: () => {
-    localStorage.removeItem(FLAG_KEY)
-    localStorage.removeItem(PROGRESS_KEY)
-    set({ done: false })
   },
 }))
 

@@ -130,6 +130,10 @@ The release safety job additionally executes the SnapRAID sync and scrub
 failure contract, ensuring a non-zero command result cannot advance protection
 state.
 
+The network diagnostic contract verifies exact allow-listed arguments for ping
+and traceroute, bounded output, context cancellation, and failure propagation.
+Unsupported diagnostic kinds are rejected before any external command runs.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until

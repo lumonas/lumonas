@@ -329,3 +329,11 @@ can create both mergerfs branches and complete SnapRAID status cleanup.
 
 The same gate injects failed SnapRAID sync and scrub commands and requires
 both operations to finish failed without updating protection success metadata.
+
+## AI. Network diagnostic command boundary
+
+Run the network diagnostic command-module tests.
+
+Pass if ping/traceroute use direct allow-listed arguments, bounded output and
+context cancellation, and unsupported or failed probes are reported as
+failures without shell execution.

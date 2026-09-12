@@ -5,12 +5,14 @@ import { BackupsOverviewTab } from '@/features/backups/overview-tab'
 import { BackupJobsTab } from '@/features/backups/jobs-tab'
 import { DestinationsTab } from '@/features/backups/destinations-tab'
 import { HistoryTab } from '@/features/backups/history-tab'
+import { RecoveryTab } from '@/features/backups/recovery-tab'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'jobs', label: 'Jobs' },
   { value: 'history', label: 'History' },
   { value: 'destinations', label: 'Destinations' },
+  { value: 'recovery', label: 'Recovery' },
 ] as const
 
 export function BackupsPage() {
@@ -51,6 +53,9 @@ export function BackupsPage() {
         </TabsContent>
         <TabsContent value="destinations">
           <DestinationsTab />
+        </TabsContent>
+        <TabsContent value="recovery">
+          <RecoveryTab />
         </TabsContent>
       </Tabs>
     </div>

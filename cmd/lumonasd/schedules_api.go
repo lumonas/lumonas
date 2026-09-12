@@ -91,6 +91,7 @@ func (s *apiServer) scheduleLoop() {
 		tick++
 		s.runDueSchedules()
 		s.evaluatePeriodicAlerts(tick)
+		s.cleanupExpiredCSRFTokens()
 	}
 }
 

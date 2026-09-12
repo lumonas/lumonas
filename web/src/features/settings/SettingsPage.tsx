@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router-dom'
-import { History } from 'lucide-react'
+import { LifeBuoy } from 'lucide-react'
+import { apiDownload } from '@/api/client'
 import { PageHeader } from '@/components/core/page-header'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -7,7 +8,7 @@ import { PowerTab } from '@/features/settings/power-tab'
 import { RuntimeTab } from '@/features/settings/runtime-tab'
 import { SecurityTab } from '@/features/settings/security-tab'
 import { UpdatesTab } from '@/features/settings/updates-tab'
-import { useOnboardingStore } from '@/stores/onboarding'
+import { toast } from 'sonner'
 
 const TABS = [
   { value: 'updates', label: 'Updates' },
@@ -18,9 +19,23 @@ const TABS = [
 
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const resetOnboarding = useOnboardingStore((s) => s.reset)
   const tabParam = searchParams.get('tab')
   const tab = tabParam != null && TABS.some((t) => t.value === tabParam) ? tabParam : 'updates'
+
+  async function downloadSupportBundle() {
+    try {
+      const blob = await apiDownload('/diagnostics/support-bundle')
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `lumonas-support-${new Date().toISOString().slice(0, 10)}.zip`
+      anchor.click()
+      URL.revokeObjectURL(url)
+      toast.success('Support bundle downloaded')
+    } catch {
+      toast.error('Support bundle could not be created')
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,9 +43,9 @@ export function SettingsPage() {
         title="Settings"
         description="Updates, runtime behavior, power and security. Every change becomes a new config generation."
         actions={
-          <Button variant="outline" size="sm" onClick={resetOnboarding}>
-            <History />
-            Re-run setup wizard
+          <Button variant="outline" size="sm" onClick={() => void downloadSupportBundle()}>
+            <LifeBuoy />
+            Support bundle
           </Button>
         }
       />

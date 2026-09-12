@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Activity, Play } from 'lucide-react'
+import { Activity, HardDriveDownload, HardDriveUpload, Play } from 'lucide-react'
 import { useActivity, useCreateJob, useDisk, useJobs } from '@/api/queries'
 import { DangerZone } from '@/components/core/danger-zone'
 import { DependencyList, type DependencyItem } from '@/components/core/dependency-list'
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatBytes, timeAgo } from '@/lib/format'
+import { DiskOperationsDialog, type DiskAction } from '@/features/storage/disk-operations-dialog'
 import { ROLE_LABELS } from '@/features/storage/roles'
 import { cn } from '@/lib/utils'
 
@@ -61,6 +62,7 @@ export function DiskDrawer({
   const [standby, setStandby] = useState('30')
   const [smartSchedule, setSmartSchedule] = useState('weekly-short')
   const [tempAlerts, setTempAlerts] = useState(true)
+  const [diskAction, setDiskAction] = useState<DiskAction | null>(null)
 
   const smartRunning =
     disk != null &&
@@ -107,6 +109,28 @@ export function DiskDrawer({
                 <Metric label="Interface" value={disk.interface.toUpperCase()} />
                 <Metric label="Last seen" value={timeAgo(disk.lastSeen)} />
               </div>
+              {disk.filesystem && !disk.poolId ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={disk.mounted}
+                    onClick={() => setDiskAction('mount')}
+                  >
+                    <HardDriveDownload />
+                    {disk.mounted ? 'Mounted' : 'Mount'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!disk.mounted}
+                    onClick={() => setDiskAction('unmount')}
+                  >
+                    <HardDriveUpload />
+                    Unmount
+                  </Button>
+                </div>
+              ) : null}
               <div>
                 <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                   Used by
@@ -242,25 +266,39 @@ export function DiskDrawer({
 
           <DangerZone
             identity={<DiskIdentity disk={disk} />}
-            onAction={() => undefined}
+            onAction={(id) => setDiskAction(id as DiskAction)}
             actions={[
-              {
-                id: 'format',
-                label: 'Format disk',
-                description: `All data on ${disk.name} will be permanently destroyed. Shares and apps using this disk will stop working.`,
-                match: disk.name,
-              },
               ...(disk.poolId
-                ? [
+                ? []
+                : [
                     {
-                      id: 'remove',
-                      label: 'Remove from pool',
-                      description: `Removes ${disk.name} from the Main pool. SnapRAID protection must be rebuilt afterwards.`,
+                      id: 'format',
+                      label: 'Format disk',
+                      description: `All data on ${disk.name} will be permanently destroyed. Shares and apps using this disk will stop working.`,
                       match: disk.name,
                     },
-                  ]
-                : []),
+                    {
+                      id: 'format-mount',
+                      label: 'Format & mount disk',
+                      description: `Destroys all data on ${disk.name}, creates a fresh filesystem, and mounts it at its canonical branch path for pool use.`,
+                      match: disk.name,
+                    },
+                    {
+                      id: 'erase',
+                      label: 'Erase disk signatures',
+                      description: `Wipes all filesystem signatures from ${disk.name} so it can be repurposed. The disk will show as blank.`,
+                      match: disk.name,
+                    },
+                  ]),
             ]}
+          />
+
+          <DiskOperationsDialog
+            disk={disk}
+            action={diskAction}
+            onOpenChange={(open) => {
+              if (!open) setDiskAction(null)
+            }}
           />
         </>
       )}

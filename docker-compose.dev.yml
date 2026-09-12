@@ -1,0 +1,48 @@
+version: "3.8"
+
+services:
+  lumonasd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: go-builder
+    command: >
+      sh -c "CGO_ENABLED=1 go run ./cmd/lumonasd/ -listen 0.0.0.0:8080 -db /data/lumonas.db"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./cmd:/build/cmd
+      - ./internal:/build/internal
+      - lumonas-data:/data
+      - ./catalog:/usr/share/lumonas/catalog
+    environment:
+      - LUMONAS_AUTH_REQUIRED=false
+      - LUMONAS_DB_PATH=/data/lumonas.db
+      - LUMONAS_CATALOG_FILE=/usr/share/lumonas/catalog/apps.json
+      - LUMONAS_CORS_ORIGINS=http://localhost:5173
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  lumonas-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: node-builder
+    command: sh -c "corepack enable && pnpm dev --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/build
+      - /build/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8080
+      - VITE_USE_MOCKS=false
+    depends_on:
+      lumonasd:
+        condition: service_healthy
+
+volumes:
+  lumonas-data:

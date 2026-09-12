@@ -1,5 +1,15 @@
 const API_BASE = '/api/v1'
 
+let csrfToken: string | null = null
+
+export function setCsrfToken(token: string) {
+  csrfToken = token
+}
+
+export function clearCsrfToken() {
+  csrfToken = null
+}
+
 export class ApiError extends Error {
   status: number
   body?: unknown
@@ -17,11 +27,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!headers.has('Content-Type') && !(typeof FormData !== 'undefined' && init?.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json')
   }
+  const method = init?.method ?? 'GET'
+  if (csrfToken && method !== 'GET' && method !== 'HEAD') {
+    headers.set('X-CSRF-Token', csrfToken)
+  }
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers,
   })
   if (!response.ok) {
+    if (response.status === 403) {
+      clearCsrfToken()
+    }
     let body: unknown
     try {
       body = await response.json()

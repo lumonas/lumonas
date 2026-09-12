@@ -17,6 +17,7 @@ Deliver:
 - common resource IDs.
 - OpenAPI and frontend response-contract parity checks.
 - bounded journald retention policy checks.
+- typed bounded network diagnostic command runner.
 
 Exit criteria:
 

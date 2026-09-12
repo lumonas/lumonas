@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -537,19 +536,7 @@ func executeDiagnostic(ctx context.Context, kind, target string, port int) (any,
 		_ = conn.Close()
 		return map[string]any{"target": target, "port": port, "reachable": true}, nil
 	case "ping", "traceroute":
-		command := "ping"
-		args := []string{"-c", "1", "-W", "2", target}
-		if kind == "traceroute" {
-			command, args = "traceroute", []string{"-m", "8", "-w", "2", target}
-		}
-		output, err := exec.CommandContext(ctx, command, args...).CombinedOutput()
-		if err != nil {
-			return nil, fmt.Errorf("%s failed", kind)
-		}
-		if len(output) > 4096 {
-			output = output[:4096]
-		}
-		return map[string]any{"target": target, "output": string(output)}, nil
+		return network.RunCommandDiagnostic(ctx, kind, target, port, nil)
 	case "route-table":
 		return readDiagnosticFile("/proc/net/route")
 	case "neighbor-table":

@@ -9,14 +9,6 @@ import { OperationReview } from '@/components/core/operation-review'
 import { ResourceDrawer } from '@/components/core/resource-drawer'
 import { EmptyState } from '@/components/core/empty-state'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RISK_LABELS, StateChip } from '@/features/docker/docker-meta'
@@ -41,9 +33,6 @@ export function StackDrawer({
   const stackAction = useStackAction()
 
   const [updateOpen, setUpdateOpen] = useState(false)
-  const [backupStrategy, setBackupStrategy] = useState<'stop-backup' | 'crash-consistent'>(
-    'stop-backup',
-  )
   const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(new Set())
 
   if (!stack) {
@@ -193,24 +182,7 @@ export function StackDrawer({
               <Archive className="size-4 text-muted-foreground" />
               Backup
             </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="grid content-start gap-2">
-                <Label className="text-xs text-muted-foreground">Strategy</Label>
-                <Select
-                  value={backupStrategy}
-                  onValueChange={(v) =>
-                    setBackupStrategy(v as 'stop-backup' | 'crash-consistent')
-                  }
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="stop-backup">Stop stack, then back up (safest)</SelectItem>
-                    <SelectItem value="crash-consistent">Crash-consistent</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="mt-3 grid gap-3 sm:grid-cols-1">
               <div className="grid content-start gap-2">
                 <span className="text-xs text-muted-foreground">Appdata</span>
                 <span className="tnum text-sm">{formatBytes(stack.backup.appdataSizeBytes)}</span>
@@ -221,6 +193,10 @@ export function StackDrawer({
                 </span>
               </div>
             </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Stack updates run an encrypted configuration backup beforehand; per-app appdata
+              backup is planned.
+            </p>
           </div>
         </TabsContent>
 

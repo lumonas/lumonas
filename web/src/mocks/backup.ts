@@ -30,7 +30,6 @@ export const readiness: RecoveryReadiness = {
   ),
   layers: readinessLayers,
 }
-
 export const backupJobs: BackupJob[] = [
   {
     id: 'bj-apps',
@@ -199,10 +198,4 @@ export const restorePlan: RestorePlan = {
   ],
   dataDisksNote:
     'Data disks are imported read-only until every disk identity has been verified against the recovery metadata.',
-}
-
-export const retention = {
-  config: 20,
-  daily: 30,
-  monthly: 12,
 }

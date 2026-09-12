@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { RefreshCw } from 'lucide-react'
 import { useCheckUpdates, useSettings, useUpdateSettings } from '@/api/queries'
 import { AlertBanner } from '@/components/core/alert-banner'
@@ -182,12 +182,12 @@ export function UpdatesTab() {
               Updated per-app with rollback — never blindly.
             </span>
           </div>
-          <a
-            href="/docker?tab=images"
+          <Link
+            to="/docker?tab=images"
             className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Review in Docker
-          </a>
+          </Link>
         </CardContent>
       </Card>
 
@@ -205,12 +205,12 @@ export function UpdatesTab() {
               Stage signed packages into an inactive slot and confirm health before switching.
             </p>
           </div>
-          <a
-            href="/updates"
+          <Link
+            to="/updates"
             className="text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             Open slot manager
-          </a>
+          </Link>
         </CardContent>
       </Card>
     </div>

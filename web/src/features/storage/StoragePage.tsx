@@ -2,12 +2,14 @@ import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '@/components/core/page-header'
 import { DiskDrawer } from '@/features/storage/disk-drawer'
 import { DisksTab } from '@/features/storage/disks-tab'
+import { MountsTab } from '@/features/storage/mounts-tab'
 import { OverviewTab } from '@/features/storage/overview-tab'
 import {
   PoolsTab,
   ProtectionTab,
   StorageActivityTab,
 } from '@/features/storage/storage-tabs'
+import { ProtectionConfigCard } from '@/features/storage/protection-config-card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const TABS = [
@@ -15,6 +17,7 @@ const TABS = [
   { value: 'disks', label: 'Disks' },
   { value: 'pools', label: 'Pools' },
   { value: 'protection', label: 'Protection' },
+  { value: 'mounts', label: 'Mounts' },
   { value: 'activity', label: 'Activity' },
 ] as const
 
@@ -60,7 +63,13 @@ export function StoragePage() {
           <PoolsTab />
         </TabsContent>
         <TabsContent value="protection">
-          <ProtectionTab />
+          <div className="flex flex-col gap-4">
+            <ProtectionTab />
+            <ProtectionConfigCard />
+          </div>
+        </TabsContent>
+        <TabsContent value="mounts">
+          <MountsTab />
         </TabsContent>
         <TabsContent value="activity">
           <StorageActivityTab />
