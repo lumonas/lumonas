@@ -16,6 +16,7 @@ Deliver:
 - typed `lumonas-privd` IPC;
 - common resource IDs.
 - OpenAPI and frontend response-contract parity checks.
+- bounded journald retention policy checks.
 
 Exit criteria:
 

@@ -80,6 +80,10 @@ that administrator-owned environment files are readable by, but not writable
 to, the `lumonas` service account, while the runtime, recovery, disk, and pool
 directories remain writable by that account. This check is release-blocking.
 
+The log-retention smoke test verifies that the packaged journald drop-in keeps
+system and runtime logs bounded and expires old files, preventing appliance
+logs from consuming the data volume without an explicit operator choice.
+
 The disk API contract test populates every stable identity field and verifies
 that `/api/v1/disks` serializes those fields, including the current device
 path, WWN/GPT/partition/filesystem identifiers, mount state, and last-seen

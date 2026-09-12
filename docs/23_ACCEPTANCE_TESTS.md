@@ -288,6 +288,13 @@ modify those files, and it can write only to the provisioned runtime,
 recovery, disk, pool, and appliance data directories. The package-permissions
 job is release-blocking.
 
+## AH. Journald retention policy
+
+Run the packaging and log-retention smoke tests.
+
+Pass if the packaged journald drop-in enforces bounded system/runtime usage,
+30-day retention, and seven-day log-file rotation.
+
 ## AE. Disk API identity contract
 
 Run the backend disk contract test and the OpenAPI parity check.
