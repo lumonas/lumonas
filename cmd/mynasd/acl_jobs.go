@@ -60,7 +60,20 @@ func (s *apiServer) createACLJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) cancelACLJob(w http.ResponseWriter, r *http.Request, id string) {
-	if _, ok := s.identityActor(w, r, true); !ok {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	var input struct {
+		ExpectedGeneration *int64 `json:"expectedGeneration"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
 		return
 	}
 	job, err := s.store.Job(id)
@@ -78,10 +91,15 @@ func (s *apiServer) cancelACLJob(w http.ResponseWriter, r *http.Request, id stri
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.recordIdentityAudit(actor, "acl.apply.cancel", id, nil)
+	s.advanceGeneration("acl.apply.cancel")
 	writeJSON(w, http.StatusOK, job)
 }
 
 func (s *apiServer) runACLJob(job model.Job, input aclJobRequest, actor string) {
+	if current, err := s.store.Job(job.ID); err != nil || current.State == "cancelled" {
+		return
+	}
 	now := time.Now().UTC()
 	progress := 10.0
 	job.State, job.Stage, job.StartedAt, job.Progress = "running", "Applying ACL entries", &now, &progress
@@ -91,7 +109,9 @@ func (s *apiServer) runACLJob(job model.Job, input aclJobRequest, actor string) 
 	for _, entry := range input.Entries {
 		entries = append(entries, map[string]any{"principal": entry.Principal, "level": entry.Level})
 	}
-	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(context.Background(), privileged.Request{Operation: "acl.apply", OperationID: job.ID, PlanHash: job.ID, RequestedState: map[string]any{"path": input.Path, "entries": entries, "recursive": input.Recursive}, Confirmed: true})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(ctx, privileged.Request{Operation: "acl.apply", OperationID: job.ID, PlanHash: job.ID, RequestedState: map[string]any{"path": input.Path, "entries": entries, "recursive": input.Recursive}, Confirmed: true})
 	now = time.Now().UTC()
 	progress = 100
 	job.FinishedAt, job.Progress = &now, &progress
