@@ -276,3 +276,14 @@ but never responds.
 
 Pass if the client returns on the caller deadline and does not leave the API
 job blocked on a connected Unix socket.
+
+## AD. Package filesystem permissions
+
+Install the generated `.deb` in a disposable Debian 13 container and inspect
+the provisioned service account, configuration files, and runtime directories.
+
+Pass if `/etc/lumonas` and its environment files are root-owned with the
+documented group-readable modes, the `lumonas` account is non-root and cannot
+modify those files, and it can write only to the provisioned runtime,
+recovery, disk, pool, and appliance data directories. The package-permissions
+job is release-blocking.

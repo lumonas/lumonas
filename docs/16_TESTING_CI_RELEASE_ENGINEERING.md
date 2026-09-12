@@ -74,6 +74,12 @@ The Debian appliance smoke test also requires `lumonas-privd`, `lumonasd`, and
 `lumonas-web` to report active/running through the services API, and requires
 the web service identity to be `lumonas` rather than root.
 
+The package-permissions job installs the generated `.deb` in a disposable
+Debian 13 container and verifies the resulting ownership and modes. It proves
+that administrator-owned environment files are readable by, but not writable
+to, the `lumonas` service account, while the runtime, recovery, disk, and pool
+directories remain writable by that account. This check is release-blocking.
+
 The daemon restart tests also verify that queued, preparing, and running jobs
 are failed closed when `lumonasd` starts again, and that an SSE client can
 resume from `Last-Event-ID` without receiving its cursor event twice. Host

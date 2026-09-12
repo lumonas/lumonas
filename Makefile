@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all test test-go test-web check-openapi build build-go build-web package recovery-fixture api-smoke storage-loopback iso-smoke qemu-recovery-smoke security-smoke dependency-smoke container-scan systemd-smoke upgrade-smoke qemu-image qemu-smoke verify-release
+.PHONY: all test test-go test-web check-openapi build build-go build-web package recovery-fixture api-smoke storage-loopback iso-smoke qemu-recovery-smoke security-smoke dependency-smoke container-scan systemd-smoke permission-smoke upgrade-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -61,6 +61,9 @@ container-scan:
 
 systemd-smoke:
 	bash scripts/systemd-smoke.sh
+
+permission-smoke:
+	bash scripts/permission-smoke.sh "$(PACKAGE)"
 
 upgrade-smoke:
 	bash scripts/upgrade-smoke.sh "$(OLD_DEB)" "$(NEW_DEB)"
