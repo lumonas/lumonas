@@ -262,7 +262,8 @@ jobs:
       - run: bash scripts/upgrade-service-order-smoke.sh
       - run: python3 scripts/check-api-contract.py
       - run: bash scripts/log-retention-smoke.sh
-      - run: LUMONAS_REQUIRE_SYSTEMD_VERIFY=true sh scripts/verify-packaging.sh
+      - run: LUMONAS_REQUIRE_SYSTEMD_VERIFY=true LUMONAS_REQUIRE_SYSTEMD_SECURITY=true sh scripts/verify-packaging.sh
+      - run: LUMONAS_REQUIRE_SYSTEMD_SECURITY=true bash scripts/systemd-security-smoke.sh
       - run: sh -n scripts/verify-release.sh
       - run: git diff --check
 

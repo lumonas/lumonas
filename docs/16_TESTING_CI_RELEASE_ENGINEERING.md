@@ -321,6 +321,12 @@ may skip it when Docker or the scanner tool is unavailable.
 Packaging validation also runs `systemd-analyze verify` against every packaged
 service unit. The check is optional for macOS/local development, but CI fails
 if `systemd-analyze` is unavailable or any unit is invalid.
+The same release gate statically verifies the sandbox policy: all services
+must use `NoNewPrivileges`, private temporary storage, protected home/system
+paths, bounded resources, and non-shell entrypoints; the web/daemon services
+must run as `lumonas`, while privileged workers are root-owned, Unix-socket
+only, and capability-bounded. CI fails if this policy check is unavailable or
+any unit regresses.
 The management daemon also requires every typed privileged worker, so a
 partially started broker cannot present a falsely mutation-capable appliance.
 

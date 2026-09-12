@@ -344,6 +344,16 @@ Pass if the upgrade stops `lumonas-web`, `lumonasd`, the privileged workers,
 and broker before unpacking, then starts the broker, workers, daemon, and web
 service in dependency order.
 
+## AJ. Systemd sandbox policy
+
+Run `LUMONAS_REQUIRE_SYSTEMD_SECURITY=true bash scripts/systemd-security-smoke.sh`
+and `systemd-analyze verify` against the packaged units.
+
+Pass if every unit has bounded resources and the required filesystem/process
+sandboxing, the web and management services run as the unprivileged `lumonas`
+user, and privileged workers are restricted to Unix sockets with an explicit
+capability bounding set. This check is release-blocking.
+
 ## AE. Disk API identity contract
 
 Run the backend disk contract test and the OpenAPI parity check.

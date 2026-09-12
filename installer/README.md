@@ -15,6 +15,11 @@ The release storage gate separately installs `e2fsprogs`, `xfsprogs`, mergerfs,
 and SnapRAID and exercises disposable ext4/XFS branches, a real mergerfs pool,
 and a read-only SnapRAID status probe before an appliance release is accepted.
 
+The packaging gate also verifies every systemd unit with `systemd-analyze` and
+checks the required sandbox policy, including unprivileged web/daemon users,
+Unix-socket-only privileged workers, capability bounds, and finite resource
+limits.
+
 The recovery fixture is deliberately generated from the production SQLite migrations and store APIs, rather than a fake database header. Run `make recovery-fixture` to build it locally, or let `make qemu-recovery-smoke` build it automatically.
 
 Run `make recovery-api-smoke` to exercise the production API export path with a

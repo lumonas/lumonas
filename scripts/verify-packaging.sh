@@ -86,6 +86,7 @@ done
 [ -x "$ROOT/scripts/recovery-api-smoke.sh" ] || { echo "recovery API smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/security-smoke.sh" ] || { echo "security smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/systemd-security-smoke.sh" ] || { echo "systemd security smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
 require_line "$ROOT/Makefile" 'share-config-smoke:'
 require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'
@@ -94,6 +95,7 @@ require_line "$ROOT/Makefile" 'recovery-fixture:'
 require_line "$ROOT/Makefile" 'recovery-api-smoke:'
 require_line "$ROOT/Makefile" 'security-smoke:'
 require_line "$ROOT/Makefile" 'systemd-smoke:'
+require_line "$ROOT/Makefile" 'systemd-security-smoke:'
 require_line "$ROOT/Makefile" 'permission-smoke:'
 require_line "$ROOT/Makefile" 'log-retention-smoke:'
 require_line "$ROOT/Makefile" 'check-api-contract:'
@@ -144,4 +146,6 @@ for dropin in smbd.service.d/lumonas.conf rsync.service.d/lumonas.conf vsftpd.se
 done
 LUMONAS_REQUIRE_SYSTEMD_VERIFY="${LUMONAS_REQUIRE_SYSTEMD_VERIFY:-false}" \
 	bash "$ROOT/scripts/systemd-smoke.sh"
+LUMONAS_REQUIRE_SYSTEMD_SECURITY="${LUMONAS_REQUIRE_SYSTEMD_SECURITY:-false}" \
+	bash "$ROOT/scripts/systemd-security-smoke.sh"
 echo "LumoNAS packaging policy checks passed"
