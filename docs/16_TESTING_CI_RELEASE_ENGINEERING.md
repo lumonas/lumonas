@@ -134,6 +134,9 @@ The network diagnostic contract verifies exact allow-listed arguments for ping
 and traceroute, bounded output, context cancellation, and failure propagation.
 Unsupported diagnostic kinds are rejected before any external command runs.
 
+Storage plan tests also mutate GPT disk GUID and partition UUID independently
+of the device path and require both single-disk and pool plans to fail closed.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until

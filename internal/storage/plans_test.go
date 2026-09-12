@@ -8,7 +8,7 @@ import (
 )
 
 func testDisk() model.Disk {
-	return model.Disk{ID: "wwn:test", CurrentPath: "/dev/sdb", Model: "Test Disk", Serial: "SER-1", WWN: "test", SizeBytes: 1000, Role: "unknown", Health: model.Healthy}
+	return model.Disk{ID: "wwn:test", CurrentPath: "/dev/sdb", Model: "Test Disk", Serial: "SER-1", WWN: "test", SizeBytes: 1000, GPTDiskGUID: "GPT-1", PartitionUUID: "PART-1", Role: "unknown", Health: model.Healthy}
 }
 
 func TestPlanHashAndIdentityValidation(t *testing.T) {
@@ -27,6 +27,16 @@ func TestPlanHashAndIdentityValidation(t *testing.T) {
 	changed.Serial = "SER-2"
 	if err := Validate(plan, changed, now.Add(time.Minute), 7); err == nil {
 		t.Fatal("serial mismatch should fail closed")
+	}
+	changed = testDisk()
+	changed.GPTDiskGUID = "GPT-2"
+	if err := Validate(plan, changed, now.Add(time.Minute), 7); err == nil {
+		t.Fatal("GPT disk GUID mismatch should fail closed")
+	}
+	changed = testDisk()
+	changed.PartitionUUID = "PART-2"
+	if err := Validate(plan, changed, now.Add(time.Minute), 7); err == nil {
+		t.Fatal("partition UUID mismatch should fail closed")
 	}
 }
 

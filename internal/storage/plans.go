@@ -108,6 +108,12 @@ func Validate(plan Plan, actual model.Disk, now time.Time, currentGeneration int
 	if plan.Target.SizeBytes != 0 && actual.SizeBytes != plan.Target.SizeBytes {
 		return errors.New("disk capacity mismatch")
 	}
+	if plan.Target.GPTDiskGUID != "" && actual.GPTDiskGUID != plan.Target.GPTDiskGUID {
+		return errors.New("GPT disk GUID mismatch")
+	}
+	if plan.Target.PartitionUUID != "" && actual.PartitionUUID != plan.Target.PartitionUUID {
+		return errors.New("partition UUID mismatch")
+	}
 	if plan.Target.FilesystemUUID != "" && actual.FilesystemUUID != plan.Target.FilesystemUUID {
 		return errors.New("filesystem UUID mismatch")
 	}

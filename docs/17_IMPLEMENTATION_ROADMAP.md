@@ -18,6 +18,7 @@ Deliver:
 - OpenAPI and frontend response-contract parity checks.
 - bounded journald retention policy checks.
 - typed bounded network diagnostic command runner.
+- GPT disk GUID and partition UUID revalidation across destructive plans.
 
 Exit criteria:
 

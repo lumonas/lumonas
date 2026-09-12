@@ -22,6 +22,8 @@ type PoolMemberPlan struct {
 	Serial         string `json:"serial,omitempty"`
 	Model          string `json:"model,omitempty"`
 	SizeBytes      uint64 `json:"sizeBytes"`
+	GPTDiskGUID    string `json:"gptDiskGuid,omitempty"`
+	PartitionUUID  string `json:"partitionUuid,omitempty"`
 	FilesystemUUID string `json:"filesystemUuid,omitempty"`
 	BranchPath     string `json:"branchPath"`
 }
@@ -130,7 +132,7 @@ func NewPoolPlan(id, name, mountPath string, disks []model.Disk, generation int6
 			return PoolPlan{}, fmt.Errorf("disk identity %q collides with another pool branch", disk.ID)
 		}
 		branches[branch] = true
-		plan.Members = append(plan.Members, PoolMemberPlan{DiskID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, FilesystemUUID: disk.FilesystemUUID, BranchPath: branch})
+		plan.Members = append(plan.Members, PoolMemberPlan{DiskID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, GPTDiskGUID: disk.GPTDiskGUID, PartitionUUID: disk.PartitionUUID, FilesystemUUID: disk.FilesystemUUID, BranchPath: branch})
 	}
 	plan.PlanHash = HashPoolPlan(plan)
 	return plan, nil
@@ -191,6 +193,12 @@ func ValidatePoolPlan(plan PoolPlan, actual []model.Disk, now time.Time, generat
 		}
 		if member.SizeBytes != 0 && disk.SizeBytes != member.SizeBytes {
 			return fmt.Errorf("pool disk %q capacity mismatch", member.DiskID)
+		}
+		if member.GPTDiskGUID != "" && disk.GPTDiskGUID != member.GPTDiskGUID {
+			return fmt.Errorf("pool disk %q GPT disk GUID mismatch", member.DiskID)
+		}
+		if member.PartitionUUID != "" && disk.PartitionUUID != member.PartitionUUID {
+			return fmt.Errorf("pool disk %q partition UUID mismatch", member.DiskID)
 		}
 		if member.FilesystemUUID != "" && disk.FilesystemUUID != member.FilesystemUUID {
 			return fmt.Errorf("pool disk %q filesystem UUID mismatch", member.DiskID)

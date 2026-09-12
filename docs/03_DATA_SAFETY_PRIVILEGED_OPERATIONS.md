@@ -58,6 +58,12 @@ typed allow-listed operations with direct argument passing, finite context
 deadlines, bounded output, and an injectable runner for tests. They never
 construct shell commands, and unsupported or failed probes remain failures.
 
+Storage plans bind every identity exposed by discovery, including GPT disk
+GUID and partition UUID when available. Confirmation and privileged execution
+revalidate those values in addition to WWN, serial, capacity, and filesystem
+UUID, so a replacement device cannot inherit a stale plan merely because its
+device path is unchanged.
+
 ### Class D — destructive
 
 Examples:

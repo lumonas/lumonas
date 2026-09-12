@@ -337,3 +337,11 @@ Run the network diagnostic command-module tests.
 Pass if ping/traceroute use direct allow-listed arguments, bounded output and
 context cancellation, and unsupported or failed probes are reported as
 failures without shell execution.
+
+## AJ. Extended disk identity revalidation
+
+Create a destructive or pool plan, then change only the GPT disk GUID or
+partition UUID while retaining the same device path and other metadata.
+
+Pass if confirmation and privileged execution reject the stale plan before any
+filesystem, pool, or protection command runs.

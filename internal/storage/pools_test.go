@@ -9,7 +9,7 @@ import (
 )
 
 func poolDisk(id, path string, size uint64) model.Disk {
-	return model.Disk{ID: id, CurrentPath: path, WWN: id + "-wwn", Serial: id + "-serial", Model: "TestDisk", SizeBytes: size, Filesystem: "xfs", Health: model.Healthy}
+	return model.Disk{ID: id, CurrentPath: path, WWN: id + "-wwn", Serial: id + "-serial", Model: "TestDisk", SizeBytes: size, GPTDiskGUID: id + "-gpt", PartitionUUID: id + "-partition", Filesystem: "xfs", Health: model.Healthy}
 }
 
 func TestPoolPlanUsesStableIdentitiesAndCanonicalBranches(t *testing.T) {
@@ -42,6 +42,11 @@ func TestPoolPlanFailsClosedOnReorderedOrReplacedDisk(t *testing.T) {
 	replaced := []model.Disk{disks[0], poolDisk("wwn:b", "/dev/sdc", 201)}
 	if err := ValidatePoolPlan(plan, replaced, time.Now().UTC(), 7); err == nil || !strings.Contains(err.Error(), "capacity mismatch") {
 		t.Fatalf("expected replacement rejection, got %v", err)
+	}
+	replaced = []model.Disk{disks[0], poolDisk("wwn:b", "/dev/sdc", 200)}
+	replaced[1].GPTDiskGUID = "replacement-gpt"
+	if err := ValidatePoolPlan(plan, replaced, time.Now().UTC(), 7); err == nil || !strings.Contains(err.Error(), "GPT disk GUID mismatch") {
+		t.Fatalf("expected GPT replacement rejection, got %v", err)
 	}
 }
 
