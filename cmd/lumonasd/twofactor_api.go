@@ -197,6 +197,14 @@ func (s *apiServer) disableTwoFactor(w http.ResponseWriter, r *http.Request, id 
 }
 
 func (s *apiServer) loginTwoFactor(w http.ResponseWriter, r *http.Request) {
+	// The code submission has its own per-IP budget in addition to the
+	// per-challenge attempt cap, so stolen challenge IDs cannot be hammered
+	// from rotating addresses.
+	if !s.checkRateLimit(clientIP(r)) {
+		w.Header().Set("Retry-After", "300")
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
+		return
+	}
 	var input struct {
 		ChallengeID string `json:"challengeId"`
 		Code        string `json:"code"`
@@ -242,10 +250,7 @@ func (s *apiServer) loginTwoFactor(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	csrfToken := newID("csrf")
-	s.csrfMu.Lock()
-	s.csrfTokens[csrfToken] = expires.Unix()
-	s.csrfMu.Unlock()
+	csrfToken := s.issueCSRFToken(token, expires)
 	http.SetCookie(w, &http.Cookie{Name: "lumonas_session", Value: token, Path: "/", Expires: expires, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: os.Getenv("LUMONAS_COOKIE_SECURE") == "true"})
 	writeJSON(w, http.StatusOK, map[string]any{"username": challenge.Username, "expiresAt": expires, "csrfToken": csrfToken})
 }

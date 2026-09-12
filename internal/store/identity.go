@@ -261,7 +261,14 @@ func (s *Store) SetPrincipalPassword(id, password string) error {
 		return err
 	}
 	if principal.Kind == identity.KindUser && principal.ManagementRole != identity.RoleNone {
-		_, err = s.db.Exec(`UPDATE users SET password_hash=? WHERE id=?`, hash, id)
+		if _, err := s.db.Exec(`UPDATE users SET password_hash=? WHERE id=?`, hash, id); err != nil {
+			return err
+		}
+		// Revoke existing sessions: credential rotation must invalidate any
+		// session that was established with the old password.
+		if err := s.DeleteSessionsForUser(id); err != nil {
+			return err
+		}
 	}
 	return err
 }

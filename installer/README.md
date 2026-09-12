@@ -16,3 +16,7 @@ and SnapRAID and exercises disposable ext4/XFS branches, a real mergerfs pool,
 and a read-only SnapRAID status probe before an appliance release is accepted.
 
 The recovery fixture is deliberately generated from the production SQLite migrations and store APIs, rather than a fake database header. Run `make recovery-fixture` to build it locally, or let `make qemu-recovery-smoke` build it automatically.
+
+Run `make recovery-api-smoke` to exercise the production API export path with a
+configured user, share, Compose stack, encrypted secret, and restored SQLite
+database before booting the ISO.

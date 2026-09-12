@@ -21,6 +21,27 @@ export class ApiError extends Error {
   }
 }
 
+// Server rejects a mutation whose CSRF token is unknown/expired/not bound to
+// this session; the retry logic keys off that message.
+function isCsrfRejection(body: unknown): boolean {
+  return (
+    typeof body === 'object' &&
+    body !== null &&
+    'error' in body &&
+    typeof (body as { error?: unknown }).error === 'string' &&
+    (body as { error: string }).error.toLowerCase().includes('csrf')
+  )
+}
+
+async function fetchCsrfToken(): Promise<string | null> {
+  const response = await fetch(`${API_BASE}/auth/csrf`)
+  if (!response.ok) return null
+  const payload = (await response.json()) as { csrfToken?: string }
+  if (!payload.csrfToken) return null
+  csrfToken = payload.csrfToken
+  return csrfToken
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const headers = new Headers(init?.headers)
@@ -36,19 +57,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
   })
   if (!response.ok) {
-    if (response.status === 403) {
-      clearCsrfToken()
-    }
     let body: unknown
     try {
       body = await response.json()
     } catch {
       body = undefined
     }
-	  throw new ApiError(response.status, init?.method ?? 'GET', path, body)
-	}
-	if (response.status === 204) return undefined as T
-	return (await response.json()) as T
+    // The daemon may have restarted (in-memory CSRF tokens are lost while
+    // the session survives in SQLite) or the token was issued for an older
+    // session. Reissue once and retry a single time.
+    if (response.status === 403 && isCsrfRejection(body) && method !== 'GET' && method !== 'HEAD') {
+      clearCsrfToken()
+      const fresh = await fetchCsrfToken()
+      if (fresh) {
+        return request<T>(path, init)
+      }
+    }
+    throw new ApiError(response.status, init?.method ?? 'GET', path, body)
+  }
+  if (response.status === 204) return undefined as T
+  return (await response.json()) as T
 }
 
 export function apiGet<T>(path: string): Promise<T> {

@@ -74,6 +74,13 @@ desired state, and Compose payloads before the guest boots; CI builds and
 passes that binary explicitly rather than relying on a development `go run`.
 This is release-blocking and exercises the offline system-disk replacement path
 end to end.
+
+The separate `recovery-api` gate exercises the production export path before
+the ISO job: it creates a management user, managed SMB/NFS share, Compose
+stack, encrypted secret payload, and configuration generation through the real
+API handlers, exports the encrypted bundle, verifies its checksums, applies it
+to a blank filesystem, and reopens the restored SQLite database. This catches
+export omissions that a prebuilt recovery fixture cannot detect.
 The recovery helper has a bounded startup timeout and powers the guest off on
 failure; the host harness also applies a deadline so a broken restore fails
 closed instead of hanging the release job.
@@ -204,6 +211,10 @@ Release-blocking scenario:
 8. Boot ISO offline.
 9. Recover.
 10. Verify checksums/config/services.
+
+The API smoke is the source-state half of this scenario; the QEMU ISO smoke is
+the offline replacement-disk half. Both are release-blocking and intentionally
+kept as separate gates so a fixture cannot make an export regression invisible.
 
 ## Upgrade matrix
 

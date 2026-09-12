@@ -693,6 +693,13 @@ func (s *Store) DeleteSession(token string) error {
 	return err
 }
 
+// DeleteSessionsForUser revokes every active session for a user — used on
+// password rotation so a stolen session cannot survive credential changes.
+func (s *Store) DeleteSessionsForUser(userID string) error {
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID)
+	return err
+}
+
 func newStoreID(prefix string) string { return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()) }
 
 func nullable(value string) any {

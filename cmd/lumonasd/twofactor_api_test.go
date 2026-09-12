@@ -107,6 +107,11 @@ func TestTwoFactorEnrolmentAndLoginFlow(t *testing.T) {
 	if err := json.NewDecoder(replay.Body).Decode(&challenge); err != nil {
 		t.Fatal(err)
 	}
+	// This test exercises 2FA semantics, not the per-IP limiter, which the
+	// login attempts above have nearly exhausted for the shared test address.
+	server.rateMu.Lock()
+	server.rateAttempts = make(map[string][]time.Time)
+	server.rateMu.Unlock()
 	replayed := twofactorPost(server, "/api/v1/auth/login/2fa", `{"challengeId":"`+challenge.ChallengeID+`","code":"`+enrolment.RecoveryCodes[0]+`"}`)
 	if replayed.Code != http.StatusUnauthorized {
 		t.Fatalf("expected recovery code replay rejection, got %d", replayed.Code)

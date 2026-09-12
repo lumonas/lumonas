@@ -145,6 +145,12 @@ Before booting the ISO, the host harness must independently verify the bundle
 with the production `lumonas-recover` binary and confirm its checksums and
 payload validity.
 
+The production recovery API gate also creates a user, managed SMB/NFS share,
+Compose stack, encrypted secret, and generation through the live handlers,
+then exports, verifies, applies, and reopens the restored database. It must
+pass independently of the QEMU fixture so recovery export regressions cannot
+be hidden by fixture-only coverage.
+
 ## M. Incomplete Docker backup
 
 One app has no appdata protection.

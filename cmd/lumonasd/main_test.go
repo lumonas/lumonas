@@ -43,7 +43,7 @@ func testServer(t *testing.T) *apiServer {
 	}
 	return &apiServer{store: db, hub: events.NewHub(), version: "test", diskFunc: func() ([]model.Disk, error) {
 		return []model.Disk{{ID: "wwn:test", Name: "sda", Role: "unknown", Health: model.Healthy, LastSeen: time.Now().UTC()}}, nil
-	}, brokerExec: func(context.Context, privileged.Request) error { return nil }, csrfTokens: make(map[string]int64), rateAttempts: make(map[string][]time.Time)}
+	}, brokerExec: func(context.Context, privileged.Request) error { return nil }, csrfTokens: make(map[string]csrfBinding), rateAttempts: make(map[string][]time.Time)}
 }
 
 func TestRequestMiddlewarePropagatesCorrelationID(t *testing.T) {

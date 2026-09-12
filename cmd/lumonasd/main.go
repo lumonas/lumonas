@@ -22,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/auth"
 	"github.com/lumonas/lumonas/internal/collector"
 	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/events"
@@ -60,7 +61,7 @@ type apiServer struct {
 	safetyUntil          time.Time
 	brokerExec           func(ctx context.Context, request privileged.Request) error
 	corsOrigins          []string
-	csrfTokens           map[string]int64
+	csrfTokens           map[string]csrfBinding
 	csrfMu               sync.Mutex
 	rateMu               sync.Mutex
 	rateAttempts         map[string][]time.Time
@@ -68,6 +69,37 @@ type apiServer struct {
 }
 
 var version = "0.1.0-dev"
+
+// csrfBinding ties a CSRF token to the session digest it was issued for and
+// an expiry; tokens only verify for the matching session.
+type csrfBinding struct {
+	sessionDigest string
+	expires       int64
+}
+
+// clientIP returns the best-effort client address for rate limiting. The
+// X-Forwarded-For header is only trusted for connections from loopback —
+// i.e. requests proxied by lumonas-web on the same host, which appends the
+// real client address. For direct connections the socket address wins and
+// client-supplied forwarding headers are ignored so the limiter cannot be
+// bypassed by rotating spoofed XFF values.
+func clientIP(r *http.Request) string {
+	host := r.RemoteAddr
+	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		host = h
+	}
+	if remote := net.ParseIP(host); remote != nil && remote.IsLoopback() {
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			parts := strings.Split(forwarded, ",")
+			// The proxy appends the real client address, so the last entry
+			// is the only one the client cannot forge ahead of.
+			if candidate := strings.TrimSpace(parts[len(parts)-1]); candidate != "" {
+				return candidate
+			}
+		}
+	}
+	return host
+}
 
 func main() {
 	listen := flag.String("listen", envOr("LUMONASD_LISTEN", "127.0.0.1:8080"), "HTTP listen address")
@@ -89,7 +121,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]int64), rateAttempts: make(map[string][]time.Time)}
+	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]csrfBinding), rateAttempts: make(map[string][]time.Time)}
 	server.dockerService = dockerruntime.New(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"), nil)
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
 	server.reconcileUpdateBoot()
@@ -163,6 +195,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.loginTwoFactor(w, r)
 	case r.Method == http.MethodPost && endpoint == "/auth/logout":
 		s.authLogout(w, r)
+	case r.Method == http.MethodGet && endpoint == "/auth/csrf":
+		s.csrfForSession(w, r)
 	case r.Method == http.MethodGet && endpoint == "/users":
 		s.listUsers(w, r)
 	case r.Method == http.MethodGet && endpoint == "/principals":
@@ -515,19 +549,56 @@ func (s *apiServer) cleanupExpiredCSRFTokens() {
 	s.csrfMu.Lock()
 	defer s.csrfMu.Unlock()
 	now := time.Now().Unix()
-	for token, expires := range s.csrfTokens {
-		if now > expires {
+	for token, binding := range s.csrfTokens {
+		if now > binding.expires {
 			delete(s.csrfTokens, token)
 		}
 	}
 }
 
-func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
-	ip := r.RemoteAddr
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
-		ip = strings.Split(forwarded, ",")[0]
+// issueCSRFToken mints a CSRF token bound to the given session so a token
+// leaked from one session cannot authorise mutations on another.
+func (s *apiServer) issueCSRFToken(sessionToken string, expires time.Time) string {
+	csrfToken := newID("csrf")
+	s.csrfMu.Lock()
+	s.csrfTokens[csrfToken] = csrfBinding{sessionDigest: auth.TokenDigest(sessionToken), expires: expires.Unix()}
+	s.csrfMu.Unlock()
+	return csrfToken
+}
+
+// deleteCSRFTokensForSession removes every CSRF token bound to a session,
+// used at logout so the tokens cannot be replayed.
+func (s *apiServer) deleteCSRFTokensForSession(sessionToken string) {
+	digest := auth.TokenDigest(sessionToken)
+	s.csrfMu.Lock()
+	defer s.csrfMu.Unlock()
+	for token, binding := range s.csrfTokens {
+		if binding.sessionDigest == digest {
+			delete(s.csrfTokens, token)
+		}
 	}
-	if !s.checkRateLimit(ip) {
+}
+
+// csrfForSession issues a fresh CSRF token for the caller's existing session;
+// it exists because tokens live in memory and are lost on daemon restart
+// while sessions persist in SQLite.
+func (s *apiServer) csrfForSession(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("lumonas_session")
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+		return
+	}
+	user, ok := s.store.SessionUser(cookie.Value)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired session"})
+		return
+	}
+	expires := time.Now().Add(12 * time.Hour)
+	writeJSON(w, http.StatusOK, map[string]any{"username": user, "csrfToken": s.issueCSRFToken(cookie.Value, expires)})
+}
+
+func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.checkRateLimit(clientIP(r)) {
 		w.Header().Set("Retry-After", "300")
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many attempts, try again later"})
 		return
@@ -564,10 +635,7 @@ func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	csrfToken := newID("csrf")
-	s.csrfMu.Lock()
-	s.csrfTokens[csrfToken] = expires.Unix()
-	s.csrfMu.Unlock()
+	csrfToken := s.issueCSRFToken(token, expires)
 	http.SetCookie(w, &http.Cookie{Name: "lumonas_session", Value: token, Path: "/", Expires: expires, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: os.Getenv("LUMONAS_COOKIE_SECURE") == "true"})
 	writeJSON(w, http.StatusOK, map[string]any{"username": input.Username, "expiresAt": expires, "csrfToken": csrfToken})
 }
@@ -575,6 +643,7 @@ func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
 func (s *apiServer) authLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("lumonas_session"); err == nil {
 		_ = s.store.DeleteSession(cookie.Value)
+		s.deleteCSRFTokensForSession(cookie.Value)
 	}
 	http.SetCookie(w, &http.Cookie{Name: "lumonas_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
@@ -602,10 +671,15 @@ func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 				return
 			}
 			s.csrfMu.Lock()
-			expires, exists := s.csrfTokens[csrfToken]
+			binding, exists := s.csrfTokens[csrfToken]
 			s.csrfMu.Unlock()
-			if !exists || time.Now().Unix() > expires {
+			if !exists || time.Now().Unix() > binding.expires {
 				writeJSON(w, http.StatusForbidden, map[string]string{"error": "invalid or expired CSRF token"})
+				return
+			}
+			// A token is only valid for the session that requested it.
+			if binding.sessionDigest != auth.TokenDigest(cookie.Value) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "CSRF token does not match this session"})
 				return
 			}
 		}
@@ -1134,13 +1208,23 @@ func (s *apiServer) pruneRecoveryBundles(directory string, keep int) {
 
 func (s *apiServer) recoveryFiles() map[string][]byte {
 	files := make(map[string][]byte)
-	for name, path := range map[string]string{
-		"config/shares.json":    envOr("LUMONAS_SHARES_FILE", "/var/lib/lumonas/shares.json"),
-		"storage/snapraid.conf": envOr("LUMONAS_SNAPRAID_CONFIG", "/etc/lumonas/snapraid.conf"),
-	} {
-		if data, err := os.ReadFile(path); err == nil {
-			files[name] = data
+	// Managed shares are stored in SQLite, while the legacy JSON file remains
+	// an import/compatibility surface. Always export the current store view so
+	// a new installation can restore shares even when that legacy file never
+	// existed.
+	if managed, err := s.store.ListManagedShares(); err == nil && len(managed) > 0 {
+		legacy := make([]shares.Share, 0, len(managed))
+		for _, value := range managed {
+			legacy = append(legacy, value.Legacy())
 		}
+		if data, marshalErr := json.Marshal(legacy); marshalErr == nil {
+			files["config/shares.json"] = data
+		}
+	} else if data, err := os.ReadFile(envOr("LUMONAS_SHARES_FILE", "/var/lib/lumonas/shares.json")); err == nil {
+		files["config/shares.json"] = data
+	}
+	if data, err := os.ReadFile(envOr("LUMONAS_SNAPRAID_CONFIG", "/etc/lumonas/snapraid.conf")); err == nil {
+		files["storage/snapraid.conf"] = data
 	}
 	return files
 }
@@ -2642,22 +2726,21 @@ func (s *apiServer) requestMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Request-ID", correlationID)
 		r = r.WithContext(trace.WithCorrelationID(r.Context(), correlationID))
 		origin := r.Header.Get("Origin")
-		if origin != "" {
-			if len(s.corsOrigins) == 0 {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Vary", "Origin")
-			} else {
-				for _, allowed := range s.corsOrigins {
-					if origin == allowed {
-						w.Header().Set("Access-Control-Allow-Origin", origin)
-						w.Header().Set("Vary", "Origin")
-						break
-					}
+		// Same-origin requests never carry CORS headers; only explicitly
+		// allowlisted origins get cross-origin access. Reflecting an
+		// arbitrary Origin with credentials enabled would defeat the point
+		// of the allowlist.
+		if origin != "" && len(s.corsOrigins) > 0 {
+			for _, allowed := range s.corsOrigins {
+				if origin == allowed {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Set("Vary", "Origin")
+					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token, Authorization")
+					w.Header().Set("Access-Control-Allow-Credentials", "true")
+					break
 				}
 			}
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token, Authorization")
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
