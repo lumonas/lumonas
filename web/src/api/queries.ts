@@ -506,6 +506,28 @@ export function useToggleUser() {
   )
 }
 
+export interface TwoFactorSetup {
+  secret: string
+  otpauthUri: string
+  recoveryCodes: string[]
+}
+
+export function useSetupTwoFactor() {
+  return useConfigMutation((id: string) => apiPost<TwoFactorSetup>(`/users/${id}/2fa/setup`, {}))
+}
+
+export function useEnableTwoFactor() {
+  return useConfigMutation((input: { id: string; code: string }) =>
+    apiPost<{ twoFactor: boolean }>(`/users/${input.id}/2fa/enable`, { code: input.code }),
+  )
+}
+
+export function useDisableTwoFactor() {
+  return useConfigMutation((id: string) =>
+    apiPost<{ twoFactor: boolean }>(`/users/${id}/2fa/disable`, {}),
+  )
+}
+
 function useFilesMutation<TInput, TResult>(fn: (input: TInput) => Promise<TResult>) {
   const qc = useQueryClient()
   return useMutation<TResult, Error, TInput>({

@@ -744,6 +744,32 @@ export const handlers = [
     return HttpResponse.json(user)
   }),
 
+  http.post(`${BASE}/users/:id/2fa/setup`, ({ params }) => {
+    const user = managementUsers.find((u) => u.id === params.id)
+    if (!user) return new HttpResponse(null, { status: 404 })
+    return HttpResponse.json({
+      secret: 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+      otpauthUri: `otpauth://totp/LumoNAS:${encodeURIComponent(user.username)}?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=LumoNAS&algorithm=SHA1&digits=6&period=30`,
+      recoveryCodes: Array.from({ length: 8 }, (_, index) => `lumo-${(100000 + index * 7919) % 1000000}-${(200000 + index * 104729) % 1000000}`),
+    })
+  }),
+
+  http.post(`${BASE}/users/:id/2fa/enable`, async ({ params, request }) => {
+    const user = managementUsers.find((u) => u.id === params.id)
+    if (!user) return new HttpResponse(null, { status: 404 })
+    const body = (await request.json()) as { code?: string }
+    if (!/^\d{6}$/.test(body.code ?? '')) return new HttpResponse(null, { status: 422 })
+    user.twoFactor = true
+    return HttpResponse.json({ twoFactor: true })
+  }),
+
+  http.post(`${BASE}/users/:id/2fa/disable`, ({ params }) => {
+    const user = managementUsers.find((u) => u.id === params.id)
+    if (!user) return new HttpResponse(null, { status: 404 })
+    user.twoFactor = false
+    return HttpResponse.json({ twoFactor: false })
+  }),
+
   http.get(`${BASE}/network/connections`, () => HttpResponse.json(connections)),
 
   http.get(`${BASE}/network/interfaces`, () => HttpResponse.json(interfaces)),

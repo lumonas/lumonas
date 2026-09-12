@@ -35,6 +35,7 @@ import (
 	"github.com/lumonas/lumonas/internal/shares"
 	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
+	"github.com/lumonas/lumonas/internal/updates"
 )
 
 type apiServer struct {
@@ -53,6 +54,8 @@ type apiServer struct {
 	notificationFailures map[string]notificationFailureState
 	notificationClient   *http.Client
 	updateHTTPClient     *http.Client
+	totpMu               sync.Mutex
+	totpChallenges       map[string]totpChallenge
 	safetyMu             sync.Mutex
 	safetyUntil          time.Time
 }
@@ -82,6 +85,7 @@ func main() {
 	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", acknowledged: make(map[string]bool)}
 	server.dockerService = dockerruntime.New(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"), nil)
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
+	server.reconcileUpdateBoot()
 	server.ensureRestartedJobs()
 	go server.metricsLoop()
 	go server.capacityLoop()
@@ -103,6 +107,22 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(ctx)
+}
+
+func (s *apiServer) reconcileUpdateBoot() {
+	state, rolledBack, err := s.updateManager().RecordBoot(s.version, updates.DefaultMaxBootAttempts)
+	if err != nil {
+		s.log.Warn("update boot state could not be recorded", "error", err)
+		return
+	}
+	if state.PendingSlot == "" && rolledBack {
+		s.publish("update.health_failed", "critical", nil, map[string]any{"reason": state.LastError})
+		s.log.Error("pending update failed boot health checks", "reason", state.LastError)
+		return
+	}
+	if state.PendingSlot != "" && state.BootAttempts > 0 {
+		s.log.Info("pending update boot recorded", "slot", state.PendingSlot, "attempt", state.BootAttempts)
+	}
 }
 
 func (s *apiServer) routes() http.Handler {
@@ -131,6 +151,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.authStatus(w, r)
 	case r.Method == http.MethodPost && endpoint == "/auth/login":
 		s.authLogin(w, r)
+	case r.Method == http.MethodPost && endpoint == "/auth/login/2fa":
+		s.loginTwoFactor(w, r)
 	case r.Method == http.MethodPost && endpoint == "/auth/logout":
 		s.authLogout(w, r)
 	case r.Method == http.MethodGet && endpoint == "/users":
@@ -139,6 +161,12 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.listPrincipals(w, r)
 	case r.Method == http.MethodPost && endpoint == "/users":
 		s.createUser(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/2fa/setup"):
+		s.setupTwoFactor(w, r, twoFactorUserID(endpoint))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/2fa/enable"):
+		s.enableTwoFactor(w, r, twoFactorUserID(endpoint))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/2fa/disable"):
+		s.disableTwoFactor(w, r, twoFactorUserID(endpoint))
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/password"):
 		s.setUserPassword(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/users/"):
@@ -447,9 +475,28 @@ func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	token, expires, err := s.store.CreateSession(input.Username, input.Password, 12*time.Hour)
+	userID, err := s.store.VerifyCredentials(input.Username, input.Password)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		return
+	}
+	twoFactor, factorErr := s.store.TOTPEnabled(userID)
+	if factorErr != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "two-factor state unavailable"})
+		return
+	}
+	if twoFactor {
+		challengeID := s.createTOTPChallenge(userID, input.Username)
+		if challengeID == "" {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "challenge creation failed"})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]any{"twoFactorRequired": true, "challengeId": challengeID})
+		return
+	}
+	token, expires, err := s.store.CreateSessionForUser(userID, 12*time.Hour)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "lumonas_session", Value: token, Path: "/", Expires: expires, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: os.Getenv("LUMONAS_COOKIE_SECURE") == "true"})
@@ -466,7 +513,7 @@ func (s *apiServer) authLogout(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.authRequired || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/logout" {
+		if !s.authRequired || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/login/2fa" || r.URL.Path == "/api/v1/auth/logout" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -746,6 +793,10 @@ func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if input.RequestedState != nil {
+		if err := storage.ValidateRequestedState(input.Action, target.ID, input.RequestedState); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
 		plan.RequestedState = input.RequestedState
 		plan.PlanHash = storage.Hash(plan)
 	}

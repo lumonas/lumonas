@@ -96,7 +96,7 @@ Before significant LumoNAS update:
 6. health-check;
 7. expose rollback when architecture permits.
 
-## Future A/B system
+## A/B system safety primitive
 
 Long-term preferred design:
 
@@ -108,11 +108,14 @@ System B
 State
 ```
 
-Write new release to inactive system slot.
+Write new release to inactive system slot and record the pending candidate.
 
-Boot and health-check.
+On candidate boot, record a bounded boot attempt. A healthy confirmation
+promotes the candidate; repeated failed attempts clear the pending slot and
+keep the previous active slot selected.
 
-Automatically return to previous slot on boot failure.
+The current package manager implements this state machine. Full EFI/partition
+slot switching remains deployment-specific and is validated in the QEMU image.
 
 This is a future architecture track, not required for first functional build.
 

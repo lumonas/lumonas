@@ -628,6 +628,57 @@ paths:
         '200':
           description: User list
 
+  /users/{id}/2fa/setup:
+    post:
+      tags: [Users]
+      summary: Start two-factor enrollment
+      operationId: setupTwoFactor
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Provisioning secret and one-time recovery codes
+
+  /users/{id}/2fa/enable:
+    post:
+      tags: [Users]
+      summary: Confirm two-factor enrollment
+      operationId: enableTwoFactor
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Two-factor enabled
+
+  /users/{id}/2fa/disable:
+    post:
+      tags: [Users]
+      summary: Disable two-factor authentication
+      operationId: disableTwoFactor
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Two-factor disabled
+
   /principals:
     get:
       tags: [Users]
@@ -658,6 +709,31 @@ paths:
       responses:
         '200':
           description: Update status
+
+  /updates/health:
+    post:
+      tags: [Settings]
+      summary: Confirm or reject a pending update
+      operationId: updateHealth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [healthy]
+              properties:
+                healthy:
+                  type: boolean
+                version:
+                  type: string
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Updated slot state
+        '409':
+          description: No matching pending update
 
   /auth/status:
     get:
@@ -700,6 +776,27 @@ paths:
           description: Logged in
         '401':
           description: Invalid credentials
+
+  /auth/login/2fa:
+    post:
+      tags: [Auth]
+      summary: Complete two-factor login challenge
+      operationId: authLoginTwoFactor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, code]
+              properties:
+                challengeId: { type: string }
+                code: { type: string }
+      responses:
+        '200':
+          description: Logged in
+        '401':
+          description: Invalid or expired verification code
 
   /auth/logout:
     post:

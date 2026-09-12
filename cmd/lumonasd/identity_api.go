@@ -65,9 +65,13 @@ func (s *apiServer) listUsers(w http.ResponseWriter, r *http.Request) {
 			if role == string(identity.RoleAdmin) {
 				role = string(identity.RoleOwner)
 			}
+			twoFactor, factorErr := s.store.TOTPEnabled(value.ID)
+			if factorErr != nil {
+				twoFactor = false
+			}
 			management = append(management, map[string]any{
 				"id": value.ID, "username": value.Name, "role": role,
-				"twoFactor": false, "enabled": value.Enabled,
+				"twoFactor": twoFactor, "enabled": value.Enabled,
 			})
 			continue
 		}

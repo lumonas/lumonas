@@ -83,3 +83,34 @@ func TestABManagerStagesAndRollsBackAtomically(t *testing.T) {
 		t.Fatalf("rollback failed: %#v %v", rolledBack, err)
 	}
 }
+
+func TestRecordBootFailsClosedAfterRepeatedCandidateFailures(t *testing.T) {
+	root := t.TempDir()
+	packagePath := filepath.Join(root, "update.pkg")
+	if err := os.WriteFile(packagePath, []byte("signed package"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	manifest := testManifest(t, packagePath)
+	publicKey, privateKey, _ := ed25519.GenerateKey(rand.Reader)
+	canonical, _ := CanonicalManifest(manifest)
+	manager := &Manager{Root: filepath.Join(root, "state")}
+	if _, err := manager.StageAndActivate(packagePath, manifest, ed25519.Sign(privateKey, canonical), publicKey); err != nil {
+		t.Fatal(err)
+	}
+	state, rolledBack, err := manager.RecordBoot(manifest.Version, 2)
+	if err != nil || rolledBack || state.BootAttempts != 1 || state.PendingSlot == "" {
+		t.Fatalf("first candidate boot was not recorded: %#v rolledBack=%v err=%v", state, rolledBack, err)
+	}
+	state, rolledBack, err = manager.RecordBoot(manifest.Version, 2)
+	if err != nil || !rolledBack || state.PendingSlot != "" || state.ActiveSlot != "a" || state.LastError == "" {
+		t.Fatalf("failed candidate was not rolled back safely: %#v rolledBack=%v err=%v", state, rolledBack, err)
+	}
+}
+
+func TestRecordBootIgnoresNonCandidateVersion(t *testing.T) {
+	manager := &Manager{Root: filepath.Join(t.TempDir(), "state")}
+	state, rolledBack, err := manager.RecordBoot("0.1.0", 2)
+	if err != nil || rolledBack || state.BootAttempts != 0 {
+		t.Fatalf("unexpected boot state without pending candidate: %#v rolledBack=%v err=%v", state, rolledBack, err)
+	}
+}

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Plus, ShieldCheck, Users } from 'lucide-react'
+import { Plus, ShieldCheck, ShieldOff, Users } from 'lucide-react'
 import { useToggleUser, useUsers } from '@/api/queries'
 import { PageHeader } from '@/components/core/page-header'
 import { ResourceTable, type Column } from '@/components/core/resource-table'
@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { CreateUserDialog } from '@/features/users/create-user-dialog'
+import { TwoFactorDialog } from '@/features/users/twofactor-dialog'
 import { timeAgo } from '@/lib/format'
 import type { FileUser, ManagementUser } from '@/api/types'
 
@@ -23,6 +24,7 @@ export function UsersPage() {
   const { data: users, isLoading } = useUsers()
   const toggleUser = useToggleUser()
   const [createOpen, setCreateOpen] = useState(searchParams.get('create') === '1')
+  const [twoFactorUser, setTwoFactorUser] = useState<ManagementUser | null>(null)
 
   const managementColumns: Column<ManagementUser>[] = [
     {
@@ -50,12 +52,23 @@ export function UsersPage() {
       sortValue: (u) => (u.twoFactor ? 0 : 1),
       cell: (u) =>
         u.twoFactor ? (
-          <span className="flex items-center gap-1 text-xs text-success">
+          <button
+            type="button"
+            onClick={() => setTwoFactorUser(u)}
+            className="flex items-center gap-1 text-xs text-success"
+          >
             <ShieldCheck className="size-3.5" />
             Enabled
-          </span>
+          </button>
         ) : (
-          <span className="text-xs text-muted-foreground">Off</span>
+          <button
+            type="button"
+            onClick={() => setTwoFactorUser(u)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ShieldOff className="size-3.5" />
+            Off
+          </button>
         ),
     },
     {
@@ -213,6 +226,7 @@ export function UsersPage() {
       </div>
 
       <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <TwoFactorDialog user={twoFactorUser} open={twoFactorUser !== null} onOpenChange={(open) => { if (!open) setTwoFactorUser(null) }} />
     </div>
   )
 }

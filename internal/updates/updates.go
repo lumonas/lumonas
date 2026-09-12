@@ -19,6 +19,8 @@ import (
 
 const ManifestFormatVersion = 1
 
+const DefaultMaxBootAttempts = 3
+
 type Manifest struct {
 	FormatVersion int       `json:"formatVersion"`
 	Version       string    `json:"version"`
@@ -223,6 +225,42 @@ func (m *Manager) MarkHealthy(version string) (SlotState, error) {
 		return SlotState{}, err
 	}
 	return state, nil
+}
+
+// RecordBoot records a boot of the pending candidate. The bootloader or
+// service supervisor calls this only after starting the pending version. A
+// candidate that does not confirm health within maxAttempts is failed closed:
+// the old active slot remains selected and the pending slot is cleared.
+func (m *Manager) RecordBoot(version string, maxAttempts int) (SlotState, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	state, err := m.loadLocked()
+	if err != nil {
+		return SlotState{}, false, err
+	}
+	if state.PendingSlot == "" || state.PendingVersion == "" || strings.TrimSpace(version) != state.PendingVersion {
+		return state, false, nil
+	}
+	if maxAttempts < 1 {
+		maxAttempts = DefaultMaxBootAttempts
+	}
+	state.BootAttempts++
+	if state.BootAttempts >= maxAttempts {
+		state.PendingSlot = ""
+		state.PendingVersion = ""
+		state.BootAttempts = 0
+		state.LastError = fmt.Sprintf("automatic rollback after %d failed boot attempts", maxAttempts)
+		state.UpdatedAt = time.Now().UTC()
+		if err := m.saveLocked(state); err != nil {
+			return SlotState{}, false, err
+		}
+		return state, true, nil
+	}
+	state.UpdatedAt = time.Now().UTC()
+	if err := m.saveLocked(state); err != nil {
+		return SlotState{}, false, err
+	}
+	return state, false, nil
 }
 
 func (m *Manager) Rollback(reason string) (SlotState, error) {

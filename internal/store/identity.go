@@ -41,6 +41,9 @@ func (s *Store) ensureIdentitySchema() error {
 	if _, err := s.db.Exec(identitySchema); err != nil {
 		return err
 	}
+	if err := s.ensureTOTPColumns(); err != nil {
+		return err
+	}
 	return s.syncLegacyUsers()
 }
 

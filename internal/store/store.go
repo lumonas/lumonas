@@ -502,13 +502,39 @@ func (s *Store) CreateSession(username, password string, duration time.Duration)
 	if !auth.VerifyPassword(password, hash) {
 		return "", time.Time{}, fmt.Errorf("invalid credentials")
 	}
+	token, expires, err := s.CreateSessionForUser(userID, duration)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expires, nil
+}
+
+// CreateSessionForUser issues a session for an already-authenticated user
+// (used by the two-factor challenge flow after code verification).
+func (s *Store) CreateSessionForUser(userID string, duration time.Duration) (string, time.Time, error) {
 	token, err := auth.NewToken()
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	expires := time.Now().UTC().Add(duration)
 	_, err = s.db.Exec(`INSERT INTO sessions(token_digest,user_id,expires_at,created_at) VALUES(?,?,?,?)`, auth.TokenDigest(token), userID, expires.Format(timeFormat), time.Now().UTC().Format(timeFormat))
-	return token, expires, err
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expires, nil
+}
+
+// VerifyCredentials validates a username/password pair without issuing a
+// session, returning the principal id for the two-factor challenge flow.
+func (s *Store) VerifyCredentials(username, password string) (string, error) {
+	var userID, hash string
+	if err := s.db.QueryRow(`SELECT id,password_hash FROM users WHERE username = ?`, username).Scan(&userID, &hash); err != nil {
+		return "", fmt.Errorf("invalid credentials")
+	}
+	if !auth.VerifyPassword(password, hash) {
+		return "", fmt.Errorf("invalid credentials")
+	}
+	return userID, nil
 }
 
 func (s *Store) SessionUser(token string) (string, bool) {
