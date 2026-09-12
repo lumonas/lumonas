@@ -13,6 +13,10 @@
 - SQLite for LumoNAS state.
 - No Node.js runtime required after frontend build.
 
+The release runtime contract requires the privileged broker and management
+daemon to be active, while the web process must run under the unprivileged
+`lumonas` service account.
+
 ### Backend
 
 Use Go for system services:

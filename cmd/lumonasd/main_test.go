@@ -46,7 +46,8 @@ func testServer(t *testing.T) *apiServer {
 
 func TestRequestMiddlewarePropagatesCorrelationID(t *testing.T) {
 	var got string
-	handler := requestMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := &apiServer{}
+	handler := server.requestMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = trace.CorrelationID(r.Context())
 		w.WriteHeader(http.StatusNoContent)
 	}))

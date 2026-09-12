@@ -12,6 +12,7 @@ type Status struct {
 	Active bool   `json:"active"`
 	State  string `json:"state"`
 	Detail string `json:"detail,omitempty"`
+	User   string `json:"user,omitempty"`
 }
 
 var DefaultNames = []string{"lumonas-privd.service", "lumonasd.service", "lumonas-web.service", "docker.service", "smbd.service", "nfs-server.service", "ssh.service"}
@@ -45,7 +46,17 @@ func Collect(ctx context.Context, names []string) []Status {
 			Name:   name,
 			Active: err == nil && raw == "active",
 			State:  normalizeState(raw),
+			User:   systemdProperty(ctx, name, "User"),
 		})
 	}
 	return result
+}
+
+func systemdProperty(ctx context.Context, unit, property string) string {
+	command := exec.CommandContext(ctx, "systemctl", "show", unit, "--property="+property, "--value")
+	output, err := command.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(output))
 }

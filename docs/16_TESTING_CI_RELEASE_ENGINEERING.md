@@ -67,6 +67,10 @@ restored desired state, Compose data, encrypted payload, and completion marker.
 This is release-blocking and exercises the offline system-disk replacement path
 end to end.
 
+The Debian appliance smoke test also requires `lumonas-privd`, `lumonasd`, and
+`lumonas-web` to report active/running through the services API, and requires
+the web service identity to be `lumonas` rather than root.
+
 ## Destructive safety tests
 
 Explicit cases:

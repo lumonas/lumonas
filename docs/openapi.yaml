@@ -2167,6 +2167,12 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceStatus'
         '202':
           description: Accepted (async job queued)
         '4XX':
@@ -3192,6 +3198,24 @@ components:
         metadata:
           type: object
           additionalProperties: true
+
+    ServiceStatus:
+      type: object
+      required: [id, name, active, state]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        active:
+          type: boolean
+        state:
+          type: string
+          enum: [running, stopped, degraded, unknown]
+        detail:
+          type: string
+        user:
+          type: string
 
     AppSettings:
       type: object

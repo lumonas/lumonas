@@ -213,3 +213,10 @@ Run packaging checks on the Debian/Ubuntu build runner.
 
 Pass if every packaged service unit passes `systemd-analyze verify` and the
 release job fails when the verifier is unavailable.
+
+## W. QEMU service identity
+
+Boot the Debian appliance and query `/api/v1/services`.
+
+Pass if the three LumoNAS services are active/running and
+`lumonas-web.service` reports `user: lumonas`.
