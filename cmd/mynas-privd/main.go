@@ -537,7 +537,7 @@ func requestedChanges(values map[string]any) (map[string]string, error) {
 
 func allowedNetworkKey(value string) bool {
 	switch value {
-	case "ipv4.method", "ipv4.addresses", "ipv4.gateway", "ipv4.dns", "ipv4.dns-search", "ipv4.route-metric", "ipv4.routes", "ipv6.method", "ipv6.addresses", "ipv6.gateway", "ipv6.dns", "ipv6.dns-search", "ipv6.route-metric", "ipv6.routes", "connection.autoconnect", "connection.metered", "802-3-ethernet.mtu":
+	case "ipv4.method", "ipv4.addresses", "ipv4.gateway", "ipv4.dns", "ipv4.dns-search", "ipv4.route-metric", "ipv4.routes", "ipv6.method", "ipv6.addresses", "ipv6.gateway", "ipv6.dns", "ipv6.dns-search", "ipv6.route-metric", "ipv6.routes", "connection.autoconnect", "connection.metered", "connection.type", "connection.master", "connection.members", "vlan.parent", "vlan.id", "802-3-ethernet.mtu":
 		return true
 	default:
 		return false

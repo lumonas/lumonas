@@ -43,4 +43,8 @@ func TestNetworkConfigurationPersistsAndDefaultsSafely(t *testing.T) {
 	if err != nil || connectionID != "lan" {
 		t.Fatalf("checkpoint mapping failed: %q err=%v", connectionID, err)
 	}
+	var version int
+	if err := database.db.QueryRow(`SELECT version FROM schema_migrations WHERE version=2`).Scan(&version); err != nil || version != 2 {
+		t.Fatalf("schema version 2 was not recorded: %d err=%v", version, err)
+	}
 }

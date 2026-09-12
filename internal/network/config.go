@@ -33,21 +33,27 @@ type Connection struct {
 	Enabled    bool     `json:"enabled"`
 	Generation int64    `json:"generation"`
 	Status     string   `json:"status"`
+	Type       string   `json:"type,omitempty"`
+	Parent     string   `json:"parent,omitempty"`
+	Members    []string `json:"members,omitempty"`
+	VLANID     int      `json:"vlanId,omitempty"`
 	IPv4       IPConfig `json:"ipv4"`
 	IPv6       IPConfig `json:"ipv6"`
 	MTU        int      `json:"mtu,omitempty"`
 }
 
 type Binding struct {
-	Service string `json:"service"`
-	Address string `json:"address"`
-	Port    int    `json:"port"`
-	Enabled bool   `json:"enabled"`
+	Service string   `json:"service"`
+	Address string   `json:"address"`
+	Port    int      `json:"port"`
+	Enabled bool     `json:"enabled"`
+	Scopes  []string `json:"scopes,omitempty"`
 }
 
 type FirewallService struct {
 	LAN       bool `json:"lan"`
 	Tailscale bool `json:"tailscale"`
+	IoT       bool `json:"iot"`
 }
 
 type FirewallPolicy struct {
@@ -73,6 +79,25 @@ func (c Connection) Validate() error {
 	if !interfacePattern.MatchString(c.Interface) {
 		return errors.New("network interface name is invalid")
 	}
+	if c.Type != "" && c.Type != "ethernet" && c.Type != "vlan" && c.Type != "bond" && c.Type != "bridge" {
+		return fmt.Errorf("network connection type %q is unsupported", c.Type)
+	}
+	if c.Parent != "" && !interfacePattern.MatchString(c.Parent) {
+		return errors.New("network connection parent is invalid")
+	}
+	if c.Type == "vlan" && (c.Parent == "" || c.VLANID < 1 || c.VLANID > 4094) {
+		return errors.New("VLAN connections require a parent and VLAN id between 1 and 4094")
+	}
+	if (c.Type == "bond" || c.Type == "bridge") && len(c.Members) == 0 {
+		return fmt.Errorf("%s connections require at least one member", c.Type)
+	}
+	seenMembers := map[string]bool{}
+	for _, member := range c.Members {
+		if !interfacePattern.MatchString(member) || seenMembers[member] {
+			return errors.New("network connection member is invalid or duplicated")
+		}
+		seenMembers[member] = true
+	}
 	if c.MTU != 0 && (c.MTU < 576 || c.MTU > 9000) {
 		return errors.New("network MTU must be between 576 and 9000")
 	}
@@ -90,6 +115,19 @@ func (c Connection) NetworkManagerChanges() (map[string]string, error) {
 		return nil, err
 	}
 	changes := map[string]string{"connection.autoconnect": strconv.FormatBool(c.Enabled)}
+	if c.Type != "" {
+		changes["connection.type"] = c.Type
+	}
+	if c.Parent != "" {
+		if c.Type == "vlan" {
+			changes["vlan.parent"], changes["vlan.id"] = c.Parent, strconv.Itoa(c.VLANID)
+		} else {
+			changes["connection.master"] = c.Parent
+		}
+	}
+	if len(c.Members) > 0 {
+		changes["connection.members"] = strings.Join(c.Members, ",")
+	}
 	if c.MTU != 0 {
 		changes["802-3-ethernet.mtu"] = strconv.Itoa(c.MTU)
 	}
@@ -195,6 +233,13 @@ func ValidateBindings(values []Binding) error {
 		if value.Address != "" && net.ParseIP(value.Address) == nil && value.Address != "0.0.0.0" && value.Address != "::" {
 			return fmt.Errorf("service %q bind address is invalid", value.Service)
 		}
+		for _, scope := range value.Scopes {
+			switch scope {
+			case "lan", "tailscale", "iot":
+			default:
+				return fmt.Errorf("service %q network scope %q is unsupported", value.Service, scope)
+			}
+		}
 	}
 	return nil
 }
@@ -227,8 +272,14 @@ func ValidateExposure(bindings []Binding, policy FirewallPolicy) error {
 			continue
 		}
 		access := policy.Services[binding.Service]
-		if !access.LAN && !access.Tailscale {
+		if len(binding.Scopes) == 0 && !access.LAN && !access.Tailscale && !access.IoT {
 			return fmt.Errorf("enabled service %q has no permitted network scope", binding.Service)
+		}
+		for _, scope := range binding.Scopes {
+			allowed := scope == "lan" && access.LAN || scope == "tailscale" && access.Tailscale || scope == "iot" && access.IoT
+			if !allowed {
+				return fmt.Errorf("service %q binding and firewall disagree for %s", binding.Service, scope)
+			}
 		}
 	}
 	return nil
@@ -268,6 +319,13 @@ func RenderNftables(policy FirewallPolicy, bindings []Binding) (string, error) {
 			builder.WriteString(" accept # ")
 			builder.WriteString(binding.Service)
 			builder.WriteString(" Tailscale\n")
+		}
+		if access.IoT {
+			builder.WriteString("    iifname \"iot0\" tcp dport ")
+			builder.WriteString(strconv.Itoa(binding.Port))
+			builder.WriteString(" accept # ")
+			builder.WriteString(binding.Service)
+			builder.WriteString(" IoT\n")
 		}
 	}
 	builder.WriteString("  }\n}\n")

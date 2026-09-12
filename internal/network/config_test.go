@@ -21,6 +21,16 @@ func TestConnectionValidationRejectsUnsafeValues(t *testing.T) {
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("invalid gateway should fail")
 	}
+	vlan := valid
+	vlan.Type, vlan.Parent, vlan.VLANID = "vlan", "en0", 20
+	if err := vlan.Validate(); err != nil {
+		t.Fatalf("valid VLAN rejected: %v", err)
+	}
+	invalid = vlan
+	invalid.VLANID = 4095
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("invalid VLAN id should fail")
+	}
 }
 
 func TestBindingsAndFirewallValidation(t *testing.T) {
@@ -44,5 +54,9 @@ func TestBindingsAndFirewallValidation(t *testing.T) {
 	rules, err := RenderNftables(policy, bindings)
 	if err != nil || len(rules) == 0 {
 		t.Fatalf("expected generated nftables rules: %q err=%v", rules, err)
+	}
+	policy.Services["ftp"] = FirewallService{IoT: true}
+	if err := ValidateExposure([]Binding{{Service: "ftp", Port: 21, Enabled: true, Scopes: []string{"iot"}}}, policy); err != nil {
+		t.Fatalf("valid IoT exposure rejected: %v", err)
 	}
 }
