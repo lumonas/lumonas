@@ -499,3 +499,13 @@ GitHub Actions OIDC issuer and tag workflow identity.
 The ISO’s embedded APT repository must additionally contain signed `Release`
 metadata and its archive keyring on tagged builds; a missing repository
 signing fingerprint or private-key secret fails the build.
+
+## AU. Release artifact manifest
+
+Run `scripts/release-artifacts.sh` and strict `scripts/verify-release.sh` on a
+complete release directory.
+
+Pass if `RELEASE-MANIFEST.json` records the source commit, reproducible source
+epoch, SHA-256 digest, and byte size for every Debian package, ISO, and QEMU
+image, and strict verification rejects any artifact added without regenerating
+the manifest.
