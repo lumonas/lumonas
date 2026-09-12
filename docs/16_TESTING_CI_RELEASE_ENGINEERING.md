@@ -54,6 +54,15 @@ The generated offline ISO is also booted under QEMU with a blank replacement
 disk. The smoke test waits for the live image's health, readiness, and server
 API before the ISO artifact is considered valid.
 
+The release ISO job additionally attaches a disposable recovery media image
+containing a verified fixture bundle and a blank replacement disk. A
+systemd-managed recovery helper identifies both devices by stable virtio
+serial, formats only the blank target, runs `lumonas-recover --apply`, and
+shuts the guest down. CI mounts the resulting target image and verifies the
+restored desired state, Compose data, encrypted payload, and completion marker.
+This is release-blocking and exercises the offline system-disk replacement path
+end to end.
+
 ## Destructive safety tests
 
 Explicit cases:

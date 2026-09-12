@@ -64,7 +64,7 @@ Event, audit, capacity, and job history retention are bounded so long-running ap
 
 Tagged releases run a Debian 13 previous-to-current package upgrade smoke test and verify that administrator configuration survives the upgrade.
 
-The ISO pipeline boots the generated offline image under QEMU with a blank replacement disk and checks the real health, readiness, and server endpoints before publishing the artifact.
+The ISO pipeline boots the generated offline image under QEMU with a blank replacement disk and checks the real health, readiness, and server endpoints before publishing the artifact. Release CI also performs a full offline system-disk recovery: it supplies a separate recovery medium, restores into the blank disk, powers the guest off, and verifies the recovered state directly from the image.
 
 Offline recovery includes the plan-first `lumonas-recover` utility. Restoration requires explicit `--apply` plus an absolute target root and writes verified configuration, Compose state, the SQLite database, and encrypted secrets atomically.
 

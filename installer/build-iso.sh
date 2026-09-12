@@ -24,6 +24,7 @@ samba
 nfs-kernel-server
 rsync
 smartmontools
+e2fsprogs
 lm-sensors
 nut
 mergerfs
@@ -48,6 +49,60 @@ chmod 0640 /etc/lumonas/lumonas-web.env
 systemctl enable lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
 EOF
 chmod 0755 "$WORK/config/hooks/live/020-install-lumonas.hook.chroot"
+if [ "${LUMONAS_ENABLE_RECOVERY_SMOKE:-false}" = "true" ]; then
+	cat > "$WORK/config/hooks/live/030-recovery-smoke.hook.chroot" <<'EOF'
+#!/bin/sh
+set -eu
+cat >/usr/local/sbin/lumonas-recovery-iso-smoke <<'SCRIPT'
+#!/bin/sh
+set -eu
+recovery_device=""
+target_device=""
+for attempt in $(seq 1 30); do
+	if [ -e /dev/disk/by-id/virtio-LUMONAS-RECOVERY ]; then
+		recovery_device=/dev/disk/by-id/virtio-LUMONAS-RECOVERY
+	fi
+	if [ -e /dev/disk/by-id/virtio-LUMONAS-REPLACEMENT ]; then
+		target_device=/dev/disk/by-id/virtio-LUMONAS-REPLACEMENT
+	fi
+	[ -n "$recovery_device" ] && [ -n "$target_device" ] && break
+	sleep 1
+done
+[ -n "$recovery_device" ] && [ -n "$target_device" ] || exit 0
+mkdir -p /mnt/lumonas-recovery /mnt/lumonas-target
+mount -o ro "$recovery_device" /mnt/lumonas-recovery
+[ -f /mnt/lumonas-recovery/.lumonas-recovery-test ] || exit 0
+mkfs.ext4 -F "$target_device" >/dev/null
+mount "$target_device" /mnt/lumonas-target
+/usr/lib/lumonas/lumonas-recover \
+	--bundle /mnt/lumonas-recovery/latest.mrb \
+	--key-file /mnt/lumonas-recovery/recovery.key \
+	--root /mnt/lumonas-target --apply \
+	> /mnt/lumonas-target/recovery-result.json
+printf '%s\n' recovery-applied > /mnt/lumonas-target/recovery-success
+sync
+systemctl poweroff
+SCRIPT
+chmod 0755 /usr/local/sbin/lumonas-recovery-iso-smoke
+cat >/etc/systemd/system/lumonas-recovery-smoke.service <<'UNIT'
+[Unit]
+Description=LumoNAS offline recovery smoke test
+After=lumonas-web.service systemd-udev-settle.service
+Wants=lumonas-web.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lumonas-recovery-iso-smoke
+User=root
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl enable lumonas-recovery-smoke.service
+EOF
+	chmod 0755 "$WORK/config/hooks/live/030-recovery-smoke.hook.chroot"
+fi
 cat > "$WORK/config/includes.chroot/usr/share/doc/lumonas/build-manifest.txt" <<EOF
 LumoNAS release: $VERSION
 Baseline: Debian 13 (Trixie)

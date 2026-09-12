@@ -41,9 +41,12 @@ require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
 require_line "$ROOT/installer/build-iso.sh" 'dpkg-scanpackages'
 require_line "$ROOT/installer/build-iso.sh" 'lumonas-local.list'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_WEB_LISTEN=0.0.0.0:8081'
+require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_ENABLE_RECOVERY_SMOKE'
 [ -x "$ROOT/scripts/storage-loopback-smoke.sh" ] || { echo "storage loopback smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/qemu-recovery-smoke.sh" ] || { echo "QEMU recovery smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
+require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'

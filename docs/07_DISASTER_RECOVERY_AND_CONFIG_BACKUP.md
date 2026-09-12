@@ -295,6 +295,16 @@ For every release:
 
 Failure blocks release.
 
+The implemented ISO smoke path runs the same shape of failure scenario in a
+disposable Debian 13 guest: the recovery bundle is placed on a separate
+read-only virtual recovery medium, the original system disk is absent, and a
+blank replacement disk is attached. The guest discovers both media by stable
+virtio serial, applies the plan-first recovery utility, then powers off. CI
+verifies the recovered SQLite/configuration payload, Compose metadata,
+encrypted secret payload, and completion marker from the replacement image.
+Any missing device identity, failed apply, or unexpected target contents fails
+the release.
+
 ## Product wording
 
 Use:
