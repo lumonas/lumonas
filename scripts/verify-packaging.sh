@@ -33,5 +33,8 @@ require_line "$SYSTEMD/mynas-privd-general.service" 'CapabilityBoundingSet=CAP_C
 
 require_line "$ROOT/packaging/debian/postinst" 'useradd --system'
 require_line "$ROOT/packaging/debian/postinst" '/var/lib/mynas/secrets'
+require_line "$ROOT/packaging/debian/postinst" '/etc/mynas/mynasd.env'
+require_line "$ROOT/packaging/debian/postinst" 'MYNAS_WEB_ROOT=/usr/share/lumonas/web'
+require_line "$ROOT/packaging/debian/postinst" '/etc/mynas/tls/server.key'
 require_line "$ROOT/packaging/debian/postinst" 'mynas-privd.service'
 echo "LumoNAS packaging policy checks passed"

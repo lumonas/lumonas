@@ -1909,16 +1909,49 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 			s.log.Warn("prune audit entries failed", "error", err)
 		}
 	}
-	if notify.ShouldSend(envOr("MYNAS_NOTIFY_MIN_SEVERITY", "warning"), severity) && (os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL") != "" || os.Getenv("MYNAS_NOTIFY_NTFY_URL") != "") {
+	if notify.ShouldSend(envOr("MYNAS_NOTIFY_MIN_SEVERITY", "warning"), severity) {
 		body, _ := json.Marshal(map[string]any{"event": kind, "severity": severity, "resource": resource, "data": data})
+		message := notify.Message{Title: "LumoNAS " + kind, Body: string(body), Severity: severity}
+		go s.sendConfiguredNotifications(message)
+	}
+	s.hub.Publish(event)
+}
+
+func (s *apiServer) sendConfiguredNotifications(message notify.Message) {
+	channels, err := s.store.ListNotificationChannels()
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("notification channel lookup failed", "error", err)
+		}
+		return
+	}
+	key := []byte(s.recoveryKeyString())
+	for _, channel := range channels {
+		if !channel.Enabled {
+			continue
+		}
+		_, credentials, credentialErr := s.store.NotificationChannel(channel.ID, key)
+		if credentialErr != nil {
+			if s.log != nil {
+				s.log.Warn("notification credentials unavailable", "channel", channel.ID, "error", credentialErr)
+			}
+			continue
+		}
 		go func() {
-			sender := notify.Sender{Config: notify.Config{WebhookURL: os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL"), NtfyURL: os.Getenv("MYNAS_NOTIFY_NTFY_URL")}, UserAgent: "LumoNAS/" + s.version}
-			if err := sender.Send(context.Background(), notify.Message{Title: "LumoNAS " + kind, Body: string(body), Severity: severity}); err != nil && s.log != nil {
-				s.log.Warn("notification delivery failed", "event", kind, "error", err)
+			err := notify.SendWithRetry(context.Background(), 3, func(ctx context.Context) error {
+				return notify.SendChannel(ctx, nil, channel, credentials, message)
+			})
+			if err != nil && s.log != nil {
+				s.log.Warn("notification delivery failed", "channel", channel.ID, "event", message.Title, "error", err)
 			}
 		}()
 	}
-	s.hub.Publish(event)
+	legacy := notify.Sender{Config: notify.Config{WebhookURL: os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL"), NtfyURL: os.Getenv("MYNAS_NOTIFY_NTFY_URL")}, UserAgent: "LumoNAS/" + s.version}
+	if legacy.Config.WebhookURL != "" || legacy.Config.NtfyURL != "" {
+		if err := notify.SendWithRetry(context.Background(), 3, func(ctx context.Context) error { return legacy.Send(ctx, message) }); err != nil && s.log != nil {
+			s.log.Warn("legacy notification delivery failed", "event", message.Title, "error", err)
+		}
+	}
 }
 
 func auditableEvent(kind string) bool {
