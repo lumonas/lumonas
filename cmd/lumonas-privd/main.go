@@ -175,7 +175,7 @@ func executeWorker(req request, worker string) response {
 
 func operationWorker(operation string) string {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "storage.mountpersist.apply":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.config.apply", "storage.mountpersist.apply":
 		return "storage"
 	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "firewall.apply":
 		return "network"
@@ -258,6 +258,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return executePoolUnmount(req, run)
 	case "storage.mountpersist.apply":
 		return applyMountPersistence(req, run)
+	case "snapraid.config.apply":
+		return applySnapraidConfig(req, discover, run)
 	case "service.reload":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -731,14 +733,20 @@ func requestedInt(values map[string]any, key string, fallback int) int {
 }
 
 func requestedStrings(values map[string]any, key string) []string {
-	items, _ := values[key].([]any)
-	result := make([]string, 0, len(items))
-	for _, item := range items {
-		if value, ok := item.(string); ok {
-			result = append(result, value)
+	switch items := values[key].(type) {
+	case []string:
+		return append([]string(nil), items...)
+	case []any:
+		result := make([]string, 0, len(items))
+		for _, item := range items {
+			if value, ok := item.(string); ok {
+				result = append(result, value)
+			}
 		}
+		return result
+	default:
+		return nil
 	}
-	return result
 }
 
 func requestedChanges(values map[string]any) (map[string]string, error) {
@@ -933,6 +941,11 @@ func validUnixName(value string) bool {
 
 func safeSnapraidConfig(value string) bool {
 	clean := filepath.Clean(value)
+	// The configured managed config path (shared with lumonasd) is always
+	// acceptable; deployments that relocate it via env stay allow-listed.
+	if configured := os.Getenv("LUMONAS_SNAPRAID_CONFIG"); configured != "" && clean == filepath.Clean(configured) {
+		return true
+	}
 	return clean == "/etc/snapraid.conf" || strings.HasPrefix(clean, "/etc/lumonas/") || strings.HasPrefix(clean, "/var/lib/lumonas/")
 }
 

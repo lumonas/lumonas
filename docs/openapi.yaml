@@ -159,15 +159,6 @@ paths:
                 items:
                   $ref: '#/components/schemas/Pool'
 
-  /storage/mounts:
-    get:
-      tags: [Storage]
-      summary: List currently mounted filesystems
-      operationId: listStorageMounts
-      responses:
-        '200':
-          description: Mounted filesystems
-
   /storage/protection:
     get:
       tags: [Storage]
@@ -180,6 +171,56 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Protection'
+
+  /storage/protection/config:
+    get:
+      tags: [Storage]
+      summary: Get the configured SnapRAID protection layout
+      operationId: getProtectionConfig
+      responses:
+        '200':
+          description: Configured parity and protected data disks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  configPath:
+                    type: string
+                  configured:
+                    type: boolean
+                  parityDiskIds:
+                    type: array
+                    items:
+                      type: string
+                  dataDiskIds:
+                    type: array
+                    items:
+                      type: string
+    put:
+      tags: [Storage]
+      summary: Generate and activate the managed SnapRAID configuration
+      operationId: updateProtectionConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [dataDiskIds]
+              properties:
+                parityDiskId:
+                  type: string
+                dataDiskIds:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+      responses:
+        '200':
+          description: Activated configuration
+        '422':
+          description: Unknown disk identities or invalid layout
 
   /storage/mounts:
     get:
@@ -240,13 +281,14 @@ paths:
               properties:
                 action:
                   type: string
-                  enum: [format, mount, unmount, erase]
+                  enum: [filesystem.format, filesystem.create, filesystem.mount, filesystem.unmount, disk.erase]
                 diskId:
                   type: string
-                filesystem:
-                  type: string
+                requestedState:
+                  type: object
+                  description: 'For filesystem.create: filesystem (ext4|xfs), mountPath (canonical branch path), optional label (max 12 chars).'
       responses:
-        '200':
+        '201':
           description: Operation plan
 
   /docker/summary:

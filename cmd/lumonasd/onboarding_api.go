@@ -14,6 +14,7 @@ import (
 
 	"github.com/lumonas/lumonas/internal/collector"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/monitoring"
 )
 
 type onboardingCompleteRequest struct {
@@ -112,6 +113,18 @@ func (s *apiServer) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if input.Protection.SyncTime != "" {
+		if _, _, err := monitoring.ParseTimeOfDay(input.Protection.SyncTime); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	if input.Protection.ScrubDay != "" {
+		if _, err := monitoring.ParseWeekday(input.Protection.ScrubDay); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 	if input.Recovery.AutoConfigBackup {
 		if _, err := s.ensureOnboardingRecoveryKey(); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recovery key setup failed: " + err.Error()})
@@ -133,6 +146,11 @@ func (s *apiServer) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	recovery, _ := json.Marshal(input.Recovery)
 	_ = s.store.SetMeta("onboarding_recovery", string(recovery))
 	s.recordIdentityAudit(actor, "onboarding.complete", "setup", map[string]any{"roles": len(input.Roles), "autoConfigBackup": input.Recovery.AutoConfigBackup})
+	protectionConfigured := false
+	if parityID, dataIDs := onboardingProtectionDisks(input.Roles); parityID != "" && len(dataIDs) > 0 {
+		protectionConfigured = s.applySnapraidConfiguration(parityID, dataIDs)
+	}
+	s.applyOnboardingSchedules(input.Protection.SyncTime, input.Protection.ScrubDay)
 	s.advanceGeneration("onboarding.complete")
 	s.publish("onboarding.completed", "info", &model.ResourceRef{Type: "server", ID: "server-1"}, nil)
 	initialSyncStarted := false
@@ -147,7 +165,25 @@ func (s *apiServer) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "initialSyncStarted": initialSyncStarted})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "initialSyncStarted": initialSyncStarted, "protectionConfigured": protectionConfigured})
+}
+
+// onboardingProtectionDisks extracts the SnapRAID layout from the assigned
+// roles: one parity disk and every data disk become the protected set.
+func onboardingProtectionDisks(roles map[string]string) (string, []string) {
+	parity := ""
+	data := make([]string, 0)
+	for diskID, role := range roles {
+		switch role {
+		case "parity":
+			if parity == "" {
+				parity = diskID
+			}
+		case "data":
+			data = append(data, diskID)
+		}
+	}
+	return parity, data
 }
 
 func classifyOnboardingDisk(disk model.Disk) string {

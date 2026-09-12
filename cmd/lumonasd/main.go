@@ -206,6 +206,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.confirmStoragePool(w, r, poolOperationID(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/storage/protection":
 		s.protection(w)
+	case r.Method == http.MethodGet && endpoint == "/storage/protection/config":
+		s.protectionConfig(w, r)
+	case r.Method == http.MethodPut && endpoint == "/storage/protection/config":
+		s.updateProtectionConfig(w, r)
 	case r.Method == http.MethodGet && endpoint == "/storage/mounts":
 		s.storageMounts(w)
 	case r.Method == http.MethodGet && endpoint == "/storage/safety":

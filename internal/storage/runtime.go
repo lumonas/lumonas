@@ -147,6 +147,20 @@ func DiscoverProtection(ctx context.Context, disks []model.Disk, runner RuntimeR
 var osReadFile = func(path string) ([]byte, error) { return os.ReadFile(path) }
 
 func diskForPath(path string, disks []model.Disk) *model.Disk {
+	// Generated configurations reference canonical branch paths, so the
+	// first path segment under /srv/disks maps exactly to one disk identity.
+	clean := filepath.Clean(path)
+	if segment, found := strings.CutPrefix(clean, "/srv/disks/"); found {
+		branch := segment
+		if index := strings.Index(segment, "/"); index >= 0 {
+			branch = segment[:index]
+		}
+		for index := range disks {
+			if DiskBranchPath(disks[index].ID) == "/srv/disks/"+branch {
+				return &disks[index]
+			}
+		}
+	}
 	for index := range disks {
 		if pathMatchesDisk(path, disks[index]) {
 			return &disks[index]
