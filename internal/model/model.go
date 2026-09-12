@@ -70,6 +70,13 @@ type Pool struct {
 	Members   []PoolMember `json:"members"`
 }
 
+type CapacitySnapshot struct {
+	ResourceID string    `json:"resourceId"`
+	CapturedAt time.Time `json:"capturedAt"`
+	TotalBytes uint64    `json:"totalBytes"`
+	UsedBytes  uint64    `json:"usedBytes"`
+}
+
 type Protection struct {
 	Status           HealthState `json:"status"`
 	ParityDisks      []DiskRef   `json:"parityDisks"`

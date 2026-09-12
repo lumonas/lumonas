@@ -60,6 +60,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate network schema: %w", err)
 	}
+	if err := s.ensureCapacitySchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate capacity schema: %w", err)
+	}
 	return s, nil
 }
 

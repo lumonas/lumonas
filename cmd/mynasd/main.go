@@ -79,6 +79,7 @@ func main() {
 	server.catalogFile = envOr("MYNAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
 	server.ensureRestartedJobs()
 	go server.metricsLoop()
+	go server.capacityLoop()
 
 	httpServer := &http.Server{Addr: *listen, Handler: server.routes(), ReadHeaderTimeout: 5 * time.Second}
 	stop := make(chan os.Signal, 1)
@@ -198,6 +199,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.notificationTest(w, r)
 	case r.Method == http.MethodGet && endpoint == "/system/metrics":
 		s.metrics(w)
+	case r.Method == http.MethodGet && endpoint == "/capacity/forecast":
+		s.capacityForecast(w, r)
 	case r.Method == http.MethodGet && endpoint == "/diagnostics/support-bundle":
 		s.supportBundle(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
@@ -1707,6 +1710,46 @@ func (s *apiServer) metricsLoop() {
 	defer ticker.Stop()
 	for range ticker.C {
 		s.publish("system.metrics", "info", nil, metricsData(collector.Metrics()))
+	}
+}
+
+func (s *apiServer) capacityLoop() {
+	interval := 24 * time.Hour
+	if value := envOr("MYNAS_CAPACITY_INTERVAL", ""); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil && parsed >= time.Hour {
+			interval = parsed
+		}
+	}
+	// Capture once on startup so a new appliance begins building history
+	// immediately; the store coalesces repeated captures on the same UTC day.
+	s.recordCapacitySnapshots()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.recordCapacitySnapshots()
+	}
+}
+
+func (s *apiServer) recordCapacitySnapshots() {
+	disks, err := s.diskFunc()
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("capacity disk discovery failed", "error", err)
+		}
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, pool := range storage.DiscoverPools(ctx, disks, nil) {
+		if pool.MountPath == "" || pool.SizeBytes == 0 || pool.UsedBytes > pool.SizeBytes {
+			continue
+		}
+		if err := s.store.SaveCapacitySnapshot(model.CapacitySnapshot{ResourceID: pool.MountPath, CapturedAt: time.Now().UTC(), TotalBytes: pool.SizeBytes, UsedBytes: pool.UsedBytes}); err != nil && s.log != nil {
+			s.log.Warn("capacity snapshot persistence failed", "resource", pool.MountPath, "error", err)
+		}
+	}
+	if err := s.store.PruneCapacitySnapshots(time.Now().UTC().Add(-180 * 24 * time.Hour)); err != nil && s.log != nil {
+		s.log.Warn("capacity snapshot retention failed", "error", err)
 	}
 }
 
