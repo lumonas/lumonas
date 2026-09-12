@@ -3,11 +3,28 @@
 
 import re
 import sys
+import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OPENAPI = ROOT / "docs" / "openapi.yaml"
 TYPES = ROOT / "web" / "src" / "api" / "types.ts"
+QUERIES = ROOT / "web" / "src" / "api" / "queries.ts"
+OPENAPI_CHECK = ROOT / "scripts" / "check-openapi.py"
+
+FRONTEND_CALL_RE = re.compile(
+    r"\bapi(?P<method>Get|Post|Patch|Put|Delete|Multipart)"
+    r"(?:<[^>\n]*>)?\(\s*"
+    r"(?:'(?P<single>[^'\n]*)'|\"(?P<double>[^\"\n]*)\"|`(?P<template>[^`\n]*)`)"
+)
+FRONTEND_METHODS = {
+    "Get": "get",
+    "Post": "post",
+    "Patch": "patch",
+    "Put": "put",
+    "Delete": "delete",
+    "Multipart": "post",
+}
 
 
 def between(source: str, start: str, end: str) -> str:
@@ -26,9 +43,31 @@ def check_fields(label: str, section: str, fields: list[str], pattern: str) -> N
         raise SystemExit(f"{label} is missing fields: {', '.join(missing)}")
 
 
+def frontend_routes(source: str) -> set[tuple[str, str]]:
+    routes: set[tuple[str, str]] = set()
+    for match in FRONTEND_CALL_RE.finditer(source):
+        path = next(value for value in (match.group("single"), match.group("double"), match.group("template")) if value is not None)
+        path = path.split("?", 1)[0]
+        path = re.sub(r"\$\{[^}]+\}", "{param}", path)
+        routes.add((FRONTEND_METHODS[match.group("method")], path))
+    return routes
+
+
+def route_matches(pattern: str, actual: str) -> bool:
+    pattern_parts = [part for part in pattern.strip("/").split("/") if part]
+    actual_parts = [part for part in actual.strip("/").split("/") if part]
+    if len(pattern_parts) != len(actual_parts):
+        return False
+    return all(
+        expected.startswith("{") and expected.endswith("}") or expected == received
+        for expected, received in zip(pattern_parts, actual_parts)
+    )
+
+
 def main() -> int:
     openapi = OPENAPI.read_text(encoding="utf-8")
     types = TYPES.read_text(encoding="utf-8")
+    queries = QUERIES.read_text(encoding="utf-8")
 
     disk_fields = [
         "id", "name", "currentPath", "model", "serial", "wwn", "gptDiskGuid",
@@ -51,7 +90,22 @@ def main() -> int:
     check_fields("OpenAPI Event", event_schema, event_fields, r"^\s+{field}:\s*$")
     check_fields("frontend LumoEvent", event_type, event_fields, r"^\s+{field}\??\s*[:(]")
 
-    print("API contract parity ok — Disk and LumoEvent fields match OpenAPI")
+    spec = importlib.util.spec_from_file_location("lumonas_check_openapi", OPENAPI_CHECK)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"could not load OpenAPI route checker: {OPENAPI_CHECK}")
+    openapi_checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(openapi_checker)
+    documented_routes = openapi_checker.paths_from_openapi(openapi)
+    missing_routes = sorted(
+        (method, path)
+        for method, path in frontend_routes(queries)
+        if not any(route_matches(documented_path, path) and documented_method == method for documented_method, documented_path in documented_routes)
+    )
+    if missing_routes:
+        details = ", ".join(f"{method.upper()} {path}" for method, path in missing_routes)
+        raise SystemExit(f"frontend API calls are missing from OpenAPI/router contract: {details}")
+
+    print(f"API contract parity ok — Disk/Event fields and {len(frontend_routes(queries))} frontend API routes match OpenAPI")
     return 0
 
 

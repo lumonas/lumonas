@@ -345,6 +345,9 @@ stable identity fallback.
 The same gate checks the complete SSE envelope field set in OpenAPI and the
 frontend types, including correlation and operation metadata.
 
+It also checks that all frontend query and mutation paths resolve to documented
+backend routes after normalizing dynamic path parameters.
+
 ## AF. SSE observability envelope
 
 Run the event encoding test and resume an SSE client from `Last-Event-ID`.
