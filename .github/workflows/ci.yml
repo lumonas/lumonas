@@ -356,6 +356,7 @@ jobs:
         env:
           LUMONAS_REQUIRE_SBOM: true
           LUMONAS_REQUIRE_SIGNATURES: true
+          LUMONAS_EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
           LUMONAS_COSIGN_CERTIFICATE_IDENTITY_REGEXP: "${{ github.server_url }}/${{ github.repository }}/.github/workflows/.+@refs/tags/${{ github.ref_name }}"
           LUMONAS_COSIGN_CERTIFICATE_OIDC_ISSUER: https://token.actions.githubusercontent.com
         run: LUMONAS_REQUIRE_RELEASE_SET=true bash scripts/verify-release.sh build/releases

@@ -507,5 +507,5 @@ complete release directory.
 
 Pass if `RELEASE-MANIFEST.json` records the source commit, reproducible source
 epoch, SHA-256 digest, and byte size for every Debian package, ISO, and QEMU
-image, and strict verification rejects any artifact added without regenerating
-the manifest.
+image, strict verification matches the source commit to the tagged GitHub
+revision, and an artifact added without regenerating the manifest is rejected.
