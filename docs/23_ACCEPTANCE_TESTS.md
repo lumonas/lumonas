@@ -252,3 +252,11 @@ Query the protection configuration endpoint with a generated SnapRAID config.
 
 Pass if it reports stable parity/data disk identities and performs exactly one
 bounded `snapraid status` probe without issuing a mutating storage command.
+
+## AA. Filesystem deployment coverage
+
+Run the loopback storage smoke test from the packaged/QEMU dependency set.
+
+Pass if both ext4 and XFS images are created, reattached by stable filesystem
+identity, mounted read-only, and checked with `findmnt`; missing `xfsprogs`
+must fail the release gate instead of silently skipping XFS coverage.

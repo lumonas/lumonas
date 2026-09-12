@@ -12,7 +12,7 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 0
 fi
 
-for command in blkid losetup mount umount mkfs.ext4 truncate findmnt; do
+for command in blkid losetup mount umount mkfs.ext4 mkfs.xfs truncate findmnt; do
 	command -v "$command" >/dev/null 2>&1 || {
 		echo "$command is required for loopback storage assertions" >&2
 		exit 1
@@ -94,17 +94,13 @@ MISMATCH_UUID=$LAST_UUID
 	exit 1
 }
 
-if command -v mkfs.xfs >/dev/null 2>&1; then
-	XFS_IMAGE="$WORK/xfs.img"
-	make_disk "$XFS_IMAGE" xfs
-	XFS_UUID=$LAST_UUID
-	XFS_LOOP=$LAST_LOOP
-	[ -n "$XFS_UUID" ] && [ -n "$XFS_LOOP" ] || { echo "xfs identity discovery failed" >&2; exit 1; }
-	mount -o ro "$XFS_LOOP" "$WORK/xfs-mount"
-	findmnt -rn -o FSTYPE "$WORK/xfs-mount" | grep -Fx xfs >/dev/null
-	umount "$WORK/xfs-mount"
-else
-	echo "mkfs.xfs is unavailable; xfs import coverage skipped" >&2
-fi
+XFS_IMAGE="$WORK/xfs.img"
+make_disk "$XFS_IMAGE" xfs
+XFS_UUID=$LAST_UUID
+XFS_LOOP=$LAST_LOOP
+[ -n "$XFS_UUID" ] && [ -n "$XFS_LOOP" ] || { echo "xfs identity discovery failed" >&2; exit 1; }
+mount -o ro "$XFS_LOOP" "$WORK/xfs-mount"
+findmnt -rn -o FSTYPE "$WORK/xfs-mount" | grep -Fx xfs >/dev/null
+umount "$WORK/xfs-mount"
 
 echo "loopback storage smoke test passed (ext4 UUID stable, read-only import verified, mismatch rejected)"

@@ -26,6 +26,7 @@ rsync
 vsftpd
 smartmontools
 e2fsprogs
+xfsprogs
 lm-sensors
 nut
 curl

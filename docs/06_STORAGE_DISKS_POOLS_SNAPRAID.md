@@ -253,3 +253,7 @@ The protection configuration endpoint performs a bounded, read-only
 `snapraid status` probe against the generated configuration. It reports the
 configured stable disk identities without inferring them from transient device
 letters, and it must never mutate storage while rendering the protection view.
+
+The Debian package, offline ISO, QEMU image, and release loopback smoke test
+install `e2fsprogs` and `xfsprogs`; both ext4 and XFS read-only import paths are
+therefore required deployment coverage rather than optional host capabilities.
