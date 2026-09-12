@@ -7,9 +7,11 @@ WORK="${LUMONAS_QEMU_WORKDIR:-$ROOT/build/qemu/work}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${LUMONAS_VERSION:-0.1.0-dev}_amd64.deb}"
 SIZE="${LUMONAS_QEMU_DISK_SIZE:-4G}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"
+SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
 case "$SOURCE_DATE_EPOCH" in
 	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
 esac
+[ -n "$SOURCE_COMMIT" ] || { echo "LUMONAS_SOURCE_COMMIT must not be empty" >&2; exit 1; }
 export SOURCE_DATE_EPOCH
 
 for command in debootstrap qemu-img mkfs.ext4 grub-install; do
@@ -43,7 +45,7 @@ rm -f "$WORK/mnt/etc/resolv.conf"
 cp /etc/resolv.conf "$WORK/mnt/etc/resolv.conf"
 cp "$DEB" "$WORK/mnt/tmp/lumonas.deb"
 
-chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" /bin/sh -eux <<'EOF'
+chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_COMMIT="$SOURCE_COMMIT" LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" /bin/sh -eux <<'EOF'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
@@ -55,6 +57,7 @@ rm -f /tmp/lumonas.deb
 mkdir -p /usr/share/doc/lumonas
 {
   echo "formatVersion=1"
+  echo "sourceCommit=$LUMONAS_SOURCE_COMMIT"
   echo "sourceDateEpoch=$LUMONAS_SOURCE_DATE_EPOCH"
   echo "packages:"
   dpkg-query -W -f='${Package}\t${Version}\n' | sort

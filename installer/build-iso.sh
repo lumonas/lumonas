@@ -8,9 +8,11 @@ DEB="${LUMONAS_DEB:-$ROOT/lumonas_${VERSION}_amd64.deb}"
 REPO_ORIGIN="LumoNAS"
 REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY:-}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"
+SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
 case "$SOURCE_DATE_EPOCH" in
 	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
 esac
+[ -n "$SOURCE_COMMIT" ] || { echo "LUMONAS_SOURCE_COMMIT must not be empty" >&2; exit 1; }
 export SOURCE_DATE_EPOCH
 if [ "${LUMONAS_REQUIRE_REPO_SIGNATURE:-false}" = "true" ] && [ -z "$REPO_SIGN_KEY" ]; then
 	echo "LUMONAS_REPO_SIGN_KEY is required for a signed offline repository" >&2
@@ -106,6 +108,7 @@ apt-get install -y --allow-downgrades lumonas || dpkg -i /opt/lumonas-repo/pool/
 mkdir -p /usr/share/doc/lumonas
 {
   echo "formatVersion=1"
+  echo "sourceCommit=$SOURCE_COMMIT"
   echo "sourceDateEpoch=$SOURCE_DATE_EPOCH"
   echo "packages:"
   dpkg-query -W -f='\${Package}\t\${Version}\n' | sort
@@ -234,6 +237,7 @@ Core package: lumonas.deb
 Embedded repository: /opt/lumonas-repo (origin $REPO_ORIGIN, pinned at priority 1001)
 Repository signature: $(if [ -n "$REPO_SIGN_KEY" ]; then echo "signed by $REPO_SIGN_KEY"; else echo "UNSIGNED (LUMONAS_REPO_SIGN_KEY not set)"; fi)
 Source date epoch: $SOURCE_DATE_EPOCH
+Source commit: $SOURCE_COMMIT
 EOF
 
 (cd "$WORK" && lb config --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer live --archive-areas "main contrib non-free-firmware" --apt-indices false)

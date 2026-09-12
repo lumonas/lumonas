@@ -131,7 +131,8 @@ Each Debian package includes a verified build manifest with source, toolchain,
 lockfile, catalog, and dependency metadata.
 
 Generated ISO and QEMU appliances also include versioned Debian package
-inventories with the reproducible source epoch and exact installed versions.
+inventories with the source commit, reproducible epoch, and exact installed
+versions.
 
 Host integration commands are executed through bounded contexts, including
 privileged storage/network operations, disk and SMART discovery, Docker,

@@ -525,5 +525,5 @@ the tagged GitHub revision, and an artifact added without regenerating the
 manifest is rejected.
 
 The generated ISO and QEMU images must also expose their versioned Debian
-package inventories under `/usr/share/doc/lumonas/`, including the source epoch
-and exact installed package versions.
+package inventories under `/usr/share/doc/lumonas/`, including the source
+commit, source epoch, and exact installed package versions.

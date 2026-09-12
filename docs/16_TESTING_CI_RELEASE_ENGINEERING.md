@@ -399,8 +399,9 @@ verification requires this manifest, compares its source commit with
 rejects any artifact added or removed without regenerating the manifest.
 
 The generated ISO and QEMU images embed versioned Debian package inventories
-under `/usr/share/doc/lumonas/`, including the source epoch and every installed
-package version, so an artifact can be audited after boot or offline inspection.
+under `/usr/share/doc/lumonas/`, including the source commit, source epoch, and
+every installed package version, so an artifact can be audited after boot or
+offline inspection.
 
 HTTP requests receive a generated `X-Request-ID` and carry the same
 correlation ID in context. API-created jobs persist it, and privileged calls
