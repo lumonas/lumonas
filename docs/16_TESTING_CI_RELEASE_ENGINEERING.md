@@ -382,6 +382,12 @@ source commit, Go toolchain, frontend lockfile hash, catalog hash, and exact
 `Depends`/`Recommends` values. `verify-deb.sh` validates the manifest against
 the package control metadata.
 
+`release-artifacts.sh` also writes `RELEASE-MANIFEST.json`, listing every
+package, ISO, and QEMU image with its SHA-256 digest and byte size, together
+with the source commit and `SOURCE_DATE_EPOCH`. Strict tagged-release
+verification requires this manifest and rejects any artifact added or removed
+without regenerating it.
+
 HTTP requests receive a generated `X-Request-ID` and carry the same
 correlation ID in context. API-created jobs persist it, and privileged calls
 inherit it; daemon-created jobs use their stable job ID as the fallback

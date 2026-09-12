@@ -11,6 +11,7 @@ printf '%s\n' 'recovery image' >"$WORK/lumonas_test.raw"
 
 LUMONAS_REQUIRE_SBOM=false sh "$ROOT/scripts/release-artifacts.sh" "$WORK"
 test -s "$WORK/SHA256SUMS"
+test -s "$WORK/RELEASE-MANIFEST.json"
 (cd "$WORK" && sha256sum -c SHA256SUMS)
 sh "$ROOT/scripts/verify-release.sh" "$WORK"
 
@@ -26,4 +27,11 @@ LUMONAS_REQUIRE_RELEASE_SET=true sh "$ROOT/scripts/verify-release.sh" "$WORK"
 grep -F 'lumonas_test.deb' "$WORK/SHA256SUMS" >/dev/null
 grep -F 'lumonas_test.iso' "$WORK/SHA256SUMS" >/dev/null
 grep -F 'lumonas_test.raw' "$WORK/SHA256SUMS" >/dev/null
+grep -F '"sourceDateEpoch"' "$WORK/RELEASE-MANIFEST.json" >/dev/null
+grep -F '"lumonas_test.iso"' "$WORK/RELEASE-MANIFEST.json" >/dev/null
+printf '%s\n' 'unlisted artifact' >"$WORK/unlisted.raw"
+if LUMONAS_REQUIRE_RELEASE_SET=true sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
+	echo "release manifest accepted an unlisted artifact" >&2
+	exit 1
+fi
 echo "LumoNAS release artifact checksum smoke test passed"

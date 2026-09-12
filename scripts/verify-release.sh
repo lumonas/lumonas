@@ -4,9 +4,55 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 RELEASE_DIR="${1:-$ROOT/build/releases}"
 CHECKSUMS="$RELEASE_DIR/SHA256SUMS"
+MANIFEST="$RELEASE_DIR/RELEASE-MANIFEST.json"
 
 [ -d "$RELEASE_DIR" ] || { echo "release directory not found: $RELEASE_DIR" >&2; exit 1; }
 [ -s "$CHECKSUMS" ] || { echo "release checksums are missing: $CHECKSUMS" >&2; exit 1; }
+if [ "${LUMONAS_REQUIRE_RELEASE_SET:-false}" = "true" ] && [ ! -s "$MANIFEST" ]; then
+	echo "release manifest is missing: $MANIFEST" >&2
+	exit 1
+fi
+
+if [ -s "$MANIFEST" ]; then
+	python3 - "$RELEASE_DIR" "$MANIFEST" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+release_dir = pathlib.Path(sys.argv[1])
+manifest_path = pathlib.Path(sys.argv[2])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+if manifest.get("schemaVersion") != 1:
+    raise SystemExit("unsupported release manifest schema")
+if not manifest.get("sourceCommit"):
+    raise SystemExit("release manifest sourceCommit is empty")
+epoch = manifest.get("sourceDateEpoch")
+if not isinstance(epoch, int) or epoch < 0:
+    raise SystemExit("release manifest sourceDateEpoch must be a non-negative integer")
+if manifest.get("checksums") != "SHA256SUMS":
+    raise SystemExit("release manifest checksum filename mismatch")
+
+expected = {}
+for item in manifest.get("artifacts", []):
+    name = item.get("name")
+    if not isinstance(name, str) or name in expected:
+        raise SystemExit("release manifest contains an invalid or duplicate artifact")
+    path = release_dir / name
+    if not path.is_file() or path.suffix not in {".deb", ".iso", ".qcow2", ".raw"}:
+        raise SystemExit(f"release manifest artifact is missing or invalid: {name}")
+    if item.get("sizeBytes") != path.stat().st_size:
+        raise SystemExit(f"release manifest size mismatch: {name}")
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if item.get("sha256") != digest:
+        raise SystemExit(f"release manifest checksum mismatch: {name}")
+    expected[name] = item
+
+actual = sorted(path.name for pattern in ("*.deb", "*.iso", "*.qcow2", "*.raw") for path in release_dir.glob(pattern))
+if sorted(expected) != actual:
+    raise SystemExit("release manifest artifact set does not match release directory")
+PY
+fi
 
 artifact_count=0
 deb_count=0
