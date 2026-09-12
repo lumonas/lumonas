@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,6 +25,8 @@ import (
 	"github.com/lumonas/lumonas/internal/events"
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/network"
+	"github.com/lumonas/lumonas/internal/notify"
+	"github.com/lumonas/lumonas/internal/power"
 	"github.com/lumonas/lumonas/internal/recovery"
 	"github.com/lumonas/lumonas/internal/services"
 	"github.com/lumonas/lumonas/internal/shares"
@@ -124,7 +127,7 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/disks/"):
 		s.disk(w, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/pools":
-		writeJSON(w, http.StatusOK, []model.Pool{})
+		s.pools(w, r)
 	case r.Method == http.MethodGet && endpoint == "/storage/protection":
 		s.protection(w)
 	case r.Method == http.MethodGet && endpoint == "/storage/safety":
@@ -147,12 +150,18 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.ackAlert(w, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/activity":
 		s.activity(w)
+	case r.Method == http.MethodGet && endpoint == "/audit":
+		s.audit(w, r)
+	case r.Method == http.MethodPost && endpoint == "/notifications/test":
+		s.notificationTest(w, r)
 	case r.Method == http.MethodGet && endpoint == "/system/metrics":
 		s.metrics(w)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
 		s.networkInterfaces(w)
 	case r.Method == http.MethodGet && endpoint == "/services":
 		s.services(w, r)
+	case r.Method == http.MethodGet && endpoint == "/power/ups":
+		s.ups(w, r)
 	case r.Method == http.MethodGet && endpoint == "/shares":
 		s.listShares(w)
 	case r.Method == http.MethodPost && endpoint == "/shares":
@@ -251,6 +260,17 @@ func (s *apiServer) disks(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, disks)
 }
 
+func (s *apiServer) pools(w http.ResponseWriter, r *http.Request) {
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk discovery unavailable"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, storage.DiscoverPools(ctx, disks, nil))
+}
+
 func (s *apiServer) disk(w http.ResponseWriter, id string) {
 	disks, err := s.diskFunc()
 	if err != nil {
@@ -267,7 +287,15 @@ func (s *apiServer) disk(w http.ResponseWriter, id string) {
 }
 
 func (s *apiServer) protection(w http.ResponseWriter) {
-	writeJSON(w, http.StatusOK, model.Protection{Status: model.Attention, SyncSchedule: "Not configured", ScrubSchedule: "Not configured", LastSyncResult: nil})
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk discovery unavailable"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	configPath := envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf")
+	writeJSON(w, http.StatusOK, storage.DiscoverProtection(ctx, disks, nil, configPath))
 }
 
 func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request) {
@@ -335,13 +363,7 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *apiServer) currentGeneration() int64 {
-	value, ok := s.store.Meta("config_generation")
-	if !ok {
-		return 0
-	}
-	var generation int64
-	_, _ = fmt.Sscan(value, &generation)
-	return generation
+	return s.store.CurrentGeneration()
 }
 
 func (s *apiServer) recoveryStatus(w http.ResponseWriter) {
@@ -448,6 +470,18 @@ func (s *apiServer) services(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	writeJSON(w, http.StatusOK, services.Collect(ctx, services.DefaultNames))
+}
+
+func (s *apiServer) ups(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	var names []string
+	for _, name := range strings.Split(os.Getenv("MYNAS_UPS_NAMES"), ",") {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			names = append(names, trimmed)
+		}
+	}
+	writeJSON(w, http.StatusOK, power.Discover(ctx, names, nil))
 }
 
 func (s *apiServer) shareStore() shares.Store {
@@ -571,6 +605,36 @@ func (s *apiServer) activity(w http.ResponseWriter) {
 		activity = append(activity, model.ActivityEvent{ID: event.ID, Timestamp: event.Timestamp, Category: activityCategory(event.Type), Title: activityTitle(event.Type), Description: event.Severity, Resource: event.Resource})
 	}
 	writeJSON(w, http.StatusOK, activity)
+}
+
+func (s *apiServer) audit(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if value := r.URL.Query().Get("limit"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			limit = parsed
+		}
+	}
+	entries, err := s.store.Audit(limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, entries)
+}
+
+func (s *apiServer) notificationTest(w http.ResponseWriter, r *http.Request) {
+	var input notify.Message
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	sender := notify.Sender{Config: notify.Config{WebhookURL: os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL"), NtfyURL: os.Getenv("MYNAS_NOTIFY_NTFY_URL")}, UserAgent: "LumoNAS/" + s.version}
+	if err := sender.Send(r.Context(), input); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	_ = s.store.SaveAudit(store.AuditEntry{Actor: "admin", Action: "notification.test", Outcome: "sent", Metadata: map[string]any{"severity": input.Severity}})
+	writeJSON(w, http.StatusNoContent, nil)
 }
 
 func activityCategory(eventType string) string {
@@ -874,6 +938,13 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 	event := model.Event{ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Resource: resource, Data: data}
 	if err := s.store.SaveEvent(event); err != nil {
 		s.log.Warn("persist event failed", "error", err)
+	}
+	entry := store.AuditEntry{Actor: "system", Action: kind, Outcome: "recorded", Metadata: data}
+	if resource != nil {
+		entry.ResourceType, entry.ResourceID = resource.Type, resource.ID
+	}
+	if err := s.store.SaveAudit(entry); err != nil {
+		s.log.Warn("persist audit entry failed", "error", err)
 	}
 	s.hub.Publish(event)
 }

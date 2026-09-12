@@ -21,6 +21,17 @@ type Store struct {
 	path string
 }
 
+type AuditEntry struct {
+	ID           string         `json:"id"`
+	Timestamp    time.Time      `json:"timestamp"`
+	Actor        string         `json:"actor"`
+	Action       string         `json:"action"`
+	Outcome      string         `json:"outcome"`
+	ResourceType string         `json:"resourceType,omitempty"`
+	ResourceID   string         `json:"resourceId,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
 func Open(path string) (*Store, error) {
 	if path == "" {
 		path = "/var/lib/mynas/mynas.db"
@@ -83,12 +94,31 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS sessions (
   token_digest TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, actor TEXT NOT NULL,
+  action TEXT NOT NULL, outcome TEXT NOT NULL, resource_type TEXT,
+  resource_id TEXT, metadata_json TEXT NOT NULL
 );`)
 	if err != nil {
 		return fmt.Errorf("migrate sqlite: %w", err)
 	}
 	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, ?)`, time.Now().UTC().Format(timeFormat))
-	return err
+	if err != nil {
+		return err
+	}
+	var generation string
+	if err := s.db.QueryRow(`SELECT value FROM meta WHERE key = 'config_generation'`).Scan(&generation); err == sql.ErrNoRows {
+		generation = "1"
+		now := time.Now().UTC().Format(timeFormat)
+		if _, err := s.db.Exec(`INSERT INTO meta(key,value) VALUES('config_generation',?)`, generation); err != nil {
+			return err
+		}
+		if _, err := s.db.Exec(`INSERT OR IGNORE INTO config_generations(generation,state,plan_hash,created_at,committed_at) VALUES(1,'committed','bootstrap',?,?)`, now, now); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Store) Meta(key string) (string, bool) {
@@ -102,6 +132,83 @@ func (s *Store) Meta(key string) (string, bool) {
 func (s *Store) SetMeta(key, value string) error {
 	_, err := s.db.Exec(`INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
 	return err
+}
+
+func (s *Store) CurrentGeneration() int64 {
+	value, ok := s.Meta("config_generation")
+	if !ok {
+		return 0
+	}
+	var generation int64
+	_, _ = fmt.Sscan(value, &generation)
+	return generation
+}
+
+func (s *Store) BeginGeneration(planHash string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.CurrentGeneration() + 1
+	_, err := s.db.Exec(`INSERT INTO config_generations(generation,state,plan_hash,created_at) VALUES(?,?,?,?)`, next, "pending", planHash, time.Now().UTC().Format(timeFormat))
+	return next, err
+}
+
+func (s *Store) CommitGeneration(generation int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now().UTC().Format(timeFormat)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`UPDATE config_generations SET state='committed',committed_at=? WHERE generation=?`, now, generation); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO meta(key,value) VALUES('config_generation',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, fmt.Sprint(generation)); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) SaveAudit(entry AuditEntry) error {
+	if entry.ID == "" {
+		entry.ID = newStoreID("audit")
+	}
+	if entry.Timestamp.IsZero() {
+		entry.Timestamp = time.Now().UTC()
+	}
+	metadata, err := json.Marshal(entry.Metadata)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO audit_log(id,timestamp,actor,action,outcome,resource_type,resource_id,metadata_json) VALUES(?,?,?,?,?,?,?,?)`, entry.ID, entry.Timestamp.Format(timeFormat), entry.Actor, entry.Action, entry.Outcome, nullable(entry.ResourceType), nullable(entry.ResourceID), string(metadata))
+	return err
+}
+
+func (s *Store) Audit(limit int) ([]AuditEntry, error) {
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`SELECT id,timestamp,actor,action,outcome,COALESCE(resource_type,''),COALESCE(resource_id,''),metadata_json FROM audit_log ORDER BY timestamp DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]AuditEntry, 0)
+	for rows.Next() {
+		var entry AuditEntry
+		var timestamp, metadata string
+		if err := rows.Scan(&entry.ID, &timestamp, &entry.Actor, &entry.Action, &entry.Outcome, &entry.ResourceType, &entry.ResourceID, &metadata); err != nil {
+			return nil, err
+		}
+		entry.Timestamp, _ = parseTime(timestamp)
+		if err := json.Unmarshal([]byte(metadata), &entry.Metadata); err != nil {
+			entry.Metadata = map[string]any{}
+		}
+		result = append(result, entry)
+	}
+	return result, rows.Err()
 }
 
 func (s *Store) Jobs() ([]model.Job, error) {

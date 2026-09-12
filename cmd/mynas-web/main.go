@@ -16,6 +16,8 @@ func main() {
 	listen := flag.String("listen", envOr("MYNAS_WEB_LISTEN", "127.0.0.1:8081"), "HTTP listen address")
 	root := flag.String("root", envOr("MYNAS_WEB_ROOT", "/usr/share/mynas/web"), "compiled frontend root")
 	api := flag.String("api", envOr("MYNAS_API_URL", "http://127.0.0.1:8080"), "backend URL")
+	cert := flag.String("tls-cert", envOr("MYNAS_WEB_TLS_CERT", ""), "optional TLS certificate")
+	key := flag.String("tls-key", envOr("MYNAS_WEB_TLS_KEY", ""), "optional TLS private key")
 	flag.Parse()
 	target, err := url.Parse(*api)
 	if err != nil {
@@ -34,6 +36,12 @@ func main() {
 		static.ServeHTTP(w, r)
 	})
 	log.Printf("mynas-web listening on %s, serving %s", *listen, *root)
+	if (*cert == "") != (*key == "") {
+		log.Fatal("both --tls-cert and --tls-key are required for HTTPS")
+	}
+	if *cert != "" {
+		log.Fatal(http.ListenAndServeTLS(*listen, *cert, *key, handler))
+	}
 	log.Fatal(http.ListenAndServe(*listen, handler))
 }
 
