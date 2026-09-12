@@ -45,3 +45,20 @@ func TestBuildComposeFromCatalogKeepsSecretsAsReferences(t *testing.T) {
 		t.Fatalf("unexpected compose: %s", compose)
 	}
 }
+
+func TestContainerAndImageActionsUseTypedDockerCommands(t *testing.T) {
+	commands := make([]string, 0, 2)
+	service := New(t.TempDir(), func(_ context.Context, name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return nil, nil
+	})
+	if err := service.ContainerAction(context.Background(), "media", "restart"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.UpdateImage(context.Background(), Image{Repo: "jellyfin/jellyfin", Tag: "latest"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != 2 || commands[0] != "docker restart media" || commands[1] != "docker pull jellyfin/jellyfin:latest" {
+		t.Fatalf("unexpected commands: %#v", commands)
+	}
+}

@@ -50,7 +50,7 @@ Debian package creation requires `dpkg-deb` and is intended for Debian/Ubuntu CI
 make package
 ```
 
-Storage mutations now use immutable plans, stable disk identity revalidation, explicit safety unlock/reauthentication, and the typed `mynas-privd` broker. Mount, unmount, format, and erase workers are allow-listed; SnapRAID synchronization and network/power mutations remain disabled until their dedicated checkpointed workers are added.
+Storage mutations now use immutable plans, stable disk identity revalidation, explicit safety unlock/reauthentication, and the typed `mynas-privd` broker. Mount, unmount, format, and erase workers are allow-listed; SnapRAID jobs, NetworkManager checkpoints, and explicit power actions are also brokered with bounded confirmation. ACL mutation, scheduled power policy, and automatic recovery execution remain intentionally separate follow-up workers.
 
 Read-only host integrations include `lsblk`/SMART disk identity, mergerfs mount discovery, SnapRAID configuration inspection, NUT UPS telemetry (`MYNAS_UPS_NAMES` or `upsc -l`), systemd status, and Docker Compose inspection. Notifications can be tested through the authenticated `/api/v1/notifications/test` endpoint after setting a webhook or ntfy URL.
 

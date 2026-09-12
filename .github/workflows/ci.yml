@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/release-artifacts.sh
+      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst scripts/api-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/release-artifacts.sh
       - run: git diff --check
 
   release:
