@@ -14,6 +14,9 @@ func TestDestinationValidationAndObjectName(t *testing.T) {
 	if err := (Destination{ID: "bad", Name: "Bad", Type: DestinationLocal, Target: "../recovery", Retention: DefaultRetention()}).Validate(); err == nil {
 		t.Fatal("expected unsafe local target to fail")
 	}
+	if err := (Destination{ID: "short", Name: "Short", Type: DestinationS3, Target: "s3://bucket/recovery", Retention: RetentionPolicy{Generations: 19, Daily: 30, Monthly: 12}}).Validate(); err == nil {
+		t.Fatal("expected retention below the verified minimum to fail")
+	}
 	name := ObjectName(42, time.Date(2026, 9, 12, 10, 11, 12, 0, time.UTC))
 	if name != "recovery/generation-42-20260912T101112Z.mrb" {
 		t.Fatalf("unexpected object name %q", name)

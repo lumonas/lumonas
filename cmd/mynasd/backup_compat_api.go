@@ -30,10 +30,12 @@ func (s *apiServer) backupReadiness(w http.ResponseWriter, r *http.Request) {
 	}
 	keyReady := s.recoveryKeyString() != ""
 	latestReady := len(runs) > 0 && runs[0].State == "verified"
+	dockerCovered, dockerWarnings := s.dockerAppdataCoverage()
 	layers := []map[string]any{
 		{"id": "recovery-key", "label": "Recovery key", "status": readinessStatus(keyReady), "detail": readinessDetail(keyReady, "Configured", "Not configured")},
 		{"id": "destinations", "label": "Backup destinations", "status": readinessStatus(len(destinations) > 0), "detail": readinessDetail(len(destinations) > 0, "Configured", "No destination configured")},
 		{"id": "latest-bundle", "label": "Latest verified bundle", "status": readinessStatus(latestReady), "detail": readinessDetail(latestReady, "Verified", "No verified bundle")},
+		{"id": "docker-appdata", "label": "Docker appdata coverage", "status": readinessStatus(dockerCovered), "detail": readinessDetail(dockerCovered, "Covered", "Not fully recoverable")},
 	}
 	score := 0
 	for _, layer := range layers {
@@ -41,7 +43,11 @@ func (s *apiServer) backupReadiness(w http.ResponseWriter, r *http.Request) {
 			score += 100 / len(layers)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"score": score, "layers": layers})
+	result := map[string]any{"score": score, "layers": layers}
+	if len(dockerWarnings) > 0 {
+		result["warnings"] = dockerWarnings
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *apiServer) backupJobs(w http.ResponseWriter, r *http.Request) {

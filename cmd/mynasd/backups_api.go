@@ -467,7 +467,10 @@ func (s *apiServer) backupLoop() {
 
 func (s *apiServer) dockerAppdataCoverage() (bool, []string) {
 	stacks, err := s.dockerService.Stacks(context.Background())
-	if err != nil || len(stacks) == 0 {
+	if err != nil {
+		return false, []string{"Docker appdata coverage could not be determined"}
+	}
+	if len(stacks) == 0 {
 		return true, nil
 	}
 	warnings := []string{"Docker appdata is not included in configuration recovery bundles"}

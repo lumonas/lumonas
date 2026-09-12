@@ -67,3 +67,22 @@ func TestBackupStatusReportsVerifiedCopies(t *testing.T) {
 		t.Fatalf("unexpected backup health %d: %s", response.Code, response.Body.String())
 	}
 }
+
+func TestBackupScheduleAPIRequiresValidIntervalAndPersists(t *testing.T) {
+	server := testServer(t)
+	invalid := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalid, httptest.NewRequest(http.MethodPatch, "/api/v1/backups/schedule", strings.NewReader(`{"enabled":true,"intervalSeconds":30}`)))
+	if invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected schedule validation, got %d: %s", invalid.Code, invalid.Body.String())
+	}
+	updated := httptest.NewRecorder()
+	server.routes().ServeHTTP(updated, httptest.NewRequest(http.MethodPatch, "/api/v1/backups/schedule", strings.NewReader(`{"enabled":false,"intervalSeconds":7200}`)))
+	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"intervalSeconds":7200`) {
+		t.Fatalf("schedule update failed: %d: %s", updated.Code, updated.Body.String())
+	}
+	readback := httptest.NewRecorder()
+	server.routes().ServeHTTP(readback, httptest.NewRequest(http.MethodGet, "/api/v1/backups/schedule", nil))
+	if readback.Code != http.StatusOK || !strings.Contains(readback.Body.String(), `"enabled":false`) {
+		t.Fatalf("schedule readback failed: %d: %s", readback.Code, readback.Body.String())
+	}
+}

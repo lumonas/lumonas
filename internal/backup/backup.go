@@ -140,8 +140,9 @@ func (d Destination) Validate() error {
 	if strings.ContainsAny(d.ID+d.Name+d.Target, "\x00\r\n") {
 		return errors.New("backup destination contains unsupported control characters")
 	}
-	if d.Retention.Generations < 1 || d.Retention.Daily < 1 || d.Retention.Monthly < 1 {
-		return errors.New("backup retention values must be positive")
+	minimum := DefaultRetention()
+	if d.Retention.Generations < minimum.Generations || d.Retention.Daily < minimum.Daily || d.Retention.Monthly < minimum.Monthly {
+		return fmt.Errorf("backup retention must keep at least %d generations, %d daily copies, and %d monthly copies", minimum.Generations, minimum.Daily, minimum.Monthly)
 	}
 	switch d.Type {
 	case DestinationLocal:
