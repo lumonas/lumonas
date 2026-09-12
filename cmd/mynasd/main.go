@@ -81,6 +81,7 @@ func main() {
 	go server.metricsLoop()
 	go server.capacityLoop()
 	go server.backupLoop()
+	go server.upsMonitorLoop()
 
 	httpServer := &http.Server{Addr: *listen, Handler: server.routes(), ReadHeaderTimeout: 5 * time.Second}
 	stop := make(chan os.Signal, 1)
@@ -218,6 +219,12 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.rollbackUpdate(w, r)
 	case r.Method == http.MethodPost && endpoint == "/updates/health":
 		s.updateHealth(w, r)
+	case r.Method == http.MethodGet && endpoint == "/settings":
+		s.settings(w, r)
+	case r.Method == http.MethodPatch && endpoint == "/settings":
+		s.updateSettings(w, r)
+	case r.Method == http.MethodPost && endpoint == "/updates/check":
+		s.checkUpdates(w, r)
 	case r.Method == http.MethodGet && endpoint == "/jobs":
 		s.listJobs(w)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/jobs/"):
@@ -237,7 +244,17 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alert-rules/"):
 		s.updateAlertRule(w, r, alertRuleID(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/notification-channels":
-		s.notificationChannels(w)
+		s.listNotificationChannels(w, r)
+	case r.Method == http.MethodPost && endpoint == "/notification-channels":
+		s.saveNotificationChannel(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/notification-channels/"):
+		s.updateNotificationChannel(w, r, path.Base(endpoint))
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/notification-channels/"):
+		s.deleteNotificationChannel(w, r, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/notification-rules":
+		s.alertRules(w)
+	case r.Method == http.MethodPost && endpoint == "/notification-rules":
+		s.saveNotificationRule(w, r)
 	case r.Method == http.MethodGet && endpoint == "/schedules":
 		s.schedules(w)
 	case r.Method == http.MethodGet && endpoint == "/activity":
@@ -284,6 +301,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.ups(w, r)
 	case r.Method == http.MethodPost && endpoint == "/power/action":
 		s.powerAction(w, r)
+	case r.Method == http.MethodGet && endpoint == "/power/shutdown/plan":
+		s.shutdownPlan(w, r)
+	case r.Method == http.MethodPost && endpoint == "/power/shutdown":
+		s.shutdownPower(w, r)
 	case r.Method == http.MethodGet && endpoint == "/shares":
 		s.listManagedShares(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/shares/"):
@@ -1043,7 +1064,7 @@ func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	operationID := newID("power")
-	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "power.action", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": input.Action}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
+	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "power.shutdown", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": input.Action}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return

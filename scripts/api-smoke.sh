@@ -172,6 +172,10 @@ if [ "$status" != 200 ] || ! head -c 1 "$TEMP_DIR/disks.json" | grep '\[' >/dev/
 	exit 1
 fi
 
+assert_authenticated_status_and_body GET /api/v1/settings 200 '"runtime"'
+assert_authenticated_status_and_body GET '/api/v1/power/shutdown/plan?action=poweroff' 200 '"name":"stop-jobs"'
+assert_authenticated_status_and_body POST /api/v1/updates/check 202 '"type":"updates.check"'
+
 # The event stream must be live, not merely routable. The metrics loop emits
 # within the timeout window after the initial SSE retry frame.
 SSE_PATH="$TEMP_DIR/events.sse"

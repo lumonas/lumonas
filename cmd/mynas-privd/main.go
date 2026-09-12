@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/lumonas/lumonas/internal/collector"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/power"
 	"github.com/lumonas/lumonas/internal/storage"
 )
 
@@ -171,7 +173,7 @@ func operationWorker(operation string) string {
 		return "storage"
 	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "firewall.apply":
 		return "network"
-	case "power.action":
+	case "power.action", "power.shutdown":
 		return "power"
 	case "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply":
 		return "general"
@@ -308,6 +310,17 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		}
 		if _, err := run("systemctl", action); err != nil {
 			return response{Error: "power action failed"}
+		}
+		return response{OK: true, Data: map[string]string{"action": action}}
+	case "power.shutdown":
+		if !req.Confirmed {
+			return response{Error: "operation plan is not confirmed"}
+		}
+		action := requestedString(req.RequestedState, "action")
+		if err := power.ExecuteShutdown(context.Background(), action, func(_ context.Context, name string, args ...string) ([]byte, error) {
+			return run(name, args...)
+		}); err != nil {
+			return response{Error: err.Error()}
 		}
 		return response{OK: true, Data: map[string]string{"action": action}}
 	case "acl.apply":
