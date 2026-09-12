@@ -34,3 +34,9 @@ func TestSenderRequiresProvider(t *testing.T) {
 		t.Fatal("expected provider error")
 	}
 }
+
+func TestShouldSendUsesSeverityThreshold(t *testing.T) {
+	if ShouldSend("warning", "info") || !ShouldSend("warning", "critical") || !ShouldSend("attention", "warning") {
+		t.Fatal("severity threshold was not enforced")
+	}
+}

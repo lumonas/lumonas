@@ -11,8 +11,9 @@ import (
 )
 
 type Config struct {
-	WebhookURL string
-	NtfyURL    string
+	WebhookURL  string
+	NtfyURL     string
+	MinSeverity string
 }
 
 type Message struct {
@@ -59,6 +60,14 @@ func (s Sender) Send(ctx context.Context, message Message) error {
 		return fmt.Errorf("no notification provider configured")
 	}
 	return nil
+}
+
+func ShouldSend(minimum, severity string) bool {
+	weight := map[string]int{"info": 0, "attention": 1, "warning": 2, "critical": 3}
+	if minimum == "" {
+		minimum = "warning"
+	}
+	return weight[strings.ToLower(severity)] >= weight[strings.ToLower(minimum)]
 }
 
 func (s Sender) postJSON(ctx context.Context, client *http.Client, endpoint string, message Message) error {

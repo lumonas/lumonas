@@ -870,7 +870,7 @@ func (s *apiServer) notificationTest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	sender := notify.Sender{Config: notify.Config{WebhookURL: os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL"), NtfyURL: os.Getenv("MYNAS_NOTIFY_NTFY_URL")}, UserAgent: "LumoNAS/" + s.version}
+	sender := notify.Sender{Config: notify.Config{WebhookURL: os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL"), NtfyURL: os.Getenv("MYNAS_NOTIFY_NTFY_URL"), MinSeverity: envOr("MYNAS_NOTIFY_MIN_SEVERITY", "warning")}, UserAgent: "LumoNAS/" + s.version}
 	if err := sender.Send(r.Context(), input); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
@@ -1355,6 +1355,15 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 		if s.log != nil {
 			s.log.Warn("persist audit entry failed", "error", err)
 		}
+	}
+	if notify.ShouldSend(envOr("MYNAS_NOTIFY_MIN_SEVERITY", "warning"), severity) && (os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL") != "" || os.Getenv("MYNAS_NOTIFY_NTFY_URL") != "") {
+		body, _ := json.Marshal(map[string]any{"event": kind, "severity": severity, "resource": resource, "data": data})
+		go func() {
+			sender := notify.Sender{Config: notify.Config{WebhookURL: os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL"), NtfyURL: os.Getenv("MYNAS_NOTIFY_NTFY_URL")}, UserAgent: "LumoNAS/" + s.version}
+			if err := sender.Send(context.Background(), notify.Message{Title: "LumoNAS " + kind, Body: string(body), Severity: severity}); err != nil && s.log != nil {
+				s.log.Warn("notification delivery failed", "event", kind, "error", err)
+			}
+		}()
 	}
 	s.hub.Publish(event)
 }
