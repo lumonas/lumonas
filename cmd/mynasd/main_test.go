@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/events"
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/store"
@@ -122,5 +126,38 @@ func TestWriteJSONOmitsBodyForNoContent(t *testing.T) {
 	}
 	if response.Body.Len() != 0 {
 		t.Fatalf("expected empty 204 body, got %q", response.Body.String())
+	}
+}
+
+func TestDockerStacksReflectContainerHealth(t *testing.T) {
+	root := t.TempDir()
+	stackDir := filepath.Join(root, "media")
+	if err := os.MkdirAll(stackDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stackDir, "compose.yaml"), []byte("services:\n  media:\n    image: example/media:latest\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	server := testServer(t)
+	server.dockerService = dockerruntime.New(root, func(_ context.Context, name string, _ ...string) ([]byte, error) {
+		if name == "docker" {
+			return []byte(`{"ID":"container-1","Names":"media","Image":"example/media:latest","State":"Up 2 hours (unhealthy)","Ports":"","Labels":"com.docker.compose.project=media"}` + "\n"), nil
+		}
+		return nil, nil
+	})
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/docker/stacks", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var stacks []struct {
+		State  string `json:"state"`
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&stacks); err != nil {
+		t.Fatal(err)
+	}
+	if len(stacks) != 1 || stacks[0].State != "unhealthy" || stacks[0].Status != "critical" {
+		t.Fatalf("unexpected stack state %#v", stacks)
 	}
 }

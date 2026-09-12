@@ -45,3 +45,16 @@ func TestContainerOutputIsNormalized(t *testing.T) {
 		t.Fatalf("unexpected container %#v", containers)
 	}
 }
+
+func TestUnhealthyContainerIsNotReportedAsRunning(t *testing.T) {
+	service := New(t.TempDir(), func(context.Context, string, ...string) ([]byte, error) {
+		return []byte(`{"ID":"abc","Names":"jellyfin","Image":"jellyfin:latest","State":"Up 2 hours (unhealthy)","Ports":"","Labels":"com.docker.compose.project=media"}` + "\n"), nil
+	})
+	containers, err := service.Containers(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(containers) != 1 || containers[0].State != "unhealthy" {
+		t.Fatalf("unexpected unhealthy container %#v", containers)
+	}
+}

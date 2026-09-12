@@ -201,9 +201,13 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && endpoint == "/power/action":
 		s.powerAction(w, r)
 	case r.Method == http.MethodGet && endpoint == "/shares":
-		s.listShares(w)
+		s.listManagedShares(w, r)
 	case r.Method == http.MethodPost && endpoint == "/shares":
-		s.createShare(w, r)
+		s.createManagedShare(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/shares/"):
+		s.updateManagedShare(w, r, path.Base(endpoint))
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/shares/"):
+		s.deleteManagedShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/shares/"):
 		s.updateShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/events/stream":
@@ -1148,6 +1152,38 @@ func (s *apiServer) dockerStacks(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
+	}
+	containers, _ := s.dockerService.Containers(ctx)
+	for index := range stacks {
+		own := make([]string, 0)
+		for _, container := range containers {
+			if container.StackID == stacks[index].Name || container.StackID == stacks[index].ID {
+				own = append(own, container.State)
+			}
+		}
+		if len(own) == 0 {
+			continue
+		}
+		stacks[index].State = "running"
+		stacks[index].Status = "healthy"
+		allStopped := true
+		for _, state := range own {
+			switch state {
+			case "unhealthy":
+				stacks[index].State = "unhealthy"
+				stacks[index].Status = "critical"
+			case "exited", "created":
+			default:
+				allStopped = false
+			}
+		}
+		if stacks[index].State == "unhealthy" {
+			continue
+		}
+		if allStopped {
+			stacks[index].State = "stopped"
+			stacks[index].Status = "offline"
+		}
 	}
 	writeJSON(w, http.StatusOK, stacks)
 }

@@ -420,6 +420,9 @@ func parseStack(name, composePath, content string) Stack {
 
 func normalizeState(value string) string {
 	lower := strings.ToLower(value)
+	if strings.Contains(lower, "unhealthy") {
+		return "unhealthy"
+	}
 	if strings.HasPrefix(lower, "up") {
 		return "running"
 	}
