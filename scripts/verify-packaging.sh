@@ -31,6 +31,7 @@ require_line "$SYSTEMD/lumonas-privd-storage.service" 'CapabilityBoundingSet=CAP
 require_line "$SYSTEMD/lumonas-privd-network.service" 'CapabilityBoundingSet=CAP_NET_ADMIN'
 require_line "$SYSTEMD/lumonas-privd-power.service" 'CapabilityBoundingSet=CAP_SYS_BOOT'
 require_line "$SYSTEMD/lumonas-privd-general.service" 'CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID'
+require_line "$SYSTEMD/lumonas-privd-general.service" '/etc/exports.d /etc/ssh/sshd_config.d'
 
 require_line "$ROOT/packaging/debian/postinst" 'useradd --system'
 require_line "$ROOT/packaging/debian/postinst" '/var/lib/lumonas/secrets'
@@ -53,6 +54,12 @@ require_line "$ROOT/Makefile" 'upgrade-smoke:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'
 require_line "$ROOT/packaging/debian/control" 'avahi-daemon'
+require_line "$ROOT/packaging/debian/control" 'vsftpd'
+require_line "$ROOT/installer/build-iso.sh" 'vsftpd'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'vsftpd'
+for dropin in smbd.service.d/lumonas.conf rsync.service.d/lumonas.conf vsftpd.service.d/lumonas.conf; do
+	[ -f "$ROOT/packaging/systemd/$dropin" ] || { echo "missing service drop-in: $dropin" >&2; exit 1; }
+done
 if command -v systemd-analyze >/dev/null 2>&1; then
 	systemd-analyze verify "$SYSTEMD"/*.service
 fi

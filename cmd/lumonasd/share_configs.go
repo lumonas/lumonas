@@ -310,9 +310,13 @@ func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.Man
 		return err
 	}
 	for service := range services {
+		state := map[string]any{"service": service}
+		if sourcePath := serviceConfigSource(service); sourcePath != "" {
+			state["sourcePath"] = sourcePath
+		}
 		result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
-			Operation: "service.reload", OperationID: newID("reload"), PlanHash: newID("reload-plan"),
-			RequestedState: map[string]any{"service": service}, Confirmed: true,
+			Operation: "service.config.apply", OperationID: newID("service-config"), PlanHash: newID("service-config-plan"),
+			RequestedState: state, Confirmed: true,
 		})
 		if err != nil {
 			return err
@@ -322,6 +326,17 @@ func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.Man
 		}
 	}
 	return nil
+}
+
+func serviceConfigSource(service string) string {
+	switch service {
+	case "nfs-server.service":
+		return envOr("LUMONAS_NFS_EXPORTS", "/var/lib/lumonas/generated/exports")
+	case "ssh.service":
+		return envOr("LUMONAS_SFTP_CONFIG", "/var/lib/lumonas/generated/sshd-sftp.conf")
+	default:
+		return ""
+	}
 }
 
 // publishAvahiAnnouncement updates the mDNS SMB/Time Machine announcement

@@ -268,7 +268,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		if !allowedService(name) {
 			return response{Error: "service is not allow-listed"}
 		}
-		if _, err := run("systemctl", "reload", name); err != nil {
+		if _, err := run("systemctl", "reload-or-restart", name); err != nil {
 			return response{Error: "service reload failed"}
 		}
 		return response{OK: true, Data: map[string]string{"service": name}}
@@ -810,10 +810,47 @@ func applyServiceConfig(req request, run command) response {
 	if !allowedService(service) {
 		return response{Error: "service is not allow-listed"}
 	}
-	if _, err := run("systemctl", "reload", service); err != nil {
+	source := requestedString(req.RequestedState, "sourcePath")
+	if source != "" {
+		target, err := managedServiceConfigTarget(service, source)
+		if err != nil {
+			return response{Error: err.Error()}
+		}
+		if requestedBool(req.RequestedState, "remove") {
+			if _, err := run("rm", "-f", target); err != nil {
+				return response{Error: "service configuration removal failed"}
+			}
+		} else if _, err := run("install", "-D", "-m", "0640", source, target); err != nil {
+			return response{Error: "service configuration activation failed"}
+		}
+	}
+	if _, err := run("systemctl", "reload-or-restart", service); err != nil {
 		return response{Error: "service configuration reload failed"}
 	}
 	return response{OK: true, Data: map[string]string{"service": service, "state": "reloaded"}}
+}
+
+func managedServiceConfigTarget(service, source string) (string, error) {
+	clean := filepath.Clean(source)
+	if !strings.HasPrefix(clean, "/var/lib/lumonas/generated/") {
+		return "", fmt.Errorf("service configuration source is not allow-listed")
+	}
+	allowed := map[string]string{
+		"nfs-server.service": "exports",
+		"ssh.service":        "sshd-sftp.conf",
+	}
+	name, ok := allowed[service]
+	if !ok {
+		return "", fmt.Errorf("service configuration does not require privileged installation")
+	}
+	if filepath.Base(clean) != name {
+		return "", fmt.Errorf("service configuration source does not match %s", service)
+	}
+	targets := map[string]string{
+		"nfs-server.service": "/etc/exports.d/lumonas.exports",
+		"ssh.service":        "/etc/ssh/sshd_config.d/90-lumonas-sftp.conf",
+	}
+	return targets[service], nil
 }
 
 func applyFirewall(req request, run command) response {

@@ -5,6 +5,6 @@ Priority: optional
 Architecture: amd64
 Maintainer: LumoNAS maintainers <maintainers@lumonas.local>
 Depends: libc6, systemd
-Recommends: network-manager, smartmontools, lm-sensors, nut-client, mergerfs, snapraid, docker.io, docker-compose, samba, samba-common-bin, nfs-kernel-server, rsync, avahi-daemon, nftables, openssl
+Recommends: network-manager, smartmontools, lm-sensors, nut-client, mergerfs, snapraid, docker.io, docker-compose, samba, samba-common-bin, nfs-kernel-server, rsync, vsftpd, avahi-daemon, nftables, openssl
 Description: LumoNAS appliance runtime
  Safe, observable NAS management runtime with Docker and storage integration.

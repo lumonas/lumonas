@@ -44,7 +44,7 @@ apt-get update
 apt-get install -y --no-install-recommends \
   systemd systemd-sysv linux-image-amd64 grub-pc openssh-server curl ca-certificates \
   iproute2 util-linux smartmontools lm-sensors nut mergerfs snapraid \
-  network-manager docker.io docker-compose samba samba-common-bin avahi-daemon
+  network-manager docker.io docker-compose samba samba-common-bin vsftpd avahi-daemon
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
 systemd-analyze verify /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service

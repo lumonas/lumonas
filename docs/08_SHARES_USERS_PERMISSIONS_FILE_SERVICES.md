@@ -78,6 +78,14 @@ Advanced ACL editor can be added later but must not create a second contradictor
 
 ## SMB
 
+Generated service configuration is activated through the native Debian
+daemons, not left as an unconsumed preview. Samba, rsync, and vsftpd use
+vendor systemd drop-ins pointing at the managed generated files. NFS exports
+and SFTP match files are installed by the root-owned privileged broker into
+`/etc/exports.d/` and `sshd_config.d/` after allow-list validation. Service
+changes use `reload-or-restart` so a newly enabled protocol becomes active
+without granting the management daemon root privileges.
+
 Features:
 
 - share enable/disable;

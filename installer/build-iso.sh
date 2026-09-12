@@ -23,6 +23,7 @@ openssh-server
 samba
 nfs-kernel-server
 rsync
+vsftpd
 smartmontools
 e2fsprogs
 lm-sensors

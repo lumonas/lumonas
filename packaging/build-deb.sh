@@ -6,6 +6,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/build/package"
 rm -rf "$OUT"
 mkdir -p "$OUT/DEBIAN" "$OUT/usr/lib/lumonas" "$OUT/usr/share/lumonas/web" "$OUT/usr/share/lumonas/catalog" "$OUT/lib/systemd/system" "$OUT/etc/lumonas" "$OUT/etc/systemd/journald.conf.d"
+mkdir -p "$OUT/lib/systemd/system/smbd.service.d" "$OUT/lib/systemd/system/rsync.service.d" "$OUT/lib/systemd/system/vsftpd.service.d"
 
 GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonasd" "$ROOT/cmd/lumonasd"
 GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-web" "$ROOT/cmd/lumonas-web"
@@ -14,6 +15,9 @@ GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopat
 (cd "$ROOT/web" && pnpm build)
 cp -R "$ROOT/web/dist/." "$OUT/usr/share/lumonas/web/"
 cp "$ROOT/packaging/systemd/"*.service "$OUT/lib/systemd/system/"
+cp "$ROOT/packaging/systemd/smbd.service.d/lumonas.conf" "$OUT/lib/systemd/system/smbd.service.d/"
+cp "$ROOT/packaging/systemd/rsync.service.d/lumonas.conf" "$OUT/lib/systemd/system/rsync.service.d/"
+cp "$ROOT/packaging/systemd/vsftpd.service.d/lumonas.conf" "$OUT/lib/systemd/system/vsftpd.service.d/"
 cp "$ROOT/packaging/systemd/journald-lumonas.conf" "$OUT/etc/systemd/journald.conf.d/lumonas.conf"
 cp "$ROOT/packaging/debian/lumonasd.env.example" "$OUT/etc/lumonas/lumonasd.env.example"
 cp "$ROOT/packaging/debian/lumonas-web.env.example" "$OUT/etc/lumonas/lumonas-web.env.example"

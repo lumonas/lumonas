@@ -32,6 +32,10 @@ Run system tools in containers/VMs where appropriate:
 - mergerfs mounts;
 - filesystem identity.
 
+Share integration tests also verify that generated Samba, rsync, and vsftpd
+paths are consumed by systemd drop-ins, while NFS and SFTP activation remains
+confined to typed privileged configuration targets.
+
 ### QEMU end-to-end
 
 Virtual NAS:
