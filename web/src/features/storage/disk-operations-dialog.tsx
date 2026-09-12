@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatDateTime } from '@/lib/format'
+import { diskBranchPath } from '@/features/storage/branch-path'
 import type { Disk } from '@/api/types'
 
 export type DiskAction = 'format' | 'format-mount' | 'erase' | 'mount' | 'unmount'
@@ -28,13 +29,6 @@ const ACTION_META: Record<DiskAction, { title: string; verb: string; destructive
   erase: { title: 'Erase disk', verb: 'Erase', destructive: true },
   mount: { title: 'Mount disk', verb: 'Mount', destructive: false },
   unmount: { title: 'Unmount disk', verb: 'Unmount', destructive: false },
-}
-
-// diskBranchPath mirrors the canonical backend branch path
-// (/srv/disks/<sanitized stable id>).
-export function diskBranchPath(diskId: string): string {
-  const segment = diskId.replace(/[^A-Za-z0-9._-]/g, '_') || 'unknown'
-  return `/srv/disks/${segment}`
 }
 
 function requestedState(action: DiskAction, disk: Disk, filesystem: string, label: string) {

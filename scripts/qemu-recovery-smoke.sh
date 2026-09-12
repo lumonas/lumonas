@@ -123,6 +123,7 @@ if [ "$SOURCE_MODE" = true ]; then
 	grep -F 'share-media' "$TARGET_MOUNT/var/lib/lumonas/shares.json" >/dev/null
 	grep -a -F 'operator' "$TARGET_MOUNT/var/lib/lumonas/lumonas.db" >/dev/null
 	grep -F 'live-source-recovery-secret' "$TARGET_MOUNT/var/lib/lumonas/secrets/recovered-secrets.bin" >/dev/null
+	grep -F 'parity' "$TARGET_MOUNT/etc/lumonas/snapraid.conf" >/dev/null
 	grep -F '"databaseRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/null
 	grep -F '"secretsRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/null
 	echo "QEMU recovery smoke test passed (live source appliance export, verified bundle, offline ISO, blank replacement disk, users/shares/Compose/secrets/database restored)"

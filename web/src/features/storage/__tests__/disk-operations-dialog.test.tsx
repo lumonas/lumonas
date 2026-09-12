@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { describe, expect, it, beforeAll, afterAll, afterEach, vi } from 'vitest'
-import { DiskOperationsDialog, diskBranchPath, type DiskAction } from '@/features/storage/disk-operations-dialog'
+import { DiskOperationsDialog, type DiskAction } from '@/features/storage/disk-operations-dialog'
+import { diskBranchPath } from '@/features/storage/branch-path'
 import type { Disk } from '@/api/types'
 
 const PLAN = {

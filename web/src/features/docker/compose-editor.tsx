@@ -1,6 +1,6 @@
 import CodeMirror from '@uiw/react-codemirror'
 import { yaml } from '@codemirror/lang-yaml'
-import { useTheme } from '@/theme/ThemeProvider'
+import { useTheme } from '@/theme/use-theme'
 
 export function ComposeEditor({
   value,

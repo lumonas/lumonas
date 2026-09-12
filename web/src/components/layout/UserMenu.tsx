@@ -9,7 +9,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { useTheme } from '@/theme/ThemeProvider'
+import { useTheme } from '@/theme/use-theme'
 import { apiPost } from '@/api/client'
 import { useUiStore } from '@/stores/ui'
 import { useNavigate } from 'react-router-dom'

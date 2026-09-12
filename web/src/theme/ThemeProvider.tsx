@@ -1,17 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { STORAGE_KEY, ThemeContext } from '@/theme/theme-context'
+import type { Theme } from '@/theme/theme-context'
 
-type Theme = 'light' | 'dark' | 'system'
-
-interface ThemeContextValue {
-  theme: Theme
-  resolvedTheme: 'light' | 'dark'
-  setTheme: (theme: Theme) => void
-}
-
-const ThemeContext = createContext<ThemeContextValue | null>(null)
-const STORAGE_KEY = 'lumonas-theme'
-
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
+export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
     return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : 'dark'
@@ -34,20 +26,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => media.removeEventListener('change', onChange)
   }, [])
 
-  const setTheme = useCallback((next: Theme) => {
+  const setTheme = (next: Theme) => {
     localStorage.setItem(STORAGE_KEY, next)
     setThemeState(next)
-  }, [])
+  }
 
   return (
     <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   )
-}
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext)
-  if (!ctx) throw new Error('useTheme must be used within ThemeProvider')
-  return ctx
 }

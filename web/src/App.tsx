@@ -20,7 +20,8 @@ import { UsersPage } from '@/features/users/UsersPage'
 import { UpdatesPage } from '@/features/updates/UpdatesPage'
 import { useOnboardingState } from '@/api/queries'
 import { useUiStore } from '@/stores/ui'
-import { ThemeProvider, useTheme } from '@/theme/ThemeProvider'
+import { ThemeProvider } from '@/theme/ThemeProvider'
+import { useTheme } from '@/theme/use-theme'
 
 const queryClient = new QueryClient({
   defaultOptions: {
