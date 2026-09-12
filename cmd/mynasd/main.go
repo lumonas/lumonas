@@ -168,6 +168,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.recoveryStatus(w)
 	case r.Method == http.MethodGet && endpoint == "/recovery/plan":
 		s.recoveryPlan(w)
+	case r.Method == http.MethodPost && endpoint == "/recovery/restore/stage":
+		s.recoveryStage(w, r)
 	case r.Method == http.MethodPost && endpoint == "/recovery/export":
 		s.recoveryExport(w)
 	case r.Method == http.MethodGet && endpoint == "/jobs":
@@ -743,6 +745,39 @@ func (s *apiServer) recoveryPlan(w http.ResponseWriter) {
 		plan.Warnings = append(plan.Warnings, "live disk inventory is unavailable; hardware identity is not verified")
 	}
 	writeJSON(w, http.StatusOK, plan)
+}
+
+func (s *apiServer) recoveryStage(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Confirmed       bool `json:"confirmed"`
+		Reauthenticated bool `json:"reauthenticated"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if !input.Confirmed || !input.Reauthenticated {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "explicit confirmation and reauthentication are required"})
+		return
+	}
+	key := os.Getenv("MYNAS_RECOVERY_KEY")
+	if key == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "MYNAS_RECOVERY_KEY is not configured"})
+		return
+	}
+	bundlePath := filepath.Join(envOr("MYNAS_RECOVERY_DIR", "/var/lib/mynas/recovery"), "latest.mrb")
+	bundle, err := os.ReadFile(bundlePath)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recovery bundle not found"})
+		return
+	}
+	result, err := recovery.Stage(bundle, []byte(key), envOr("MYNAS_RECOVERY_STAGING_DIR", "/var/lib/mynas/recovery/staged"))
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "recovery staging failed: " + err.Error()})
+		return
+	}
+	s.publish("recovery.restore.staged", "warning", nil, map[string]any{"directory": result.Directory, "files": len(result.Files), "generation": result.Manifest.Generation})
+	writeJSON(w, http.StatusAccepted, result)
 }
 
 func (s *apiServer) metrics(w http.ResponseWriter) { writeJSON(w, http.StatusOK, collector.Metrics()) }

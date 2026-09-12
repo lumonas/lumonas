@@ -191,3 +191,39 @@ func TestRecoveryPlanWarnsOnNASAndDiskMismatch(t *testing.T) {
 		t.Fatalf("expected identity warnings, got %#v", plan.Warnings)
 	}
 }
+
+func TestRecoveryStageRequiresConfirmationAndExtractsBundle(t *testing.T) {
+	server := testServer(t)
+	directory := t.TempDir()
+	t.Setenv("MYNAS_RECOVERY_KEY", "stage-key")
+	t.Setenv("MYNAS_RECOVERY_DIR", directory)
+	staging := filepath.Join(directory, "staged")
+	t.Setenv("MYNAS_RECOVERY_STAGING_DIR", staging)
+	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{NASUUID: "nas-test"}, DesiredState: []byte(`{"mode":"safe"}`), Database: []byte("SQLite format 3\x00staged")}, []byte("stage-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "latest.mrb"), bundle, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	locked := httptest.NewRecorder()
+	server.routes().ServeHTTP(locked, httptest.NewRequest(http.MethodPost, "/api/v1/recovery/restore/stage", strings.NewReader(`{"confirmed":false,"reauthenticated":true}`)))
+	if locked.Code != http.StatusLocked {
+		t.Fatalf("expected confirmation lock, got %d", locked.Code)
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/recovery/restore/stage", strings.NewReader(`{"confirmed":true,"reauthenticated":true}`)))
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", response.Code, response.Body.String())
+	}
+	var result struct {
+		Directory string `json:"directory"`
+		Verified  bool   `json:"verified"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.Verified || !strings.HasPrefix(result.Directory, staging) {
+		t.Fatalf("unexpected stage response %#v", result)
+	}
+}

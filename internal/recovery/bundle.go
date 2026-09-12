@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -47,6 +49,13 @@ type RestorePlan struct {
 	DesiredStateValid bool     `json:"desiredStateValid"`
 	EncryptedSecrets  bool     `json:"encryptedSecrets"`
 	Warnings          []string `json:"warnings,omitempty"`
+}
+
+type StageResult struct {
+	Manifest  Manifest `json:"manifest"`
+	Directory string   `json:"directory"`
+	Files     []string `json:"files"`
+	Verified  bool     `json:"verified"`
 }
 
 func Create(input Input, key []byte) ([]byte, error) {
@@ -301,6 +310,57 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 
 func isSQLiteDatabase(data []byte) bool {
 	return bytes.HasPrefix(data, []byte("SQLite format 3\x00"))
+}
+
+func Stage(bundle, key []byte, destination string) (StageResult, error) {
+	if strings.TrimSpace(destination) == "" {
+		return StageResult{}, errors.New("staging destination is required")
+	}
+	plan, err := Plan(bundle, key)
+	if err != nil {
+		return StageResult{}, err
+	}
+	if !plan.DatabaseValid || !plan.DesiredStateValid {
+		return StageResult{}, errors.New("restore payload validation failed")
+	}
+	files, err := readBundleFiles(bundle)
+	if err != nil {
+		return StageResult{}, err
+	}
+	if err := os.MkdirAll(destination, 0o750); err != nil {
+		return StageResult{}, err
+	}
+	directory, err := os.MkdirTemp(destination, ".restore-")
+	if err != nil {
+		return StageResult{}, err
+	}
+	cleanup := func() { _ = os.RemoveAll(directory) }
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if !allowedBundleEntry(name) {
+			cleanup()
+			return StageResult{}, fmt.Errorf("unsupported restore entry %q", name)
+		}
+		target := filepath.Join(directory, filepath.FromSlash(name))
+		relative, err := filepath.Rel(directory, target)
+		if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+			cleanup()
+			return StageResult{}, fmt.Errorf("unsafe restore entry %q", name)
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
+			cleanup()
+			return StageResult{}, err
+		}
+		if err := os.WriteFile(target, files[name], 0o600); err != nil {
+			cleanup()
+			return StageResult{}, err
+		}
+	}
+	return StageResult{Manifest: plan.Manifest, Directory: directory, Files: names, Verified: true}, nil
 }
 
 func DecryptSecrets(bundle, key []byte) ([]byte, error) {
