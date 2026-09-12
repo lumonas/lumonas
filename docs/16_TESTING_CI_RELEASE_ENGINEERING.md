@@ -460,6 +460,10 @@ identity. A signature file existing on disk is not sufficient.
 Dependency and container-image vulnerability scans are required before tagged
 release publication, in addition to the generated SBOM and signatures.
 
+The race/fuzz job runs the Go fuzz engine with a bounded duration for path,
+backup-manifest, Compose, network, recovery, and storage validators. It is
+not satisfied by merely selecting `Fuzz` functions as ordinary unit tests.
+
 The release job has an explicit gate-policy smoke test that checks its `needs`
 set includes package, QEMU, ISO, recovery, storage safety, integration,
 security, dependency, race/fuzz, schema-compatibility, and upgrade jobs. A

@@ -263,6 +263,10 @@ Pass if:
 - every catalog container image passes the Trivy scan;
 - the tagged release is blocked when any of these checks fails.
 
+The same release controls must execute bounded Go fuzzing for path validation,
+backup manifests, Compose transformations, network payloads, recovery bundles,
+and storage configuration, rather than only running their seed cases.
+
 ## V. systemd unit validation
 
 Run packaging checks on the Debian/Ubuntu build runner.

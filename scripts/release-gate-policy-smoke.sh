@@ -25,5 +25,8 @@ actual = {item.strip() for item in match.group(1).split(",") if item.strip()}
 missing = sorted(needed - actual)
 if missing:
     raise SystemExit("release job is missing blocking gates: " + ", ".join(missing))
+race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+if not race_match or not re.search(r"^\s+- run: .*scripts/fuzz-smoke\.sh", race_match.group(0), re.M):
+    raise SystemExit("race-fuzz job is not running the bounded fuzz harness")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY

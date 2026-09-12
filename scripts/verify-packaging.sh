@@ -126,6 +126,7 @@ done
 [ -x "$ROOT/scripts/privileged-storage-loopback-smoke.sh" ] || { echo "privileged storage loopback smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/disk-full-smoke.sh" ] || { echo "disk-full smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/disk-identity-smoke.sh" ] || { echo "disk-identity smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/fuzz-smoke.sh" ] || { echo "fuzz smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/frontend-runtime-smoke.sh" ] || { echo "frontend runtime smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/share-config-smoke.sh" ] || { echo "share configuration smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
@@ -139,6 +140,8 @@ done
 require_line "$ROOT/Makefile" 'storage-loopback:'
 require_line "$ROOT/Makefile" 'disk-full-smoke:'
 require_line "$ROOT/Makefile" 'disk-identity-smoke:'
+require_line "$ROOT/Makefile" 'fuzz-smoke:'
+require_line "$ROOT/.github/workflows/ci.yml" 'LUMONAS_FUZZ_TIME=5s bash scripts/fuzz-smoke.sh'
 require_line "$ROOT/Makefile" 'share-config-smoke:'
 require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'
 require_line "$ROOT/Makefile" 'qemu-recovery-live:'
