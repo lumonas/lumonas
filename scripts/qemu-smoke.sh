@@ -91,15 +91,18 @@ for attempt in $(seq 1 60); do
       RECOVERY_EXPORT_LOG="$LOG.recovery-export"
       RECOVERY_STATUS_LOG="$LOG.recovery-status"
       RECOVERY_PLAN_LOG="$LOG.recovery-plan"
+      RECOVERY_STAGE_LOG="$LOG.recovery-stage"
       if curl -fsS -X POST http://127.0.0.1:18080/api/v1/recovery/key >"$RECOVERY_KEY_LOG" 2>/dev/null && \
          curl -fsS -X POST http://127.0.0.1:18080/api/v1/recovery/export >"$RECOVERY_EXPORT_LOG" 2>/dev/null && \
          curl -fsS http://127.0.0.1:18080/api/v1/recovery/status >"$RECOVERY_STATUS_LOG" 2>/dev/null && \
          curl -fsS http://127.0.0.1:18080/api/v1/recovery/plan >"$RECOVERY_PLAN_LOG" 2>/dev/null && \
+         curl -fsS -X POST -H 'Content-Type: application/json' -d '{"confirmed":true,"reauthenticated":true}' http://127.0.0.1:18080/api/v1/recovery/restore/stage >"$RECOVERY_STAGE_LOG" 2>/dev/null && \
          grep -F 'retry: 3000' "$EVENTS_LOG" >/dev/null 2>&1 && \
          grep -F 'system.metrics' "$EVENTS_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_EXPORT_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_STATUS_LOG" >/dev/null 2>&1 && \
-         grep -F '"verified":true' "$RECOVERY_PLAN_LOG" >/dev/null 2>&1; then
+         grep -F '"verified":true' "$RECOVERY_PLAN_LOG" >/dev/null 2>&1 && \
+         grep -F '"verified":true' "$RECOVERY_STAGE_LOG" >/dev/null 2>&1; then
         printf '%s\n' "$(grep -o '"id":"[^"]*"' "$LOG.disks" | sort)" >"$LOG.ids.initial"
         kill "$QEMU_PID" 2>/dev/null || true
         wait "$QEMU_PID" 2>/dev/null || true
