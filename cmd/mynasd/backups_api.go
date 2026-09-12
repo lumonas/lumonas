@@ -122,6 +122,13 @@ func (s *apiServer) backupStatus(w http.ResponseWriter, r *http.Request) {
 	if len(runs) > 0 {
 		status.LatestVerified = runs[0].State == "verified"
 		status.LatestGeneration = runs[0].Generation
+		if copies, copyErr := s.store.BackupCopies(runs[0].ID); copyErr == nil {
+			for _, copy := range copies {
+				if copy.State == "verified" && copy.Verified {
+					status.HealthyCopies++
+				}
+			}
+		}
 	}
 	if !status.RecoveryKey {
 		status.Warnings = append(status.Warnings, "recovery key is not configured")

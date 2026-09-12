@@ -233,12 +233,19 @@ func (s *apiServer) transferFiles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "target names already exist", "conflicts": conflicts})
 		return
 	}
+	strategy := "copy"
+	if input.Operation == "move" {
+		strategy = "rename"
+		if filepath.Clean(source.Path) != filepath.Clean(target.Path) {
+			strategy = "copy-delete"
+		}
+	}
 	job := s.queueFileJob(input.Operation+" files", target.ID, func() (map[string]any, error) {
 		count, err := fileops.Transfer(taskInput)
-		return map[string]any{"transferred": count}, err
+		return map[string]any{"transferred": count, "strategy": strategy}, err
 	})
-	s.recordIdentityAudit(actor, "file.transfer.queued", target.ID, map[string]any{"jobId": job.ID, "operation": input.Operation, "count": len(input.Names)})
-	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "transferred": 0})
+	s.recordIdentityAudit(actor, "file.transfer.queued", target.ID, map[string]any{"jobId": job.ID, "operation": input.Operation, "strategy": strategy, "count": len(input.Names)})
+	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "transferred": 0, "strategy": strategy})
 }
 
 func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
@@ -267,13 +274,6 @@ func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 			input.Name = header.Filename
 		}
 		input.SizeBytes = header.Size
-		if input.Name == "" {
-			input.Name = header.Filename
-		}
-		actor, ok := s.identityActor(w, r, true)
-		if !ok {
-			return
-		}
 		share, err := s.fileShare(input.ShareID)
 		if err != nil {
 			writeFileError(w, err)
