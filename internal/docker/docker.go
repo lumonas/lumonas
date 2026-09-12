@@ -313,6 +313,9 @@ func (s Service) UpdateCompose(name, compose string) (Stack, error) {
 	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`).MatchString(name) || !strings.Contains(compose, "services:") {
 		return Stack{}, errors.New("invalid compose update")
 	}
+	if err := s.ValidateCompose(context.Background(), compose); err != nil {
+		return Stack{}, err
+	}
 	stackDir := filepath.Join(s.Root, name)
 	if filepath.Dir(stackDir) != filepath.Clean(s.Root) {
 		return Stack{}, errors.New("invalid stack path")
@@ -351,6 +354,9 @@ func (s Service) CreateStack(name, compose string) (Stack, error) {
 	if !strings.Contains(compose, "services:") {
 		return Stack{}, errors.New("compose must define services")
 	}
+	if err := s.ValidateCompose(context.Background(), compose); err != nil {
+		return Stack{}, err
+	}
 	stackDir := filepath.Join(s.Root, name)
 	if filepath.Dir(stackDir) != filepath.Clean(s.Root) {
 		return Stack{}, errors.New("invalid stack path")
@@ -385,6 +391,56 @@ func (s Service) CreateStack(name, compose string) (Stack, error) {
 		return Stack{}, err
 	}
 	return parseStack(name, composePath, compose), nil
+}
+
+func (s Service) ValidateCompose(ctx context.Context, compose string) error {
+	if err := validateComposeStructure(compose); err != nil {
+		return err
+	}
+	directory, err := os.MkdirTemp("", "mynas-compose-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(directory)
+	path := filepath.Join(directory, "compose.yaml")
+	if err := os.WriteFile(path, []byte(compose), 0o600); err != nil {
+		return err
+	}
+	_, err = s.Run(ctx, "docker", "compose", "-f", path, "config", "--quiet")
+	if err != nil && !isUnavailable(err) {
+		return fmt.Errorf("compose validation failed: %w", err)
+	}
+	return nil
+}
+
+func validateComposeStructure(compose string) error {
+	if strings.ContainsRune(compose, '\x00') || strings.Contains(compose, "\t") {
+		return errors.New("compose contains unsupported control characters")
+	}
+	lines := strings.Split(strings.ReplaceAll(compose, "\r\n", "\n"), "\n")
+	servicesLine := -1
+	for index, line := range lines {
+		if strings.TrimSpace(line) == "services:" && len(line) == len(strings.TrimLeft(line, " ")) {
+			servicesLine = index
+			break
+		}
+	}
+	if servicesLine < 0 {
+		return errors.New("compose must define a top-level services mapping")
+	}
+	for _, line := range lines[servicesLine+1:] {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		if len(line)-len(strings.TrimLeft(line, " ")) >= 2 && strings.HasSuffix(trimmed, ":") {
+			return nil
+		}
+		if !strings.HasPrefix(line, " ") {
+			break
+		}
+	}
+	return errors.New("compose services mapping is empty")
 }
 
 func parseStack(name, composePath, content string) Stack {
@@ -467,5 +523,5 @@ func parseDays(value string) int {
 	return 0
 }
 func isUnavailable(err error) bool {
-	return strings.Contains(strings.ToLower(err.Error()), "executable file not found") || strings.Contains(strings.ToLower(err.Error()), "cannot connect")
+	return errors.Is(err, os.ErrNotExist) || strings.Contains(strings.ToLower(err.Error()), "executable file not found") || strings.Contains(strings.ToLower(err.Error()), "cannot connect")
 }

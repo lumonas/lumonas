@@ -46,6 +46,16 @@ func TestBuildComposeFromCatalogKeepsSecretsAsReferences(t *testing.T) {
 	}
 }
 
+func TestValidateComposeRejectsEmptyServices(t *testing.T) {
+	service := New(t.TempDir(), func(context.Context, string, ...string) ([]byte, error) { return nil, os.ErrNotExist })
+	if err := service.ValidateCompose(context.Background(), "services:\n"); err == nil {
+		t.Fatal("expected empty services mapping to be rejected")
+	}
+	if err := service.ValidateCompose(context.Background(), "services:\n  media:\n    image: example/media:latest\n"); err != nil {
+		t.Fatalf("expected valid compose, got %v", err)
+	}
+}
+
 func TestContainerAndImageActionsUseTypedDockerCommands(t *testing.T) {
 	commands := make([]string, 0, 2)
 	service := New(t.TempDir(), func(_ context.Context, name string, args ...string) ([]byte, error) {
