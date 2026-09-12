@@ -206,3 +206,10 @@ Pass if:
 - repository dependency manifests pass the Trivy scan;
 - every catalog container image passes the Trivy scan;
 - the tagged release is blocked when any of these checks fails.
+
+## V. systemd unit validation
+
+Run packaging checks on the Debian/Ubuntu build runner.
+
+Pass if every packaged service unit passes `systemd-analyze verify` and the
+release job fails when the verifier is unavailable.

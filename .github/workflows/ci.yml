@@ -215,8 +215,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst scripts/api-smoke.sh scripts/compose-smoke.sh scripts/container-image-scan.sh scripts/dependency-smoke.sh scripts/iso-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/qemu-recovery-smoke.sh scripts/security-smoke.sh scripts/storage-loopback-smoke.sh scripts/upgrade-smoke.sh scripts/release-artifacts.sh scripts/verify-deb.sh
-      - run: sh scripts/verify-packaging.sh
+      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst scripts/api-smoke.sh scripts/compose-smoke.sh scripts/container-image-scan.sh scripts/dependency-smoke.sh scripts/iso-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/qemu-recovery-smoke.sh scripts/security-smoke.sh scripts/storage-loopback-smoke.sh scripts/systemd-smoke.sh scripts/upgrade-smoke.sh scripts/release-artifacts.sh scripts/verify-deb.sh
+      - run: LUMONAS_REQUIRE_SYSTEMD_VERIFY=true sh scripts/verify-packaging.sh
       - run: sh -n scripts/verify-release.sh
       - run: git diff --check
 

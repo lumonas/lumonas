@@ -72,6 +72,9 @@ Release CI also runs pinned Go/frontend dependency checks and scans the catalog
 container images with Trivy; HIGH and CRITICAL unfixed findings block a tagged
 release.
 
+Packaged systemd units are verified with `systemd-analyze` in CI; local runs
+skip that check when systemd tooling is unavailable.
+
 Offline recovery includes the plan-first `lumonas-recover` utility. Restoration requires explicit `--apply` plus an absolute target root and writes verified configuration, Compose state, the SQLite database, and encrypted secrets atomically.
 
 Management sessions can be reviewed and revoked by token digest, while Time Machine shares render Samba fruit support only when explicitly enabled.

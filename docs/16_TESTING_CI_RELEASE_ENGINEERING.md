@@ -179,6 +179,10 @@ every application image declared in `catalog/apps.json`. Unfixed HIGH and
 CRITICAL findings fail the job. The scanner is required in CI; local execution
 may skip it when Docker or the scanner tool is unavailable.
 
+Packaging validation also runs `systemd-analyze verify` against every packaged
+service unit. The check is optional for macOS/local development, but CI fails
+if `systemd-analyze` is unavailable or any unit is invalid.
+
 ## Release artifacts
 
 CI should produce:

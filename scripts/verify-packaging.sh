@@ -47,9 +47,11 @@ require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_ENABLE_RECOVERY_SMOKE'
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/qemu-recovery-smoke.sh" ] || { echo "QEMU recovery smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/security-smoke.sh" ] || { echo "security smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
 require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'
 require_line "$ROOT/Makefile" 'security-smoke:'
+require_line "$ROOT/Makefile" 'systemd-smoke:'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'
@@ -60,7 +62,6 @@ require_line "$ROOT/scripts/qemu-build-image.sh" 'vsftpd'
 for dropin in smbd.service.d/lumonas.conf rsync.service.d/lumonas.conf vsftpd.service.d/lumonas.conf; do
 	[ -f "$ROOT/packaging/systemd/$dropin" ] || { echo "missing service drop-in: $dropin" >&2; exit 1; }
 done
-if command -v systemd-analyze >/dev/null 2>&1; then
-	systemd-analyze verify "$SYSTEMD"/*.service
-fi
+LUMONAS_REQUIRE_SYSTEMD_VERIFY="${LUMONAS_REQUIRE_SYSTEMD_VERIFY:-false}" \
+	bash "$ROOT/scripts/systemd-smoke.sh"
 echo "LumoNAS packaging policy checks passed"
