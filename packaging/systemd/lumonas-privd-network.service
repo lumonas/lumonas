@@ -1,7 +1,7 @@
 [Unit]
 Description=LumoNAS network operation worker
 After=network-online.target lumonas-privd.service
-Wants=lumonas-privd.service
+Requires=lumonas-privd.service
 
 [Service]
 Type=simple

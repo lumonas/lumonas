@@ -258,6 +258,8 @@ may skip it when Docker or the scanner tool is unavailable.
 Packaging validation also runs `systemd-analyze verify` against every packaged
 service unit. The check is optional for macOS/local development, but CI fails
 if `systemd-analyze` is unavailable or any unit is invalid.
+The management daemon also requires every typed privileged worker, so a
+partially started broker cannot present a falsely mutation-capable appliance.
 
 Every Debian package embeds `usr/share/lumonas/build-manifest.json` with the
 source commit, Go toolchain, frontend lockfile hash, catalog hash, and exact

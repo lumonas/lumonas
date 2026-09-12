@@ -1,7 +1,7 @@
 [Unit]
 Description=LumoNAS storage operation worker
 After=local-fs.target lumonas-privd.service
-Wants=lumonas-privd.service
+Requires=lumonas-privd.service
 
 [Service]
 Type=simple

@@ -27,6 +27,10 @@ require_line "$SYSTEMD/lumonasd.service" 'User=lumonas'
 require_line "$SYSTEMD/lumonas-privd.service" 'User=root'
 require_line "$SYSTEMD/lumonas-privd.service" 'CapabilityBoundingSet='
 require_line "$SYSTEMD/lumonasd.service" 'ReadWritePaths=/var/lib/lumonas /srv/lumonas'
+require_line "$SYSTEMD/lumonasd.service" 'Requires=lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service'
+for worker in storage network power general; do
+  require_line "$SYSTEMD/lumonas-privd-$worker.service" 'Requires=lumonas-privd.service'
+done
 require_line "$SYSTEMD/lumonas-privd-storage.service" 'CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_RAWIO'
 require_line "$SYSTEMD/lumonas-privd-network.service" 'CapabilityBoundingSet=CAP_NET_ADMIN'
 require_line "$SYSTEMD/lumonas-privd-power.service" 'CapabilityBoundingSet=CAP_SYS_BOOT'
