@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -11,9 +12,20 @@ func TestOutputContextHonorsParentDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	started := time.Now()
-	_, err := OutputContext(ctx, "sh", "-c", "sleep 1")
+	_, err := OutputContext(ctx, "sh", "-c", "sleep 10 & wait")
 	if err == nil || time.Since(started) > 500*time.Millisecond {
 		t.Fatalf("command was not bounded by parent context: err=%v elapsed=%s", err, time.Since(started))
+	}
+}
+
+func TestOutputContextPreservesStdoutAndStderrOnFailure(t *testing.T) {
+	out, err := OutputContext(context.Background(), "sh", "-c", "printf 'stdout'; printf 'stderr' >&2; exit 7")
+	if err == nil || string(out) != "stdout" {
+		t.Fatalf("expected stdout and failure, output=%q err=%v", out, err)
+	}
+	exitErr, ok := err.(*exec.ExitError)
+	if !ok || !strings.Contains(string(exitErr.Stderr), "stderr") {
+		t.Fatalf("expected captured stderr, err=%#v", err)
 	}
 }
 

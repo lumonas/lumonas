@@ -29,7 +29,29 @@ func Output(name string, args ...string) ([]byte, error) {
 func OutputContext(parent context.Context, name string, args ...string) ([]byte, error) {
 	ctx, cancel := Context(parent)
 	defer cancel()
-	return exec.CommandContext(ctx, name, args...).Output()
+	command := exec.Command(name, args...)
+	configureProcessGroup(command)
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+
+	if err := command.Start(); err != nil {
+		return nil, err
+	}
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
+	select {
+	case err := <-done:
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitErr.Stderr = stderr.Bytes()
+		}
+		return stdout.Bytes(), err
+	case <-ctx.Done():
+		killProcessGroup(command)
+		<-done
+		return stdout.Bytes(), ctx.Err()
+	}
 }
 
 func CombinedOutput(name string, args ...string) ([]byte, error) {
