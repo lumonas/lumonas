@@ -14,7 +14,7 @@ if [ "${LUMONAS_REQUIRE_RELEASE_SET:-false}" = "true" ] && [ ! -s "$MANIFEST" ];
 fi
 
 if [ -s "$MANIFEST" ]; then
-	python3 - "$RELEASE_DIR" "$MANIFEST" "${LUMONAS_EXPECTED_SOURCE_COMMIT:-}" <<'PY'
+	python3 - "$RELEASE_DIR" "$MANIFEST" "${LUMONAS_EXPECTED_SOURCE_COMMIT:-}" "${LUMONAS_EXPECTED_SOURCE_DATE_EPOCH:-}" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -23,6 +23,7 @@ import sys
 release_dir = pathlib.Path(sys.argv[1])
 manifest_path = pathlib.Path(sys.argv[2])
 expected_source_commit = sys.argv[3]
+expected_source_date_epoch = sys.argv[4]
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 if manifest.get("schemaVersion") != 1:
     raise SystemExit("unsupported release manifest schema")
@@ -33,6 +34,8 @@ if expected_source_commit and manifest["sourceCommit"] != expected_source_commit
 epoch = manifest.get("sourceDateEpoch")
 if not isinstance(epoch, int) or epoch < 0:
     raise SystemExit("release manifest sourceDateEpoch must be a non-negative integer")
+if expected_source_date_epoch and str(epoch) != expected_source_date_epoch:
+    raise SystemExit("release manifest sourceDateEpoch does not match the expected release timestamp")
 if manifest.get("checksums") != "SHA256SUMS":
     raise SystemExit("release manifest checksum filename mismatch")
 

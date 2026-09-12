@@ -352,6 +352,8 @@ jobs:
       - uses: anchore/sbom-action/download-syft@v0
       - uses: sigstore/cosign-installer@v3
       - run: LUMONAS_REQUIRE_SBOM=true LUMONAS_SIGN_ARTIFACTS=true bash scripts/release-artifacts.sh build/releases
+      - name: Compute release source timestamp
+        run: echo "LUMONAS_EXPECTED_SOURCE_DATE_EPOCH=$(git show -s --format=%ct \"$GITHUB_SHA\")" >> "$GITHUB_ENV"
       - name: Verify release signatures and provenance
         env:
           LUMONAS_REQUIRE_SBOM: true

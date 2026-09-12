@@ -386,8 +386,8 @@ the package control metadata.
 package, ISO, and QEMU image with its SHA-256 digest and byte size, together
 with the source commit and `SOURCE_DATE_EPOCH`. Strict tagged-release
 verification requires this manifest, compares its source commit with
-`github.sha`, and rejects any artifact added or removed without regenerating
-it.
+`github.sha` and its source epoch with that commit's timestamp. It also
+rejects any artifact added or removed without regenerating the manifest.
 
 HTTP requests receive a generated `X-Request-ID` and carry the same
 correlation ID in context. API-created jobs persist it, and privileged calls

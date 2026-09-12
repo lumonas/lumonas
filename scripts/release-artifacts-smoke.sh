@@ -33,6 +33,10 @@ if LUMONAS_REQUIRE_RELEASE_SET=true LUMONAS_EXPECTED_SOURCE_COMMIT=wrong sh "$RO
 	echo "release manifest accepted an unexpected source commit" >&2
 	exit 1
 fi
+if LUMONAS_REQUIRE_RELEASE_SET=true LUMONAS_EXPECTED_SOURCE_DATE_EPOCH=0 sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
+	echo "release manifest accepted an unexpected source timestamp" >&2
+	exit 1
+fi
 printf '%s\n' 'unlisted artifact' >"$WORK/unlisted.raw"
 if LUMONAS_REQUIRE_RELEASE_SET=true sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
 	echo "release manifest accepted an unlisted artifact" >&2
