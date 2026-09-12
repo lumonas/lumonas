@@ -69,6 +69,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: web
       - run: bash packaging/build-deb.sh "${GITHUB_SHA::12}"
+      - run: bash scripts/verify-deb.sh "$(find . -maxdepth 1 -type f -name '*.deb' -print -quit)"
       - uses: actions/upload-artifact@v4
         with:
           name: lumonas-deb
@@ -107,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst scripts/api-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/release-artifacts.sh
+      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst scripts/api-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/release-artifacts.sh scripts/verify-deb.sh
       - run: sh scripts/verify-packaging.sh
       - run: git diff --check
 
