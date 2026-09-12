@@ -276,8 +276,13 @@ func (s *apiServer) serverInfo(w http.ResponseWriter) {
 func (s *apiServer) disks(w http.ResponseWriter) {
 	disks, err := s.diskFunc()
 	if err != nil {
-		s.log.Warn("disk discovery unavailable", "error", err)
+		if s.log != nil {
+			s.log.Warn("disk discovery unavailable", "error", err)
+		}
 		disks = []model.Disk{}
+	}
+	if err := s.store.SaveDiskInventory(disks); err != nil && s.log != nil {
+		s.log.Warn("persist disk inventory failed", "error", err)
 	}
 	writeJSON(w, http.StatusOK, disks)
 }
@@ -829,6 +834,7 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 		writeJSON(w, http.StatusOK, []model.Alert{})
 		return
 	}
+	_ = s.store.SaveDiskInventory(disks)
 	alerts := make([]model.Alert, 0)
 	now := time.Now().UTC()
 	for _, disk := range disks {
@@ -840,6 +846,23 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 			severity = "critical"
 		}
 		alert := model.Alert{ID: "disk-health-" + disk.ID, Severity: severity, Title: "Disk health requires attention", Description: fmt.Sprintf("%s (%s) reported %s health", disk.Name, disk.Model, disk.Health), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "firing", StartedAt: now}
+		s.alertMu.Lock()
+		if s.acknowledged[alert.ID] {
+			alert.State = "acknowledged"
+		}
+		s.alertMu.Unlock()
+		alerts = append(alerts, alert)
+	}
+	known, _ := s.store.KnownDisks()
+	current := make(map[string]bool, len(disks))
+	for _, disk := range disks {
+		current[disk.ID] = true
+	}
+	for _, disk := range known {
+		if current[disk.ID] {
+			continue
+		}
+		alert := model.Alert{ID: "disk-missing-" + disk.ID, Severity: "critical", Title: "Disk is missing", Description: fmt.Sprintf("%s (%s) with stable identity %s was not discovered", disk.Model, disk.Serial, disk.ID), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "firing", StartedAt: disk.LastSeen}
 		s.alertMu.Lock()
 		if s.acknowledged[alert.ID] {
 			alert.State = "acknowledged"
@@ -882,6 +905,19 @@ func (s *apiServer) ackAlert(w http.ResponseWriter, id string) {
 		}
 		writeJSON(w, http.StatusOK, model.Alert{ID: id, Severity: severity, Title: "Disk health requires attention", Description: fmt.Sprintf("%s (%s) reported %s health", disk.Name, disk.Model, disk.Health), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "acknowledged", StartedAt: time.Now().UTC()})
 		return
+	}
+	if strings.HasPrefix(id, "disk-missing-") {
+		known, _ := s.store.KnownDisks()
+		for _, disk := range known {
+			if id != "disk-missing-"+disk.ID {
+				continue
+			}
+			s.alertMu.Lock()
+			s.acknowledged[id] = true
+			s.alertMu.Unlock()
+			writeJSON(w, http.StatusOK, model.Alert{ID: id, Severity: "critical", Title: "Disk is missing", Description: fmt.Sprintf("%s (%s) with stable identity %s was not discovered", disk.Model, disk.Serial, disk.ID), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "acknowledged", StartedAt: disk.LastSeen})
+			return
+		}
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "alert not found"})
 }
@@ -1309,6 +1345,22 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 	requested := map[string]any{"configPath": envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf")}
 	if job.Type == "snapraid.scrub" {
 		requested["scrubPercent"] = envOr("MYNAS_SNAPRAID_SCRUB_PERCENT", "5")
+	}
+	currentDisks, discoveryErr := s.diskFunc()
+	if discoveryErr != nil {
+		job.State, job.Stage, job.Error, job.FinishedAt = "failed", "Disk discovery failed", discoveryErr.Error(), &now
+		_ = s.store.SaveJob(job)
+		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		s.publish(job.Type+".failed", "critical", &model.ResourceRef{Type: "protection", ID: "protection"}, map[string]any{"jobId": job.ID, "error": job.Error})
+		return
+	}
+	protection := storage.DiscoverProtection(context.Background(), currentDisks, nil, envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf"))
+	if protection.Status == model.Critical {
+		job.State, job.Stage, job.Error, job.FinishedAt = "failed", "Protected disk missing", "SnapRAID operation blocked because a configured parity or data disk is missing", &now
+		_ = s.store.SaveJob(job)
+		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		s.publish(job.Type+".failed", "critical", &model.ResourceRef{Type: "protection", ID: "protection"}, map[string]any{"jobId": job.ID, "error": job.Error})
+		return
 	}
 	request := privileged.Request{Operation: job.Type, PlanHash: job.ID, RequestedState: requested, ExpiresAt: now.Add(30 * time.Minute), Confirmed: true}
 	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(context.Background(), request)

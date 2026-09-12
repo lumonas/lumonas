@@ -47,3 +47,15 @@ func TestDiscoverProtectionReadsConfigWithoutMutating(t *testing.T) {
 		t.Fatalf("unexpected protection: %#v calls=%d", result, calls)
 	}
 }
+
+func TestDiscoverProtectionMarksMissingConfiguredDiskCritical(t *testing.T) {
+	directory := t.TempDir()
+	config := filepath.Join(directory, "snapraid.conf")
+	if err := os.WriteFile(config, []byte("parity /srv/disks/wwn-parity/parity\ndata data-a /srv/disks/wwn-data\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result := DiscoverProtection(context.Background(), []model.Disk{{ID: "wwn-data"}}, func(context.Context, string, ...string) ([]byte, error) { return nil, nil }, config)
+	if result.Status != model.Critical {
+		t.Fatalf("expected critical missing-disk state: %#v", result)
+	}
+}

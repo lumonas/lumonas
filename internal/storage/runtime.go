@@ -103,6 +103,7 @@ func DiscoverProtection(ctx context.Context, disks []model.Disk, runner RuntimeR
 	if err != nil {
 		return result
 	}
+	missingConfiguredDisk := false
 	for _, line := range strings.Split(string(config), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 || strings.HasPrefix(fields[0], "#") {
@@ -112,6 +113,8 @@ func DiscoverProtection(ctx context.Context, disks []model.Disk, runner RuntimeR
 		case "parity":
 			if disk := diskForPath(fields[1], disks); disk != nil {
 				result.ParityDisks = append(result.ParityDisks, model.DiskRef{DiskID: disk.ID, SizeBytes: disk.SizeBytes})
+			} else {
+				missingConfiguredDisk = true
 			}
 		case "data":
 			dataPath := fields[1]
@@ -120,8 +123,13 @@ func DiscoverProtection(ctx context.Context, disks []model.Disk, runner RuntimeR
 			}
 			if disk := diskForPath(dataPath, disks); disk != nil {
 				result.ProtectedDiskIDs = append(result.ProtectedDiskIDs, disk.ID)
+			} else {
+				missingConfiguredDisk = true
 			}
 		}
+	}
+	if missingConfiguredDisk {
+		result.Status = model.Critical
 	}
 	if runner == nil {
 		runner = func(ctx context.Context, command string, args ...string) ([]byte, error) {

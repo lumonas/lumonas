@@ -95,6 +95,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   token_digest TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL,
   created_at TEXT NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS disk_inventory (
+  id TEXT PRIMARY KEY, last_seen TEXT NOT NULL, model TEXT NOT NULL, serial TEXT NOT NULL,
+  wwn TEXT NOT NULL, size_bytes INTEGER NOT NULL, role TEXT NOT NULL, mounted INTEGER NOT NULL,
+  pool_id TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS audit_log (
   id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, actor TEXT NOT NULL,
   action TEXT NOT NULL, outcome TEXT NOT NULL, resource_type TEXT,
@@ -276,6 +281,42 @@ func (s *Store) Job(id string) (model.Job, error) {
 		job.FinishedAt = &value
 	}
 	return job, nil
+}
+
+func (s *Store) SaveDiskInventory(disks []model.Disk) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, disk := range disks {
+		if _, err := tx.Exec(`INSERT INTO disk_inventory(id,last_seen,model,serial,wwn,size_bytes,role,mounted,pool_id) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen,model=excluded.model,serial=excluded.serial,wwn=excluded.wwn,size_bytes=excluded.size_bytes,role=excluded.role,mounted=excluded.mounted,pool_id=excluded.pool_id`, disk.ID, disk.LastSeen.Format(timeFormat), disk.Model, disk.Serial, disk.WWN, disk.SizeBytes, disk.Role, disk.Mounted, disk.PoolID); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) KnownDisks() ([]model.Disk, error) {
+	rows, err := s.db.Query(`SELECT id,last_seen,model,serial,wwn,size_bytes,role,mounted,pool_id FROM disk_inventory ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]model.Disk, 0)
+	for rows.Next() {
+		var disk model.Disk
+		var lastSeen string
+		var mounted int
+		if err := rows.Scan(&disk.ID, &lastSeen, &disk.Model, &disk.Serial, &disk.WWN, &disk.SizeBytes, &disk.Role, &mounted, &disk.PoolID); err != nil {
+			return nil, err
+		}
+		disk.LastSeen, _ = parseTime(lastSeen)
+		disk.Mounted = mounted != 0
+		disk.Health = model.Healthy
+		result = append(result, disk)
+	}
+	return result, rows.Err()
 }
 
 func (s *Store) SaveJob(j model.Job) error {
