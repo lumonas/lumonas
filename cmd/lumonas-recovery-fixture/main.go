@@ -9,6 +9,7 @@ import (
 	"github.com/lumonas/lumonas/internal/identity"
 	"github.com/lumonas/lumonas/internal/recovery"
 	"github.com/lumonas/lumonas/internal/shares"
+	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
 )
 
@@ -124,6 +125,15 @@ func buildFixtureDatabase() ([]byte, error) {
 		return nil, fmt.Errorf("unexpected fixture generation %d", generation)
 	}
 	if err := database.CommitGeneration(generation); err != nil {
+		return nil, err
+	}
+	dataOne := storage.DiskBranchPath("serial:DATA1")
+	dataTwo := storage.DiskBranchPath("serial:DATA2")
+	if err := database.SaveMountEntries([]storage.MountEntry{
+		{Kind: "disk", TargetID: "serial:DATA1", MountPath: dataOne, FSType: "ext4", Source: "UUID=fixture-data1", Options: storage.DiskMountOptions, Enabled: true},
+		{Kind: "disk", TargetID: "serial:DATA2", MountPath: dataTwo, FSType: "ext4", Source: "UUID=fixture-data2", Options: storage.DiskMountOptions, Enabled: true},
+		{Kind: "pool", TargetID: "media", MountPath: "/srv/pools/media", FSType: "fuse.mergerfs", Source: dataOne + ":" + dataTwo, Options: storage.PoolMountOptions, Enabled: true},
+	}); err != nil {
 		return nil, err
 	}
 	if operator.ID == "" {

@@ -119,4 +119,6 @@ grep -F '"databaseRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/nul
 grep -F '"secretsRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/null
 grep -F 'operator' "$TARGET_MOUNT/restored-principals.json" >/dev/null
 grep -F 'share-media' "$TARGET_MOUNT/restored-shares.json" >/dev/null
-echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, users/shares/Compose/appdata/SnapRAID restored, API ready)"
+grep -F 'fuse.mergerfs' "$TARGET_MOUNT/restored-mounts.json" >/dev/null
+grep -F 'serial_DATA1' "$TARGET_MOUNT/restored-mounts.json" >/dev/null
+echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, users/shares/mounts/Compose/appdata/SnapRAID restored, API ready)"

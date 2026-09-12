@@ -104,7 +104,8 @@ for attempt in $(seq 1 30); do
 	if curl -fsS http://127.0.0.1:18083/healthz >/dev/null 2>&1 && \
 		curl -fsS http://127.0.0.1:18083/readyz >/dev/null 2>&1 && \
 		curl -fsS http://127.0.0.1:18083/api/v1/principals > /mnt/lumonas-target/restored-principals.json 2>/dev/null && \
-		curl -fsS http://127.0.0.1:18083/api/v1/shares > /mnt/lumonas-target/restored-shares.json 2>/dev/null; then
+		curl -fsS http://127.0.0.1:18083/api/v1/shares > /mnt/lumonas-target/restored-shares.json 2>/dev/null && \
+		curl -fsS http://127.0.0.1:18083/api/v1/storage/mounts > /mnt/lumonas-target/restored-mounts.json 2>/dev/null; then
 		backend_ready=true
 		break
 	fi
@@ -113,6 +114,8 @@ done
 [ "$backend_ready" = true ]
 grep -F 'operator' /mnt/lumonas-target/restored-principals.json >/dev/null
 grep -F 'share-media' /mnt/lumonas-target/restored-shares.json >/dev/null
+grep -F 'fuse.mergerfs' /mnt/lumonas-target/restored-mounts.json >/dev/null
+grep -F 'serial_DATA1' /mnt/lumonas-target/restored-mounts.json >/dev/null
 cleanup_backend
 backend_pid=""
 printf '%s\n' recovery-applied > /mnt/lumonas-target/recovery-success

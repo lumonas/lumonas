@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lumonas/lumonas/internal/recovery"
+	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
 )
 
@@ -34,6 +35,23 @@ func TestFixtureDatabaseContainsRecoverableNASState(t *testing.T) {
 	}
 	if database.CurrentGeneration() != 2 {
 		t.Fatalf("expected restored generation 2, got %d", database.CurrentGeneration())
+	}
+	mounts, err := database.MountEntries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(mounts) != 3 {
+		t.Fatalf("expected three restored mount entries, got %d", len(mounts))
+	}
+	var pool storage.MountEntry
+	for _, mount := range mounts {
+		if mount.FSType == "fuse.mergerfs" {
+			pool = mount
+			break
+		}
+	}
+	if pool.TargetID != "media" || pool.Source == "" {
+		t.Fatalf("expected restored mergerfs pool, got %#v", pool)
 	}
 }
 

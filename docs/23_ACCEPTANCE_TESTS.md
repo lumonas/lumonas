@@ -134,7 +134,8 @@ configuration generation, Compose YAML, mergerfs/SnapRAID configuration, disk
 identity metadata, encrypted secrets, and the recovery result after shutdown.
 The hook also starts the backend against the restored filesystem and checks the
 principals and shares API before powering off, so API readiness is not supplied
-only by the live ISO runtime.
+only by the live ISO runtime. It also queries the restored storage-mounts API and
+checks the mergerfs pool plus stable disk branch identities.
 
 ## M. Incomplete Docker backup
 
