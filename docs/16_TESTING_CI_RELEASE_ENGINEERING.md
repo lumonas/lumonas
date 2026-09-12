@@ -244,6 +244,9 @@ Good candidates:
 The `security-controls` job is also release-blocking. It scans tracked files
 for high-confidence private-key and token formats, then runs the diagnostics
 redaction and privileged-operation rejection tests with a clean checkout.
+Support bundle redaction also covers structured recovery-key fields, raw PEM
+private-key blocks, and entries whose filenames identify recovery keys or
+private keys.
 
 The `dependency-controls` job is release-blocking as well. It runs the pinned
 Go vulnerability scanner and the production frontend dependency audit, then

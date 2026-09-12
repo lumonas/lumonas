@@ -14,8 +14,10 @@ import (
 
 var sensitiveText = regexp.MustCompile(`(?i)(password|passwd|secret|token|api[_-]?key|private[_-]?key|recovery[_-]?key)([[:space:]]*[:=][[:space:]]*)("[^"]*"|'[^']*'|[^[:space:],}]+)`)
 var bearerText = regexp.MustCompile(`(?i)(bearer[[:space:]]+)[A-Za-z0-9._~+/=-]+`)
+var privateKeyBlock = regexp.MustCompile(`(?s)-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----`)
 
 func RedactText(value string) string {
+	value = privateKeyBlock.ReplaceAllString(value, "[REDACTED]")
 	value = sensitiveText.ReplaceAllString(value, `${1}${2}"[REDACTED]"`)
 	return bearerText.ReplaceAllString(value, `${1}[REDACTED]`)
 }
@@ -68,7 +70,13 @@ func CreateBundle(entries map[string][]byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := entry.Write([]byte(RedactText(string(entries[name])))); err != nil {
+		content := entries[name]
+		if sensitiveKey(path.Base(name)) {
+			content = []byte("[REDACTED]")
+		} else {
+			content = []byte(RedactText(string(content)))
+		}
+		if _, err := entry.Write(content); err != nil {
 			return nil, err
 		}
 	}
@@ -84,7 +92,10 @@ func safeName(value string) bool {
 }
 
 func sensitiveKey(value string) bool {
-	lower := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(value, "-", ""), "_", ""))
+	lower := strings.ToLower(value)
+	for _, separator := range []string{"-", "_", ".", "/"} {
+		lower = strings.ReplaceAll(lower, separator, "")
+	}
 	for _, marker := range []string{"password", "passwd", "secret", "token", "apikey", "privatekey", "recoverykey", "authorization"} {
 		if strings.Contains(lower, marker) {
 			return true

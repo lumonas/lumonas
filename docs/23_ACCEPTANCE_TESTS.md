@@ -190,7 +190,8 @@ Create secrets with unique canary strings.
 
 Generate diagnostics.
 
-Pass if none of the canary strings appear.
+Pass if none of the canary strings appear, including canaries in recovery-key
+files and PEM private-key blocks.
 
 ## R. Mobile/PWA basics
 

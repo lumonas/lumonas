@@ -42,3 +42,44 @@ func TestBundleRejectsUnsafeNamesAndRedactsText(t *testing.T) {
 		t.Fatal("text canary leaked into support bundle")
 	}
 }
+
+func TestRedactionCoversRecoveryAndPrivateKeyMaterial(t *testing.T) {
+	privateKey := "-----BEGIN PRIVATE KEY-----\nprivate-canary\n-----END PRIVATE KEY-----"
+	data, err := MarshalJSON(map[string]any{
+		"recoveryKey": "recovery-canary",
+		"privateKey":  privateKey,
+		"message":     "private_key=" + privateKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "canary") || strings.Contains(string(data), "PRIVATE KEY") {
+		t.Fatalf("structured redaction leaked key material: %s", data)
+	}
+
+	bundle, err := CreateBundle(map[string][]byte{
+		"recovery.key":    []byte("raw-recovery-canary"),
+		"tls/private.key": []byte(privateKey),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range reader.File {
+		handle, openErr := file.Open()
+		if openErr != nil {
+			t.Fatal(openErr)
+		}
+		content, readErr := io.ReadAll(handle)
+		_ = handle.Close()
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if strings.Contains(string(content), "canary") || strings.Contains(string(content), "PRIVATE KEY") {
+			t.Fatalf("raw sensitive material leaked from %s: %q", file.Name, content)
+		}
+	}
+}
