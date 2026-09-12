@@ -12,6 +12,9 @@ type smartJSON struct {
 	SmartStatus *struct {
 		Passed bool `json:"passed"`
 	} `json:"smart_status"`
+	Temperature *struct {
+		Current float64 `json:"current"`
+	} `json:"temperature"`
 	PowerOnTime *struct {
 		Hours int64 `json:"hours"`
 	} `json:"power_on_time"`
@@ -25,20 +28,25 @@ type smartJSON struct {
 	} `json:"ata_smart_attributes"`
 }
 
-func SMART(run CommandRunner, path string) (model.SmartSummary, error) {
+type SMARTDetails struct {
+	Summary      model.SmartSummary
+	TemperatureC *float64
+}
+
+func ReadSMART(run CommandRunner, path string) (SMARTDetails, error) {
 	if strings.TrimSpace(path) == "" {
-		return model.SmartSummary{}, fmt.Errorf("disk path is required")
+		return SMARTDetails{}, fmt.Errorf("disk path is required")
 	}
 	if run == nil {
 		run = SystemRunner
 	}
 	out, err := run("smartctl", "-aj", path)
 	if err != nil {
-		return model.SmartSummary{}, fmt.Errorf("smartctl: %w", err)
+		return SMARTDetails{}, fmt.Errorf("smartctl: %w", err)
 	}
 	var payload smartJSON
 	if err := json.Unmarshal(out, &payload); err != nil {
-		return model.SmartSummary{}, fmt.Errorf("parse smartctl: %w", err)
+		return SMARTDetails{}, fmt.Errorf("parse smartctl: %w", err)
 	}
 	summary := model.SmartSummary{Overall: model.Healthy}
 	if payload.SmartStatus != nil && !payload.SmartStatus.Passed {
@@ -64,5 +72,14 @@ func SMART(run CommandRunner, path string) (model.SmartSummary, error) {
 	if summary.PendingSectors > 0 || summary.UncorrectableSectors > 0 {
 		summary.Overall = model.Warning
 	}
-	return summary, nil
+	var temperature *float64
+	if payload.Temperature != nil {
+		temperature = &payload.Temperature.Current
+	}
+	return SMARTDetails{Summary: summary, TemperatureC: temperature}, nil
+}
+
+func SMART(run CommandRunner, path string) (model.SmartSummary, error) {
+	details, err := ReadSMART(run, path)
+	return details.Summary, err
 }

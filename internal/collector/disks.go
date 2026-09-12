@@ -69,6 +69,17 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 			SMART: model.SmartSummary{Overall: health},
 		})
 	}
+	if _, err := exec.LookPath("smartctl"); err == nil {
+		for index := range result {
+			if result[index].CurrentPath == "" {
+				continue
+			}
+			if details, smartErr := ReadSMART(run, result[index].CurrentPath); smartErr == nil {
+				result[index].SMART = details.Summary
+				result[index].Temperature = details.TemperatureC
+			}
+		}
+	}
 	return result, nil
 }
 
