@@ -237,7 +237,21 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso dpkg-dev gnupg qemu-system-x86 qemu-utils curl python3
       - run: go build -trimpath -o "$RUNNER_TEMP/lumonas-recovery-fixture" ./cmd/lumonas-recovery-fixture
       - run: go build -trimpath -o "$RUNNER_TEMP/lumonas-recover" ./cmd/lumonas-recover
-      - run: sudo env LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_ENABLE_RECOVERY_SMOKE=true LUMONAS_REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY}" LUMONAS_REQUIRE_REPO_SIGNATURE="${LUMONAS_REQUIRE_REPO_SIGNATURE}" bash installer/build-iso.sh "${GITHUB_SHA::12}"
+      - name: Import ISO repository signing key
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          LUMONAS_REPO_PRIVATE_KEY: ${{ secrets.LUMONAS_REPO_PRIVATE_KEY }}
+          LUMONAS_REPO_SIGN_KEY: ${{ secrets.LUMONAS_REPO_SIGN_KEY }}
+        run: |
+          test -n "$LUMONAS_REPO_PRIVATE_KEY"
+          test -n "$LUMONAS_REPO_SIGN_KEY"
+          export GNUPGHOME="$RUNNER_TEMP/lumonas-repo-gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          printf '%s' "$LUMONAS_REPO_PRIVATE_KEY" | gpg --batch --import
+          gpg --batch --list-secret-keys "$LUMONAS_REPO_SIGN_KEY" >/dev/null
+          echo "LUMONAS_REPO_GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+      - run: sudo env LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_ENABLE_RECOVERY_SMOKE=true LUMONAS_REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY}" LUMONAS_REQUIRE_REPO_SIGNATURE="${LUMONAS_REQUIRE_REPO_SIGNATURE}" LUMONAS_REPO_GNUPGHOME="${LUMONAS_REPO_GNUPGHOME}" bash installer/build-iso.sh "${GITHUB_SHA::12}"
         env:
           LUMONAS_REPO_SIGN_KEY: ${{ secrets.LUMONAS_REPO_SIGN_KEY }}
           LUMONAS_REQUIRE_REPO_SIGNATURE: ${{ startsWith(github.ref, 'refs/tags/') }}

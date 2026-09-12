@@ -276,9 +276,10 @@ continue to use the lighter artifact smoke test because they do not publish a
 release set.
 
 The ISO job also requires the embedded APT repository to be signed on tagged
-builds. It receives the release-only GPG key through the CI secret and checks
-for `Release.gpg`, `InRelease`, and the exported keyring; unsigned
-`[trusted=yes]` media is limited to non-release development builds.
+builds. It imports the release-only armored private key into an ephemeral
+GnuPG home, selects it by the configured fingerprint, and checks for
+`Release.gpg`, `InRelease`, and the exported keyring; unsigned `[trusted=yes]`
+media is limited to non-release development builds.
 
 ## Installer matrix
 

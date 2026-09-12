@@ -10,7 +10,9 @@ bash installer/build-iso.sh 0.1.0-dev
 ```
 
 Tagged CI builds set `LUMONAS_REQUIRE_REPO_SIGNATURE=true` and provide the
-release-only `LUMONAS_REPO_SIGN_KEY` secret. Such builds fail closed unless
+release-only `LUMONAS_REPO_SIGN_KEY` fingerprint and
+`LUMONAS_REPO_PRIVATE_KEY` armored-key secrets. CI imports the private key
+into an ephemeral GnuPG home before building. Such builds fail closed unless
 the embedded repository contains `Release.gpg`, `InRelease`, and the exported
 archive keyring. Local development builds may omit the key and use the
 explicitly marked unsigned repository path.

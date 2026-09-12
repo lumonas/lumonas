@@ -498,4 +498,4 @@ GitHub Actions OIDC issuer and tag workflow identity.
 
 The ISO’s embedded APT repository must additionally contain signed `Release`
 metadata and its archive keyring on tagged builds; a missing repository
-signing key fails the build.
+signing fingerprint or private-key secret fails the build.
