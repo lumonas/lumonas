@@ -136,19 +136,31 @@ type ServerInfo struct {
 }
 
 type SystemMetrics struct {
-	CPUPercent    float64    `json:"cpuPercent"`
-	Load          [3]float64 `json:"load"`
-	RAMUsedBytes  uint64     `json:"ramUsedBytes"`
-	RAMTotalBytes uint64     `json:"ramTotalBytes"`
-	CPUTempC      float64    `json:"cpuTempC"`
-	UptimeSeconds uint64     `json:"uptimeSeconds"`
-	Net           NetMetrics `json:"net"`
+	CPUPercent     float64               `json:"cpuPercent"`
+	Load           [3]float64            `json:"load"`
+	RAMUsedBytes   uint64                `json:"ramUsedBytes"`
+	RAMTotalBytes  uint64                `json:"ramTotalBytes"`
+	CPUTempC       float64               `json:"cpuTempC"`
+	UptimeSeconds  uint64                `json:"uptimeSeconds"`
+	Net            NetMetrics            `json:"net"`
+	NetInterfaces  []NetInterfaceMetrics `json:"netInterfaces,omitempty"`
 }
 
 type NetMetrics struct {
 	Interface string  `json:"interface"`
 	UpMbps    float64 `json:"upMbps"`
 	DownMbps  float64 `json:"downMbps"`
+}
+
+type NetInterfaceMetrics struct {
+	Interface   string  `json:"interface"`
+	UpMbps      float64 `json:"upMbps"`
+	DownMbps    float64 `json:"downMbps"`
+	ErrorsIn    uint64  `json:"errorsIn"`
+	ErrorsOut   uint64  `json:"errorsOut"`
+	DroppedIn   uint64  `json:"droppedIn"`
+	DroppedOut  uint64  `json:"droppedOut"`
+	Up          bool    `json:"up"`
 }
 
 type DockerSummary struct {
@@ -174,4 +186,18 @@ type Alert struct {
 	Resource    *ResourceRef `json:"resource,omitempty"`
 	State       string       `json:"state"`
 	StartedAt   time.Time    `json:"startedAt"`
+}
+
+type HealthComponent struct {
+	ID          string      `json:"id"`
+	Label       string      `json:"label"`
+	Status      HealthState `json:"status"`
+	Message     string      `json:"message,omitempty"`
+	Recommended string      `json:"recommended,omitempty"`
+}
+
+type HealthBreakdown struct {
+	Status     HealthState      `json:"status"`
+	Score      int              `json:"score"`
+	Components []HealthComponent `json:"components"`
 }

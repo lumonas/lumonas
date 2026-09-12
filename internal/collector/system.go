@@ -24,6 +24,17 @@ var metricState struct {
 	netTx    uint64
 	netAt    time.Time
 	netIface string
+	ifaces   map[string]netIfaceCounters
+}
+
+type netIfaceCounters struct {
+	rx      uint64
+	tx      uint64
+	errsIn  uint64
+	errsOut uint64
+	dropIn  uint64
+	dropOut uint64
+	at      time.Time
 }
 
 func Metrics() model.SystemMetrics {
@@ -84,6 +95,7 @@ func Metrics() model.SystemMetrics {
 	}
 	m.CPUTempC = cpuTemperature()
 	m.Net.UpMbps, m.Net.DownMbps = networkThroughput(m.Net.Interface, now)
+	m.NetInterfaces = netInterfaceMetrics(now)
 	return m
 }
 
@@ -193,4 +205,88 @@ func Hostname() string {
 		return "lumonas"
 	}
 	return value
+}
+
+func netInterfaceMetrics(now time.Time) []model.NetInterfaceMetrics {
+	data, err := os.ReadFile("/proc/net/dev")
+	if err != nil {
+		return nil
+	}
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	upMap := make(map[string]bool, len(interfaces))
+	for _, iface := range interfaces {
+		upMap[iface.Name] = iface.Flags&net.FlagUp != 0 && iface.Flags&net.FlagLoopback == 0
+	}
+	entries := parseAllNetDev(string(data))
+	metricState.Lock()
+	defer metricState.Unlock()
+	if metricState.ifaces == nil {
+		metricState.ifaces = make(map[string]netIfaceCounters)
+	}
+	result := make([]model.NetInterfaceMetrics, 0, len(entries))
+	for name, e := range entries {
+		if name == "lo" {
+			continue
+		}
+		m := model.NetInterfaceMetrics{
+			Interface: name,
+			Up:        upMap[name],
+			ErrorsIn:  e.errsIn,
+			ErrorsOut: e.errsOut,
+			DroppedIn: e.dropIn,
+			DroppedOut: e.dropOut,
+		}
+		prev, ok := metricState.ifaces[name]
+		if ok && !prev.at.IsZero() && now.After(prev.at) && e.rx >= prev.rx && e.tx >= prev.tx {
+			seconds := now.Sub(prev.at).Seconds()
+			if seconds > 0 {
+				m.DownMbps = float64(e.rx-prev.rx) * 8 / seconds / 1_000_000
+				m.UpMbps = float64(e.tx-prev.tx) * 8 / seconds / 1_000_000
+			}
+		}
+		metricState.ifaces[name] = netIfaceCounters{
+			rx: e.rx, tx: e.tx, errsIn: e.errsIn, errsOut: e.errsOut,
+			dropIn: e.dropIn, dropOut: e.dropOut, at: now,
+		}
+		result = append(result, m)
+	}
+	return result
+}
+
+type netDevEntry struct {
+	rx, tx             uint64
+	errsIn, errsOut    uint64
+	dropIn, dropOut    uint64
+}
+
+func parseAllNetDev(data string) map[string]netDevEntry {
+	entries := make(map[string]netDevEntry)
+	for _, line := range strings.Split(data, "\n") {
+		name, values, found := strings.Cut(strings.TrimSpace(line), ":")
+		if !found {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		fields := strings.Fields(values)
+		if len(fields) < 12 {
+			continue
+		}
+		rx, _ := strconv.ParseUint(fields[0], 10, 64)
+		errsIn, _ := strconv.ParseUint(fields[2], 10, 64)
+		dropIn, _ := strconv.ParseUint(fields[3], 10, 64)
+		tx, _ := strconv.ParseUint(fields[8], 10, 64)
+		errsOut, _ := strconv.ParseUint(fields[10], 10, 64)
+		dropOut, _ := strconv.ParseUint(fields[11], 10, 64)
+		entries[name] = netDevEntry{
+			rx: rx, tx: tx, errsIn: errsIn, errsOut: errsOut,
+			dropIn: dropIn, dropOut: dropOut,
+		}
+	}
+	return entries
 }

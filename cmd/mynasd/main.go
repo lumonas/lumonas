@@ -237,6 +237,12 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.settings(w, r)
 	case r.Method == http.MethodPatch && endpoint == "/settings":
 		s.updateSettings(w, r)
+	case r.Method == http.MethodGet && endpoint == "/ssh/keys":
+		s.listSSHKeys(w)
+	case r.Method == http.MethodPost && endpoint == "/ssh/keys":
+		s.addSSHKey(w, r)
+	case r.Method == http.MethodPost && endpoint == "/ssh/keys/remove":
+		s.removeSSHKey(w, r)
 	case r.Method == http.MethodPost && endpoint == "/updates/check":
 		s.checkUpdates(w, r)
 	case r.Method == http.MethodGet && endpoint == "/jobs":
@@ -291,6 +297,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.supportBundle(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
 		s.networkInterfaces(w)
+	case r.Method == http.MethodGet && endpoint == "/network/interfaces/metrics":
+		s.networkInterfaceMetrics(w)
+	case r.Method == http.MethodGet && endpoint == "/network/wifi/scan":
+		s.networkWiFiScan(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/connections":
 		s.listNetworkConnections(w, r)
 	case r.Method == http.MethodPost && endpoint == "/network/connections":
@@ -315,6 +325,20 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.networkCheckpoint(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/network/checkpoints/"):
 		s.networkCheckpointAction(w, r, endpoint)
+	case r.Method == http.MethodGet && endpoint == "/network/wireguard/status":
+		s.wireguardStatus(w)
+	case r.Method == http.MethodPost && endpoint == "/network/wireguard/apply":
+		s.applyWireGuard(w, r)
+	case r.Method == http.MethodPost && endpoint == "/network/wireguard/keygen":
+		s.wireguardKeygen(w)
+	case r.Method == http.MethodGet && endpoint == "/network/tailscale/status":
+		s.tailscaleStatus(w)
+	case r.Method == http.MethodPost && endpoint == "/network/tailscale/up":
+		s.tailscaleUp(w, r)
+	case r.Method == http.MethodPost && endpoint == "/network/tailscale/down":
+		s.tailscaleDown(w)
+	case r.Method == http.MethodPost && endpoint == "/network/tailscale/exit-node":
+		s.tailscaleExitNode(w, r)
 	case r.Method == http.MethodGet && endpoint == "/services":
 		s.services(w, r)
 	case r.Method == http.MethodGet && endpoint == "/power/ups":
@@ -395,6 +419,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.dockerVolumes(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/docker/logs/"):
 		s.dockerLogs(w, r, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/health/components":
+		s.healthComponents(w)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
 	}
@@ -497,6 +523,119 @@ func (s *apiServer) serverHealth() model.HealthState {
 		health = model.Attention
 	}
 	return health
+}
+
+func (s *apiServer) healthComponents(w http.ResponseWriter) {
+	var components []model.HealthComponent
+	disks, err := s.diskFunc()
+	if err != nil {
+		components = append(components, model.HealthComponent{
+			ID: "disk-discovery", Label: "Disk discovery", Status: model.Attention,
+			Message:     "Disk discovery is unavailable",
+			Recommended: "Check that lsblk is installed and accessible",
+		})
+	} else {
+		warningCount, criticalCount, offlineCount := 0, 0, 0
+		var warnings, criticals, offlines []string
+		for _, disk := range disks {
+			switch disk.Health {
+			case model.Warning:
+				warningCount++
+				warnings = append(warnings, disk.Name)
+			case model.Critical:
+				criticalCount++
+				criticals = append(criticals, disk.Name)
+			case model.Offline:
+				offlineCount++
+				offlines = append(offlines, disk.Name)
+			}
+		}
+		diskStatus := model.Healthy
+		diskMsg := fmt.Sprintf("%d disk(s) healthy", len(disks)-warningCount-criticalCount-offlineCount)
+		if criticalCount > 0 {
+			diskStatus = model.Critical
+			diskMsg = fmt.Sprintf("%d critical: %s", criticalCount, strings.Join(criticals, ", "))
+		} else if warningCount > 0 {
+			diskStatus = model.Warning
+			diskMsg = fmt.Sprintf("%d warning: %s", warningCount, strings.Join(warnings, ", "))
+		} else if offlineCount > 0 {
+			diskStatus = model.Attention
+			diskMsg = fmt.Sprintf("%d offline: %s", offlineCount, strings.Join(offlines, ", "))
+		}
+		diskRecommended := ""
+		if criticalCount > 0 {
+			diskRecommended = "Replace failing disks immediately"
+		}
+		components = append(components, model.HealthComponent{
+			ID: "disks", Label: "Disk health", Status: diskStatus, Message: diskMsg,
+			Recommended: diskRecommended,
+		})
+
+		known, _ := s.store.KnownDisks()
+		currentIDs := make(map[string]bool, len(disks))
+		for _, disk := range disks {
+			currentIDs[disk.ID] = true
+		}
+		var missingNames []string
+		for _, k := range known {
+			if !currentIDs[k.ID] {
+				missingNames = append(missingNames, k.ID)
+			}
+		}
+		if len(missingNames) > 0 {
+			components = append(components, model.HealthComponent{
+				ID: "missing-disks", Label: "Missing disks", Status: model.Critical,
+				Message:     fmt.Sprintf("%d known disk(s) missing: %s", len(missingNames), strings.Join(missingNames, ", ")),
+				Recommended: "Check cable connections and power. Do not remove protected disks.",
+			})
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	protection := storage.DiscoverProtection(ctx, disks, nil, envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf"))
+	s.enrichProtection(&protection)
+	protMsg := "Parity configured"
+	if len(protection.ParityDisks) == 0 {
+		protMsg = "No parity disks configured"
+	}
+	if protection.LastSyncAt != nil {
+		protMsg += fmt.Sprintf(", last sync %s", protection.LastSyncAt.Format("2006-01-02 15:04"))
+	}
+	if protection.ChangesSinceSync > 0 {
+		protMsg += fmt.Sprintf(", %d bytes unsynced", protection.ChangesSinceSync)
+	}
+	protRecommended := ""
+	if protection.Status == model.Critical {
+		protRecommended = "Sync immediately to restore protection"
+	} else if protection.Status == model.Attention && protection.ChangesSinceSync > 0 {
+		protRecommended = "Run a sync to protect recent changes"
+	}
+	components = append(components, model.HealthComponent{
+		ID: "protection", Label: "SnapRAID protection", Status: protection.Status, Message: protMsg,
+		Recommended: protRecommended,
+	})
+
+	score := 100
+	for _, c := range components {
+		switch c.Status {
+		case model.Critical:
+			score -= 40
+		case model.Warning:
+			score -= 20
+		case model.Attention:
+			score -= 10
+		}
+	}
+	if score < 0 {
+		score = 0
+	}
+
+	writeJSON(w, http.StatusOK, model.HealthBreakdown{
+		Status:     s.serverHealth(),
+		Score:      score,
+		Components: components,
+	})
 }
 
 func (s *apiServer) disks(w http.ResponseWriter) {
@@ -976,6 +1115,23 @@ func (s *apiServer) networkInterfaces(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, interfaces)
 }
 
+func (s *apiServer) networkInterfaceMetrics(w http.ResponseWriter) {
+	m := collector.Metrics()
+	writeJSON(w, http.StatusOK, m.NetInterfaces)
+}
+
+func (s *apiServer) networkWiFiScan(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	networks, available, err := network.ScanWiFi(nil)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"available": available, "networks": networks})
+}
+
 func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		ConnectionUUID  string            `json:"connectionUuid"`
@@ -1062,6 +1218,123 @@ func (s *apiServer) networkCheckpointAction(w http.ResponseWriter, r *http.Reque
 	}
 	s.publish("network.checkpoint."+parts[3], "info", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, nil)
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *apiServer) wireguardStatus(w http.ResponseWriter) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	iface := envOr("MYNAS_WG_INTERFACE", "wg0")
+	status, err := network.WireGuardShow(ctx, iface)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"interface": iface, "connected": false, "peers": 0})
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *apiServer) applyWireGuard(w http.ResponseWriter, r *http.Request) {
+	var input network.WireGuardConfig
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if err := network.ValidateWireGuardConfig(input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	iface := envOr("MYNAS_WG_INTERFACE", "wg0")
+	if err := network.ApplyWireGuardConfig(r.Context(), iface, input); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.advanceGeneration("network.wireguard.apply")
+	s.publish("network.wireguard.applied", "info", &model.ResourceRef{Type: "wireguard", ID: iface}, nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "applied"})
+}
+
+func (s *apiServer) wireguardKeygen(w http.ResponseWriter) {
+	privKey, pubKey, err := network.GenerateWireGuardKeyPair()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"privateKey": privKey, "publicKey": pubKey})
+}
+
+func (s *apiServer) tailscaleStatus(w http.ResponseWriter) {
+	if !network.TailscaleIsInstalled() {
+		writeJSON(w, http.StatusOK, map[string]any{"installed": false, "running": false})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	status, err := network.TailscaleGetStatus(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"installed": true, "running": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *apiServer) tailscaleUp(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Hostname string `json:"hostname"`
+		AuthKey  string `json:"authKey,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if err := network.ValidateTailscaleConfig(input.Hostname); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if err := network.TailscaleUp(ctx, input.Hostname, input.AuthKey); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.advanceGeneration("network.tailscale.up")
+	s.publish("network.tailscale.connected", "info", &model.ResourceRef{Type: "tailscale", ID: input.Hostname}, nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+}
+
+func (s *apiServer) tailscaleDown(w http.ResponseWriter) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := network.TailscaleDown(ctx); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.advanceGeneration("network.tailscale.down")
+	s.publish("network.tailscale.disconnected", "info", nil, nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
+}
+
+func (s *apiServer) tailscaleExitNode(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		PeerIP string `json:"peerIp"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	if input.PeerIP == "" {
+		if err := network.TailscaleClearExitNode(ctx); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	} else {
+		if err := network.TailscaleSetExitNode(ctx, input.PeerIP); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	s.advanceGeneration("network.tailscale.exit-node")
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
 func (s *apiServer) services(w http.ResponseWriter, r *http.Request) {
