@@ -62,7 +62,7 @@ DROPIN
 cat >/etc/fstab <<'FSTAB'
 /dev/vda / ext4 defaults 0 1
 FSTAB
-systemctl enable systemd-networkd.service systemd-resolved.service docker.service smbd.service avahi-daemon.service mynas-privd.service mynasd.service mynas-web.service || true
+systemctl enable systemd-networkd.service systemd-resolved.service docker.service smbd.service avahi-daemon.service mynas-privd.service mynas-privd-storage.service mynas-privd-network.service mynas-privd-power.service mynas-privd-general.service mynasd.service mynas-web.service || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 passwd -l root || true
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config

@@ -13,7 +13,7 @@ require_line() {
 	fi
 }
 
-for unit in mynas-web.service mynasd.service mynas-privd.service; do
+for unit in mynas-web.service mynasd.service mynas-privd.service mynas-privd-storage.service mynas-privd-network.service mynas-privd-power.service mynas-privd-general.service; do
 	[ -f "$SYSTEMD/$unit" ] || { echo "missing systemd unit: $unit" >&2; exit 1; }
 	require_line "$SYSTEMD/$unit" 'NoNewPrivileges=true'
 	require_line "$SYSTEMD/$unit" 'ProtectSystem=strict'
@@ -26,6 +26,10 @@ require_line "$SYSTEMD/mynasd.service" 'User=mynas'
 require_line "$SYSTEMD/mynas-privd.service" 'User=root'
 require_line "$SYSTEMD/mynas-privd.service" 'CapabilityBoundingSet='
 require_line "$SYSTEMD/mynasd.service" 'ReadWritePaths=/var/lib/mynas /srv/mynas'
+require_line "$SYSTEMD/mynas-privd-storage.service" 'CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_RAWIO'
+require_line "$SYSTEMD/mynas-privd-network.service" 'CapabilityBoundingSet=CAP_NET_ADMIN'
+require_line "$SYSTEMD/mynas-privd-power.service" 'CapabilityBoundingSet=CAP_SYS_BOOT'
+require_line "$SYSTEMD/mynas-privd-general.service" 'CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID'
 
 require_line "$ROOT/packaging/debian/postinst" 'useradd --system'
 require_line "$ROOT/packaging/debian/postinst" '/var/lib/mynas/secrets'

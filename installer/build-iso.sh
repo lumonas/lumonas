@@ -33,7 +33,7 @@ cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<'EOF'
 #!/bin/sh
 set -eu
 dpkg -i /opt/lumonas-repo/lumonas.deb
-systemctl enable mynas-privd.service mynasd.service mynas-web.service
+systemctl enable mynas-privd.service mynas-privd-storage.service mynas-privd-network.service mynas-privd-power.service mynas-privd-general.service mynasd.service mynas-web.service
 EOF
 chmod 0755 "$WORK/config/hooks/live/020-install-lumonas.hook.chroot"
 cat > "$WORK/config/includes.chroot/usr/share/doc/lumonas/build-manifest.txt" <<EOF

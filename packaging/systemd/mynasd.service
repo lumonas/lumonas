@@ -1,6 +1,6 @@
 [Unit]
 Description=LumoNAS management daemon
-After=network-online.target docker.service mynas-privd.service
+After=network-online.target docker.service mynas-privd.service mynas-privd-storage.service mynas-privd-network.service mynas-privd-power.service mynas-privd-general.service
 Wants=network-online.target
 Requires=mynas-privd.service
 

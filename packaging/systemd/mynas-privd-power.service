@@ -1,0 +1,30 @@
+[Unit]
+Description=LumoNAS power operation worker
+After=local-fs.target mynas-privd.service
+Wants=mynas-privd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/lumonas/mynas-privd --worker power --socket /run/mynas/power.sock
+User=root
+Group=mynas
+RuntimeDirectory=mynas
+RuntimeDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/mynas
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_SYS_BOOT
+AmbientCapabilities=CAP_SYS_BOOT
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=128M
+CPUQuota=100%
+TasksMax=64
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target

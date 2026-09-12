@@ -60,7 +60,11 @@ var checkpointState = struct {
 
 func main() {
 	socket := flag.String("socket", "/run/mynas/privd.sock", "Unix socket path")
+	worker := flag.String("worker", "", "run as a restricted operation worker (storage, network, power, or general)")
 	flag.Parse()
+	if *worker != "" && !validWorker(*worker) {
+		panic("unsupported privileged worker")
+	}
 	_ = os.Remove(*socket)
 	if err := os.MkdirAll(filepath.Dir(*socket), 0o750); err != nil {
 		panic(err)
@@ -70,13 +74,21 @@ func main() {
 		panic(err)
 	}
 	defer listener.Close()
-	_ = os.Chmod(*socket, 0o660)
+	mode := os.FileMode(0o660)
+	if *worker != "" {
+		mode = 0o600
+	}
+	_ = os.Chmod(*socket, mode)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			continue
 		}
-		go serve(conn)
+		if *worker == "" {
+			go serve(conn)
+		} else {
+			go serveWorker(conn, *worker)
+		}
 	}
 }
 
@@ -90,8 +102,89 @@ func serve(conn net.Conn) {
 			_ = encoder.Encode(response{Error: "invalid request"})
 			continue
 		}
-		_ = encoder.Encode(execute(req, collector.Disks, commandRunner))
+		_ = encoder.Encode(executeBroker(req))
 	}
+}
+
+func serveWorker(conn net.Conn, worker string) {
+	defer conn.Close()
+	scanner := bufio.NewScanner(conn)
+	encoder := json.NewEncoder(conn)
+	for scanner.Scan() {
+		var req request
+		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+			_ = encoder.Encode(response{Error: "invalid request"})
+			continue
+		}
+		_ = encoder.Encode(executeWorker(req, worker))
+	}
+}
+
+func executeBroker(req request) response {
+	worker := operationWorker(req.Operation)
+	if worker == "" {
+		return execute(req, collector.Disks, commandRunner)
+	}
+	if req.PlanHash == "" {
+		return response{Error: "planHash is required"}
+	}
+	if !req.ExpiresAt.IsZero() && !time.Now().UTC().Before(req.ExpiresAt) {
+		return response{Error: "operation plan has expired"}
+	}
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	return forwardToWorker(req, worker)
+}
+
+func forwardToWorker(req request, worker string) response {
+	socket := filepath.Join(envOr("MYNAS_PRIVD_WORKER_DIR", "/run/mynas"), worker+".sock")
+	connection, err := net.DialTimeout("unix", socket, 3*time.Second)
+	if err != nil {
+		return response{Error: "privileged worker unavailable"}
+	}
+	defer connection.Close()
+	if err := json.NewEncoder(connection).Encode(req); err != nil {
+		return response{Error: "privileged worker request failed"}
+	}
+	var result response
+	if err := json.NewDecoder(bufio.NewReader(connection)).Decode(&result); err != nil {
+		return response{Error: "privileged worker response failed"}
+	}
+	return result
+}
+
+func executeWorker(req request, worker string) response {
+	if operationWorker(req.Operation) != worker {
+		return response{Error: "operation is not allow-listed for this worker"}
+	}
+	return execute(req, collector.Disks, commandRunner)
+}
+
+func operationWorker(operation string) string {
+	switch operation {
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub":
+		return "storage"
+	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "firewall.apply":
+		return "network"
+	case "power.action":
+		return "power"
+	case "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply":
+		return "general"
+	default:
+		return ""
+	}
+}
+
+func validWorker(worker string) bool {
+	return worker == "storage" || worker == "network" || worker == "power" || worker == "general"
+}
+
+func envOr(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 type command func(string, ...string) ([]byte, error)
