@@ -172,6 +172,16 @@ if [ "$status" != 200 ] || ! head -c 1 "$TEMP_DIR/disks.json" | grep '\[' >/dev/
 	exit 1
 fi
 
+# The event stream must be live, not merely routable. The metrics loop emits
+# within the timeout window after the initial SSE retry frame.
+SSE_PATH="$TEMP_DIR/events.sse"
+curl -sS --max-time 5 -N -b "$COOKIE_JAR" "$BASE_URL/api/v1/events/stream" >"$SSE_PATH" 2>/dev/null || true
+if ! grep -F 'retry: 3000' "$SSE_PATH" >/dev/null 2>&1 || ! grep -F 'system.metrics' "$SSE_PATH" >/dev/null 2>&1; then
+	echo "authenticated SSE stream did not deliver system metrics" >&2
+	sed -n '1,80p' "$SSE_PATH" >&2
+	exit 1
+fi
+
 # SnapRAID jobs are accepted and delegated to the privileged broker.
 assert_authenticated_status_and_body POST /api/v1/jobs 202 '"state":"queued"' '{"type":"snapraid.sync","resourceId":"smoke-test"}'
 
