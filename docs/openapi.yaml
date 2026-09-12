@@ -267,6 +267,68 @@ paths:
         '200':
           description: Locked
 
+  /storage/pools/setup/plan:
+    post:
+      tags: [Storage]
+      summary: Plan a first-run pool setup (format + mount + protection)
+      operationId: planPoolSetup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, dataDiskIds]
+              properties:
+                name:
+                  type: string
+                dataDiskIds:
+                  type: array
+                  items:
+                    type: string
+                parityDiskId:
+                  type: string
+                filesystem:
+                  type: string
+                  enum: [ext4, xfs]
+                formatDisks:
+                  type: boolean
+                  description: Force reformatting even when a usable filesystem is present
+      responses:
+        '201':
+          description: Setup plan (bundle of reviewed steps; hash-confirmed once)
+        '422':
+          description: Invalid pool name or layout
+
+  /storage/pools/setup/confirm:
+    post:
+      tags: [Storage]
+      summary: Execute a confirmed pool setup plan
+      operationId: confirmPoolSetup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operationId, planHash]
+              properties:
+                operationId:
+                  type: string
+                planHash:
+                  type: string
+                reauthenticated:
+                  type: boolean
+                storageSafetyUnlocked:
+                  type: boolean
+      responses:
+        '202':
+          description: Pool setup executed (protectionConfigured reports SnapRAID outcome)
+        '409':
+          description: Plan hash or identity revalidation failed
+        '423':
+          description: Reauthentication and storage safety unlock required
+
   /storage/operations/plan:
     post:
       tags: [Storage]

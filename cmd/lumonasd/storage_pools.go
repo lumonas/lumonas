@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +13,156 @@ import (
 	"github.com/lumonas/lumonas/internal/privileged"
 	"github.com/lumonas/lumonas/internal/storage"
 )
+
+func (s *apiServer) planStoragePoolSetup(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name               string   `json:"name"`
+		DataDiskIDs        []string `json:"dataDiskIds"`
+		ParityDiskID       string   `json:"parityDiskId"`
+		Filesystem         string   `json:"filesystem"`
+		FormatDisks        bool     `json:"formatDisks"`
+		ExpectedGeneration *int64   `json:"expectedGeneration"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if input.ExpectedGeneration != nil && *input.ExpectedGeneration != s.currentGeneration() {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "configuration generation changed", "currentGeneration": s.currentGeneration()})
+		return
+	}
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity discovery unavailable"})
+		return
+	}
+	plan, err := storage.NewPoolSetupPlan(newID("pool-setup"), input.Name, disks, input.DataDiskIDs, strings.TrimSpace(input.ParityDiskID), input.Filesystem, input.FormatDisks, s.currentGeneration(), time.Now().UTC())
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.store.SavePoolSetupPlan(plan); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publish("storage.pool.setup.planned", "warning", &model.ResourceRef{Type: "pool", ID: plan.Name}, map[string]any{"operationId": plan.OperationID, "planHash": plan.PlanHash, "destroysData": plan.DestroysData, "steps": len(plan.Steps)})
+	writeJSON(w, http.StatusCreated, plan)
+}
+
+func (s *apiServer) confirmStoragePoolSetup(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		OperationID           string `json:"operationId"`
+		PlanHash              string `json:"planHash"`
+		Reauthenticated       bool   `json:"reauthenticated"`
+		StorageSafetyUnlocked bool   `json:"storageSafetyUnlocked"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if input.OperationID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "operationId is required"})
+		return
+	}
+	plan, err := s.store.PoolSetupPlan(input.OperationID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "pool setup plan not found"})
+		return
+	}
+	if input.PlanHash == "" || input.PlanHash != plan.PlanHash {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "plan hash mismatch"})
+		return
+	}
+	if !input.Reauthenticated || !input.StorageSafetyUnlocked || !s.safetyUnlocked() {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication and the storage safety unlock are required"})
+		return
+	}
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity revalidation unavailable"})
+		return
+	}
+	if err := storage.ValidatePoolSetupPlan(plan, disks, time.Now().UTC(), s.currentGeneration()); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "pool setup revalidation failed: " + err.Error()})
+		return
+	}
+	byID := make(map[string]model.Disk, len(disks))
+	for _, disk := range disks {
+		byID[disk.ID] = disk
+	}
+	broker := func(request privileged.Request) error { return s.brokerExecute(r.Context(), request) }
+	formatted := make([]string, 0, len(plan.FormatDiskIDs))
+	for _, id := range plan.FormatDiskIDs {
+		disk := byID[id]
+		single, planErr := storage.NewPlan(newID("disk"), storage.ActionCreate, disk, s.currentGeneration(), time.Now().UTC())
+		if planErr != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "format plan for " + id + " failed: " + planErr.Error()})
+			return
+		}
+		single.RequestedState = map[string]any{"filesystem": plan.Filesystem, "mountPath": storage.DiskBranchPath(id)}
+		single.Status = "confirmed"
+		single.PlanHash = storage.Hash(single)
+		request := privileged.Request{Operation: string(single.Action), OperationID: single.OperationID, CorrelationID: requestCorrelationID(r), PlanHash: single.PlanHash, TargetDiskID: single.Target.DiskID, ExpectedIdentity: expectedIdentityMap(single.Target), ExpectedState: expectedStateMap(single.ExpectedState), RequestedState: single.RequestedState, ExpiresAt: single.ExpiresAt, Confirmed: true}
+		if execErr := broker(request); execErr != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "formatting " + id + " failed: " + execErr.Error()})
+			return
+		}
+		formatted = append(formatted, id)
+	}
+	// Re-scan after formatting: filesystem UUIDs changed and the pool plan
+	// must be built from the fresh identities.
+	disks, err = s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity re-scan unavailable"})
+		return
+	}
+	byID = make(map[string]model.Disk, len(disks))
+	for _, disk := range disks {
+		byID[disk.ID] = disk
+	}
+	members := make([]model.Disk, 0, len(plan.DataDiskIDs))
+	for _, id := range plan.DataDiskIDs {
+		disk, ok := byID[id]
+		if !ok {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "pool disk " + id + " disappeared during setup"})
+			return
+		}
+		members = append(members, disk)
+	}
+	poolPlan, err := storage.NewPoolPlan(plan.OperationID, plan.Name, plan.MountPath, members, s.currentGeneration(), time.Now().UTC())
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "pool plan build failed: " + err.Error()})
+		return
+	}
+	poolPlan.Status = "confirmed"
+	poolPlan.PlanHash = storage.HashPoolPlan(poolPlan)
+	expected := make([]privileged.ExpectedDisk, 0, len(poolPlan.Members))
+	branches := make([]any, 0, len(poolPlan.Members))
+	for _, member := range poolPlan.Members {
+		expected = append(expected, privileged.ExpectedDisk{ID: member.DiskID, WWN: member.WWN, Serial: member.Serial, Model: member.Model, SizeBytes: member.SizeBytes, GPTDiskGUID: member.GPTDiskGUID, PartitionUUID: member.PartitionUUID, FilesystemUUID: member.FilesystemUUID})
+		branches = append(branches, member.BranchPath)
+	}
+	request := privileged.Request{Operation: "pool.mount", OperationID: poolPlan.OperationID, PlanHash: poolPlan.PlanHash, ExpectedDisks: expected, RequestedState: map[string]any{"mountPath": poolPlan.MountPath, "branches": branches, "policy": poolPlan.Policy}, ExpiresAt: plan.ExpiresAt, Confirmed: true}
+	if err := broker(request); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	s.advanceGeneration("storage.pool.setup")
+	s.publish("storage.pool.setup.completed", "info", &model.ResourceRef{Type: "pool", ID: plan.Name}, map[string]any{"operationId": plan.OperationID, "formatted": len(formatted), "members": len(plan.DataDiskIDs)})
+	s.persistMountState("storage.pool.setup")
+	protectionConfigured := false
+	if plan.ParityDiskID != "" {
+		protectionConfigured = s.applySnapraidConfiguration(plan.ParityDiskID, plan.DataDiskIDs)
+		if protectionConfigured {
+			job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+			if err := s.store.SaveJob(job); err == nil {
+				s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+				go s.runProtectionJob(job)
+			}
+		}
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "mountPath": plan.MountPath, "formatted": formatted, "protectionConfigured": protectionConfigured})
+}
 
 func (s *apiServer) planStoragePool(w http.ResponseWriter, r *http.Request) {
 	idempotencyKey, err := requestIdempotencyKey(r)
@@ -221,6 +372,14 @@ func (s *apiServer) confirmStoragePoolUnmount(w http.ResponseWriter, r *http.Req
 	s.publish("storage.pool.unmounted", "warning", &model.ResourceRef{Type: "pool", ID: plan.PoolID}, map[string]any{"operationId": plan.OperationID, "mountPath": plan.MountPath})
 	s.persistMountState("storage.pool.unmount")
 	writeJSON(w, http.StatusAccepted, result)
+}
+
+func expectedIdentityMap(target storage.TargetIdentity) map[string]string {
+	return map[string]string{"id": target.DiskID, "wwn": target.WWN, "serial": target.Serial, "model": target.Model, "gptDiskGuid": target.GPTDiskGUID, "partitionUuid": target.PartitionUUID, "filesystemUuid": target.FilesystemUUID, "sizeBytes": strconv.FormatUint(target.SizeBytes, 10)}
+}
+
+func expectedStateMap(state storage.ExpectedState) map[string]string {
+	return map[string]string{"currentPath": state.CurrentPath, "mounted": strconv.FormatBool(state.Mounted), "role": state.Role, "poolId": state.PoolID}
 }
 
 func poolOperationID(endpoint string) string {

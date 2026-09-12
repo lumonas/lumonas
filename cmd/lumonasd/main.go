@@ -255,6 +255,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.pools(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/pools/plan":
 		s.planStoragePool(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/pools/setup/plan":
+		s.planStoragePoolSetup(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/pools/setup/confirm":
+		s.confirmStoragePoolSetup(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/pools/unmount/plan":
 		s.planStoragePoolUnmount(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/pools/unmount/") && strings.HasSuffix(endpoint, "/confirm"):
