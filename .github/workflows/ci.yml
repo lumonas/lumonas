@@ -76,6 +76,18 @@ jobs:
           ./cmd/lumonasd ./cmd/lumonas-privd ./internal/storage ./internal/recovery ./internal/privileged
           -run 'TestStoragePlanRequiresStableIdentityAndSafetyUnlock|TestPoolPlanPersistsAndRejectsReplacedDiskOnConfirmation|TestPoolPlanFailsClosedOnReorderedOrReplacedDisk|TestPlanRejectsExpiryMountAndGenerationRaces|TestApplyMountPersistenceRejectsStaleDiskIdentity|TestApplySnapraidConfigRevalidatesDiskIdentities|TestRecoveryStageRequiresConfirmationAndExtractsBundle|TestBundleRoundTripAndEncryptedPayload|TestBundleTamperingFailsVerification|TestUpdateAPIRequiresVerifiedRecoveryAndSupportsABHealthRollback|TestClientRoundTrip'
 
+  race-fuzz:
+    runs-on: ubuntu-latest
+    needs: [backend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+      - run: go test -race ./cmd/lumonasd ./cmd/lumonas-privd ./internal/backup ./internal/diagnostics ./internal/docker ./internal/network ./internal/recovery ./internal/storage
+      - run: go test ./cmd/lumonasd ./cmd/lumonas-privd ./internal/backup ./internal/diagnostics ./internal/docker ./internal/network ./internal/recovery ./internal/storage -run 'Fuzz'
+
   package:
     runs-on: ubuntu-latest
     needs: [backend, frontend, runtime-smoke]

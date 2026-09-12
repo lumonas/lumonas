@@ -481,7 +481,7 @@ func (s *apiServer) queueFileJob(title, resourceID string, task fileJobTask) mod
 		return job
 	}
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
-	go func() {
+	go func(job model.Job) {
 		started := time.Now().UTC()
 		job.State, job.Stage, job.StartedAt, job.Progress = "running", "Processing filesystem operation", &started, float64Ptr(10)
 		_ = s.store.SaveJob(job)
@@ -497,7 +497,7 @@ func (s *apiServer) queueFileJob(title, resourceID string, task fileJobTask) mod
 		job.State, job.Stage = "successful", "Filesystem operation completed"
 		_ = s.store.SaveJob(job)
 		s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "result": data})
-	}()
+	}(job)
 	return job
 }
 
