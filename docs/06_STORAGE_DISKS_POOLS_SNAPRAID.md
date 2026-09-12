@@ -248,3 +248,8 @@ Display only when enough history exists; do not show false precision.
 - Existing filesystem import does not write to disk before approval.
 - Removing a pool disk with dependencies is blocked.
 - Data files remain directly readable by mounting individual data disks.
+
+The protection configuration endpoint performs a bounded, read-only
+`snapraid status` probe against the generated configuration. It reports the
+configured stable disk identities without inferring them from transient device
+letters, and it must never mutate storage while rendering the protection view.

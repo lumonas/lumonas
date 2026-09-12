@@ -31,8 +31,7 @@ func (s *apiServer) protectionConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	stubRunner := func(context.Context, string, ...string) ([]byte, error) { return nil, nil }
-	protection := storage.DiscoverProtection(ctx, disks, stubRunner, s.snapraidConfigPath())
+	protection := storage.DiscoverProtection(ctx, disks, nil, s.snapraidConfigPath())
 	parityIDs := make([]string, 0, len(protection.ParityDisks))
 	for _, parity := range protection.ParityDisks {
 		parityIDs = append(parityIDs, parity.DiskID)

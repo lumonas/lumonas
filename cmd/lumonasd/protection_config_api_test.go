@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +19,37 @@ func TestProtectionConfigEndpointReportsUnconfiguredState(t *testing.T) {
 	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/storage/protection/config", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"configured":false`) {
 		t.Fatalf("expected unconfigured protection, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestProtectionConfigEndpointUsesReadOnlySnapraidCollector(t *testing.T) {
+	server := testServer(t)
+	configPath := filepath.Join(t.TempDir(), "snapraid.conf")
+	if err := os.WriteFile(configPath, []byte("parity /srv/disks/serial_parity/snapraid.parity\ndata d1 /srv/disks/serial_data\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LUMONAS_SNAPRAID_CONFIG", configPath)
+	server.diskFunc = func() ([]model.Disk, error) {
+		return []model.Disk{
+			{ID: "serial:parity", SizeBytes: 300, Health: model.Healthy},
+			{ID: "serial:data", SizeBytes: 200, Health: model.Healthy},
+		}, nil
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/storage/protection/config", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("protection config request failed: status=%d body=%s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Configured    bool     `json:"configured"`
+		ParityDiskIDs []string `json:"parityDiskIds"`
+		DataDiskIDs   []string `json:"dataDiskIds"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if !payload.Configured || len(payload.ParityDiskIDs) != 1 || payload.ParityDiskIDs[0] != "serial:parity" || len(payload.DataDiskIDs) != 1 || payload.DataDiskIDs[0] != "serial:data" {
+		t.Fatalf("unexpected protection config payload: %#v", payload)
 	}
 }
 

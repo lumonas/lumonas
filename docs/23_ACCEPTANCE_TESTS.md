@@ -245,3 +245,10 @@ Run the `lumonasd` restart and event-stream tests.
 Pass if interrupted queued/preparing/running jobs become failed with a
 completion timestamp, and an SSE client resuming from `Last-Event-ID` receives
 only events after that cursor before live delivery begins.
+
+## Z. Read-only protection discovery
+
+Query the protection configuration endpoint with a generated SnapRAID config.
+
+Pass if it reports stable parity/data disk identities and performs exactly one
+bounded `snapraid status` probe without issuing a mutating storage command.

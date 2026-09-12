@@ -214,6 +214,10 @@ Tailscale, NUT, systemd status, mergerfs/SnapRAID discovery, and SFTP backup
 transfers inherit a finite deadline; NetworkManager checkpoints additionally
 remain bounded by their requested confirmation timeout.
 
+The protection-config API test uses a generated configuration and stable disk
+identities, so the endpoint’s read-only discovery path is exercised separately
+from destructive operation tests.
+
 ## Release artifacts
 
 CI should produce:

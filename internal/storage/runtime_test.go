@@ -40,6 +40,9 @@ func TestDiscoverProtectionReadsConfigWithoutMutating(t *testing.T) {
 	calls := 0
 	runner := func(_ context.Context, command string, args ...string) ([]byte, error) {
 		calls++
+		if command != "snapraid" || len(args) != 3 || args[0] != "-c" || args[1] != config || args[2] != "status" {
+			t.Fatalf("unexpected read-only SnapRAID probe: %s %v", command, args)
+		}
 		return []byte("status"), nil
 	}
 	result := DiscoverProtection(context.Background(), disks, runner, config)
