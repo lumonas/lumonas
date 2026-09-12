@@ -10,24 +10,69 @@ The repository now contains the first appliance-runtime vertical slice alongside
 
 ## Local development
 
+The quickest way to work on the UI — the frontend is backed by the Mock Service
+Worker (no backend needed), with login `admin` + any 4+ character password:
+
+```sh
+make dev            # or: cd web && pnpm dev
+```
+
+To run everything for real — `lumonasd`, the `lumonas-privd` broker plus its
+storage/network/power/general workers (custom socket dir, no root needed), and
+the frontend proxying to the live API — use:
+
+```sh
+make dev-full       # or: scripts/dev.sh full
+```
+
+State (SQLite db, stacks, recovery dir, worker sockets) and logs live under
+`build/dev/`; the frontend runs in the foreground and Ctrl-C stops the stack.
+Note that privileged worker operations shell out to Linux tooling (samba,
+snapraid, nft, …), so most mutating ops fail on a macOS host — the API and UI
+flows still work. Set `LUMONAS_AUTH_REQUIRED=true` for an authenticated session
+(`admin` / `dev-password-123` by default).
+
+### Dev command reference
+
+| Command | What it starts | URL |
+|---|---|---|
+| `make dev` | Vite dev server + MSW mock backend | http://localhost:5173 |
+| `make dev-full` | `lumonasd` + privd broker + 4 workers + Vite (real API) | http://localhost:5173 (API: 8080) |
+| `pnpm dev:api` | Vite only, proxies to an already-running backend | http://localhost:5173 |
+| `make api-smoke` | Black-box backend smoke test (self-contained) | — |
+| `make test` | Go tests + web lint/typecheck/tests + contract checks | — |
+
+The dev launcher reads these overrides (all optional):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LUMONASD_LISTEN` | `127.0.0.1:8080` | Backend listen address (must stay `8080` for the Vite proxy) |
+| `LUMONAS_DEV_DIR` | `build/dev` | State, binaries, worker sockets, and logs root |
+| `LUMONAS_AUTH_REQUIRED` | `false` | Require login in full mode |
+| `LUMONAS_ADMIN_PASSWORD` | `dev-password-123` | Admin password when auth is required |
+
+If port 5173 or 8080 is already taken (e.g. a stray `lumonasd` from an earlier
+session), stop that process first — `lsof -nP -iTCP:8080 -sTCP:LISTEN` finds it.
+
+Manual setup, piece by piece:
+
 Run the backend with a temporary database:
 
 ```sh
 env LUMONAS_DB_PATH=/tmp/lumonas.db go run ./cmd/lumonasd
 ```
 
-In another terminal, run the frontend. Vite proxies `/api`, `/healthz`, and `/readyz` to the backend:
+In another terminal, run the frontend against the real API. Vite proxies
+`/api`, `/healthz`, and `/readyz` to the backend:
 
 ```sh
 cd web
-pnpm dev
+pnpm dev:api
 ```
 
-The mock service worker is opt-in:
-
-```sh
-VITE_USE_MOCKS=true pnpm dev
-```
+`pnpm dev` uses the mock service worker by default (see
+`web/.env.development`); `VITE_USE_MOCKS` is baked in at build time, so
+production bundles always talk to the real backend.
 
 For an appliance-style authenticated runtime, provide an environment file to `lumonasd`:
 
