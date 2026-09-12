@@ -450,6 +450,11 @@ security, dependency, race/fuzz, schema-compatibility, and upgrade jobs. A
 successful individual job cannot be bypassed by accidentally omitting it from
 tagged publication.
 
+The deployment-hardening gates also mount and fill a disposable ext4 image,
+then run the production filesystem collector against it. The test requires a
+critical nearly-full result and is included in tagged release dependencies, so
+disk exhaustion handling cannot regress silently.
+
 ## Reproducibility
 
 Pin external package inputs per release as much as practical.

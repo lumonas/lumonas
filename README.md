@@ -138,6 +138,9 @@ Tagged publication is blocked by the package, QEMU, ISO, recovery, storage
 safety, security, dependency, race/fuzz, schema-compatibility, and upgrade
 gates.
 
+CI also fills a disposable ext4 filesystem and verifies the production
+collector reports a critical nearly-full state before release publication.
+
 Host integration commands are executed through bounded contexts, including
 privileged storage/network operations, disk and SMART discovery, Docker,
 Samba validation, WireGuard, Tailscale, and NUT.

@@ -124,6 +124,7 @@ for worker in storage network power general; do
 done
 [ -x "$ROOT/scripts/storage-loopback-smoke.sh" ] || { echo "storage loopback smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/privileged-storage-loopback-smoke.sh" ] || { echo "privileged storage loopback smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/disk-full-smoke.sh" ] || { echo "disk-full smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/frontend-runtime-smoke.sh" ] || { echo "frontend runtime smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/share-config-smoke.sh" ] || { echo "share configuration smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
@@ -134,6 +135,7 @@ done
 [ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-security-smoke.sh" ] || { echo "systemd security smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
+require_line "$ROOT/Makefile" 'disk-full-smoke:'
 require_line "$ROOT/Makefile" 'share-config-smoke:'
 require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'
 require_line "$ROOT/Makefile" 'qemu-recovery-live:'
@@ -174,6 +176,8 @@ require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'loop-mounted-
 require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'loop-stale'
 require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'loop-expired'
 require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'operationId is required'
+require_line "$ROOT/scripts/disk-full-smoke.sh" 'LUMONAS_DISK_FULL_ASSERT'
+require_line "$ROOT/.github/workflows/ci.yml" 'disk-full:'
 require_line "$ROOT/.github/workflows/ci.yml" 'privileged-storage-loopback:'
 require_line "$ROOT/Makefile" 'privileged-storage-loopback:'
 require_line "$ROOT/installer/build-iso.sh" 'xfsprogs'

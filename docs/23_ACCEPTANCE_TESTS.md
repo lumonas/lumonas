@@ -533,6 +533,13 @@ commit, source epoch, and exact installed package versions.
 Run `scripts/release-gate-policy-smoke.sh`.
 
 Pass if tagged publication depends on the package, QEMU, ISO, recovery,
-storage-safety, integration, security, dependency, race/fuzz, and upgrade
+storage-safety, integration, security, dependency, race/fuzz,
 schema-compatibility, and upgrade jobs, so a failed required gate cannot still
 publish release artifacts.
+
+## AW. Disk-full behavior
+
+Run `scripts/disk-full-smoke.sh` on the Linux CI runner.
+
+Pass if a disposable ext4 filesystem filled beyond 95% is reported by the
+production collector as `critical`, and the gate blocks tagged publication.

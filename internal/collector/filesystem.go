@@ -13,9 +13,16 @@ var monitoredFilesystemPaths = []string{"/", "/var/lib/lumonas", "/srv/lumonas",
 // logs, recovery data, and NAS payloads. Missing optional mount points are
 // omitted; the root filesystem remains the fallback signal.
 func Filesystems() []model.FilesystemUsage {
-	result := make([]model.FilesystemUsage, 0, len(monitoredFilesystemPaths))
-	seen := make(map[string]bool, len(monitoredFilesystemPaths))
-	for _, path := range monitoredFilesystemPaths {
+	return FilesystemsAt(monitoredFilesystemPaths)
+}
+
+// FilesystemsAt reports bounded usage for an explicit set of paths. Keeping
+// the path selection separate makes the real statfs behavior testable against
+// disposable filesystems without changing the appliance's monitored roots.
+func FilesystemsAt(paths []string) []model.FilesystemUsage {
+	result := make([]model.FilesystemUsage, 0, len(paths))
+	seen := make(map[string]bool, len(paths))
+	for _, path := range paths {
 		if seen[path] {
 			continue
 		}

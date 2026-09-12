@@ -17,7 +17,7 @@ if not match:
 needed = {
     "package", "package-permissions", "qemu-smoke", "iso", "installer-scripts",
     "safety-recovery", "recovery-api", "storage-loopback",
-    "privileged-storage-loopback", "share-integrations", "compose-validation",
+    "privileged-storage-loopback", "disk-full", "share-integrations", "compose-validation",
     "security-controls", "dependency-controls", "race-fuzz", "upgrade-compatibility",
     "upgrade-debian",
 }
