@@ -22,11 +22,13 @@ def assert_order(source, names, label):
 
 assert_order(prerm, [
     "lumonas-web.service", "lumonasd.service",
+    "lumonas-runtime.service",
     "lumonas-privd-general.service", "lumonas-privd-power.service",
     "lumonas-privd-network.service", "lumonas-privd-storage.service",
     "lumonas-privd.service",
 ], "upgrade stop")
 assert_order(postinst, [
+    "lumonas-runtime.service",
     "lumonas-privd.service", "lumonas-privd-storage.service",
     "lumonas-privd-network.service", "lumonas-privd-power.service",
     "lumonas-privd-general.service", "lumonasd.service",

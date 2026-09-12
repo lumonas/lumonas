@@ -32,6 +32,7 @@ dpkg -i "/packages/$PACKAGE_NAME"
 [ "$(stat -c "%U:%G:%a" /etc/lumonas)" = "root:lumonas:750" ]
 [ "$(stat -c "%U:%G:%a" /etc/lumonas/lumonasd.env)" = "root:lumonas:640" ]
 [ "$(stat -c "%U:%G:%a" /etc/lumonas/lumonas-web.env)" = "root:lumonas:640" ]
+[ "$(stat -c "%U:%G:%a" /etc/lumonas/runtime.env)" = "root:lumonas:640" ]
 [ "$(stat -c "%U:%G:%a" /var/lib/lumonas)" = "lumonas:lumonas:750" ]
 [ "$(stat -c "%U:%G:%a" /var/lib/lumonas/secrets)" = "lumonas:lumonas:750" ]
 [ "$(stat -c "%U:%G:%a" /var/lib/lumonas/recovery)" = "lumonas:lumonas:750" ]
@@ -42,8 +43,10 @@ dpkg -i "/packages/$PACKAGE_NAME"
 runuser -u lumonas -- sh -eu -c "
 	test -r /etc/lumonas/lumonasd.env
 	test -r /etc/lumonas/lumonas-web.env
+	test -r /etc/lumonas/runtime.env
 	test ! -w /etc/lumonas/lumonasd.env
 	test ! -w /etc/lumonas/lumonas-web.env
+	test ! -w /etc/lumonas/runtime.env
 	test ! -w /etc/lumonas
 	touch /var/lib/lumonas/.permission-smoke
 	touch /var/lib/lumonas/recovery/.permission-smoke
