@@ -2,11 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 
+	"github.com/lumonas/lumonas/internal/collector"
+	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/storage"
 )
 
@@ -16,7 +20,7 @@ var lumonasMountUnitPattern = regexp.MustCompile(`^srv-(disks|pools)-[A-Za-z0-9.
 // requested mount state, prunes stale LumoNAS units, and reloads systemd.
 // The requested state is the complete desired set, making the operation
 // idempotent and self-healing.
-func applyMountPersistence(req request, run command) response {
+func applyMountPersistence(req request, discover func(collector.CommandRunner) ([]model.Disk, error), run command) response {
 	if !req.Confirmed {
 		return response{Error: "operation plan is not confirmed"}
 	}
@@ -35,6 +39,9 @@ func applyMountPersistence(req request, run command) response {
 	}
 	units, err := storage.RenderMountUnits(entries)
 	if err != nil {
+		return response{Error: err.Error()}
+	}
+	if err := revalidateMountDisks(req, entries, discover); err != nil {
 		return response{Error: err.Error()}
 	}
 	directory := envOr("LUMONAS_UNIT_DIR", "/etc/systemd/system")
@@ -61,6 +68,67 @@ func applyMountPersistence(req request, run command) response {
 		}
 	}
 	return response{OK: true, Data: map[string]any{"units": names, "removed": removed}}
+}
+
+func revalidateMountDisks(req request, entries []storage.MountEntry, discover func(collector.CommandRunner) ([]model.Disk, error)) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	if len(req.ExpectedDisks) == 0 {
+		return fmt.Errorf("expected mount disk identities are required")
+	}
+	if discover == nil {
+		return fmt.Errorf("disk identity discovery is unavailable")
+	}
+	actual, err := discover(nil)
+	if err != nil {
+		return fmt.Errorf("disk identity discovery failed")
+	}
+	byID := make(map[string]model.Disk, len(actual))
+	for _, disk := range actual {
+		byID[disk.ID] = disk
+	}
+	expected := make(map[string]expectedDisk, len(req.ExpectedDisks))
+	for _, disk := range req.ExpectedDisks {
+		if _, duplicate := expected[disk.ID]; duplicate {
+			return fmt.Errorf("expected mount disk identities contain a duplicate")
+		}
+		expected[disk.ID] = disk
+		current, ok := byID[disk.ID]
+		if !ok {
+			return fmt.Errorf("mount disk %q is no longer present", disk.ID)
+		}
+		identity := map[string]string{"id": disk.ID, "wwn": disk.WWN, "serial": disk.Serial, "model": disk.Model, "filesystemUuid": disk.FilesystemUUID}
+		if disk.SizeBytes != 0 {
+			identity["sizeBytes"] = fmt.Sprint(disk.SizeBytes)
+		}
+		if err := validateIdentity(current, identity); err != nil {
+			return fmt.Errorf("mount disk %q changed: %w", disk.ID, err)
+		}
+	}
+	for _, entry := range entries {
+		switch entry.Kind {
+		case "disk":
+			disk, ok := expected[entry.TargetID]
+			if !ok || entry.Source != "UUID="+disk.FilesystemUUID {
+				return fmt.Errorf("disk mount %q does not match its expected filesystem identity", entry.MountPath)
+			}
+		case "pool":
+			for _, branch := range strings.Split(entry.Source, ":") {
+				matched := false
+				for id := range expected {
+					if storage.DiskBranchPath(id) == branch {
+						matched = true
+						break
+					}
+				}
+				if !matched {
+					return fmt.Errorf("pool mount %q references an unverified disk branch", entry.MountPath)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // writeUnitAtomic replaces a unit file only when its content changed so

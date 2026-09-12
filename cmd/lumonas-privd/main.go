@@ -257,7 +257,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 	case "pool.unmount":
 		return executePoolUnmount(req, run)
 	case "storage.mountpersist.apply":
-		return applyMountPersistence(req, run)
+		return applyMountPersistence(req, discover, run)
 	case "snapraid.config.apply":
 		return applySnapraidConfig(req, discover, run)
 	case "service.reload":

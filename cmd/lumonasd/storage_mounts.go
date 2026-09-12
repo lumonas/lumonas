@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/privileged"
 	"github.com/lumonas/lumonas/internal/storage"
 )
@@ -86,11 +88,19 @@ func (s *apiServer) warnMountPersistence(reason string, err error) {
 }
 
 func (s *apiServer) applyMountPersistence(ctx context.Context, entries []storage.MountEntry) error {
+	disks, err := s.diskFunc()
+	if err != nil {
+		return fmt.Errorf("disk identity discovery unavailable: %w", err)
+	}
+	expected, err := expectedMountDisks(disks, entries)
+	if err != nil {
+		return err
+	}
 	encoded := make([]any, 0, len(entries))
 	for _, entry := range entries {
 		encoded = append(encoded, map[string]any{"kind": entry.Kind, "targetId": entry.TargetID, "mountPath": entry.MountPath, "fstype": entry.FSType, "source": entry.Source, "options": entry.Options, "enabled": entry.Enabled})
 	}
-	request := privileged.Request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-" + fmt.Sprint(s.currentGeneration()), RequestedState: map[string]any{"entries": encoded}, ExpiresAt: time.Now().UTC().Add(5 * time.Minute), Confirmed: true}
+	request := privileged.Request{Operation: "storage.mountpersist.apply", OperationID: newID("mountpersist"), PlanHash: "mountpersist-" + fmt.Sprint(s.currentGeneration()), ExpectedDisks: expected, RequestedState: map[string]any{"entries": encoded}, ExpiresAt: time.Now().UTC().Add(5 * time.Minute), Confirmed: true}
 	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(ctx, request)
 	if err != nil {
 		return err
@@ -99,6 +109,43 @@ func (s *apiServer) applyMountPersistence(ctx context.Context, entries []storage
 		return fmt.Errorf("%s", result.Error)
 	}
 	return nil
+}
+
+func expectedMountDisks(disks []model.Disk, entries []storage.MountEntry) ([]privileged.ExpectedDisk, error) {
+	byID := make(map[string]model.Disk, len(disks))
+	ids := make(map[string]bool)
+	for _, disk := range disks {
+		byID[disk.ID] = disk
+	}
+	for _, entry := range entries {
+		if entry.Kind == "disk" {
+			ids[entry.TargetID] = true
+			continue
+		}
+		for _, branch := range strings.Split(entry.Source, ":") {
+			found := false
+			for _, disk := range disks {
+				if storage.DiskBranchPath(disk.ID) == branch {
+					ids[disk.ID] = true
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("mount branch %q has no discovered stable disk identity", branch)
+			}
+		}
+	}
+	result := make([]privileged.ExpectedDisk, 0, len(ids))
+	for id := range ids {
+		disk, ok := byID[id]
+		if !ok {
+			return nil, fmt.Errorf("mount disk identity is no longer present: %s", id)
+		}
+		result = append(result, privileged.ExpectedDisk{ID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, FilesystemUUID: disk.FilesystemUUID})
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID < result[j].ID })
+	return result, nil
 }
 
 func (s *apiServer) storageMounts(w http.ResponseWriter) {

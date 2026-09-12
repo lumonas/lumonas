@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/collector"
+	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/storage"
 )
 
@@ -26,7 +28,9 @@ func TestApplyMountPersistenceWritesEnablesAndPrunes(t *testing.T) {
 		{"kind": "disk", "targetId": "wwn:a", "mountPath": "/srv/disks/wwn_a", "fstype": "ext4", "source": "UUID=abc-123", "options": storage.DiskMountOptions, "enabled": true},
 		{"kind": "pool", "targetId": "media", "mountPath": "/srv/pools/media", "fstype": "fuse.mergerfs", "source": "/srv/disks/wwn_a", "options": storage.PoolMountOptions, "enabled": true},
 	}
-	result := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-1", RequestedState: map[string]any{"entries": entriesOf(entries)}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(name string, args ...string) ([]byte, error) {
+	result := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", FilesystemUUID: "abc-123"}}, RequestedState: map[string]any{"entries": entriesOf(entries)}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(_ collector.CommandRunner) ([]model.Disk, error) {
+		return []model.Disk{{ID: "wwn:a", FilesystemUUID: "abc-123"}}, nil
+	}, func(name string, args ...string) ([]byte, error) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
 		return nil, nil
 	})
@@ -61,7 +65,7 @@ func TestApplyMountPersistencePrunesEverythingOnEmptyState(t *testing.T) {
 		t.Fatal(err)
 	}
 	commands := make([]string, 0)
-	result := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-2", RequestedState: map[string]any{"entries": []any{}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(name string, args ...string) ([]byte, error) {
+	result := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-2", RequestedState: map[string]any{"entries": []any{}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
 		return nil, nil
 	})
@@ -79,16 +83,25 @@ func TestApplyMountPersistencePrunesEverythingOnEmptyState(t *testing.T) {
 func TestApplyMountPersistenceRequiresConfirmationAndSafeState(t *testing.T) {
 	directory := t.TempDir()
 	t.Setenv("LUMONAS_UNIT_DIR", directory)
-	unconfirmed := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-3", RequestedState: map[string]any{"entries": []any{}}}, func(string, ...string) ([]byte, error) { return nil, nil })
+	unconfirmed := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-3", RequestedState: map[string]any{"entries": []any{}}}, nil, func(string, ...string) ([]byte, error) { return nil, nil })
 	if unconfirmed.OK || !strings.Contains(unconfirmed.Error, "not confirmed") {
 		t.Fatalf("expected confirmation gate: %#v", unconfirmed)
 	}
-	unsafe := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-4", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute), RequestedState: map[string]any{"entries": []any{map[string]any{"kind": "disk", "targetId": "evil", "mountPath": "/etc/cron.d/evil", "fstype": "ext4", "source": "UUID=x", "enabled": true}}}}, func(string, ...string) ([]byte, error) { return nil, nil })
+	unsafe := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-4", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute), RequestedState: map[string]any{"entries": []any{map[string]any{"kind": "disk", "targetId": "evil", "mountPath": "/etc/cron.d/evil", "fstype": "ext4", "source": "UUID=x", "enabled": true}}}}, nil, func(string, ...string) ([]byte, error) { return nil, nil })
 	if unsafe.OK || !strings.Contains(unsafe.Error, "canonical") {
 		t.Fatalf("expected unsafe path rejection: %#v", unsafe)
 	}
 	if items, err := os.ReadDir(directory); err != nil || len(items) != 0 {
 		t.Fatalf("no unit should be written for rejected state: %v %v", items, err)
+	}
+}
+
+func TestApplyMountPersistenceRejectsStaleDiskIdentity(t *testing.T) {
+	result := applyMountPersistence(request{Operation: "storage.mountpersist.apply", PlanHash: "mountpersist-stale", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "old"}}, RequestedState: map[string]any{"entries": []any{map[string]any{"kind": "disk", "targetId": "wwn:a", "mountPath": "/srv/disks/wwn_a", "fstype": "ext4", "source": "UUID=abc", "enabled": true}}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(_ collector.CommandRunner) ([]model.Disk, error) {
+		return []model.Disk{{ID: "wwn:a", WWN: "new", FilesystemUUID: "abc"}}, nil
+	}, func(string, ...string) ([]byte, error) { return nil, nil })
+	if result.OK || !strings.Contains(result.Error, "identity mismatch") {
+		t.Fatalf("expected stale identity rejection: %#v", result)
 	}
 }
 
