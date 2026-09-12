@@ -606,9 +606,12 @@ func (s *apiServer) recoveryStatus(w http.ResponseWriter) {
 	status := map[string]any{"configured": key != "", "latestPath": bundlePath, "verified": false}
 	if key != "" {
 		if bundle, err := os.ReadFile(bundlePath); err == nil {
-			if manifest, verifyErr := recovery.Verify(bundle, []byte(key)); verifyErr == nil {
-				status["verified"] = true
-				status["manifest"] = manifest
+			if plan, planErr := recovery.Plan(bundle, []byte(key)); planErr == nil {
+				status["verified"] = plan.Verified && plan.DatabaseValid && plan.DesiredStateValid && plan.ComposeValid
+				status["manifest"] = plan.Manifest
+				if len(plan.Warnings) > 0 {
+					status["warnings"] = plan.Warnings
+				}
 			}
 		}
 	}

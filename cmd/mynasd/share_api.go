@@ -101,6 +101,19 @@ func (s *apiServer) createManagedShare(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "legacy share import failed: " + err.Error()})
 		return
 	}
+	idempotencyKey, err := requestIdempotencyKey(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if idempotencyKey != "" {
+		if shareID, found := s.store.Meta(idempotencyMetaKey("share.create", idempotencyKey)); found {
+			if existing, getErr := s.store.ManagedShare(shareID); getErr == nil {
+				writeJSON(w, http.StatusOK, existing)
+				return
+			}
+		}
+	}
 	share, expectedGeneration, err := decodeManagedShare(r)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
@@ -147,6 +160,9 @@ func (s *apiServer) createManagedShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordIdentityAudit(actor, "share.create", created.ID, map[string]any{"name": created.Name})
+	if idempotencyKey != "" {
+		_ = s.store.SetMeta(idempotencyMetaKey("share.create", idempotencyKey), created.ID)
+	}
 	s.advanceGeneration("share.create")
 	writeJSON(w, http.StatusCreated, created)
 }

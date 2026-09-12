@@ -35,6 +35,19 @@ func (s *apiServer) createNetworkConnection(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
+	idempotencyKey, err := requestIdempotencyKey(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if idempotencyKey != "" {
+		if connectionID, found := s.store.Meta(idempotencyMetaKey("network.connection.create", idempotencyKey)); found {
+			if existing, getErr := s.store.NetworkConnection(connectionID); getErr == nil {
+				writeJSON(w, http.StatusOK, existing)
+				return
+			}
+		}
+	}
 	var input struct {
 		network.Connection
 		ExpectedGeneration *int64 `json:"expectedGeneration"`
@@ -65,6 +78,9 @@ func (s *apiServer) createNetworkConnection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.recordIdentityAudit(actor, "network.connection.create", value.ID, map[string]any{"interface": value.Interface})
+	if idempotencyKey != "" {
+		_ = s.store.SetMeta(idempotencyMetaKey("network.connection.create", idempotencyKey), value.ID)
+	}
 	s.advanceGeneration("network.connection.create")
 	s.publish("network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: value.ID}, map[string]any{"requiresCheckpoint": true})
 	writeJSON(w, http.StatusCreated, value)
@@ -334,6 +350,19 @@ func (s *apiServer) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.identityActor(w, r, false); !ok {
 		return
 	}
+	idempotencyKey, err := requestIdempotencyKey(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if idempotencyKey != "" {
+		if jobID, found := s.store.Meta(idempotencyMetaKey("network.diagnostic", idempotencyKey)); found {
+			if job, getErr := s.store.Job(jobID); getErr == nil {
+				writeJSON(w, http.StatusAccepted, job)
+				return
+			}
+		}
+	}
 	var input struct {
 		Kind   string `json:"kind"`
 		Target string `json:"target"`
@@ -353,6 +382,9 @@ func (s *apiServer) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+	if idempotencyKey != "" {
+		_ = s.store.SetMeta(idempotencyMetaKey("network.diagnostic", idempotencyKey), job.ID)
+	}
 	go s.runNetworkDiagnostic(job, input.Kind, input.Target, input.Port)
 	writeJSON(w, http.StatusAccepted, job)
 }

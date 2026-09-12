@@ -16,6 +16,7 @@ func TestManagedShareAPICreateUpdateDelete(t *testing.T) {
 	t.Setenv("MYNAS_SAMBA_CONFIG", sambaConfig)
 
 	create := httptest.NewRequest(http.MethodPost, "/api/v1/shares", strings.NewReader(`{"name":"Documents","path":"/srv/Documents","enabled":true,"protocols":["smb"],"access":{}}`))
+	create.Header.Set("Idempotency-Key", "documents-create")
 	createdResponse := httptest.NewRecorder()
 	server.routes().ServeHTTP(createdResponse, create)
 	if createdResponse.Code != http.StatusCreated {
@@ -26,6 +27,19 @@ func TestManagedShareAPICreateUpdateDelete(t *testing.T) {
 	}
 	if err := json.NewDecoder(createdResponse.Body).Decode(&created); err != nil || created.ID == "" {
 		t.Fatalf("invalid create response: %#v err=%v", created, err)
+	}
+	retry := httptest.NewRecorder()
+	server.routes().ServeHTTP(retry, httptest.NewRequest(http.MethodPost, "/api/v1/shares", strings.NewReader(`{"name":"Documents","path":"/srv/Documents","enabled":true,"protocols":["smb"],"access":{}}`)))
+	// A retry without the key is a normal duplicate request and remains rejected.
+	if retry.Code != http.StatusConflict {
+		t.Fatalf("unexpected unkeyed duplicate status %d: %s", retry.Code, retry.Body.String())
+	}
+	keyedRetry := httptest.NewRequest(http.MethodPost, "/api/v1/shares", strings.NewReader(`{"name":"Documents","path":"/srv/Documents","enabled":true,"protocols":["smb"],"access":{}}`))
+	keyedRetry.Header.Set("Idempotency-Key", "documents-create")
+	keyedResponse := httptest.NewRecorder()
+	server.routes().ServeHTTP(keyedResponse, keyedRetry)
+	if keyedResponse.Code != http.StatusOK || !strings.Contains(keyedResponse.Body.String(), created.ID) {
+		t.Fatalf("idempotent retry did not return original share: %d %s", keyedResponse.Code, keyedResponse.Body.String())
 	}
 
 	update := httptest.NewRequest(http.MethodPatch, "/api/v1/shares/"+created.ID, strings.NewReader(`{"name":"Documents","path":"/srv/Documents","description":"Updated","enabled":true,"protocols":[{"name":"smb"}],"access":[]}`))
