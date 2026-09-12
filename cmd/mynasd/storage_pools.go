@@ -13,6 +13,19 @@ import (
 )
 
 func (s *apiServer) planStoragePool(w http.ResponseWriter, r *http.Request) {
+	idempotencyKey, err := requestIdempotencyKey(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if idempotencyKey != "" {
+		if operationID, found := s.store.Meta(idempotencyMetaKey("storage.pool.plan", idempotencyKey)); found {
+			if existing, loadErr := s.store.PoolPlan(operationID); loadErr == nil {
+				writeJSON(w, http.StatusOK, existing)
+				return
+			}
+		}
+	}
 	var input struct {
 		Name               string   `json:"name"`
 		DiskIDs            []string `json:"diskIds"`
@@ -57,6 +70,9 @@ func (s *apiServer) planStoragePool(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SavePoolPlan(plan); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	if idempotencyKey != "" {
+		_ = s.store.SetMeta(idempotencyMetaKey("storage.pool.plan", idempotencyKey), plan.OperationID)
 	}
 	s.publish("storage.pool.planned", "warning", &model.ResourceRef{Type: "pool", ID: plan.Name}, map[string]any{"operationId": plan.OperationID, "planHash": plan.PlanHash, "diskCount": len(plan.Members)})
 	writeJSON(w, http.StatusCreated, plan)
