@@ -270,7 +270,43 @@ func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 
 func (s *apiServer) serverInfo(w http.ResponseWriter) {
 	uuid, _ := s.store.Meta("nas_uuid")
-	writeJSON(w, http.StatusOK, model.ServerInfo{ID: "server-1", Name: collector.Hostname(), Hostname: collector.Hostname(), Version: s.version, NASUUID: uuid, Timezone: time.Now().Location().String(), Health: model.Healthy, IP: primaryIP()})
+	writeJSON(w, http.StatusOK, model.ServerInfo{ID: "server-1", Name: collector.Hostname(), Hostname: collector.Hostname(), Version: s.version, NASUUID: uuid, Timezone: time.Now().Location().String(), Health: s.serverHealth(), IP: primaryIP()})
+}
+
+func (s *apiServer) serverHealth() model.HealthState {
+	health := model.Healthy
+	disks, err := s.diskFunc()
+	if err != nil {
+		return model.Attention
+	}
+	for _, disk := range disks {
+		if disk.Health == model.Critical {
+			return model.Critical
+		}
+		if disk.Health == model.Warning || disk.Health == model.Attention {
+			health = model.Attention
+		}
+	}
+	current := make(map[string]bool, len(disks))
+	for _, disk := range disks {
+		current[disk.ID] = true
+	}
+	known, _ := s.store.KnownDisks()
+	for _, disk := range known {
+		if !current[disk.ID] {
+			return model.Critical
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	protection := storage.DiscoverProtection(ctx, disks, nil, envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf"))
+	if protection.Status == model.Critical {
+		return model.Critical
+	}
+	if protection.Status == model.Attention {
+		health = model.Attention
+	}
+	return health
 }
 
 func (s *apiServer) disks(w http.ResponseWriter) {
