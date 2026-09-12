@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ArrowUpCircle, FileUp } from 'lucide-react'
-import { useDockerImages, useUpdateImage } from '@/api/queries'
+import { useDockerImages, useImportDockerImage, useUpdateImage } from '@/api/queries'
 import { EmptyState } from '@/components/core/empty-state'
 import { ResourceTable, type Column } from '@/components/core/resource-table'
 import { Badge } from '@/components/ui/badge'
@@ -12,6 +12,8 @@ import type { DockerImage } from '@/api/types'
 export function ImagesTab() {
   const { data: images, isLoading } = useDockerImages()
   const updateImage = useUpdateImage()
+  const importImage = useImportDockerImage()
+  const fileInput = useRef<HTMLInputElement>(null)
   const [importOpen, setImportOpen] = useState(false)
 
   const columns: Column<DockerImage>[] = [
@@ -107,17 +109,32 @@ export function ImagesTab() {
           </DialogHeader>
           <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed p-8 text-center">
             <FileUp className="size-6 text-muted-foreground" />
-            <p className="text-sm font-medium">Drop a .tar archive here</p>
+            <p className="text-sm font-medium">Choose a .tar archive</p>
             <p className="text-xs text-muted-foreground">
               Produced by <span className="font-mono">docker save</span> on another machine
             </p>
+            <input
+              ref={fileInput}
+              type="file"
+              accept=".tar,application/x-tar,application/octet-stream"
+              className="sr-only"
+              onChange={(event) => {
+                const archive = event.target.files?.[0]
+                if (!archive) return
+                importImage.mutate(archive, { onSuccess: () => setImportOpen(false) })
+                event.target.value = ''
+              }}
+            />
+            <Button variant="outline" onClick={() => fileInput.current?.click()} disabled={importImage.isPending}>
+              {importImage.isPending ? 'Importing…' : 'Choose archive'}
+            </Button>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setImportOpen(false)}>
               Cancel
             </Button>
-            <Button variant="outline" disabled>
-              Import (mock)
+            <Button variant="outline" onClick={() => fileInput.current?.click()} disabled={importImage.isPending}>
+              {importImage.isPending ? 'Importing…' : 'Import'}
             </Button>
           </DialogFooter>
         </DialogContent>

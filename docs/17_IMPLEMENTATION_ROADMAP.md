@@ -30,6 +30,7 @@ Deliver:
 - Debian Docker JSON-file log rotation baseline and retention verification.
 - catalog recovery contracts are applied to runtime Docker stack responses;
   unknown Compose stacks remain conservative by default.
+- bounded offline Docker image import through the controlled backend.
 
 Exit criteria:
 

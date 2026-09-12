@@ -314,6 +314,21 @@ func (s Service) UpdateImage(ctx context.Context, image Image) error {
 	return err
 }
 
+func (s Service) ImportImage(ctx context.Context, archivePath string) error {
+	if archivePath == "" || !filepath.IsAbs(archivePath) {
+		return errors.New("image archive path must be absolute")
+	}
+	info, err := os.Stat(archivePath)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return errors.New("image archive must be a regular file")
+	}
+	_, err = s.Run(ctx, "docker", "load", "--input", archivePath)
+	return err
+}
+
 func (s Service) UpdateCompose(name, compose string) (Stack, error) {
 	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`).MatchString(name) || !strings.Contains(compose, "services:") {
 		return Stack{}, errors.New("invalid compose update")

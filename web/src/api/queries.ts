@@ -300,6 +300,14 @@ export function useUpdateImage() {
   return useDockerMutation((id: string) => apiPost<DockerImage>(`/docker/images/${id}/update`))
 }
 
+export function useImportDockerImage() {
+  return useDockerMutation((archive: File) => {
+    const form = new FormData()
+    form.append('archive', archive)
+    return apiMultipart<{ status: string; bytes: number }>('/docker/images/import', form)
+  })
+}
+
 export function useSeedLogs() {
   return useMutation({
     mutationFn: (container: string) => apiGet<LogLine[]>(`/docker/logs/${container}`),

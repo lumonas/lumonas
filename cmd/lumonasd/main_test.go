@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -264,6 +266,39 @@ func TestDockerStacksExposeCatalogRecoveryMetadata(t *testing.T) {
 	}
 	if len(stacks) != 1 || stacks[0].CatalogID != "jellyfin" || stacks[0].Recovery == nil || stacks[0].RecoveryCoverage <= 0 {
 		t.Fatalf("unexpected catalog recovery metadata: %#v", stacks)
+	}
+}
+
+func TestDockerImageImportStagesBoundedArchiveAndLoadsIt(t *testing.T) {
+	server := testServer(t)
+	importRoot := t.TempDir()
+	t.Setenv("LUMONAS_DOCKER_IMPORT_DIR", importRoot)
+	var command string
+	server.dockerService = dockerruntime.New(t.TempDir(), func(_ context.Context, name string, args ...string) ([]byte, error) {
+		command = name + " " + strings.Join(args, " ")
+		return nil, nil
+	})
+	body := &bytes.Buffer{}
+	multipartWriter := multipart.NewWriter(body)
+	part, err := multipartWriter.CreateFormFile("archive", "images.tar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := part.Write([]byte("docker save payload")); err != nil {
+		t.Fatal(err)
+	}
+	if err := multipartWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/docker/images/import", body)
+	request.Header.Set("Content-Type", multipartWriter.FormDataContentType())
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"status":"imported"`) {
+		t.Fatalf("unexpected import response %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.HasPrefix(command, "docker load --input "+importRoot) {
+		t.Fatalf("unexpected import command: %q", command)
 	}
 }
 

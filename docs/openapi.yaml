@@ -1273,6 +1273,28 @@ paths:
         '4XX':
           description: Client error
 
+  /docker/images/import:
+    post:
+      tags: [Docker]
+      summary: Import a docker save image archive
+      operationId: post-docker-images-import
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archive]
+              properties:
+                archive:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Image archive imported
+        '4XX':
+          description: Client error
+
   /docker/images/{id}/update:
     post:
       tags: [Docker]

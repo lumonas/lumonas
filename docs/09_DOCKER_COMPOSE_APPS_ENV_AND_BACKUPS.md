@@ -201,6 +201,11 @@ Before apply:
 
 Docker → Images → Import should accept tar archives produced by `docker save`.
 
+The appliance implements this through a bounded multipart upload to a
+temporary staging directory followed by a typed `docker load --input`
+invocation. The archive is removed after import and user input never passes
+through a shell.
+
 When stack image is unavailable and no Internet:
 
 ```text

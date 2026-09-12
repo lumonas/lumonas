@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -461,6 +462,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.dockerContainerAction(w, r, endpoint)
 	case r.Method == http.MethodGet && endpoint == "/docker/images":
 		s.dockerImages(w, r)
+	case r.Method == http.MethodPost && endpoint == "/docker/images/import":
+		s.dockerImageImport(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/images/"):
 		s.dockerImageAction(w, r, endpoint)
 	case r.Method == http.MethodGet && endpoint == "/docker/volumes":
@@ -2023,6 +2026,64 @@ func (s *apiServer) dockerImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, images)
+}
+
+const dockerImportMaxBytes int64 = 20 << 30
+
+func (s *apiServer) dockerImageImport(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, dockerImportMaxBytes+1)
+	file, _, err := r.FormFile("archive")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "a Docker save archive is required in the archive field"})
+		return
+	}
+	defer file.Close()
+
+	directory := envOr("LUMONAS_DOCKER_IMPORT_DIR", "/var/lib/lumonas/imports")
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "image import directory could not be created"})
+		return
+	}
+	temporary, err := os.CreateTemp(directory, "image-import-*.tar")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "image import staging failed"})
+		return
+	}
+	temporaryPath := temporary.Name()
+	cleanup := func() {
+		_ = temporary.Close()
+		_ = os.Remove(temporaryPath)
+	}
+	defer cleanup()
+	if err := temporary.Chmod(0o600); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "image import staging permissions failed"})
+		return
+	}
+	written, err := io.Copy(temporary, io.LimitReader(file, dockerImportMaxBytes+1))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "image archive upload failed"})
+		return
+	}
+	if written > dockerImportMaxBytes {
+		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "image archive exceeds the 20 GiB limit"})
+		return
+	}
+	if err := temporary.Sync(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "image archive could not be flushed"})
+		return
+	}
+	if err := temporary.Close(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "image archive could not be closed"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Minute)
+	defer cancel()
+	if err := s.dockerService.ImportImage(ctx, temporaryPath); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Docker image import failed"})
+		return
+	}
+	s.publish("docker.image.imported", "info", nil, map[string]any{"bytes": written})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "imported", "bytes": written})
 }
 
 func (s *apiServer) dockerContainerAction(w http.ResponseWriter, r *http.Request, endpoint string) {
