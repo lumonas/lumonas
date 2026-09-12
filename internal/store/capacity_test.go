@@ -8,7 +8,7 @@ import (
 )
 
 func TestCapacitySnapshotsAreBoundedToOnePerResourcePerDay(t *testing.T) {
-	db, err := Open(t.TempDir() + "/mynas.db")
+	db, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}

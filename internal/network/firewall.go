@@ -10,8 +10,8 @@ import (
 // WriteNftables atomically activates a generated ruleset. The content is
 // intentionally accepted only from RenderNftables callers in the daemon.
 func WriteNftables(path, content string) error {
-	if !strings.HasPrefix(content, "table inet mynas {") || !strings.Contains(content, "chain input") {
-		return fmt.Errorf("nftables content is not a generated MyNAS ruleset")
+	if !strings.HasPrefix(content, "table inet lumonas {") || !strings.Contains(content, "chain input") {
+		return fmt.Errorf("nftables content is not a generated LumoNAS ruleset")
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err

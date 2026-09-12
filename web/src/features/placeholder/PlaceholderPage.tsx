@@ -5,16 +5,7 @@ import { PageHeader } from '@/components/core/page-header'
 import { Button } from '@/components/ui/button'
 import { NAV_ITEMS } from '@/components/layout/nav'
 
-const DESCRIPTIONS: Record<string, string> = {
-  '/shares': 'SMB, NFS and other file shares with access rules.',
-  '/docker': 'Apps, stacks, containers, images and volumes.',
-  '/files': 'Browse and manage files on your shares.',
-  '/backups': 'Backup jobs and disaster recovery readiness.',
-  '/network': 'Interfaces, VPN, firewall and diagnostics.',
-  '/monitoring': 'Metrics, alerts, jobs history and the event timeline.',
-  '/users': 'Management and file users, groups and permissions.',
-  '/settings': 'System, updates, power and notifications.',
-}
+const DESCRIPTIONS: Record<string, string> = {}
 
 export function PlaceholderPage() {
   const { pathname } = useLocation()

@@ -1,0 +1,1270 @@
+openapi: 3.0.3
+info:
+  title: LumoNAS API
+  description: |
+    LumoNAS management daemon API. Provides endpoints for system monitoring,
+    storage management, Docker orchestration, networking, backups, and administration.
+  version: 0.1.0
+  contact:
+    name: LumoNAS
+    url: https://github.com/lumonas/lumonas
+
+servers:
+  - url: http://127.0.0.1:8080/api/v1
+    description: Local development
+
+tags:
+  - name: System
+    description: Server info, metrics, health
+  - name: Storage
+    description: Disks, pools, SnapRAID protection
+  - name: Docker
+    description: Stacks, containers, images, volumes
+  - name: Shares
+    description: File shares and access rules
+  - name: Files
+    description: File browser operations
+  - name: Network
+    description: Network configuration, VPN, firewall
+  - name: Backups
+    description: Backup destinations, jobs, recovery
+  - name: Monitoring
+    description: Alerts, notifications, schedules
+  - name: Users
+    description: User and group management
+  - name: Settings
+    description: System settings and updates
+  - name: Auth
+    description: Authentication and sessions
+  - name: Health
+    description: Health scoring and explanations
+
+paths:
+  /healthz:
+    get:
+      tags: [System]
+      summary: Health check
+      operationId: healthz
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /readyz:
+    get:
+      tags: [System]
+      summary: Readiness check
+      operationId: readyz
+      responses:
+        '200':
+          description: Ready
+        '503':
+          description: Not ready
+
+  /server:
+    get:
+      tags: [System]
+      summary: Get server info
+      operationId: getServer
+      responses:
+        '200':
+          description: Server information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerInfo'
+
+  /system/metrics:
+    get:
+      tags: [System]
+      summary: Get system metrics
+      operationId: getMetrics
+      responses:
+        '200':
+          description: System metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemMetrics'
+
+  /health/components:
+    get:
+      tags: [Health]
+      summary: Get health component breakdown
+      operationId: getHealthComponents
+      description: Returns detailed health score with per-component status and recommendations.
+      responses:
+        '200':
+          description: Health breakdown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthBreakdown'
+
+  /disks:
+    get:
+      tags: [Storage]
+      summary: List disks
+      operationId: listDisks
+      responses:
+        '200':
+          description: Disk list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Disk'
+
+  /disks/{id}:
+    get:
+      tags: [Storage]
+      summary: Get disk by ID
+      operationId: getDisk
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Disk details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Disk'
+        '404':
+          description: Disk not found
+
+  /pools:
+    get:
+      tags: [Storage]
+      summary: List storage pools
+      operationId: listPools
+      responses:
+        '200':
+          description: Pool list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pool'
+
+  /storage/protection:
+    get:
+      tags: [Storage]
+      summary: Get SnapRAID protection status
+      operationId: getProtection
+      responses:
+        '200':
+          description: Protection status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Protection'
+
+  /storage/safety:
+    get:
+      tags: [Storage]
+      summary: Get storage safety lock status
+      operationId: getStorageSafety
+      responses:
+        '200':
+          description: Safety status
+
+  /storage/safety/unlock:
+    post:
+      tags: [Storage]
+      summary: Unlock storage safety
+      operationId: unlockStorageSafety
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Unlocked
+
+  /storage/safety/lock:
+    post:
+      tags: [Storage]
+      summary: Lock storage safety
+      operationId: lockStorageSafety
+      responses:
+        '200':
+          description: Locked
+
+  /storage/operations/plan:
+    post:
+      tags: [Storage]
+      summary: Plan a storage operation
+      operationId: planStorageOperation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [format, mount, unmount, erase]
+                diskId:
+                  type: string
+                filesystem:
+                  type: string
+      responses:
+        '200':
+          description: Operation plan
+
+  /docker/summary:
+    get:
+      tags: [Docker]
+      summary: Docker summary
+      operationId: dockerSummary
+      responses:
+        '200':
+          description: Docker summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DockerSummary'
+
+  /docker/stacks:
+    get:
+      tags: [Docker]
+      summary: List Docker stacks
+      operationId: listDockerStacks
+      responses:
+        '200':
+          description: Stack list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DockerStack'
+    post:
+      tags: [Docker]
+      summary: Create a Docker stack
+      operationId: createDockerStack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                catalogId:
+                  type: string
+                values:
+                  type: object
+                storage:
+                  type: array
+                  items:
+                    type: object
+      responses:
+        '201':
+          description: Stack created
+
+  /docker/containers:
+    get:
+      tags: [Docker]
+      summary: List Docker containers
+      operationId: listDockerContainers
+      responses:
+        '200':
+          description: Container list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DockerContainer'
+
+  /docker/images:
+    get:
+      tags: [Docker]
+      summary: List Docker images
+      operationId: listDockerImages
+      responses:
+        '200':
+          description: Image list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DockerImage'
+
+  /docker/volumes:
+    get:
+      tags: [Docker]
+      summary: List Docker volumes
+      operationId: listDockerVolumes
+      responses:
+        '200':
+          description: Volume list
+
+  /shares:
+    get:
+      tags: [Shares]
+      summary: List managed shares
+      operationId: listShares
+      responses:
+        '200':
+          description: Share list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Share'
+    post:
+      tags: [Shares]
+      summary: Create a share
+      operationId: createShare
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                path:
+                  type: string
+      responses:
+        '201':
+          description: Share created
+
+  /files:
+    get:
+      tags: [Files]
+      summary: List files
+      operationId: listFiles
+      parameters:
+        - name: shareId
+          in: query
+          schema:
+            type: string
+        - name: path
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: File list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FileEntry'
+
+  /network/connections:
+    get:
+      tags: [Network]
+      summary: List network connections
+      operationId: listNetworkConnections
+      responses:
+        '200':
+          description: Connection list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NetworkConnection'
+
+  /network/interfaces:
+    get:
+      tags: [Network]
+      summary: List network interfaces
+      operationId: listNetworkInterfaces
+      responses:
+        '200':
+          description: Interface list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NetworkInterface'
+
+  /network/wireguard/status:
+    get:
+      tags: [Network]
+      summary: WireGuard status
+      operationId: wireguardStatus
+      responses:
+        '200':
+          description: WireGuard status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WireGuardStatus'
+
+  /network/wireguard/apply:
+    post:
+      tags: [Network]
+      summary: Apply WireGuard configuration
+      operationId: applyWireGuard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WireGuardConfig'
+      responses:
+        '200':
+          description: Applied
+
+  /network/wireguard/keygen:
+    post:
+      tags: [Network]
+      summary: Generate WireGuard key pair
+      operationId: wireguardKeygen
+      responses:
+        '200':
+          description: Key pair
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  privateKey:
+                    type: string
+                  publicKey:
+                    type: string
+
+  /network/tailscale/status:
+    get:
+      tags: [Network]
+      summary: Tailscale status
+      operationId: tailscaleStatus
+      responses:
+        '200':
+          description: Tailscale status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TailscaleStatus'
+
+  /network/tailscale/up:
+    post:
+      tags: [Network]
+      summary: Connect to Tailscale
+      operationId: tailscaleUp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                hostname:
+                  type: string
+                authKey:
+                  type: string
+      responses:
+        '200':
+          description: Connected
+
+  /network/tailscale/down:
+    post:
+      tags: [Network]
+      summary: Disconnect from Tailscale
+      operationId: tailscaleDown
+      responses:
+        '200':
+          description: Disconnected
+
+  /network/tailscale/exit-node:
+    post:
+      tags: [Network]
+      summary: Set Tailscale exit node
+      operationId: tailscaleExitNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                peerIp:
+                  type: string
+                  description: Exit node IP, or empty to clear
+      responses:
+        '200':
+          description: Updated
+
+  /network/bindings:
+    get:
+      tags: [Network]
+      summary: List service bindings
+      operationId: listNetworkBindings
+      responses:
+        '200':
+          description: Binding list
+
+  /network/firewall/policy:
+    get:
+      tags: [Network]
+      summary: Get firewall policy
+      operationId: getNetworkFirewall
+      responses:
+        '200':
+          description: Firewall policy
+
+  /backups/destinations:
+    get:
+      tags: [Backups]
+      summary: List backup destinations
+      operationId: listBackupDestinations
+      responses:
+        '200':
+          description: Destination list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BackupDestination'
+
+  /backups/runs:
+    get:
+      tags: [Backups]
+      summary: List backup runs
+      operationId: listBackupRuns
+      responses:
+        '200':
+          description: Run list
+
+  /backups/run:
+    post:
+      tags: [Backups]
+      summary: Run backup now
+      operationId: runBackup
+      responses:
+        '202':
+          description: Backup started
+
+  /backup/readiness:
+    get:
+      tags: [Backups]
+      summary: Get recovery readiness score
+      operationId: backupReadiness
+      responses:
+        '200':
+          description: Recovery readiness
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryReadiness'
+
+  /backup/generations:
+    get:
+      tags: [Backups]
+      summary: List config generations
+      operationId: listGenerations
+      responses:
+        '200':
+          description: Generation list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConfigGeneration'
+
+  /alerts:
+    get:
+      tags: [Monitoring]
+      summary: List alerts
+      operationId: listAlerts
+      responses:
+        '200':
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Alert'
+
+  /notification-channels:
+    get:
+      tags: [Monitoring]
+      summary: List notification channels
+      operationId: listNotificationChannels
+      responses:
+        '200':
+          description: Channel list
+
+  /users:
+    get:
+      tags: [Users]
+      summary: List users
+      operationId: listUsers
+      responses:
+        '200':
+          description: User list
+
+  /principals:
+    get:
+      tags: [Users]
+      summary: List principals
+      operationId: listPrincipals
+      responses:
+        '200':
+          description: Principal list
+
+  /settings:
+    get:
+      tags: [Settings]
+      summary: Get settings
+      operationId: getSettings
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppSettings'
+
+  /updates/status:
+    get:
+      tags: [Settings]
+      summary: Get update status
+      operationId: updatesStatus
+      responses:
+        '200':
+          description: Update status
+
+  /auth/status:
+    get:
+      tags: [Auth]
+      summary: Get auth status
+      operationId: authStatus
+      responses:
+        '200':
+          description: Auth status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  required:
+                    type: boolean
+                  configured:
+                    type: boolean
+                  authenticated:
+                    type: boolean
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      operationId: authLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Logged in
+        '401':
+          description: Invalid credentials
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout
+      operationId: authLogout
+      responses:
+        '200':
+          description: Logged out
+
+  /events/stream:
+    get:
+      tags: [System]
+      summary: SSE event stream
+      operationId: eventStream
+      responses:
+        '200':
+          description: Event stream
+
+  /jobs:
+    get:
+      tags: [System]
+      summary: List jobs
+      operationId: listJobs
+      responses:
+        '200':
+          description: Job list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Job'
+
+components:
+  schemas:
+    HealthState:
+      type: string
+      enum: [healthy, attention, warning, critical, offline]
+
+    HealthComponent:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        status:
+          $ref: '#/components/schemas/HealthState'
+        message:
+          type: string
+        recommended:
+          type: string
+
+    HealthBreakdown:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/HealthState'
+        score:
+          type: integer
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthComponent'
+
+    ServerInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        hostname:
+          type: string
+        version:
+          type: string
+        nasUuid:
+          type: string
+        timezone:
+          type: string
+        health:
+          $ref: '#/components/schemas/HealthState'
+        ip:
+          type: string
+
+    SystemMetrics:
+      type: object
+      properties:
+        cpuPercent:
+          type: number
+        load:
+          type: array
+          items:
+            type: number
+        ramUsedBytes:
+          type: integer
+        ramTotalBytes:
+          type: integer
+        cpuTempC:
+          type: number
+        uptimeSeconds:
+          type: integer
+        net:
+          type: object
+          properties:
+            interface:
+              type: string
+            upMbps:
+              type: number
+            downMbps:
+              type: number
+
+    SmartSummary:
+      type: object
+      properties:
+        overall:
+          $ref: '#/components/schemas/HealthState'
+        reallocatedSectors:
+          type: integer
+        pendingSectors:
+          type: integer
+        uncorrectableSectors:
+          type: integer
+        crcErrors:
+          type: integer
+        powerOnHours:
+          type: integer
+        wearPercent:
+          type: number
+
+    Disk:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        model:
+          type: string
+        serial:
+          type: string
+        sizeBytes:
+          type: integer
+        role:
+          type: string
+        rotational:
+          type: boolean
+        interface:
+          type: string
+        health:
+          $ref: '#/components/schemas/HealthState'
+        temperatureC:
+          type: number
+        filesystem:
+          type: string
+        mounted:
+          type: boolean
+        poolId:
+          type: string
+        smart:
+          $ref: '#/components/schemas/SmartSummary'
+
+    Pool:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        mountPath:
+          type: string
+        status:
+          $ref: '#/components/schemas/HealthState'
+        sizeBytes:
+          type: integer
+        usedBytes:
+          type: integer
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              diskId:
+                type: string
+              enabled:
+                type: boolean
+
+    Protection:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/HealthState'
+        parityDisks:
+          type: array
+          items:
+            type: object
+        lastSyncAt:
+          type: string
+          format: date-time
+        lastSyncResult:
+          type: string
+        changesSinceSyncBytes:
+          type: integer
+        syncSchedule:
+          type: string
+        scrubSchedule:
+          type: string
+        syncRunning:
+          type: boolean
+
+    DockerSummary:
+      type: object
+      properties:
+        stacks:
+          type: integer
+        appsRunning:
+          type: integer
+        updatesAvailable:
+          type: integer
+
+    DockerStack:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        status:
+          $ref: '#/components/schemas/HealthState'
+        state:
+          type: string
+        images:
+          type: array
+          items:
+            type: string
+        composeYaml:
+          type: string
+        ports:
+          type: array
+          items:
+            type: object
+        risks:
+          type: array
+          items:
+            type: string
+        recovery:
+          $ref: '#/components/schemas/RecoveryContract'
+        recoveryCoverage:
+          type: number
+
+    DockerContainer:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        stackId:
+          type: string
+        image:
+          type: string
+        state:
+          type: string
+        cpuPercent:
+          type: number
+        ramUsedBytes:
+          type: integer
+
+    DockerImage:
+      type: object
+      properties:
+        id:
+          type: string
+        repo:
+          type: string
+        tag:
+          type: string
+        sizeBytes:
+          type: integer
+
+    RecoveryContract:
+      type: object
+      properties:
+        strategy:
+          type: string
+          enum: [stop-backup, snapshot, custom, none]
+        appdataPaths:
+          type: array
+          items:
+            type: string
+        preBackupHook:
+          $ref: '#/components/schemas/RecoveryHook'
+        postBackupHook:
+          $ref: '#/components/schemas/RecoveryHook'
+        restoreHook:
+          $ref: '#/components/schemas/RecoveryHook'
+        dbDump:
+          $ref: '#/components/schemas/RecoveryHook'
+        dbRestore:
+          $ref: '#/components/schemas/RecoveryHook'
+        stopServices:
+          type: array
+          items:
+            type: string
+        startServices:
+          type: array
+          items:
+            type: string
+
+    RecoveryHook:
+      type: object
+      properties:
+        container:
+          type: string
+        command:
+          type: string
+        timeout:
+          type: integer
+
+    Share:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        path:
+          type: string
+        status:
+          $ref: '#/components/schemas/HealthState'
+
+    FileEntry:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [dir, file]
+        sizeBytes:
+          type: integer
+        modifiedAt:
+          type: string
+          format: date-time
+
+    NetworkConnection:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        interface:
+          type: string
+        enabled:
+          type: boolean
+        type:
+          type: string
+        status:
+          type: string
+        ipv4:
+          type: object
+        ipv6:
+          type: object
+
+    NetworkInterface:
+      type: object
+      properties:
+        name:
+          type: string
+        mac:
+          type: string
+        mtu:
+          type: integer
+        up:
+          type: boolean
+        loopback:
+          type: boolean
+        wireless:
+          type: boolean
+        addresses:
+          type: array
+          items:
+            type: string
+
+    WireGuardConfig:
+      type: object
+      properties:
+        interface:
+          type: string
+        privateKey:
+          type: string
+        address:
+          type: array
+          items:
+            type: string
+        listenPort:
+          type: integer
+        dns:
+          type: array
+          items:
+            type: string
+        peers:
+          type: array
+          items:
+            type: object
+            properties:
+              publicKey:
+                type: string
+              presharedKey:
+                type: string
+              endpoint:
+                type: string
+              allowedIps:
+                type: array
+                items:
+                  type: string
+              persistentKeepalive:
+                type: integer
+
+    WireGuardStatus:
+      type: object
+      properties:
+        interface:
+          type: string
+        ip:
+          type: string
+        listenPort:
+          type: integer
+        peers:
+          type: integer
+        connected:
+          type: boolean
+
+    TailscaleStatus:
+      type: object
+      properties:
+        installed:
+          type: boolean
+        running:
+          type: boolean
+        connected:
+          type: boolean
+        health:
+          type: string
+        backendState:
+          type: string
+        version:
+          type: string
+        tailscaleIp4:
+          type: string
+        tailscaleIp6:
+          type: string
+        hostName:
+          type: string
+        exitNode:
+          type: string
+        subnetRoutes:
+          type: array
+          items:
+            type: string
+
+    BackupDestination:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+        encrypted:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/HealthState'
+
+    RecoveryReadiness:
+      type: object
+      properties:
+        score:
+          type: integer
+        layers:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              status:
+                type: string
+              detail:
+                type: string
+
+    ConfigGeneration:
+      type: object
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        status:
+          type: string
+        summary:
+          type: string
+        config:
+          type: string
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        resource:
+          type: object
+        state:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        title:
+          type: string
+        state:
+          type: string
+        progress:
+          type: number
+        stage:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AppSettings:
+      type: object
+      properties:
+        updates:
+          type: object
+        runtime:
+          type: object
+        power:
+          type: object
+        security:
+          type: object

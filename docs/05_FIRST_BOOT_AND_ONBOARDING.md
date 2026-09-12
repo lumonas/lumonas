@@ -17,11 +17,11 @@ Shares, Docker apps, notifications and cloud backups are suggested after the NAS
 Show a lightweight local status screen:
 
 ```text
-MyNAS — HomeNAS
+LumoNAS — HomeNAS
 
 Healthy
 IP: 192.168.1.74
-Web: http://mynas.local
+Web: http://lumonas.local
 
 5 unconfigured disks detected
 
@@ -61,7 +61,7 @@ Classify each physical disk:
 - System;
 - blank;
 - existing filesystem/data;
-- existing MyNAS disk;
+- existing LumoNAS disk;
 - suspected parity;
 - removable/external.
 

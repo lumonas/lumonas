@@ -34,7 +34,7 @@ require_path() {
 	}
 }
 
-for binary in mynasd mynas-web mynas-privd; do
+for binary in lumonasd lumonas-web lumonas-privd; do
 	require_path "./usr/lib/lumonas/$binary"
 	dpkg-deb -c "$PACKAGE" | awk -v path="./usr/lib/lumonas/$binary" '$6 == path { print $1 }' | grep -E '^-rwx' >/dev/null 2>&1 || {
 		echo "$binary is not executable in the package" >&2
@@ -43,27 +43,27 @@ for binary in mynasd mynas-web mynas-privd; do
 done
 
 for unit in \
-	mynas-web.service \
-	mynasd.service \
-	mynas-privd.service \
-	mynas-privd-storage.service \
-	mynas-privd-network.service \
-	mynas-privd-power.service \
-	mynas-privd-general.service; do
+	lumonas-web.service \
+	lumonasd.service \
+	lumonas-privd.service \
+	lumonas-privd-storage.service \
+	lumonas-privd-network.service \
+	lumonas-privd-power.service \
+	lumonas-privd-general.service; do
 	require_path "./lib/systemd/system/$unit"
 done
 
 for path in \
 	./usr/share/lumonas/web/index.html \
 	./usr/share/lumonas/catalog/apps.json \
-	./etc/mynas/mynasd.env.example \
-	./etc/mynas/mynas-web.env.example; do
+	./etc/lumonas/lumonasd.env.example \
+	./etc/lumonas/lumonas-web.env.example; do
 	require_path "$path"
 done
 
 [ -x "$CONTROL_DIR/postinst" ] || { echo "package postinst is missing or not executable" >&2; exit 1; }
 
-printf '%s\n' "$CONTENTS" | awk '{print $6}' | grep -E '^\./(var/lib/mynas|srv/mynas)' >/dev/null 2>&1 && {
+printf '%s\n' "$CONTENTS" | awk '{print $6}' | grep -E '^\./(var/lib/lumonas|srv/lumonas)' >/dev/null 2>&1 && {
 	echo "package must not ship mutable runtime state" >&2
 	exit 1
 }

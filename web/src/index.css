@@ -112,6 +112,10 @@
   }
 }
 
+html[data-density='compact'] {
+  --spacing: 0.2rem;
+}
+
 @utility tnum {
   font-variant-numeric: tabular-nums;
 }

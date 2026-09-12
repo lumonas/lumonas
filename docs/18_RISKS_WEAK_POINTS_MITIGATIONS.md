@@ -37,7 +37,7 @@ Scope is explicitly not considered a blocker here. Risks are solved architectura
 
 **Mitigation:**
 
-- one canonical MyNAS access model;
+- one canonical LumoNAS access model;
 - stable UID/GID;
 - simple access levels;
 - advanced ACL later but same source of truth;

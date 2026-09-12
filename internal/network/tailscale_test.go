@@ -37,7 +37,7 @@ func TestValidateTailscaleConfigRejectsSpecialChars(t *testing.T) {
 }
 
 func TestValidateTailscaleConfigAcceptsValid(t *testing.T) {
-	valid := []string{"mynas", "nas-01", "server123", "a", "my-nas-server"}
+	valid := []string{"lumonas", "nas-01", "server123", "a", "my-nas-server"}
 	for _, h := range valid {
 		if err := ValidateTailscaleConfig(h); err != nil {
 			t.Fatalf("hostname %q rejected: %v", h, err)

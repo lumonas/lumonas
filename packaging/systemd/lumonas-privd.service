@@ -1,0 +1,28 @@
+[Unit]
+Description=LumoNAS privileged operation broker
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/lumonas/lumonas-privd --socket /run/lumonas/privd.sock
+User=root
+Group=lumonas
+RuntimeDirectory=lumonas
+RuntimeDirectoryMode=0750
+UMask=007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/lumonas
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=128M
+CPUQuota=100%
+TasksMax=64
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target

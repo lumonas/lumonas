@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Globe, Power, PowerOff, Route, Server } from 'lucide-react'
+import { Globe, Power, PowerOff, Route } from 'lucide-react'
 import { useTailscaleStatus, useTailscaleUp, useTailscaleDown, useTailscaleExitNode } from '@/api/queries'
 import { HealthBadge } from '@/components/core/health-badge'
 import { Badge } from '@/components/ui/badge'
@@ -54,7 +54,7 @@ export function TailscaleSection() {
 
   function handleConnect() {
     connect.mutate(
-      { hostname: hostname || 'mynas', authKey: authKey || undefined },
+      { hostname: hostname || 'lumonas', authKey: authKey || undefined },
       { onSuccess: () => setShowConnect(false) },
     )
   }
@@ -137,7 +137,7 @@ export function TailscaleSection() {
                 id="ts-hostname"
                 value={hostname}
                 onChange={(e) => setHostname(e.target.value)}
-                placeholder="mynas"
+                placeholder="lumonas"
                 className="font-mono text-xs"
               />
             </div>

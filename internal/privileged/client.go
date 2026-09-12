@@ -48,7 +48,7 @@ type Client struct {
 
 func (c Client) Execute(ctx context.Context, request Request) (Response, error) {
 	if c.Socket == "" {
-		c.Socket = "/run/mynas/privd.sock"
+		c.Socket = "/run/lumonas/privd.sock"
 	}
 	dialer := c.Dialer
 	if dialer == nil {

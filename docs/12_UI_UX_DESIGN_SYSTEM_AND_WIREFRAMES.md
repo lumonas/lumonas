@@ -185,7 +185,7 @@ Features:
 - validate;
 - format;
 - unresolved variable hints;
-- MyNAS path variable completion;
+- LumoNAS path variable completion;
 - diff;
 - deploy.
 

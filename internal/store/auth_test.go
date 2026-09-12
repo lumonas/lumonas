@@ -6,7 +6,7 @@ import (
 )
 
 func TestAdminSessionLifecycle(t *testing.T) {
-	db, err := Open(t.TempDir() + "/mynas.db")
+	db, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestAdminSessionLifecycle(t *testing.T) {
 }
 
 func TestDatabaseBackupProducesReadableCopy(t *testing.T) {
-	db, err := Open(t.TempDir() + "/mynas.db")
+	db, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}

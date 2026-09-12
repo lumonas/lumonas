@@ -19,7 +19,7 @@ func WriteValidated(path, content string, validate func(string) error) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".mynas-validated-*")
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".lumonas-validated-*")
 	if err != nil {
 		return err
 	}

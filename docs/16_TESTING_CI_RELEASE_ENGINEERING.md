@@ -2,7 +2,7 @@
 
 ## Philosophy
 
-MyNAS touches real disks. Safety cannot rely only on code review.
+LumoNAS touches real disks. Safety cannot rely only on code review.
 
 Automate destructive failure scenarios in disposable virtual environments.
 
@@ -67,7 +67,7 @@ Expected result: fail closed.
 
 Release-blocking scenario:
 
-1. Install old/current MyNAS.
+1. Install old/current LumoNAS.
 2. Configure realistic NAS.
 3. Create test files.
 4. Configure SnapRAID and Compose.
@@ -93,7 +93,7 @@ At minimum:
 - network available;
 - no network;
 - data disks attached;
-- existing MyNAS disks attached;
+- existing LumoNAS disks attached;
 - small/large system disk.
 
 ## Docker tests

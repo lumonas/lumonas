@@ -60,7 +60,7 @@ Keep USB installer needs separate if required.
 Future:
 
 - signed kernel/UKI;
-- MyNAS signing chain;
+- LumoNAS signing chain;
 - recovery compatibility.
 
 Do not make initial releases unusable on common self-built hardware because of premature Secure Boot complexity.
@@ -104,4 +104,4 @@ Explore reducing privilege further, but storage/network core still needs control
 
 Go is recommended for core implementation consistency.
 
-A tiny Rust `mynas-privd` could be considered later if memory-safety/threat review justifies a second language. Avoid complexity unless there is a concrete gain.
+A tiny Rust `lumonas-privd` could be considered later if memory-safety/threat review justifies a second language. Avoid complexity unless there is a concrete gain.

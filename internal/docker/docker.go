@@ -23,22 +23,24 @@ type Service struct {
 }
 
 type Stack struct {
-	ID           string           `json:"id"`
-	Name         string           `json:"name"`
-	Category     string           `json:"category"`
-	Status       string           `json:"status"`
-	State        string           `json:"state"`
-	Images       []string         `json:"images"`
-	ComposeYAML  string           `json:"composeYaml"`
-	Env          []EnvVar         `json:"env"`
-	Storage      []StorageMapping `json:"storage"`
-	Ports        []Port           `json:"ports"`
-	Risks        []string         `json:"risks"`
-	CPUPercent   float64          `json:"cpuPercent"`
-	RAMUsedBytes uint64           `json:"ramUsedBytes"`
-	Restarts     int              `json:"restarts"`
-	LastDeploy   time.Time        `json:"lastDeploy"`
-	Backup       BackupInfo       `json:"backup"`
+	ID              string           `json:"id"`
+	Name            string           `json:"name"`
+	Category        string           `json:"category"`
+	Status          string           `json:"status"`
+	State           string           `json:"state"`
+	Images          []string         `json:"images"`
+	ComposeYAML     string           `json:"composeYaml"`
+	Env             []EnvVar         `json:"env"`
+	Storage         []StorageMapping `json:"storage"`
+	Ports           []Port           `json:"ports"`
+	Risks           []string         `json:"risks"`
+	CPUPercent      float64          `json:"cpuPercent"`
+	RAMUsedBytes    uint64           `json:"ramUsedBytes"`
+	Restarts        int              `json:"restarts"`
+	LastDeploy      time.Time        `json:"lastDeploy"`
+	Backup          BackupInfo       `json:"backup"`
+	Recovery        *RecoveryContract `json:"recovery,omitempty"`
+	RecoveryCoverage float64         `json:"recoveryCoverage"`
 }
 type EnvVar struct {
 	Name  string `json:"name"`
@@ -397,7 +399,7 @@ func (s Service) ValidateCompose(ctx context.Context, compose string) error {
 	if err := validateComposeStructure(compose); err != nil {
 		return err
 	}
-	directory, err := os.MkdirTemp("", "mynas-compose-")
+	directory, err := os.MkdirTemp("", "lumonas-compose-")
 	if err != nil {
 		return err
 	}
@@ -523,5 +525,10 @@ func parseDays(value string) int {
 	return 0
 }
 func isUnavailable(err error) bool {
-	return errors.Is(err, os.ErrNotExist) || strings.Contains(strings.ToLower(err.Error()), "executable file not found") || strings.Contains(strings.ToLower(err.Error()), "cannot connect")
+	message := strings.ToLower(err.Error())
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		message += " " + strings.ToLower(string(exitErr.Stderr))
+	}
+	return errors.Is(err, os.ErrNotExist) || strings.Contains(message, "executable file not found") || strings.Contains(message, "cannot connect") || strings.Contains(message, "failed to connect")
 }

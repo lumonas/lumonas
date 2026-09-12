@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useActivity, useAlerts, useCreateJob, useDisks, useDockerSummary, useJobs, useProtection, usePools, useServer } from '@/api/queries'
 import { HealthBadge } from '@/components/core/health-badge'
+import { HealthExplanation } from '@/components/core/health-explanation'
 import { Metric } from '@/components/core/metric'
 import { Sparkline } from '@/components/core/sparkline'
 import { StorageUsage } from '@/components/core/storage-usage'
@@ -74,6 +75,9 @@ export function HealthCard() {
             RAM {formatBytes(metrics.ramUsedBytes)} / {formatBytes(metrics.ramTotalBytes)}
           </span>
         </div>
+        <div className="mt-5 border-t pt-5">
+          <HealthExplanation />
+        </div>
       </CardContent>
     </Card>
   )
@@ -134,7 +138,7 @@ export function SystemCard() {
           System
         </CardTitle>
         <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
-          <Link to="/monitoring">
+          <Link to="/monitoring?tab=overview">
             Details
             <ArrowRight />
           </Link>
@@ -273,13 +277,20 @@ export function DockerCard() {
           </Link>
         </Button>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4">
-        <Metric label="Apps running" value={docker?.appsRunning ?? '—'} sub={`${docker?.stacks ?? 0} stacks`} />
-        <Metric
-          label="Updates"
-          value={docker?.updatesAvailable ?? '—'}
-          sub="images available"
-        />
+      <CardContent className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-4">
+          <Metric
+            label="Containers running"
+            value={docker?.appsRunning ?? '—'}
+            sub={`${docker?.stacks ?? 0} stacks`}
+          />
+          <Metric label="Updates" value={docker?.updatesAvailable ?? '—'} sub="images available" />
+        </div>
+        {(docker?.updatesAvailable ?? 0) > 0 && (
+          <Button variant="outline" size="sm" className="w-full" asChild>
+            <Link to="/docker?tab=images">Review updates</Link>
+          </Button>
+        )}
       </CardContent>
     </Card>
   )
@@ -295,7 +306,7 @@ export function RecentActivityCard() {
           Recent activity
         </CardTitle>
         <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
-          <Link to="/monitoring">
+          <Link to="/monitoring?tab=timeline">
             View all
             <ArrowRight />
           </Link>

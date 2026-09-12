@@ -1,59 +1,59 @@
 #!/bin/sh
 set -eu
 
-getent group mynas >/dev/null 2>&1 || groupadd --system mynas
-id mynas >/dev/null 2>&1 || useradd --system --gid mynas --home-dir /var/lib/mynas --no-create-home --shell /usr/sbin/nologin mynas
-install -d -o root -g mynas -m 0750 /etc/mynas
-install -d -o mynas -g mynas -m 0750 /var/lib/mynas /var/lib/mynas/secrets /var/lib/mynas/generated /var/lib/mynas/recovery /srv/mynas /srv/mynas/docker /srv/disks /srv/pools
-if getent group docker >/dev/null 2>&1; then usermod -aG docker mynas || true; fi
+getent group lumonas >/dev/null 2>&1 || groupadd --system lumonas
+id lumonas >/dev/null 2>&1 || useradd --system --gid lumonas --home-dir /var/lib/lumonas --no-create-home --shell /usr/sbin/nologin lumonas
+install -d -o root -g lumonas -m 0750 /etc/lumonas
+install -d -o lumonas -g lumonas -m 0750 /var/lib/lumonas /var/lib/lumonas/secrets /var/lib/lumonas/generated /var/lib/lumonas/recovery /srv/lumonas /srv/lumonas/docker /srv/disks /srv/pools
+if getent group docker >/dev/null 2>&1; then usermod -aG docker lumonas || true; fi
 
 # Keep administrator-owned configuration across upgrades, but create a usable
 # first-boot baseline when this is a fresh installation. The service defaults
 # intentionally remain local-only until onboarding or an administrator changes
 # the listener.
-if [ ! -f /etc/mynas/mynasd.env ]; then
-	cat >/etc/mynas/mynasd.env <<'ENV'
-MYNAS_AUTH_REQUIRED=false
-MYNAS_DB_PATH=/var/lib/mynas/mynas.db
-MYNAS_RECOVERY_DIR=/var/lib/mynas/recovery
-MYNAS_STACK_ROOT=/srv/mynas/docker/stacks
-MYNAS_CATALOG_FILE=/usr/share/lumonas/catalog/apps.json
-MYNAS_SNAPRAID_CONFIG=/etc/mynas/snapraid.conf
-MYNAS_PRIVD_SOCKET=/run/mynas/privd.sock
+if [ ! -f /etc/lumonas/lumonasd.env ]; then
+	cat >/etc/lumonas/lumonasd.env <<'ENV'
+LUMONAS_AUTH_REQUIRED=false
+LUMONAS_DB_PATH=/var/lib/lumonas/lumonas.db
+LUMONAS_RECOVERY_DIR=/var/lib/lumonas/recovery
+LUMONAS_STACK_ROOT=/srv/lumonas/docker/stacks
+LUMONAS_CATALOG_FILE=/usr/share/lumonas/catalog/apps.json
+LUMONAS_SNAPRAID_CONFIG=/etc/lumonas/snapraid.conf
+LUMONAS_PRIVD_SOCKET=/run/lumonas/privd.sock
 ENV
-	chown root:mynas /etc/mynas/mynasd.env
-	chmod 0640 /etc/mynas/mynasd.env
+	chown root:lumonas /etc/lumonas/lumonasd.env
+	chmod 0640 /etc/lumonas/lumonasd.env
 fi
-if [ ! -f /etc/mynas/mynas-web.env ]; then
-	cat >/etc/mynas/mynas-web.env <<'ENV'
-MYNAS_WEB_LISTEN=127.0.0.1:8081
-MYNAS_WEB_ROOT=/usr/share/lumonas/web
-MYNAS_API_URL=http://127.0.0.1:8080
+if [ ! -f /etc/lumonas/lumonas-web.env ]; then
+	cat >/etc/lumonas/lumonas-web.env <<'ENV'
+LUMONAS_WEB_LISTEN=127.0.0.1:8081
+LUMONAS_WEB_ROOT=/usr/share/lumonas/web
+LUMONAS_API_URL=http://127.0.0.1:8080
 # Set both values to enable local HTTPS after provisioning a trusted cert.
-MYNAS_WEB_TLS_CERT=
-MYNAS_WEB_TLS_KEY=
+LUMONAS_WEB_TLS_CERT=
+LUMONAS_WEB_TLS_KEY=
 ENV
-	chown root:mynas /etc/mynas/mynas-web.env
-	chmod 0640 /etc/mynas/mynas-web.env
+	chown root:lumonas /etc/lumonas/lumonas-web.env
+	chmod 0640 /etc/lumonas/lumonas-web.env
 fi
 
 # Provision an optional self-signed local certificate once, without replacing
 # administrator-managed certificates on upgrades. HTTPS is opt-in by clearing
-# the default listener and setting these paths in mynas-web.env.
-if command -v openssl >/dev/null 2>&1 && [ ! -e /etc/mynas/tls/server.key ]; then
-	install -d -o root -g mynas -m 0750 /etc/mynas/tls
+# the default listener and setting these paths in lumonas-web.env.
+if command -v openssl >/dev/null 2>&1 && [ ! -e /etc/lumonas/tls/server.key ]; then
+	install -d -o root -g lumonas -m 0750 /etc/lumonas/tls
 	openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
-		-subj '/CN=mynas.local' \
-		-addext 'subjectAltName=DNS:mynas.local,DNS:localhost,IP:127.0.0.1' \
-		-keyout /etc/mynas/tls/server.key -out /etc/mynas/tls/server.crt >/dev/null 2>&1 || true
-	if [ -f /etc/mynas/tls/server.key ] && [ -f /etc/mynas/tls/server.crt ]; then
-		chown root:mynas /etc/mynas/tls/server.key /etc/mynas/tls/server.crt
-		chmod 0640 /etc/mynas/tls/server.key
-		chmod 0644 /etc/mynas/tls/server.crt
+		-subj '/CN=lumonas.local' \
+		-addext 'subjectAltName=DNS:lumonas.local,DNS:localhost,IP:127.0.0.1' \
+		-keyout /etc/lumonas/tls/server.key -out /etc/lumonas/tls/server.crt >/dev/null 2>&1 || true
+	if [ -f /etc/lumonas/tls/server.key ] && [ -f /etc/lumonas/tls/server.crt ]; then
+		chown root:lumonas /etc/lumonas/tls/server.key /etc/lumonas/tls/server.crt
+		chmod 0640 /etc/lumonas/tls/server.key
+		chmod 0644 /etc/lumonas/tls/server.crt
 	fi
 fi
 systemctl daemon-reload || true
 systemctl try-reload-or-restart systemd-journald.service || true
-systemctl enable mynas-privd.service mynas-privd-storage.service mynas-privd-network.service mynas-privd-power.service mynas-privd-general.service mynasd.service mynas-web.service || true
-systemctl try-restart mynas-privd.service mynas-privd-storage.service mynas-privd-network.service mynas-privd-power.service mynas-privd-general.service mynasd.service mynas-web.service || true
+systemctl enable lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+systemctl try-restart lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
 exit 0

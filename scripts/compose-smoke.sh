@@ -2,7 +2,7 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-COMPOSE_FILE="${MYNAS_COMPOSE_FILE:-$ROOT/test/compose/compose.yaml}"
+COMPOSE_FILE="${LUMONAS_COMPOSE_FILE:-$ROOT/test/compose/compose.yaml}"
 [ -f "$COMPOSE_FILE" ] || { echo "Compose fixture not found: $COMPOSE_FILE" >&2; exit 1; }
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then

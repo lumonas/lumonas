@@ -13,7 +13,7 @@ Deliver:
 - job engine;
 - config generations;
 - audit framework;
-- typed `mynas-privd` IPC;
+- typed `lumonas-privd` IPC;
 - common resource IDs.
 
 Exit criteria:
@@ -110,7 +110,7 @@ Deliver:
 
 Exit:
 
-- standard exported Compose works outside MyNAS.
+- standard exported Compose works outside LumoNAS.
 
 ## Phase 6 — Simple Docker app experience
 

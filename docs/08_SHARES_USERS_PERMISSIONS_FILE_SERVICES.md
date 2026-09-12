@@ -27,7 +27,7 @@ Initial/following planned support:
 
 Avoid separate independent permission systems.
 
-MyNAS should own a canonical access policy:
+LumoNAS should own a canonical access policy:
 
 ```text
 principal → resource → No access / Read only / Read & Write
@@ -44,7 +44,7 @@ Render this into:
 
 Distinguish:
 
-- **Management users** — can log into MyNAS UI;
+- **Management users** — can log into LumoNAS UI;
 - **File users** — can access shares;
 - **Service identities** — apps/backup accounts.
 

@@ -44,7 +44,7 @@ func TailscaleGetStatus(ctx context.Context) (*TailscaleStatus, error) {
 	}
 	status := &TailscaleStatus{
 		BackendState: "Running",
-		HostName:     "mynas",
+		HostName:     "lumonas",
 	}
 	lines := strings.Split(string(out), "\n")
 	for _, line := range lines {

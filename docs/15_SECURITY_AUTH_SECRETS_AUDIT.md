@@ -81,7 +81,7 @@ Do not copy plaintext secret values into many tables/files.
 
 Default local HTTPS path:
 
-- local MyNAS CA/cert;
+- local LumoNAS CA/cert;
 - explain client trust;
 - allow user certificate import;
 - ACME optional when network/domain conditions allow.
@@ -103,7 +103,7 @@ Recommended defaults:
 - API tokens later;
 - scoped API tokens rather than full session equivalence.
 
-`mynas-privd` has no network API.
+`lumonas-privd` has no network API.
 
 ## Docker security
 

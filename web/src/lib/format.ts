@@ -45,3 +45,14 @@ export function formatDateTime(iso: string): string {
 export function formatPercent(value: number, digits = 0): string {
   return `${value.toFixed(digits)}%`
 }
+
+export function formatDuration(startIso: string, endIso?: string): string {
+  const seconds = Math.max(
+    0,
+    ((endIso ? new Date(endIso).getTime() : Date.now()) - new Date(startIso).getTime()) / 1000,
+  )
+  const m = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}

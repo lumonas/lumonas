@@ -15,7 +15,7 @@ const server = setupServer(
       version: '1.60.0',
       tailscaleIp4: '100.64.0.1',
       tailscaleIp6: 'fd7a:115c:a1e0::1',
-      hostName: 'mynas',
+      hostName: 'lumonas',
       exitNode: '',
       exitNodeAllow: false,
       subnetRoutes: ['192.168.1.0/24'],
@@ -43,7 +43,7 @@ describe('TailscaleSection', () => {
   it('displays hostname', async () => {
     renderWithQuery(<TailscaleSection />)
     await waitFor(() => {
-      expect(screen.getByText('mynas')).toBeInTheDocument()
+      expect(screen.getByText('lumonas')).toBeInTheDocument()
     })
   })
 

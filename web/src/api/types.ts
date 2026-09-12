@@ -389,7 +389,7 @@ export type OnboardingClassification =
   | 'system'
   | 'blank'
   | 'existing'
-  | 'mynas'
+  | 'lumonas'
   | 'suspected-parity'
   | 'removable'
 

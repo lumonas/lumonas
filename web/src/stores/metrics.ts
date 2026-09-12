@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SystemMetrics, NetInterfaceMetrics } from '@/api/types'
+import type { SystemMetrics } from '@/api/types'
 
 interface MetricsState {
   metrics: SystemMetrics

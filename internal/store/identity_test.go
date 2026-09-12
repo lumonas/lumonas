@@ -8,7 +8,7 @@ import (
 )
 
 func TestPrincipalStoreAllocatesStableIDsAndSeparatesManagementAccess(t *testing.T) {
-	database, err := Open(t.TempDir() + "/mynas.db")
+	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestPrincipalStoreAllocatesStableIDsAndSeparatesManagementAccess(t *testing
 }
 
 func TestPrincipalStoreGroupMembershipAndDependencyProtection(t *testing.T) {
-	database, err := Open(t.TempDir() + "/mynas.db")
+	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestPrincipalStoreGroupMembershipAndDependencyProtection(t *testing.T) {
 }
 
 func TestLegacyAdminIsImportedAndDisablingManagementUserRevokesSession(t *testing.T) {
-	database, err := Open(t.TempDir() + "/mynas.db")
+	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -25,7 +25,7 @@ A release ISO must contain everything needed for installation and core operation
 
 - Debian base;
 - kernel and firmware;
-- MyNAS binaries/UI;
+- LumoNAS binaries/UI;
 - Docker Engine and Compose;
 - Samba/NFS/OpenSSH/rsync/FTP implementation;
 - mergerfs/SnapRAID;
@@ -37,13 +37,13 @@ A release ISO must contain everything needed for installation and core operation
 
 Internet-dependent features should degrade gracefully and display why they are unavailable.
 
-### 2. Data remains readable without MyNAS
+### 2. Data remains readable without LumoNAS
 
 Data disks use ordinary filesystems such as XFS/ext4.
 
 mergerfs combines mounted paths, not proprietary block layouts.
 
-If MyNAS disappears, an experienced Linux user should still be able to mount the disks and read files.
+If LumoNAS disappears, an experienced Linux user should still be able to mount the disks and read files.
 
 ### 3. Safe by default
 
@@ -107,9 +107,9 @@ Tailscale, Slack, Telegram, Docker registries, Backblaze, S3, Let's Encrypt, etc
 
 ## Disk roles
 
-MyNAS should model disks using semantic roles:
+LumoNAS should model disks using semantic roles:
 
-- **System** — OS, MyNAS state;
+- **System** — OS, LumoNAS state;
 - **Apps/Cache** — Docker engine/appdata/databases/cache;
 - **Data** — persistent files;
 - **Parity** — SnapRAID parity;

@@ -69,7 +69,7 @@ func UploadAndVerifyWithTimeout(destination Destination, credentials Credentials
 	if err := UploadWithTimeout(destination, credentials, source, object); err != nil {
 		return err
 	}
-	verifyPath, err := os.CreateTemp("", ".mynas-backup-verify-*")
+	verifyPath, err := os.CreateTemp("", ".lumonas-backup-verify-*")
 	if err != nil {
 		return err
 	}

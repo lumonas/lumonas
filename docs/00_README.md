@@ -1,9 +1,9 @@
-# MyNAS OS — Detailed Product & Engineering Plan
+# LumoNAS OS — Detailed Product & Engineering Plan
 
 **Planning snapshot:** September 2026  
-**Working name:** MyNAS  
+**Working name:** LumoNAS  
 **Primary target:** x86-64 home / prosumer NAS and Docker host  
-**Baseline OS:** Debian 13 Stable (Trixie), pinned by MyNAS release image  
+**Baseline OS:** Debian 13 Stable (Trixie), pinned by LumoNAS release image  
 **Core philosophy:** offline-first, data-safe, Compose-first, observable, recoverable, Linux-compatible.
 
 ## Purpose of this package
@@ -26,13 +26,13 @@ If a technical choice was not previously fixed, this plan selects the option tha
 
 ## Product statement
 
-MyNAS should feel like a modern appliance but remain a normal Linux system underneath.
+LumoNAS should feel like a modern appliance but remain a normal Linux system underneath.
 
 A beginner should be able to:
 
 1. write the ISO to a USB drive;
 2. install fully offline;
-3. open `mynas.local`;
+3. open `lumonas.local`;
 4. create/import storage;
 5. create SMB/NFS shares;
 6. deploy Docker apps without seeing YAML;
@@ -81,11 +81,11 @@ An expert should still be able to:
 ## Recommended repository shape
 
 ```text
-mynas/
+lumonas/
 ├── cmd/
-│   ├── mynasd/
-│   ├── mynas-web/
-│   └── mynas-privd/
+│   ├── lumonasd/
+│   ├── lumonas-web/
+│   └── lumonas-privd/
 ├── internal/
 │   ├── storage/
 │   ├── docker/
@@ -126,5 +126,5 @@ mynas/
 3. Never automatically bypass a safety check after an operation fails.
 4. Unknown/existing data disks default to read-only import, never erase.
 5. `compose.yaml` remains standard Compose and is the Docker source of truth.
-6. A MyNAS release is not considered recoverable until CI destroys the system disk and restores onto a blank replacement disk.
-7. Cloud services may enhance MyNAS but must never be required for core NAS operation.
+6. A LumoNAS release is not considered recoverable until CI destroys the system disk and restores onto a blank replacement disk.
+7. Cloud services may enhance LumoNAS but must never be required for core NAS operation.

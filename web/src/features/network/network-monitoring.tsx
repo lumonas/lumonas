@@ -3,7 +3,6 @@ import { Sparkline } from '@/components/core/sparkline'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useMetricsStore } from '@/stores/metrics'
-import { cn } from '@/lib/utils'
 
 function formatRate(mbps: number): string {
   if (mbps >= 1000) return `${(mbps / 1000).toFixed(1)} Gbps`
@@ -35,7 +34,6 @@ export function NetworkMonitoring() {
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {ifaces.map((iface) => {
         const hist = ifaceHistories[iface.interface] ?? { up: [], down: [] }
-        const hasActivity = iface.upMbps > 0 || iface.downMbps > 0
         const hasErrors = iface.errorsIn > 0 || iface.errorsOut > 0
         const hasDrops = iface.droppedIn > 0 || iface.droppedOut > 0
 

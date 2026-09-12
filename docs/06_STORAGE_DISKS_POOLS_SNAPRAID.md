@@ -15,7 +15,7 @@ Btrfs/ZFS can be future modules.
 
 Store:
 
-- stable MyNAS disk ID;
+- stable LumoNAS disk ID;
 - WWN;
 - serial;
 - model;
@@ -26,7 +26,7 @@ Store:
 - SMART capability;
 - filesystem/partition identities;
 - semantic role;
-- MyNAS metadata generation.
+- LumoNAS metadata generation.
 
 ## Disk UI
 
@@ -87,7 +87,7 @@ Warn that frequent spin cycling may be undesirable for some workloads.
 
 First-class pool type for mixed-size HDDs.
 
-MyNAS owns semantic pool configuration and renders mount options.
+LumoNAS owns semantic pool configuration and renders mount options.
 
 Default policy should favor predictable directory placement and sensible free-space behavior; expose advanced mergerfs policy selection later.
 
@@ -196,7 +196,7 @@ Show:
 
 - filesystem;
 - used space;
-- MyNAS metadata if any;
+- LumoNAS metadata if any;
 - SnapRAID content files if detected;
 - possible mergerfs relationship.
 
@@ -204,7 +204,7 @@ Options:
 
 - import as standalone;
 - add existing path as pool branch;
-- reconstruct existing MyNAS pool;
+- reconstruct existing LumoNAS pool;
 - erase and initialize (destructive).
 
 ## Filesystem check

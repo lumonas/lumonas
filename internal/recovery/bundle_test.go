@@ -5,7 +5,7 @@ import (
 )
 
 func TestBundleRoundTripAndEncryptedPayload(t *testing.T) {
-	bundle, err := Create(Input{Manifest: Manifest{MyNASVersion: "test", NASUUID: "nas-1", Generation: 4}, DesiredState: []byte(`{"hostname":"nas"}`), Database: []byte("sqlite"), EncryptedData: []byte("secret")}, []byte("recovery-key"))
+	bundle, err := Create(Input{Manifest: Manifest{LumoNASVersion: "test", NASUUID: "nas-1", Generation: 4}, DesiredState: []byte(`{"hostname":"nas"}`), Database: []byte("sqlite"), EncryptedData: []byte("secret")}, []byte("recovery-key"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestBundleRoundTripAndEncryptedPayload(t *testing.T) {
 }
 
 func TestBundleTamperingFailsVerification(t *testing.T) {
-	bundle, err := Create(Input{Manifest: Manifest{MyNASVersion: "test"}, DesiredState: []byte("state")}, []byte("key"))
+	bundle, err := Create(Input{Manifest: Manifest{LumoNASVersion: "test"}, DesiredState: []byte("state")}, []byte("key"))
 	if err != nil {
 		t.Fatal(err)
 	}

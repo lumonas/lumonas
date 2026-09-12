@@ -1,70 +1,136 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, FolderOpen, Plus, Share2 } from 'lucide-react'
-import { apiDelete, apiGet, apiPost } from '@/api/client'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { FolderOpen, Plus } from 'lucide-react'
+import { useShares } from '@/api/queries'
+import { HealthBadge } from '@/components/core/health-badge'
+import { EmptyState } from '@/components/core/empty-state'
 import { PageHeader } from '@/components/core/page-header'
+import { ResourceTable, type Column } from '@/components/core/resource-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { ShareDrawer } from '@/features/shares/share-drawer'
+import { CreateShareWizard } from '@/features/shares/create-wizard'
+import { formatBytes } from '@/lib/format'
+import type { Share } from '@/api/types'
 
-type Protocol = { name: string; settings?: Record<string, unknown> }
-type Share = { id: string; name: string; path: string; description?: string; enabled: boolean; guest: boolean; protocols: Protocol[]; access: { principalName?: string; level: string }[] }
-const protocolOptions = ['smb', 'nfs', 'sftp', 'ftp', 'ftps', 'rsync']
+const PROTOCOL_ORDER = ['smb', 'nfs', 'sftp', 'rsync', 'timemachine'] as const
 
 export function SharesPage() {
-  const queryClient = useQueryClient()
-  const shares = useQuery({ queryKey: ['admin', 'shares'], queryFn: () => apiGet<Share[]>('/shares') })
-  const [step, setStep] = useState(1)
-  const [name, setName] = useState('')
-  const [path, setPath] = useState('/srv/pools/data')
-  const [description, setDescription] = useState('')
-  const [protocols, setProtocols] = useState<string[]>(['smb'])
-  const [guest, setGuest] = useState(false)
-  const [access, setAccess] = useState('')
-  const [message, setMessage] = useState('')
-  const deleteShare = useMutation({
-    mutationFn: (share: Share) => apiDelete(`/shares/${share.id}`),
-    onSuccess: () => { setMessage('Share deleted and services reloaded.'); void queryClient.invalidateQueries({ queryKey: ['admin', 'shares'] }) },
-    onError: (error) => setMessage(error instanceof Error ? error.message : 'Unable to delete share.'),
-  })
-  const createShare = useMutation({
-    mutationFn: () => apiPost<Share>('/shares', {
-      name, path, description, enabled: true, guest,
-      protocols: protocols.map((protocol) => ({ name: protocol })),
-      access: access.split(',').map((item) => item.trim()).filter(Boolean).map((item) => { const [principalName, level = 'read'] = item.split(':'); return { principalName, level } }),
-    }),
-    onSuccess: () => { setStep(1); setName(''); setDescription(''); setMessage('Share created and configuration activated.'); void queryClient.invalidateQueries({ queryKey: ['admin', 'shares'] }) },
-    onError: (error) => setMessage(error instanceof Error ? error.message : 'Unable to create share.'),
-  })
-  const toggleProtocol = (protocol: string) => setProtocols((current) => current.includes(protocol) ? current.filter((item) => item !== protocol) : [...current, protocol])
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { data: shares, isLoading } = useShares()
+  const [wizardOpen, setWizardOpen] = useState(searchParams.get('create') === '1')
+
+  const shareId = searchParams.get('share')
+
+  function setParam(key: string, value: string | null) {
+    const next = new URLSearchParams(searchParams)
+    if (value == null) next.delete(key)
+    else next.set(key, value)
+    setSearchParams(next, { replace: true })
+  }
+
+  const columns: Column<Share>[] = [
+    {
+      id: 'name',
+      header: 'Share',
+      sortValue: (s) => s.name,
+      cell: (s) => (
+        <div className="flex flex-col">
+          <span className="text-[13px] font-medium">{s.name}</span>
+          {s.description ? (
+            <span className="truncate text-xs text-muted-foreground">{s.description}</span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      id: 'location',
+      header: 'Location',
+      sortValue: (s) => `${s.resourceLabel}${s.relativePath}`,
+      cell: (s) => (
+        <div className="flex flex-col">
+          <span className="text-[13px]">{s.resourceLabel}</span>
+          <span className="font-mono text-xs text-muted-foreground">{s.relativePath}</span>
+        </div>
+      ),
+    },
+    {
+      id: 'protocols',
+      header: 'Protocols',
+      cell: (s) => (
+        <div className="flex flex-wrap gap-1">
+          {[...s.protocols]
+            .filter((p) => p.enabled)
+            .sort((a, b) => PROTOCOL_ORDER.indexOf(a.protocol) - PROTOCOL_ORDER.indexOf(b.protocol))
+            .map((p) => (
+              <Badge key={p.protocol} variant="secondary" className="uppercase">
+                {p.protocol === 'timemachine' ? 'TM' : p.protocol}
+              </Badge>
+            ))}
+        </div>
+      ),
+    },
+    {
+      id: 'access',
+      header: 'Access',
+      cell: (s) => (
+        <span className="text-xs text-muted-foreground">
+          {s.access.filter((a) => a.level !== 'none').length} principals
+        </span>
+      ),
+    },
+    {
+      id: 'used',
+      header: 'Used',
+      advanced: true,
+      className: 'tnum',
+      sortValue: (s) => s.usedBytes ?? 0,
+      cell: (s) => (s.usedBytes != null ? formatBytes(s.usedBytes) : '—'),
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      sortValue: (s) => s.status,
+      cell: (s) => <HealthBadge state={s.status} />,
+    },
+  ]
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Shares" description="Publish pool directories through validated SMB, NFS, SFTP, FTP, FTPS, or rsync policies." actions={<Button onClick={() => setStep(1)}><Plus />New share</Button>} />
-      <div className="grid gap-4 xl:grid-cols-[1.45fr_1fr]">
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><Share2 className="size-4 text-primary" />Published shares</CardTitle><CardDescription>Every change is validated and activated atomically.</CardDescription></CardHeader>
-          <CardContent>
-            {shares.isLoading ? <p className="text-sm text-muted-foreground">Loading shares…</p> : shares.isError ? <p className="text-sm text-critical">Unable to load shares. Check the API connection.</p> : <Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Path</TableHead><TableHead>Protocols</TableHead><TableHead>Access</TableHead><TableHead /></TableRow></TableHeader><TableBody>{shares.data?.map((share) => <TableRow key={share.id}><TableCell className="font-medium">{share.name}<div className="text-xs text-muted-foreground">{share.guest ? 'Guest enabled' : 'Authenticated access'}</div></TableCell><TableCell className="font-mono text-xs">{share.path}</TableCell><TableCell><div className="flex flex-wrap gap-1">{share.protocols.map((protocol) => <Badge key={protocol.name} variant="secondary">{protocol.name}</Badge>)}</div></TableCell><TableCell>{share.access.length ? `${share.access.length} rule${share.access.length === 1 ? '' : 's'}` : 'No explicit rules'}</TableCell><TableCell><Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Delete share ${share.name}?`)) deleteShare.mutate(share) }}>Delete</Button></TableCell></TableRow>)}</TableBody></Table>}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><FolderOpen className="size-4 text-primary" />Create share</CardTitle><CardDescription>Four steps keep path, protocol, access, and review concerns separate.</CardDescription></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">{['Path', 'Protocols', 'Access', 'Review'].map((label, index) => <span key={label} className={index + 1 === step ? 'font-semibold text-primary' : ''}>{index + 1}. {label}</span>)}</div>
-            {step === 1 ? <div className="space-y-3"><Label htmlFor="share-name">Share name</Label><Input id="share-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="documents" /><Label htmlFor="share-path">Directory path</Label><Input id="share-path" value={path} onChange={(event) => setPath(event.target.value)} placeholder="/srv/pools/data/documents" /><Label htmlFor="share-description">Description</Label><Input id="share-description" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Team documents" /></div> : null}
-            {step === 2 ? <div className="space-y-2">{protocolOptions.map((protocol) => <label key={protocol} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm uppercase"><span>{protocol}</span><Switch checked={protocols.includes(protocol)} onCheckedChange={() => toggleProtocol(protocol)} /></label>)}</div> : null}
-            {step === 3 ? <div className="space-y-3"><label className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"><span>Allow guest access</span><Switch checked={guest} onCheckedChange={setGuest} /></label><Label htmlFor="share-access">Access rules</Label><Input id="share-access" value={access} onChange={(event) => setAccess(event.target.value)} placeholder="family:write, backup:read" /><p className="text-xs text-muted-foreground">Use principal names and levels: none, read, or write.</p></div> : null}
-            {step === 4 ? <div className="rounded-lg border bg-muted/30 p-3 text-sm"><p className="font-medium">{name || 'Unnamed share'}</p><p className="mt-1 font-mono text-xs text-muted-foreground">{path}</p><p className="mt-2">{protocols.join(', ') || 'No protocols selected'} · {guest ? 'guest enabled' : 'authenticated'}</p><p className="mt-1 text-muted-foreground">{access || 'No explicit access rules'}</p></div> : null}
-            <div className="flex justify-between gap-2"><Button variant="outline" disabled={step === 1} onClick={() => setStep((current) => current - 1)}><ArrowLeft />Back</Button>{step < 4 ? <Button disabled={(step === 1 && (!name || !path)) || (step === 2 && protocols.length === 0)} onClick={() => setStep((current) => current + 1)}>Next<ArrowRight /></Button> : <Button disabled={createShare.isPending} onClick={() => createShare.mutate()}>Create share</Button>}</div>
-          </CardContent>
-        </Card>
-      </div>
-      {message ? <p className="text-sm text-muted-foreground" role="status">{message}</p> : null}
+      <PageHeader
+        title="Shares"
+        description="One share can expose one location over multiple protocols."
+        actions={
+          <Button size="sm" onClick={() => setWizardOpen(true)}>
+            <Plus />
+            Create share
+          </Button>
+        }
+      />
+      <ResourceTable
+        columns={columns}
+        rows={shares ?? []}
+        loading={isLoading}
+        onRowClick={(share) => navigate(`/shares?share=${share.id}`)}
+        emptyState={
+          <EmptyState
+            icon={<FolderOpen />}
+            title="No shares"
+            description="Create your first share to make storage available on the network."
+            className="border-0"
+          />
+        }
+      />
+
+      <ShareDrawer
+        shareId={shareId}
+        onOpenChange={(open) => setParam('share', open ? shareId : null)}
+      />
+      <CreateShareWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+      />
     </div>
   )
 }

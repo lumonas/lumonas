@@ -2,7 +2,7 @@
 
 ## Objective
 
-MyNAS must make accidental data destruction difficult even if:
+LumoNAS must make accidental data destruction difficult even if:
 
 - UI code has a bug;
 - device letters change after reboot;
@@ -125,7 +125,7 @@ Plan hash
 
 The UI confirms exactly that plan.
 
-`mynas-privd` executes that signed/hashed plan, not user-supplied replacement parameters.
+`lumonas-privd` executes that signed/hashed plan, not user-supplied replacement parameters.
 
 Plans expire quickly.
 
@@ -231,7 +231,7 @@ Configure multiple content files on separate devices.
 
 The installer is allowed to modify only the selected **system target**.
 
-Existing MyNAS disks receive a hard protection marker in the install plan.
+Existing LumoNAS disks receive a hard protection marker in the install plan.
 
 Data disks are mounted read-only during recovery discovery.
 
@@ -297,6 +297,6 @@ A destructive operation must abort if:
 - target becomes part of a pool after plan creation;
 - plan expires;
 - another admin changes relevant config;
-- `mynas-privd` receives a parameter not present in the confirmed plan.
+- `lumonas-privd` receives a parameter not present in the confirmed plan.
 
 CI must include simulated races for these cases.

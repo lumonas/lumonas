@@ -9,7 +9,7 @@ import (
 )
 
 func TestPoolPlanRoundTrip(t *testing.T) {
-	db, err := Open(t.TempDir() + "/mynas.db")
+	db, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestPoolPlanRoundTrip(t *testing.T) {
 }
 
 func TestPoolUnmountPlanRoundTrip(t *testing.T) {
-	db, err := Open(t.TempDir() + "/mynas.db")
+	db, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}

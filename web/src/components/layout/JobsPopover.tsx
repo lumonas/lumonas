@@ -56,7 +56,7 @@ export function JobsPopover() {
             variant="ghost"
             size="sm"
             className="w-full text-xs text-muted-foreground"
-            onClick={() => navigate('/monitoring')}
+            onClick={() => navigate('/monitoring?tab=jobs')}
           >
             View all activity
           </Button>

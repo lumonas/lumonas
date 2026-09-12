@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-ASSERT_MODE="${MYNAS_QEMU_ASSERT:-false}"
+ASSERT_MODE="${LUMONAS_QEMU_ASSERT:-false}"
 
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
   if [ "$ASSERT_MODE" = "true" ]; then
@@ -12,34 +12,34 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
   exit 0
 fi
 
-if [ -z "${MYNAS_QEMU_IMAGE:-}" ]; then
+if [ -z "${LUMONAS_QEMU_IMAGE:-}" ]; then
   if [ "$ASSERT_MODE" = "true" ]; then
-    echo "MYNAS_QEMU_IMAGE is required in assertion mode" >&2
+    echo "LUMONAS_QEMU_IMAGE is required in assertion mode" >&2
     exit 1
   fi
-  echo "Set MYNAS_QEMU_IMAGE to a Debian 13 image built by scripts/qemu-build-image.sh" >&2
+  echo "Set LUMONAS_QEMU_IMAGE to a Debian 13 image built by scripts/qemu-build-image.sh" >&2
   exit 0
 fi
 
 if ! command -v qemu-img >/dev/null 2>&1; then
-  echo "qemu-img is required when MYNAS_QEMU_IMAGE is set" >&2
+  echo "qemu-img is required when LUMONAS_QEMU_IMAGE is set" >&2
   exit 1
 fi
 
-DATA_DIR="${MYNAS_QEMU_DATA_DIR:-/tmp/lumonas-qemu-disks}"
+DATA_DIR="${LUMONAS_QEMU_DATA_DIR:-/tmp/lumonas-qemu-disks}"
 mkdir -p "$DATA_DIR"
 for disk in data1 data2 data3 parity; do
   image="$DATA_DIR/$disk.qcow2"
   if [ ! -f "$image" ]; then qemu-img create -f qcow2 "$image" 1G >/dev/null; fi
 done
 
-IMAGE_FORMAT="${MYNAS_QEMU_IMAGE_FORMAT:-raw}"
+IMAGE_FORMAT="${LUMONAS_QEMU_IMAGE_FORMAT:-raw}"
 run_qemu() {
 qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -m 2048 \
   -smp 2 \
-  -drive "file=$MYNAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT,serial=LUMONAS-SYSTEM" \
+  -drive "file=$LUMONAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT,serial=LUMONAS-SYSTEM" \
   -drive "file=$DATA_DIR/data1.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA1" \
   -drive "file=$DATA_DIR/data2.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA2" \
   -drive "file=$DATA_DIR/data3.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA3" \
@@ -56,7 +56,7 @@ if [ "$ASSERT_MODE" != "true" ]; then
   exit $?
 fi
 
-LOG="${MYNAS_QEMU_LOG:-/tmp/lumonas-qemu-smoke.log}"
+LOG="${LUMONAS_QEMU_LOG:-/tmp/lumonas-qemu-smoke.log}"
 run_qemu >"$LOG" 2>&1 &
 QEMU_PID=$!
 cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null || true; }

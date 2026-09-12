@@ -42,7 +42,7 @@ type ConfigGeneration struct {
 
 func Open(path string) (*Store, error) {
 	if path == "" {
-		path = "/var/lib/mynas/mynas.db"
+		path = "/var/lib/lumonas/lumonas.db"
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return nil, fmt.Errorf("create database directory: %w", err)
@@ -90,7 +90,7 @@ func Open(path string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) BackupBytes() ([]byte, error) {
-	temporary, err := os.CreateTemp(filepath.Dir(s.path), ".mynas-db-backup-*.db")
+	temporary, err := os.CreateTemp(filepath.Dir(s.path), ".lumonas-db-backup-*.db")
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func (s *Store) Jobs() ([]model.Job, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var result []model.Job
+	result := make([]model.Job, 0)
 	for rows.Next() {
 		var j model.Job
 		var progress sql.NullFloat64

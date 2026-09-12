@@ -8,7 +8,7 @@ import (
 )
 
 func TestResolveShareAccessIncludesGroupMembership(t *testing.T) {
-	database, err := Open(t.TempDir() + "/mynas.db")
+	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}

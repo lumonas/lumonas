@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const trashDirectory = ".mynas-trash"
+const trashDirectory = ".lumonas-trash"
 
 type Entry struct {
 	ID         string    `json:"id"`
@@ -226,7 +226,7 @@ func WriteUpload(root, relative, name string, input io.Reader, sizeLimit int64) 
 		return "", err
 	}
 	finalName := uniqueName(parent, name)
-	temporary, err := os.CreateTemp(parent, ".mynas-upload-*")
+	temporary, err := os.CreateTemp(parent, ".lumonas-upload-*")
 	if err != nil {
 		return "", err
 	}

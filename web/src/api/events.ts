@@ -1,6 +1,7 @@
 import { MockEventSource } from '@/mocks/event-stream'
 
-export const useMocks = import.meta.env.VITE_USE_MOCKS !== 'false'
+// The appliance runtime is the default. Set VITE_USE_MOCKS=true for the standalone UI demo.
+export const useMocks = import.meta.env.VITE_USE_MOCKS === 'true'
 
 export interface EventSourceLike {
   addEventListener(type: 'message', listener: (event: { data: string }) => void): void

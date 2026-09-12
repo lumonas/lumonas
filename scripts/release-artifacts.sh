@@ -10,15 +10,15 @@ if command -v syft >/dev/null 2>&1; then
 		[ -f "$artifact" ] || continue
 		syft "file:$artifact" -o spdx-json > "$artifact.sbom.json"
 	done
-elif [ "${MYNAS_REQUIRE_SBOM:-false}" = "true" ]; then
+elif [ "${LUMONAS_REQUIRE_SBOM:-false}" = "true" ]; then
   echo "syft is required for this release" >&2
   exit 1
 else
   echo "syft not installed; SBOM generation skipped" >&2
 fi
 
-if [ "${MYNAS_SIGN_ARTIFACTS:-false}" = "true" ]; then
-  command -v cosign >/dev/null 2>&1 || { echo "cosign is required when MYNAS_SIGN_ARTIFACTS=true" >&2; exit 1; }
+if [ "${LUMONAS_SIGN_ARTIFACTS:-false}" = "true" ]; then
+  command -v cosign >/dev/null 2>&1 || { echo "cosign is required when LUMONAS_SIGN_ARTIFACTS=true" >&2; exit 1; }
 	for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw; do
     [ -f "$artifact" ] || continue
     cosign sign-blob --yes --output-signature "$artifact.sig" "$artifact"

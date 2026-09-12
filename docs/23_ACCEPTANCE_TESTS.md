@@ -17,7 +17,7 @@ Pass if:
 - installation completes;
 - data HDDs are untouched;
 - system boots;
-- `mynas.local` is advertised on LAN;
+- `lumonas.local` is advertised on LAN;
 - UI, Docker, SMB packages and storage tools are available.
 
 ## B. Existing data import
@@ -28,7 +28,7 @@ User selects Import.
 
 Pass if:
 
-- MyNAS mounts/imports without formatting;
+- LumoNAS mounts/imports without formatting;
 - sample file hashes remain unchanged;
 - destructive erase is not default.
 

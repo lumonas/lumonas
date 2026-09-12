@@ -2,10 +2,10 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-OUTPUT="${MYNAS_QEMU_IMAGE:-$ROOT/build/qemu/mynas-debian13.raw}"
-WORK="${MYNAS_QEMU_WORKDIR:-$ROOT/build/qemu/work}"
-DEB="${MYNAS_DEB:-$ROOT/lumonas_${MYNAS_VERSION:-0.1.0-dev}_amd64.deb}"
-SIZE="${MYNAS_QEMU_DISK_SIZE:-4G}"
+OUTPUT="${LUMONAS_QEMU_IMAGE:-$ROOT/build/qemu/lumonas-debian13.raw}"
+WORK="${LUMONAS_QEMU_WORKDIR:-$ROOT/build/qemu/work}"
+DEB="${LUMONAS_DEB:-$ROOT/lumonas_${LUMONAS_VERSION:-0.1.0-dev}_amd64.deb}"
+SIZE="${LUMONAS_QEMU_DISK_SIZE:-4G}"
 
 for command in debootstrap qemu-img mkfs.ext4 grub-install; do
   command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 1; }
@@ -47,7 +47,7 @@ apt-get install -y --no-install-recommends \
   network-manager docker.io docker-compose samba samba-common-bin avahi-daemon
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
-mkdir -p /etc/systemd/network /etc/systemd/system/mynas-web.service.d
+mkdir -p /etc/systemd/network /etc/systemd/system/lumonas-web.service.d
 cat >/etc/systemd/network/20-ethernet.network <<'NETWORK'
 [Match]
 Name=en* eth*
@@ -55,14 +55,14 @@ Name=en* eth*
 [Network]
 DHCP=yes
 NETWORK
-cat >/etc/systemd/system/mynas-web.service.d/qemu.conf <<'DROPIN'
+cat >/etc/systemd/system/lumonas-web.service.d/qemu.conf <<'DROPIN'
 [Service]
-Environment=MYNAS_WEB_LISTEN=0.0.0.0:8081
+Environment=LUMONAS_WEB_LISTEN=0.0.0.0:8081
 DROPIN
 cat >/etc/fstab <<'FSTAB'
 /dev/vda / ext4 defaults 0 1
 FSTAB
-systemctl enable systemd-networkd.service systemd-resolved.service docker.service smbd.service avahi-daemon.service mynas-privd.service mynas-privd-storage.service mynas-privd-network.service mynas-privd-power.service mynas-privd-general.service mynasd.service mynas-web.service || true
+systemctl enable systemd-networkd.service systemd-resolved.service docker.service smbd.service avahi-daemon.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 passwd -l root || true
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config

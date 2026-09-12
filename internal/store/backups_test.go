@@ -8,12 +8,12 @@ import (
 )
 
 func TestBackupDestinationsEncryptCredentialsAndPersistRuns(t *testing.T) {
-	database, err := Open(t.TempDir() + "/mynas.db")
+	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer database.Close()
-	destination, err := database.SaveBackupDestination(backup.Destination{ID: "local", Name: "Local", Type: backup.DestinationLocal, Target: "/var/lib/mynas/recovery", Enabled: true, Retention: backup.DefaultRetention()}, backup.Credentials{AccessKey: "access", SecretKey: "secret"}, []byte("recovery-key"))
+	destination, err := database.SaveBackupDestination(backup.Destination{ID: "local", Name: "Local", Type: backup.DestinationLocal, Target: "/var/lib/lumonas/recovery", Enabled: true, Retention: backup.DefaultRetention()}, backup.Credentials{AccessKey: "access", SecretKey: "secret"}, []byte("recovery-key"))
 	if err != nil || !destination.CredentialsConfigured {
 		t.Fatalf("save destination failed: %#v %v", destination, err)
 	}
@@ -58,7 +58,7 @@ func TestBackupDestinationsEncryptCredentialsAndPersistRuns(t *testing.T) {
 }
 
 func TestBackupScheduleRejectsUnboundedIntervals(t *testing.T) {
-	database, err := Open(t.TempDir() + "/mynas.db")
+	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}

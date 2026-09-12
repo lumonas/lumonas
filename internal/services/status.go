@@ -13,7 +13,7 @@ type Status struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-var DefaultNames = []string{"mynas-privd.service", "mynasd.service", "mynas-web.service", "docker.service", "smbd.service", "nfs-server.service", "ssh.service"}
+var DefaultNames = []string{"lumonas-privd.service", "lumonasd.service", "lumonas-web.service", "docker.service", "smbd.service", "nfs-server.service", "ssh.service"}
 
 func Collect(ctx context.Context, names []string) []Status {
 	result := make([]Status, 0, len(names))

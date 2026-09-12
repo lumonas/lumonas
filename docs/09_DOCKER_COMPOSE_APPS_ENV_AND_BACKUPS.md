@@ -13,17 +13,17 @@ Both modes operate on the same underlying stack.
 Suggested:
 
 ```text
-/srv/mynas/docker/
+/srv/lumonas/docker/
 ├── stacks/
 │   ├── jellyfin/
 │   │   ├── compose.yaml
 │   │   ├── stack.env
-│   │   └── mynas.yaml
+│   │   └── lumonas.yaml
 │   └── immich/
 ├── templates/
 └── exports/
 
-/var/lib/mynas/secrets/docker/
+/var/lib/lumonas/secrets/docker/
 ```
 
 Appdata defaults to a configurable Apps storage resource, not necessarily the system SSD.
@@ -32,7 +32,7 @@ Appdata defaults to a configurable Apps storage resource, not necessarily the sy
 
 `compose.yaml` is the authoritative Docker stack definition.
 
-MyNAS metadata is separate.
+LumoNAS metadata is separate.
 
 Never regenerate the complete YAML from a simple form and discard unknown options.
 
@@ -69,7 +69,7 @@ Catalog entry includes:
 - backup/recovery contract;
 - version/update policy.
 
-Keep catalog separately updateable from MyNAS core.
+Keep catalog separately updateable from LumoNAS core.
 
 ## Arbitrary Compose import
 
@@ -86,16 +86,16 @@ Analyze Compose and generate a configuration form from unresolved variables:
 PORT → port field
 UPLOAD_LOCATION → storage picker
 PASSWORD → secret field
-TZ → MyNAS timezone
+TZ → LumoNAS timezone
 ```
 
-Show advanced constructs that MyNAS does not graphically understand, but preserve them.
+Show advanced constructs that LumoNAS does not graphically understand, but preserve them.
 
 ## Common environment variables
 
 Variable scopes:
 
-1. built-in MyNAS variables;
+1. built-in LumoNAS variables;
 2. user global variables;
 3. stack variables;
 4. service/container variables;
@@ -104,12 +104,12 @@ Variable scopes:
 Suggested built-ins:
 
 ```text
-MYNAS_HOSTNAME
-MYNAS_LAN_IP
-MYNAS_TIMEZONE
-MYNAS_APPDATA
-MYNAS_DATA
-MYNAS_BACKUPS
+LUMONAS_HOSTNAME
+LUMONAS_LAN_IP
+LUMONAS_TIMEZONE
+LUMONAS_APPDATA
+LUMONAS_DATA
+LUMONAS_BACKUPS
 ```
 
 ## Storage references instead of fragile paths
@@ -121,7 +121,7 @@ Pool: Media
 Directory: /
 ```
 
-MyNAS resolves it to the current effective host path.
+LumoNAS resolves it to the current effective host path.
 
 This lets internal mount locations change without editing dozens of stacks.
 
@@ -135,7 +135,7 @@ MEDIA → Media Pool → used by 8 stacks
 
 Do not store secrets in normal global `.env`.
 
-Store encrypted in MyNAS secret store with restrictive files/runtime injection.
+Store encrypted in LumoNAS secret store with restrictive files/runtime injection.
 
 UI tracks where secrets are used.
 
@@ -168,7 +168,7 @@ Container /movies → Media / Movies
 
 ## Docker Engine access
 
-`mynas-web` must not receive direct Docker socket access.
+`lumonas-web` must not receive direct Docker socket access.
 
 A controlled backend module uses Docker Engine API/SDK.
 
@@ -267,7 +267,7 @@ Support:
 ## Acceptance criteria
 
 - Simple-mode edits preserve unknown YAML.
-- An exported stack runs with normal Docker Compose outside MyNAS.
+- An exported stack runs with normal Docker Compose outside LumoNAS.
 - Changing a global storage reference lists affected stacks before apply.
 - Secrets do not appear in normal exports/logs.
 - A user can deploy a basic app without knowing Compose.

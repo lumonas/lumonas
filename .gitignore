@@ -1,4 +1,7 @@
 /bin/
+/lumonasd
+/lumonas-web
+/lumonas-privd
 /build/
 /coverage/
 *.deb
@@ -7,3 +10,7 @@
 *.sbom.json
 *.sig
 build/qemu/work/
+/data/
+*.db
+*.db-shm
+*.db-wal

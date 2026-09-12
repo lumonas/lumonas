@@ -11,7 +11,7 @@ Baseline: Debian 13 Stable (Trixie). Debian announced 13.6 on 2026-07-11.
 
 ## Docker
 
-MyNAS should use Docker Engine API/Go SDK rather than parsing `docker ps` output for normal management.
+LumoNAS should use Docker Engine API/Go SDK rather than parsing `docker ps` output for normal management.
 
 - https://docs.docker.com/reference/api/engine/
 - https://docs.docker.com/compose/
@@ -25,7 +25,7 @@ Use D-Bus API and checkpoint/rollback behavior for safe network changes.
 
 ## SnapRAID
 
-The manual documents sync/scrub/content/parity behavior. MyNAS should keep SnapRAID terminology and safety semantics accurate.
+The manual documents sync/scrub/content/parity behavior. LumoNAS should keep SnapRAID terminology and safety semantics accurate.
 
 - https://www.snapraid.it/manual
 
@@ -45,6 +45,6 @@ Candidate future image/A-B/reproducible image tooling. Supports Debian image cre
 
 ## Notes
 
-Technology versions should be pinned per MyNAS release.
+Technology versions should be pinned per LumoNAS release.
 
 The product must not assume that “latest” package behavior remains unchanged; CI and release manifests are authoritative for each shipped image.

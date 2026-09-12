@@ -8,7 +8,7 @@ import (
 )
 
 func TestDestinationValidationAndObjectName(t *testing.T) {
-	if err := (Destination{ID: "local", Name: "Local", Type: DestinationLocal, Target: "/var/lib/mynas/recovery", Retention: DefaultRetention()}).Validate(); err != nil {
+	if err := (Destination{ID: "local", Name: "Local", Type: DestinationLocal, Target: "/var/lib/lumonas/recovery", Retention: DefaultRetention()}).Validate(); err != nil {
 		t.Fatal(err)
 	}
 	if err := (Destination{ID: "bad", Name: "Bad", Type: DestinationLocal, Target: "../recovery", Retention: DefaultRetention()}).Validate(); err == nil {

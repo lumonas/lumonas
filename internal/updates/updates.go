@@ -277,7 +277,7 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".mynas-update-*")
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".lumonas-update-*")
 	if err != nil {
 		return err
 	}

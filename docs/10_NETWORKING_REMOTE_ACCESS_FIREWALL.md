@@ -149,7 +149,7 @@ Provide:
 - DNS state;
 - gateway test;
 - Internet test;
-- MyNAS update endpoint test;
+- LumoNAS update endpoint test;
 - Docker registry test.
 
 ## Live monitoring
@@ -184,12 +184,12 @@ Future: LAN device list + wake known hosts.
 
 Use Avahi to advertise:
 
-- MyNAS management hostname;
+- LumoNAS management hostname;
 - SMB/Time Machine where appropriate.
 
 ## HTTPS
 
-Support local HTTPS even offline using a MyNAS local certificate/CA.
+Support local HTTPS even offline using a LumoNAS local certificate/CA.
 
 Explain that client trust installation may be required.
 

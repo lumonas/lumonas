@@ -1,0 +1,30 @@
+[Unit]
+Description=LumoNAS general privileged operation worker
+After=local-fs.target lumonas-privd.service
+Wants=lumonas-privd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/lumonas/lumonas-privd --worker general --socket /run/lumonas/general.sock
+User=root
+Group=lumonas
+RuntimeDirectory=lumonas
+RuntimeDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/lumonas /etc/lumonas /var/lib/lumonas /srv/lumonas /srv/pools
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
+AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=128M
+CPUQuota=100%
+TasksMax=64
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target

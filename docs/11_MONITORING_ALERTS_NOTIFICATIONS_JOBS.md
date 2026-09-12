@@ -121,7 +121,7 @@ Planned:
 - ntfy;
 - generic webhook.
 
-Use a provider abstraction. Apprise may be used as a bridge initially, but keep MyNAS alert routing semantics independent so individual native integrations can replace it later.
+Use a provider abstraction. Apprise may be used as a bridge initially, but keep LumoNAS alert routing semantics independent so individual native integrations can replace it later.
 
 ## Routing
 

@@ -43,7 +43,7 @@ func TestOperationsStayInsideShareRootAndUseRecycleBin(t *testing.T) {
 	if _, err := Resolve(root, "/../outside"); err == nil {
 		t.Fatal("path traversal should be rejected")
 	}
-	if _, err := Resolve(root, "/.mynas-trash"); err == nil {
+	if _, err := Resolve(root, "/.lumonas-trash"); err == nil {
 		t.Fatal("recycle-bin internals should not be addressable")
 	}
 }

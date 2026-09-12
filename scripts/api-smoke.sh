@@ -1,16 +1,16 @@
 #!/bin/sh
 set -eu
 
-# Black-box smoke test for the real mynasd process. This deliberately exercises
+# Black-box smoke test for the real lumonasd process. This deliberately exercises
 # the HTTP boundary instead of calling handlers in-process, so it catches
 # startup, migration, routing, cookie, and middleware regressions together.
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 TEMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/lumonas-api-smoke.XXXXXX")
-LISTEN_ADDR=${MYNAS_API_SMOKE_LISTEN:-127.0.0.1:18080}
+LISTEN_ADDR=${LUMONAS_API_SMOKE_LISTEN:-127.0.0.1:18080}
 BASE_URL="http://${LISTEN_ADDR}"
-DB_PATH="$TEMP_DIR/mynas.db"
-LOG_PATH="$TEMP_DIR/mynasd.log"
+DB_PATH="$TEMP_DIR/lumonas.db"
+LOG_PATH="$TEMP_DIR/lumonasd.log"
 COOKIE_JAR="$TEMP_DIR/cookies.txt"
 ADMIN_PASSWORD='api-smoke-password-123'
 SERVER_PID=''
@@ -33,30 +33,30 @@ require_command() {
 
 require_command curl
 
-if [ -n "${MYNAS_API_SMOKE_BIN:-}" ]; then
-	MYNASD_BIN=$MYNAS_API_SMOKE_BIN
+if [ -n "${LUMONAS_API_SMOKE_BIN:-}" ]; then
+	LUMONASD_BIN=$LUMONAS_API_SMOKE_BIN
 else
-	MYNASD_BIN="$TEMP_DIR/mynasd"
+	LUMONASD_BIN="$TEMP_DIR/lumonasd"
 	(
 		cd "$ROOT_DIR"
 		GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" \
 		GOPATH="${GOPATH:-/tmp/lumonas-gopath}" \
-			go build -trimpath -o "$MYNASD_BIN" ./cmd/mynasd
+			go build -trimpath -o "$LUMONASD_BIN" ./cmd/lumonasd
 	)
 fi
 
-if [ ! -x "$MYNASD_BIN" ]; then
-	echo "mynasd binary is not executable: $MYNASD_BIN" >&2
+if [ ! -x "$LUMONASD_BIN" ]; then
+	echo "lumonasd binary is not executable: $LUMONASD_BIN" >&2
 	exit 1
 fi
 
-MYNAS_DB_PATH="$DB_PATH" \
-MYNAS_AUTH_REQUIRED=true \
-MYNAS_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
-MYNAS_CATALOG_FILE="$ROOT_DIR/catalog/apps.json" \
-MYNAS_STACK_ROOT="$TEMP_DIR/stacks" \
-MYNAS_RECOVERY_DIR="$TEMP_DIR/recovery" \
-"$MYNASD_BIN" -listen "$LISTEN_ADDR" >"$LOG_PATH" 2>&1 &
+LUMONAS_DB_PATH="$DB_PATH" \
+LUMONAS_AUTH_REQUIRED=true \
+LUMONAS_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+LUMONAS_CATALOG_FILE="$ROOT_DIR/catalog/apps.json" \
+LUMONAS_STACK_ROOT="$TEMP_DIR/stacks" \
+LUMONAS_RECOVERY_DIR="$TEMP_DIR/recovery" \
+"$LUMONASD_BIN" -listen "$LISTEN_ADDR" >"$LOG_PATH" 2>&1 &
 SERVER_PID=$!
 
 wait_for_status() {
@@ -69,7 +69,7 @@ wait_for_status() {
 			return 0
 		fi
 		if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-			echo "mynasd exited before $endpoint became ready" >&2
+			echo "lumonasd exited before $endpoint became ready" >&2
 			sed -n '1,160p' "$LOG_PATH" >&2
 			return 1
 		fi

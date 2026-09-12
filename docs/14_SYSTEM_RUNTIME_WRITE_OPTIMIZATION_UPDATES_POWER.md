@@ -2,7 +2,7 @@
 
 ## Goal
 
-Keep MyNAS lightweight and reduce unnecessary system-SSD writes without risking important state.
+Keep LumoNAS lightweight and reduce unnecessary system-SSD writes without risking important state.
 
 ## Memory/write optimization
 
@@ -78,7 +78,7 @@ Alert on worsening wear/error state.
 
 Separate:
 
-1. MyNAS core release;
+1. LumoNAS core release;
 2. Debian security updates;
 3. Docker image updates.
 
@@ -86,7 +86,7 @@ Do not silently dist-upgrade major Debian releases.
 
 ## Update workflow
 
-Before significant MyNAS update:
+Before significant LumoNAS update:
 
 1. configuration generation snapshot;
 2. recovery backup verification;
@@ -128,7 +128,7 @@ UI support:
 
 Before clean shutdown:
 
-- flush MyNAS state;
+- flush LumoNAS state;
 - persist volatile critical queues;
 - stop Docker cleanly;
 - stop file services;

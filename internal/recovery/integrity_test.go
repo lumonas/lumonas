@@ -20,7 +20,7 @@ type testZipEntry struct {
 func validBundle(t *testing.T, encrypted bool) []byte {
 	t.Helper()
 	input := Input{
-		Manifest:     Manifest{MyNASVersion: "test", NASUUID: "nas-1", Generation: 4},
+		Manifest:     Manifest{LumoNASVersion: "test", NASUUID: "nas-1", Generation: 4},
 		DesiredState: []byte(`{"hostname":"nas"}`),
 		Database:     []byte("sqlite snapshot"),
 		Compose:      map[string][]byte{"media/compose.yaml": []byte("services:\n  media:\n    image: example/media:latest\n")},
@@ -168,8 +168,8 @@ func TestBundleIntegrityRejectsMalformedArchives(t *testing.T) {
 	}{
 		{
 			name:    "missing required entry",
-			wantErr: `bundle entry "mynas.db" is missing`,
-			mutate:  func(entries []testZipEntry) []testZipEntry { return removeTestEntry(entries, "mynas.db") },
+			wantErr: `bundle entry "lumonas.db" is missing`,
+			mutate:  func(entries []testZipEntry) []testZipEntry { return removeTestEntry(entries, "lumonas.db") },
 		},
 		{
 			name:    "missing checksum entry",

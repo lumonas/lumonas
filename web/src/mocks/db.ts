@@ -274,8 +274,8 @@ export const alerts: Alert[] = [
   {
     id: 'alert-2',
     severity: 'attention',
-    title: 'Recovery readiness at 96%',
-    description: 'Appdata backup is missing for 1 of 18 apps.',
+    title: 'Recovery readiness at 87%',
+    description: 'Appdata backup is missing for pihole — the offsite copy is also 9 days old.',
     state: 'firing',
     startedAt: daysAgo(1),
   },
@@ -373,6 +373,7 @@ export const runtime = {
   jobCounter: 100,
   eventCounter: 0,
   activityCounter: 100,
+  stackCounter: 100,
   uptimeStartedAt: now - (14 * 86_400 + 3 * 3_600) * 1000,
   metrics: {
     cpuPercent: 9,
@@ -381,6 +382,7 @@ export const runtime = {
     ramTotalBytes: 32 * GB,
     cpuTempC: 47,
     net: { interface: 'eth0', upMbps: 2.1, downMbps: 18.4 },
+    disk: { readMbps: 34, writeMbps: 12 },
   },
 }
 

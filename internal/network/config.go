@@ -37,6 +37,8 @@ type Connection struct {
 	Parent     string   `json:"parent,omitempty"`
 	Members    []string `json:"members,omitempty"`
 	VLANID     int      `json:"vlanId,omitempty"`
+	SSID       string   `json:"ssid,omitempty"`
+	WiFiOpen   bool     `json:"wifiOpen,omitempty"`
 	IPv4       IPConfig `json:"ipv4"`
 	IPv6       IPConfig `json:"ipv6"`
 	MTU        int      `json:"mtu,omitempty"`
@@ -66,6 +68,27 @@ type FirewallPolicy struct {
 var connectionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 var interfacePattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
 
+func validConnectionType(value string) bool {
+	switch value {
+	case "ethernet", "wifi", "vlan", "bond", "bridge":
+		return true
+	default:
+		return false
+	}
+}
+
+// ValidateWiFiPSK checks a transient pre-shared key at apply time. PSKs are
+// never persisted on the Connection record.
+func ValidateWiFiPSK(psk string) error {
+	if len(psk) < 8 || len(psk) > 63 {
+		return errors.New("wifi password must be between 8 and 63 characters")
+	}
+	if strings.ContainsFunc(psk, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+		return errors.New("wifi password contains control characters")
+	}
+	return nil
+}
+
 func (c Connection) Validate() error {
 	if !connectionIDPattern.MatchString(c.ID) {
 		return errors.New("network connection id is invalid")
@@ -76,11 +99,24 @@ func (c Connection) Validate() error {
 	if strings.TrimSpace(c.Name) == "" || len(c.Name) > 128 {
 		return errors.New("network connection name is required")
 	}
-	if !interfacePattern.MatchString(c.Interface) {
+	if c.Interface == "" && c.Type != "wifi" {
+		return errors.New("network interface name is required")
+	}
+	if c.Interface != "" && !interfacePattern.MatchString(c.Interface) {
 		return errors.New("network interface name is invalid")
 	}
-	if c.Type != "" && c.Type != "ethernet" && c.Type != "vlan" && c.Type != "bond" && c.Type != "bridge" {
+	if c.Type != "" && !validConnectionType(c.Type) {
 		return fmt.Errorf("network connection type %q is unsupported", c.Type)
+	}
+	if c.Type == "wifi" {
+		if len(c.SSID) < 1 || len(c.SSID) > 32 {
+			return errors.New("wifi connections require an SSID of 1 to 32 bytes")
+		}
+		if c.WiFiOpen && strings.ContainsRune(c.SSID, 0) {
+			return errors.New("wifi SSID contains invalid characters")
+		}
+	} else if c.SSID != "" || c.WiFiOpen {
+		return errors.New("only wifi connections may carry wifi settings")
 	}
 	if c.Parent != "" && !interfacePattern.MatchString(c.Parent) {
 		return errors.New("network connection parent is invalid")
@@ -117,6 +153,12 @@ func (c Connection) NetworkManagerChanges() (map[string]string, error) {
 	changes := map[string]string{"connection.autoconnect": strconv.FormatBool(c.Enabled)}
 	if c.Type != "" {
 		changes["connection.type"] = c.Type
+	}
+	if c.SSID != "" {
+		changes["802-11-wireless.ssid"] = c.SSID
+		if !c.WiFiOpen {
+			changes["802-11-wireless-security.key-mgmt"] = "wpa-psk"
+		}
 	}
 	if c.Parent != "" {
 		if c.Type == "vlan" {
@@ -301,7 +343,7 @@ func RenderNftables(policy FirewallPolicy, bindings []Binding) (string, error) {
 		policyName = "accept"
 	}
 	var builder strings.Builder
-	builder.WriteString("table inet mynas {\n  chain input { type filter hook input priority 0; policy ")
+	builder.WriteString("table inet lumonas {\n  chain input { type filter hook input priority 0; policy ")
 	builder.WriteString(policyName)
 	builder.WriteString(";\n    ct state established,related accept\n    iifname \"lo\" accept\n")
 	for _, binding := range services {

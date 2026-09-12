@@ -27,7 +27,7 @@ const FormatVersion = 1
 type Manifest struct {
 	FormatVersion int               `json:"formatVersion"`
 	ConfigSchema  int               `json:"configSchema"`
-	MyNASVersion  string            `json:"mynasVersion"`
+	LumoNASVersion  string            `json:"lumonasVersion"`
 	NASUUID       string            `json:"nasUuid"`
 	Generation    int64             `json:"generation"`
 	CreatedAt     time.Time         `json:"createdAt"`
@@ -69,7 +69,7 @@ func Create(input Input, key []byte) ([]byte, error) {
 	if input.Manifest.CreatedAt.IsZero() {
 		input.Manifest.CreatedAt = time.Now().UTC()
 	}
-	files := map[string][]byte{"manifest.json": nil, "desired-state.json": input.DesiredState, "mynas.db": input.Database}
+	files := map[string][]byte{"manifest.json": nil, "desired-state.json": input.DesiredState, "lumonas.db": input.Database}
 	for name, content := range input.Compose {
 		if name == "" || content == nil {
 			continue
@@ -153,7 +153,7 @@ func Verify(bundle, key []byte) (Manifest, error) {
 }
 
 func verifyFiles(files map[string][]byte, key []byte) (Manifest, error) {
-	for _, name := range []string{"manifest.json", "checksums.sha256", "desired-state.json", "mynas.db"} {
+	for _, name := range []string{"manifest.json", "checksums.sha256", "desired-state.json", "lumonas.db"} {
 		if _, ok := files[name]; !ok {
 			return Manifest{}, fmt.Errorf("bundle entry %q is missing", name)
 		}
@@ -284,7 +284,7 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 	if err != nil {
 		return RestorePlan{}, err
 	}
-	plan := RestorePlan{Manifest: manifest, Verified: true, Files: make([]string, 0, len(reader.File)), DatabaseValid: isSQLiteDatabase(files["mynas.db"]), DesiredStateValid: json.Valid(files["desired-state.json"]), ComposeValid: true}
+	plan := RestorePlan{Manifest: manifest, Verified: true, Files: make([]string, 0, len(reader.File)), DatabaseValid: isSQLiteDatabase(files["lumonas.db"]), DesiredStateValid: json.Valid(files["desired-state.json"]), ComposeValid: true}
 	for _, file := range reader.File {
 		plan.Files = append(plan.Files, file.Name)
 		if file.Name == "encrypted-secrets.bin" {
@@ -292,7 +292,7 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 		}
 	}
 	sort.Strings(plan.Files)
-	if !contains(plan.Files, "desired-state.json") || !contains(plan.Files, "mynas.db") {
+	if !contains(plan.Files, "desired-state.json") || !contains(plan.Files, "lumonas.db") {
 		plan.Warnings = append(plan.Warnings, "bundle is missing desired state or database")
 	}
 	if !plan.DatabaseValid {
@@ -443,7 +443,7 @@ func allowedPayloadEntry(name string) bool {
 		return false
 	}
 	switch name {
-	case "desired-state.json", "mynas.db", "encrypted-secrets.bin":
+	case "desired-state.json", "lumonas.db", "encrypted-secrets.bin":
 		return true
 	}
 	for _, prefix := range []string{"docker/stacks/", "config/", "acl/", "certificates/", "encrypted-secrets/"} {

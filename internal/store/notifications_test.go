@@ -8,7 +8,7 @@ import (
 )
 
 func TestNotificationChannelCredentialsPersistEncryptedAndRedacted(t *testing.T) {
-	database, err := Open(t.TempDir() + "/mynas.db")
+	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestNotificationChannelCredentialsPersistEncryptedAndRedacted(t *testing.T)
 }
 
 func TestNotificationDeliveryStatusPersistsWithoutSecrets(t *testing.T) {
-	database, err := Open(t.TempDir() + "/mynas.db")
+	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)
 	}

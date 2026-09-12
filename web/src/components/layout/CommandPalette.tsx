@@ -1,12 +1,23 @@
 import { useNavigate } from 'react-router-dom'
 import {
   Activity,
+  ArrowUpCircle,
+  Container,
+  FolderOpen,
+  FolderPlus,
   HardDrive,
   RefreshCw,
+  RotateCw,
   Search,
   SlidersHorizontal,
+  UserPlus,
 } from 'lucide-react'
-import { useCreateJob, useDisks } from '@/api/queries'
+import {
+  useCreateJob,
+  useDisks,
+  useDockerStacks,
+  useStackAction,
+} from '@/api/queries'
 import { NAV_ITEMS } from '@/components/layout/nav'
 import {
   CommandDialog,
@@ -24,6 +35,8 @@ export function CommandPalette() {
   const setOpen = useUiStore((s) => s.setPaletteOpen)
   const { data: disks } = useDisks()
   const createJob = useCreateJob()
+  const { data: stacks } = useDockerStacks()
+  const stackAction = useStackAction()
 
   function run(fn: () => void) {
     return () => {
@@ -66,6 +79,23 @@ export function CommandPalette() {
           </CommandGroup>
         </>
       )}
+      {stacks && stacks.length > 0 && (
+        <>
+          <CommandSeparator />
+          <CommandGroup heading="Docker stacks">
+            {stacks.slice(0, 6).map((stack) => (
+              <CommandItem
+                key={stack.id}
+                value={`stack ${stack.name}`}
+                onSelect={run(() => navigate(`/docker?tab=stacks&stack=${stack.id}`))}
+              >
+                <Container />
+                <span className="font-mono text-xs">{stack.name}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </>
+      )}
       <CommandSeparator />
       <CommandGroup heading="Actions">
         <CommandItem
@@ -78,6 +108,51 @@ export function CommandPalette() {
           Start SnapRAID sync
           <CommandShortcut>job</CommandShortcut>
         </CommandItem>
+        {stacks?.some((s) => s.name === 'jellyfin') && (
+          <>
+            <CommandItem
+              onSelect={run(() => {
+                const jellyfin = stacks.find((s) => s.name === 'jellyfin')
+                if (jellyfin) stackAction.mutate({ id: jellyfin.id, action: 'restart' })
+              })}
+            >
+              <RotateCw />
+              Restart Jellyfin
+            </CommandItem>
+            <CommandItem
+              onSelect={run(() => {
+                const jellyfin = stacks.find((s) => s.name === 'jellyfin')
+                navigate(`/docker?tab=stacks&stack=${jellyfin?.id ?? ''}`)
+              })}
+            >
+              <Container />
+              View Jellyfin logs
+            </CommandItem>
+          </>
+        )}
+        {stacks?.some((s) => s.updateAvailable) && (
+          <CommandItem
+            onSelect={run(() => {
+              const stack = stacks.find((s) => s.updateAvailable)
+              if (stack) navigate(`/docker?tab=stacks&stack=${stack.id}`)
+            })}
+          >
+            <ArrowUpCircle />
+            Review pending stack update
+          </CommandItem>
+        )}
+        <CommandItem onSelect={run(() => navigate('/files'))}>
+          <FolderOpen />
+          Browse files
+        </CommandItem>
+        <CommandItem onSelect={run(() => navigate('/shares?create=1'))}>
+          <FolderPlus />
+          Create share
+        </CommandItem>
+        <CommandItem onSelect={run(() => navigate('/users?create=1'))}>
+          <UserPlus />
+          Add user
+        </CommandItem>
         <CommandItem
           onSelect={run(() => {
             const flagged = disks?.find((d) => d.health === 'warning' || d.health === 'critical')
@@ -89,11 +164,15 @@ export function CommandPalette() {
           Run SMART test on flagged disk
           <CommandShortcut>job</CommandShortcut>
         </CommandItem>
-        <CommandItem onSelect={run(() => navigate('/settings'))}>
+        <CommandItem onSelect={run(() => navigate('/docker'))}>
+          <Search />
+          Browse app catalog
+        </CommandItem>
+        <CommandItem onSelect={run(() => navigate('/settings?tab=updates'))}>
           <SlidersHorizontal />
           Check for updates
         </CommandItem>
-        <CommandItem onSelect={run(() => navigate('/monitoring'))}>
+        <CommandItem onSelect={run(() => navigate('/monitoring?tab=timeline'))}>
           <Search />
           View activity log
         </CommandItem>

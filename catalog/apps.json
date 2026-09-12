@@ -14,7 +14,14 @@
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8096"},
       {"id":"MEDIA","label":"Media library","type":"storage_ref","required":true,"containerPath":"/media","defaultResource":"share-media"},
       {"id":"TZ","label":"Timezone","type":"timezone"}
-    ]
+    ],
+    "appdataPaths": ["/config"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["jellyfin"],
+      "startServices": ["jellyfin"]
+    }
   },
   {
     "id": "immich",
@@ -32,7 +39,17 @@
       {"id":"UPLOAD_LOCATION","label":"Upload storage","type":"storage_ref","required":true,"containerPath":"/usr/src/app/upload","defaultResource":"share-photos"},
       {"id":"DB_PASSWORD","label":"Database password","type":"secret","required":true},
       {"id":"TZ","label":"Timezone","type":"timezone"}
-    ]
+    ],
+    "appdataPaths": ["/usr/src/app/upload", "/var/lib/postgresql/data"],
+    "dbDumpContainer": "immich-postgres",
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/usr/src/app/upload", "/var/lib/postgresql/data"],
+      "stopServices": ["immich-server", "immich-redis", "immich-postgres"],
+      "startServices": ["immich-postgres", "immich-redis", "immich-server"],
+      "dbDump": {"container": "immich-postgres", "command": "pg_dump -U immich -d immich", "timeout": 300},
+      "dbRestore": {"container": "immich-postgres", "command": "psql -U immich -d immich", "timeout": 300}
+    }
   },
   {
     "id": "homeassistant",
@@ -47,6 +64,13 @@
     "form": [
       {"id":"CONFIG","label":"Configuration storage","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
       {"id":"TZ","label":"Timezone","type":"timezone"}
-    ]
+    ],
+    "appdataPaths": ["/config", "/config/.storage"],
+    "recovery": {
+      "strategy": "stop-backup",
+      "appdataPaths": ["/config"],
+      "stopServices": ["homeassistant"],
+      "startServices": ["homeassistant"]
+    }
   }
 ]

@@ -38,6 +38,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm test -- --run
       - run: pnpm build
 
   runtime-smoke:
@@ -71,7 +72,7 @@ jobs:
       # suite as well.
       - run: >-
           go test -count=1
-          ./cmd/mynasd ./internal/storage ./internal/recovery ./internal/privileged
+          ./cmd/lumonasd ./internal/storage ./internal/recovery ./internal/privileged
           -run 'TestStoragePlanRequiresStableIdentityAndSafetyUnlock|TestPoolPlanPersistsAndRejectsReplacedDiskOnConfirmation|TestPoolPlanFailsClosedOnReorderedOrReplacedDisk|TestPlanRejectsExpiryMountAndGenerationRaces|TestRecoveryStageRequiresConfirmationAndExtractsBundle|TestBundleRoundTripAndEncryptedPayload|TestBundleTamperingFailsVerification|TestUpdateAPIRequiresVerifiedRecoveryAndSupportsABHealthRollback|TestClientRoundTrip'
 
   package:
@@ -108,8 +109,8 @@ jobs:
         with:
           name: lumonas-deb
           path: .
-      - run: sudo MYNAS_DEB="$PWD/$(ls *.deb | head -n1)" MYNAS_QEMU_IMAGE="$PWD/build/qemu/mynas-debian13.raw" bash scripts/qemu-build-image.sh
-      - run: MYNAS_QEMU_IMAGE="$PWD/build/qemu/mynas-debian13.raw" MYNAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
+      - run: sudo LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh
+      - run: LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
 
   iso:
     runs-on: ubuntu-latest
@@ -121,7 +122,7 @@ jobs:
           name: lumonas-deb
           path: .
       - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso dpkg-dev
-      - run: sudo MYNAS_DEB="$PWD/$(ls *.deb | head -n1)" bash installer/build-iso.sh "${GITHUB_SHA::12}"
+      - run: sudo LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" bash installer/build-iso.sh "${GITHUB_SHA::12}"
       - uses: actions/upload-artifact@v4
         with:
           name: lumonas-iso
@@ -154,7 +155,7 @@ jobs:
           path: build/releases
       - uses: anchore/sbom-action/download-syft@v0
       - uses: sigstore/cosign-installer@v3
-      - run: MYNAS_REQUIRE_SBOM=true MYNAS_SIGN_ARTIFACTS=true bash scripts/release-artifacts.sh build/releases
+      - run: LUMONAS_REQUIRE_SBOM=true LUMONAS_SIGN_ARTIFACTS=true bash scripts/release-artifacts.sh build/releases
       - uses: softprops/action-gh-release@v2
         with:
           files: build/releases/*

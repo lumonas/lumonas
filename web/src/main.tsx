@@ -5,7 +5,7 @@ import '@/index.css'
 import App from '@/App'
 
 async function prepare() {
-  if (import.meta.env.VITE_USE_MOCKS === 'false') return
+  if (import.meta.env.VITE_USE_MOCKS !== 'true') return
   const { worker } = await import('@/mocks/browser')
   await worker.start({ onUnhandledRequest: 'bypass', quiet: true })
 }
@@ -18,4 +18,9 @@ prepare().then(() => {
       <App />
     </StrictMode>,
   )
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => void 0)
+    })
+  }
 })

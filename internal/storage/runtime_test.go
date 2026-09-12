@@ -33,7 +33,7 @@ func TestDiscoverPoolsUsesStableDiskIDs(t *testing.T) {
 func TestDiscoverProtectionReadsConfigWithoutMutating(t *testing.T) {
 	directory := t.TempDir()
 	config := filepath.Join(directory, "snapraid.conf")
-	if err := os.WriteFile(config, []byte("parity /srv/disks/wwn:parity/parity\ndata data-a /srv/disks/wwn:data\ncontent /var/lib/mynas/content\n"), 0o600); err != nil {
+	if err := os.WriteFile(config, []byte("parity /srv/disks/wwn:parity/parity\ndata data-a /srv/disks/wwn:data\ncontent /var/lib/lumonas/content\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	disks := []model.Disk{{ID: "wwn:parity", SizeBytes: 10}, {ID: "wwn:data", SizeBytes: 20}}

@@ -10,7 +10,7 @@
 - NetworkManager.
 - nftables.
 - Docker Engine + Compose v2.
-- SQLite for MyNAS state.
+- SQLite for LumoNAS state.
 - No Node.js runtime required after frontend build.
 
 ### Backend
@@ -34,7 +34,7 @@ Use Go for system services:
 - TanStack Query;
 - small client store for live resource state.
 
-Build to static assets and embed/serve through `mynas-web`.
+Build to static assets and embed/serve through `lumonas-web`.
 
 ## Process architecture
 
@@ -45,11 +45,11 @@ Browser
    ├─ SSE
    └─ WebSocket (terminal only)
    ▼
-mynas-web
+lumonas-web
 unprivileged HTTP/UI service
    │
    ▼
-mynasd
+lumonasd
 domain logic / desired state / events
 mostly unprivileged
    │
@@ -61,18 +61,18 @@ mostly unprivileged
    └── mutation planner
    │
    ▼
-mynas-privd
+lumonas-privd
 small root service
 structured, allow-listed operations
 ```
 
 ## Why three services
 
-`mynas-web` should not be root.
+`lumonas-web` should not be root.
 
-`mynasd` should own product state and business rules but should not contain a generic privileged shell.
+`lumonasd` should own product state and business rules but should not contain a generic privileged shell.
 
-`mynas-privd` should remain intentionally small, auditable, and boring.
+`lumonas-privd` should remain intentionally small, auditable, and boring.
 
 If the web server is compromised, the attacker must still cross another strongly constrained boundary before performing destructive disk operations.
 
@@ -80,15 +80,15 @@ If the web server is compromised, the attacker must still cross another strongly
 
 Recommended:
 
-- Unix domain socket between `mynasd` and `mynas-privd`;
+- Unix domain socket between `lumonasd` and `lumonas-privd`;
 - peer credential verification;
 - protobuf/gRPC or a small framed typed protocol;
-- no TCP listener for `mynas-privd`;
+- no TCP listener for `lumonas-privd`;
 - requests include operation ID and immutable mutation plan hash.
 
 ## Desired-state configuration
 
-Store canonical MyNAS intent in SQLite and version it by generation.
+Store canonical LumoNAS intent in SQLite and version it by generation.
 
 Examples:
 
@@ -163,15 +163,15 @@ Long jobs survive UI navigation and restart where safely possible.
 
 ## Configuration files
 
-Prefer generated fragments owned by MyNAS rather than taking ownership of entire system config when possible.
+Prefer generated fragments owned by LumoNAS rather than taking ownership of entire system config when possible.
 
 Examples:
 
 ```text
 /etc/samba/smb.conf
-/etc/samba/conf.d/mynas.conf
+/etc/samba/conf.d/lumonas.conf
 
-/etc/nftables.d/mynas.nft
+/etc/nftables.d/lumonas.nft
 /etc/systemd/system/...
 ```
 
@@ -188,15 +188,15 @@ Before reload:
 Suggested:
 
 ```text
-/var/lib/mynas/
-├── mynas.db
+/var/lib/lumonas/
+├── lumonas.db
 ├── generations/
 ├── recovery/
 ├── secrets/
 ├── jobs/
 └── state/
 
-/srv/mynas/
+/srv/lumonas/
 └── docker/
     ├── stacks/
     ├── templates/

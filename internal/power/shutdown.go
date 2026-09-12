@@ -18,10 +18,10 @@ func OrderedShutdown(action string) ([]ShutdownStep, error) {
 		return nil, errors.New("shutdown action must be poweroff or reboot")
 	}
 	return []ShutdownStep{
-		{Name: "stop-jobs", Command: "systemctl", Args: []string{"stop", "mynas-jobs.target"}},
-		{Name: "stop-services", Command: "systemctl", Args: []string{"stop", "mynas-services.target"}},
+		{Name: "stop-jobs", Command: "systemctl", Args: []string{"stop", "lumonas-jobs.target"}},
+		{Name: "stop-services", Command: "systemctl", Args: []string{"stop", "lumonas-services.target"}},
 		{Name: "flush-writes", Command: "sync"},
-		{Name: "unmount-storage", Command: "systemctl", Args: []string{"stop", "mynas-storage.target"}},
+		{Name: "unmount-storage", Command: "systemctl", Args: []string{"stop", "lumonas-storage.target"}},
 		{Name: "power-action", Command: "systemctl", Args: []string{action}},
 	}, nil
 }

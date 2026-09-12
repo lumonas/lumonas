@@ -2,14 +2,14 @@
 
 ## Requirement
 
-A MyNAS USB image must install a fully usable NAS without Internet access.
+A LumoNAS USB image must install a fully usable NAS without Internet access.
 
 Core installation cannot depend on:
 
 - Debian mirrors;
 - Docker repositories;
 - GitHub;
-- MyNAS servers;
+- LumoNAS servers;
 - external DNS;
 - cloud services.
 
@@ -18,7 +18,7 @@ Core installation cannot depend on:
 Primary artifact:
 
 ```text
-mynas-<version>-amd64.iso
+lumonas-<version>-amd64.iso
 ```
 
 Also publish:
@@ -35,7 +35,7 @@ Future artifacts may include qcow2/raw images.
 
 For the September 2026 plan, use Debian 13 Stable.
 
-Pin package versions per MyNAS release so:
+Pin package versions per LumoNAS release so:
 
 > same ISO = same installed core system.
 
@@ -85,7 +85,7 @@ The image should include:
 - NUT;
 - Docker Engine;
 - Docker Compose plugin;
-- MyNAS packages;
+- LumoNAS packages;
 - recovery tools.
 
 ## Offline repository
@@ -93,12 +93,12 @@ The image should include:
 Embed a signed local repository:
 
 ```text
-/opt/mynas-repo/
+/opt/lumonas-repo/
 ├── dists/
 ├── pool/
 ├── Release
 ├── Release.gpg
-└── mynas-keyring...
+└── lumonas-keyring...
 ```
 
 Installation points APT to the media/local repo first.
@@ -108,8 +108,8 @@ Network availability may add official mirrors, but cannot be mandatory.
 ## Boot menu
 
 ```text
-Install MyNAS
-Recover existing MyNAS
+Install LumoNAS
+Recover existing LumoNAS
 Hardware diagnostics
 Advanced options
 ```
@@ -146,7 +146,7 @@ Show:
 - serial suffix/full on detail;
 - current filesystem;
 - used data estimate;
-- whether existing MyNAS metadata exists.
+- whether existing LumoNAS metadata exists.
 
 Do not emphasize `/dev/sdX`.
 
@@ -162,14 +162,14 @@ Internet: Unavailable
 Installation can continue offline.
 ```
 
-mDNS should make the installed system discoverable as `mynas.local` after boot.
+mDNS should make the installed system discoverable as `lumonas.local` after boot.
 
 ## Browser-based installer future
 
 Long-term, the boot environment may display:
 
 ```text
-Open http://192.168.1.123 to install MyNAS
+Open http://192.168.1.123 to install LumoNAS
 ```
 
 and use the same React design language remotely.
@@ -180,7 +180,7 @@ For the first production installer, reliability is more important than building 
 
 Recovery media should support:
 
-- detect existing MyNAS data disks;
+- detect existing LumoNAS data disks;
 - validate recovery backup;
 - install blank replacement system SSD;
 - restore desired state;
@@ -195,7 +195,7 @@ Recovery media should support:
 During installer/recovery discovery:
 
 - mount existing data disks read-only;
-- identify by MyNAS metadata + filesystem UUID + disk serial;
+- identify by LumoNAS metadata + filesystem UUID + disk serial;
 - do not run repair/format automatically;
 - do not alter parity.
 
@@ -205,7 +205,7 @@ Installer must verify:
 
 - bootloader installed;
 - root filesystem mountable;
-- MyNAS services enabled;
+- LumoNAS services enabled;
 - local database created;
 - Docker starts;
 - network configuration valid;
@@ -224,7 +224,7 @@ For each release image:
 - Docker availability;
 - SMB service;
 - install with unrelated data disks attached;
-- install with existing MyNAS disks attached;
+- install with existing LumoNAS disks attached;
 - recovery install after deleting system disk.
 
 Offline-install failure blocks release.

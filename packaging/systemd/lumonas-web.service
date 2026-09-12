@@ -1,0 +1,29 @@
+[Unit]
+Description=LumoNAS web interface
+After=lumonasd.service
+Requires=lumonasd.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/lumonas/lumonas-web.env
+Environment=LUMONAS_WEB_ROOT=/usr/share/lumonas/web
+Environment=LUMONAS_API_URL=http://127.0.0.1:8080
+ExecStart=/usr/lib/lumonas/lumonas-web
+User=lumonas
+Group=lumonas
+Restart=on-failure
+RestartSec=3s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=256M
+CPUQuota=100%
+TasksMax=128
+TimeoutStopSec=15s
+
+[Install]
+WantedBy=multi-user.target

@@ -11,17 +11,20 @@ import (
 )
 
 type CatalogApp struct {
-	ID          string             `json:"id"`
-	Name        string             `json:"name"`
-	Category    string             `json:"category"`
-	Tagline     string             `json:"tagline"`
-	Description string             `json:"description"`
-	Accent      string             `json:"accent"`
-	Upstream    string             `json:"upstream"`
-	Image       string             `json:"image"`
-	Ports       []int              `json:"ports"`
-	Form        []CatalogFormField `json:"form"`
-	Popular     bool               `json:"popular,omitempty"`
+	ID              string             `json:"id"`
+	Name            string             `json:"name"`
+	Category        string             `json:"category"`
+	Tagline         string             `json:"tagline"`
+	Description     string             `json:"description"`
+	Accent          string             `json:"accent"`
+	Upstream        string             `json:"upstream"`
+	Image           string             `json:"image"`
+	Ports           []int              `json:"ports"`
+	Form            []CatalogFormField `json:"form"`
+	Popular         bool               `json:"popular,omitempty"`
+	Recovery        *RecoveryContract  `json:"recovery,omitempty"`
+	AppdataPaths    []string           `json:"appdataPaths,omitempty"`
+	DBDumpContainer string             `json:"dbDumpContainer,omitempty"`
 }
 type CatalogFormField struct {
 	ID              string `json:"id"`

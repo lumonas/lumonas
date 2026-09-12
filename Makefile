@@ -13,15 +13,15 @@ test-go:
 	$(GO_ENV) go test ./...
 
 test-web:
-	cd web && pnpm lint && pnpm typecheck && pnpm build
+	cd web && pnpm lint && pnpm typecheck && pnpm test -- --run && pnpm build
 
 build: build-go build-web
 
 build-go:
 	mkdir -p bin
-	$(GO_ENV) go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/mynasd ./cmd/mynasd
-	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/mynas-web ./cmd/mynas-web
-	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/mynas-privd ./cmd/mynas-privd
+	$(GO_ENV) go build -trimpath -ldflags "-s -w -X main.version=$(VERSION)" -o bin/lumonasd ./cmd/lumonasd
+	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/lumonas-web ./cmd/lumonas-web
+	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/lumonas-privd ./cmd/lumonas-privd
 
 build-web:
 	cd web && pnpm build
@@ -34,7 +34,7 @@ api-smoke:
 	bash scripts/api-smoke.sh
 
 qemu-image:
-	sudo MYNAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" MYNAS_QEMU_IMAGE="$(CURDIR)/build/qemu/mynas-debian13.raw" bash scripts/qemu-build-image.sh
+	sudo LUMONAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh
 
 qemu-smoke:
-	MYNAS_QEMU_IMAGE="$(CURDIR)/build/qemu/mynas-debian13.raw" MYNAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
+	LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh

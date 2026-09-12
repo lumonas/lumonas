@@ -7,8 +7,8 @@ Primary scenario:
 ```text
 system SSD fails
 → replace SSD
-→ boot MyNAS USB
-→ Recover existing MyNAS
+→ boot LumoNAS USB
+→ Recover existing LumoNAS
 → unlock recovery backup
 → validate disks/hardware
 → restore configuration/app state
@@ -23,7 +23,7 @@ User data disks remain untouched throughout discovery and planning.
 
 Reinstall from release image. Do not rely on block-level OS backup.
 
-### R1 — MyNAS desired state
+### R1 — LumoNAS desired state
 
 Must be strongly recoverable:
 
@@ -53,7 +53,7 @@ Lives on data disks and/or backup targets. SnapRAID parity is not a substitute f
 
 ## Backup format
 
-Use a versioned MyNAS Recovery Bundle, e.g.:
+Use a versioned LumoNAS Recovery Bundle, e.g.:
 
 ```text
 *.mrb
@@ -64,7 +64,7 @@ Contents:
 ```text
 manifest.json
 desired-state.json
-mynas.db export/safe snapshot
+lumonas.db export/safe snapshot
 docker/stacks/
 acl/
 certificates/
@@ -76,7 +76,7 @@ Manifest includes:
 
 - backup format version;
 - config schema;
-- MyNAS version;
+- LumoNAS version;
 - NAS UUID;
 - generation;
 - timestamp;
@@ -123,12 +123,12 @@ Recommended optional:
 
 Config backups are small enough to retain many generations.
 
-## On-disk MyNAS metadata
+## On-disk LumoNAS metadata
 
 Each adopted data disk may contain:
 
 ```text
-/.mynas/
+/.lumonas/
 ├── disk.json
 └── recovery/
 ```

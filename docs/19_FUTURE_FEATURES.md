@@ -16,7 +16,7 @@ These features fit the product philosophy but can evolve after the primary archi
 
 ## Backup
 
-- MyNAS-to-MyNAS replication protocol;
+- LumoNAS-to-LumoNAS replication protocol;
 - remote deduplicated repository;
 - immutable backup target mode;
 - ransomware-resistant retention;
@@ -41,7 +41,7 @@ These features fit the product philosophy but can evolve after the primary archi
 
 - richer VLAN topology visualization;
 - NIC bonding diagnostics;
-- network throughput tests between MyNAS nodes;
+- network throughput tests between LumoNAS nodes;
 - SMB multichannel assistant;
 - 10GbE tuning recommendations;
 - mDNS service explorer.
@@ -73,7 +73,7 @@ These features fit the product philosophy but can evolve after the primary archi
 
 ## Multi-NAS
 
-- dashboard for multiple MyNAS machines;
+- dashboard for multiple LumoNAS machines;
 - centralized notifications;
 - remote backup pairing;
 - config comparison;

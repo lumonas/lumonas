@@ -2,8 +2,10 @@ package collector
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +44,9 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 	}
 	out, err := run("lsblk", "-J", "-b", "-o", "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,ROTA,TRAN,FSTYPE,UUID,PARTUUID,MOUNTPOINT")
 	if err != nil {
+		if runtime.GOOS != "linux" && errors.Is(err, exec.ErrNotFound) {
+			return []model.Disk{}, nil
+		}
 		return nil, fmt.Errorf("lsblk: %w", err)
 	}
 	var response lsblkResponse

@@ -97,7 +97,7 @@ func parseMounts(output string) []mount {
 func DiscoverProtection(ctx context.Context, disks []model.Disk, runner RuntimeRunner, configPath string) model.Protection {
 	result := model.Protection{Status: model.Attention, SyncSchedule: "Not configured", ScrubSchedule: "Not configured", LastSyncResult: nil}
 	if configPath == "" {
-		configPath = "/etc/mynas/snapraid.conf"
+		configPath = "/etc/lumonas/snapraid.conf"
 	}
 	config, err := osReadFile(configPath)
 	if err != nil {
