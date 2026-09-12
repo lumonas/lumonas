@@ -25,6 +25,8 @@ import (
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/recovery"
+	"github.com/lumonas/lumonas/internal/services"
+	"github.com/lumonas/lumonas/internal/shares"
 	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
 )
@@ -38,6 +40,8 @@ type apiServer struct {
 	diskFunc      func() ([]model.Disk, error)
 	authRequired  bool
 	dockerService dockerruntime.Service
+	alertMu       sync.Mutex
+	acknowledged  map[string]bool
 }
 
 var version = "0.1.0-dev"
@@ -62,7 +66,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("MYNAS_AUTH_REQUIRED") == "true"}
+	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("MYNAS_AUTH_REQUIRED") == "true", acknowledged: make(map[string]bool)}
 	server.dockerService = dockerruntime.New(envOr("MYNAS_STACK_ROOT", "/srv/mynas/docker/stacks"), nil)
 	server.ensureRestartedJobs()
 	go server.metricsLoop()
@@ -138,13 +142,19 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && endpoint == "/alerts":
 		s.alerts(w)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alerts/"):
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "alert not found"})
+		s.ackAlert(w, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/activity":
 		s.activity(w)
 	case r.Method == http.MethodGet && endpoint == "/system/metrics":
 		s.metrics(w)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
 		s.networkInterfaces(w)
+	case r.Method == http.MethodGet && endpoint == "/services":
+		s.services(w, r)
+	case r.Method == http.MethodGet && endpoint == "/shares":
+		s.listShares(w)
+	case r.Method == http.MethodPost && endpoint == "/shares":
+		s.createShare(w, r)
 	case r.Method == http.MethodGet && endpoint == "/events/stream":
 		s.stream(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/summary":
@@ -430,6 +440,73 @@ func (s *apiServer) networkInterfaces(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, interfaces)
 }
 
+func (s *apiServer) services(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	writeJSON(w, http.StatusOK, services.Collect(ctx, services.DefaultNames))
+}
+
+func (s *apiServer) shareStore() shares.Store {
+	return shares.Store{Path: envOr("MYNAS_SHARES_FILE", "/var/lib/mynas/shares.json")}
+}
+
+func (s *apiServer) listShares(w http.ResponseWriter) {
+	values, err := s.shareStore().Load()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, values)
+}
+
+func (s *apiServer) createShare(w http.ResponseWriter, r *http.Request) {
+	var share shares.Share
+	if err := json.NewDecoder(r.Body).Decode(&share); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if share.ID == "" {
+		share.ID = newID("share")
+	}
+	if err := shares.Validate(share); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	store := s.shareStore()
+	existing, err := store.Load()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	for _, current := range existing {
+		if current.Name == share.Name {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "share name already exists"})
+			return
+		}
+	}
+	existing = append(existing, share)
+	config, err := shares.RenderSamba(existing)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	configPath := envOr("MYNAS_SAMBA_CONFIG", "/var/lib/mynas/generated/smb.conf")
+	if err := shares.WriteGenerated(configPath, config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := shares.ValidateSamba(configPath); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := store.Save(existing); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publish("share.created", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"name": share.Name})
+	writeJSON(w, http.StatusCreated, share)
+}
+
 func (s *apiServer) alerts(w http.ResponseWriter) {
 	disks, err := s.diskFunc()
 	if err != nil {
@@ -446,9 +523,37 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 		if disk.Health == model.Critical {
 			severity = "critical"
 		}
-		alerts = append(alerts, model.Alert{ID: "disk-health-" + disk.ID, Severity: severity, Title: "Disk health requires attention", Description: fmt.Sprintf("%s (%s) reported %s health", disk.Name, disk.Model, disk.Health), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "firing", StartedAt: now})
+		alert := model.Alert{ID: "disk-health-" + disk.ID, Severity: severity, Title: "Disk health requires attention", Description: fmt.Sprintf("%s (%s) reported %s health", disk.Name, disk.Model, disk.Health), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "firing", StartedAt: now}
+		s.alertMu.Lock()
+		if s.acknowledged[alert.ID] {
+			alert.State = "acknowledged"
+		}
+		s.alertMu.Unlock()
+		alerts = append(alerts, alert)
 	}
 	writeJSON(w, http.StatusOK, alerts)
+}
+
+func (s *apiServer) ackAlert(w http.ResponseWriter, id string) {
+	disks, _ := s.diskFunc()
+	for _, disk := range disks {
+		if "disk-health-"+disk.ID != id {
+			continue
+		}
+		if disk.Health != model.Warning && disk.Health != model.Critical {
+			break
+		}
+		s.alertMu.Lock()
+		s.acknowledged[id] = true
+		s.alertMu.Unlock()
+		severity := "warning"
+		if disk.Health == model.Critical {
+			severity = "critical"
+		}
+		writeJSON(w, http.StatusOK, model.Alert{ID: id, Severity: severity, Title: "Disk health requires attention", Description: fmt.Sprintf("%s (%s) reported %s health", disk.Name, disk.Model, disk.Health), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "acknowledged", StartedAt: time.Now().UTC()})
+		return
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "alert not found"})
 }
 
 func (s *apiServer) activity(w http.ResponseWriter) {
