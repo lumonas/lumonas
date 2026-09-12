@@ -39,11 +39,11 @@ qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -m 2048 \
   -smp 2 \
-  -drive "file=$MYNAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT" \
-  -drive "file=$DATA_DIR/data1.qcow2,if=virtio,format=qcow2" \
-  -drive "file=$DATA_DIR/data2.qcow2,if=virtio,format=qcow2" \
-  -drive "file=$DATA_DIR/data3.qcow2,if=virtio,format=qcow2" \
-  -drive "file=$DATA_DIR/parity.qcow2,if=virtio,format=qcow2" \
+  -drive "file=$MYNAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT,serial=LUMONAS-SYSTEM" \
+  -drive "file=$DATA_DIR/data1.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA1" \
+  -drive "file=$DATA_DIR/data2.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA2" \
+  -drive "file=$DATA_DIR/data3.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA3" \
+  -drive "file=$DATA_DIR/parity.qcow2,if=virtio,format=qcow2,serial=LUMONAS-PARITY" \
   -netdev user,id=n1,hostfwd=tcp::18080-:8081 \
   -device virtio-net-pci,netdev=n1 \
   -nographic \
@@ -71,7 +71,7 @@ for attempt in $(seq 1 60); do
      curl -fsS http://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1; then
     disk_count=$(grep -o '"id"' "$LOG.disks" | wc -l | tr -d ' ')
-    if [ "$disk_count" -ge 5 ]; then
+    if [ "$disk_count" -ge 5 ] && grep -F 'serial:LUMONAS-DATA1' "$LOG.disks" >/dev/null 2>&1; then
       echo "QEMU appliance smoke test passed (disks=$disk_count)"
       exit 0
     fi
