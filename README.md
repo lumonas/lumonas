@@ -6,7 +6,7 @@ The repository now contains the first appliance-runtime vertical slice alongside
 - `mynas-privd` — Unix-socket allow-list broker that rejects unknown operations;
 - `mynas-web` — static frontend server with `/api` reverse proxy;
 - `packaging/` — systemd units and Debian package builder;
-- `.github/workflows/ci.yml` — Go, frontend, package, and QEMU smoke-test jobs.
+- `.github/workflows/ci.yml` — Go, frontend, package, QEMU smoke-test, and ISO jobs.
 
 ## Local development
 
@@ -48,6 +48,12 @@ Debian package creation requires `dpkg-deb` and is intended for Debian/Ubuntu CI
 
 ```sh
 make package
+```
+
+After the Debian package and QEMU smoke test are reliable, the offline installer can be built on Debian/Ubuntu with `live-build`:
+
+```sh
+sudo MYNAS_DEB="$PWD/lumonas_0.1.0-dev_amd64.deb" bash installer/build-iso.sh 0.1.0-dev
 ```
 
 Storage mutations now use immutable plans, stable disk identity revalidation, explicit safety unlock/reauthentication, and the typed `mynas-privd` broker. Mount, unmount, format, and erase workers are allow-listed; SnapRAID jobs, NetworkManager checkpoints, and explicit power actions are also brokered with bounded confirmation. ACL mutation, scheduled power policy, and automatic recovery execution remain intentionally separate follow-up workers.
