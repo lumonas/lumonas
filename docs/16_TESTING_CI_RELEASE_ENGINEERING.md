@@ -70,9 +70,10 @@ The recovery helper has a bounded startup timeout and powers the guest off on
 failure; the host harness also applies a deadline so a broken restore fails
 closed instead of hanging the release job.
 
-The Debian appliance smoke test also requires `lumonas-privd`, `lumonasd`, and
-`lumonas-web` to report active/running through the services API, and requires
-the web service identity to be `lumonas` rather than root.
+The Debian appliance smoke test also requires `lumonas-privd`, all four typed
+privileged workers, `lumonasd`, and `lumonas-web` to report active/running
+through the services API, and requires the web service identity to be `lumonas`
+rather than root.
 
 The package-permissions job installs the generated `.deb` in a disposable
 Debian 13 container and verifies the resulting ownership and modes. It proves

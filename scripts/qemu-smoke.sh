@@ -89,6 +89,10 @@ for attempt in $(seq 1 60); do
        grep -F '<title>LumoNAS</title>' "$INDEX_LOG" >/dev/null 2>&1 && \
        grep -F '<div id="root"></div>' "$INDEX_LOG" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-privd.service","name":"lumonas-privd.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
+       grep -F '"id":"lumonas-privd-storage.service","name":"lumonas-privd-storage.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
+       grep -F '"id":"lumonas-privd-network.service","name":"lumonas-privd-network.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
+       grep -F '"id":"lumonas-privd-power.service","name":"lumonas-privd-power.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
+       grep -F '"id":"lumonas-privd-general.service","name":"lumonas-privd-general.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$LOG.services" >/dev/null 2>&1; then
       EVENTS_LOG="$LOG.events"

@@ -54,6 +54,9 @@ require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_WEB_LISTEN=0.0.0.0:8081'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_ENABLE_RECOVERY_SMOKE'
 require_line "$ROOT/scripts/qemu-smoke.sh" '<title>LumoNAS</title>'
 require_line "$ROOT/scripts/qemu-smoke.sh" '<div id="root"></div>'
+for worker in storage network power general; do
+  require_line "$ROOT/scripts/qemu-smoke.sh" "lumonas-privd-$worker.service"
+done
 [ -x "$ROOT/scripts/storage-loopback-smoke.sh" ] || { echo "storage loopback smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/qemu-recovery-smoke.sh" ] || { echo "QEMU recovery smoke test must be executable" >&2; exit 1; }
