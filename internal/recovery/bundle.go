@@ -3,6 +3,7 @@ package recovery
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -17,6 +18,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 )
 
 const FormatVersion = 1
@@ -47,6 +50,7 @@ type RestorePlan struct {
 	Verified          bool     `json:"verified"`
 	DatabaseValid     bool     `json:"databaseValid"`
 	DesiredStateValid bool     `json:"desiredStateValid"`
+	ComposeValid      bool     `json:"composeValid"`
 	EncryptedSecrets  bool     `json:"encryptedSecrets"`
 	Warnings          []string `json:"warnings,omitempty"`
 }
@@ -280,7 +284,7 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 	if err != nil {
 		return RestorePlan{}, err
 	}
-	plan := RestorePlan{Manifest: manifest, Verified: true, Files: make([]string, 0, len(reader.File)), DatabaseValid: isSQLiteDatabase(files["mynas.db"]), DesiredStateValid: json.Valid(files["desired-state.json"])}
+	plan := RestorePlan{Manifest: manifest, Verified: true, Files: make([]string, 0, len(reader.File)), DatabaseValid: isSQLiteDatabase(files["mynas.db"]), DesiredStateValid: json.Valid(files["desired-state.json"]), ComposeValid: true}
 	for _, file := range reader.File {
 		plan.Files = append(plan.Files, file.Name)
 		if file.Name == "encrypted-secrets.bin" {
@@ -296,6 +300,15 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 	}
 	if !plan.DesiredStateValid {
 		plan.Warnings = append(plan.Warnings, "desired state is not valid JSON")
+	}
+	for name, content := range files {
+		if !strings.HasPrefix(name, "docker/stacks/") || !strings.HasSuffix(name, "/compose.yaml") {
+			continue
+		}
+		if err := (dockerruntime.New("", nil)).ValidateCompose(context.Background(), string(content)); err != nil {
+			plan.ComposeValid = false
+			plan.Warnings = append(plan.Warnings, "invalid Docker Compose payload: "+name)
+		}
 	}
 	for _, diskID := range manifest.DiskIDs {
 		if strings.TrimSpace(diskID) == "" {
