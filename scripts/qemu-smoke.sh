@@ -102,16 +102,16 @@ cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null |
 trap cleanup EXIT
 
 for attempt in $(seq 1 60); do
-  if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/readyz >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
-     curl -fsS http://127.0.0.1:18080/api/v1/server >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
-     curl -fsS http://127.0.0.1:18080/api/v1/system/metrics >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
-     curl -fsS http://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
+  if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/readyz >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/server >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
     disk_count=$(grep -o '"id"' "$LOG.disks" | wc -l | tr -d ' ')
     if [ "$disk_count" -ge 5 ] && \
        grep -F 'serial:LUMONAS-DATA1' "$LOG.disks" >/dev/null 2>&1 && \
@@ -128,17 +128,17 @@ for attempt in $(seq 1 60); do
        grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$LOG.services" >/dev/null 2>&1; then
       EVENTS_LOG="$LOG.events"
-      curl -fsS --max-time 5 -N http://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
+      curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
       RECOVERY_KEY_LOG="$LOG.recovery-key"
       RECOVERY_EXPORT_LOG="$LOG.recovery-export"
       RECOVERY_STATUS_LOG="$LOG.recovery-status"
       RECOVERY_PLAN_LOG="$LOG.recovery-plan"
       RECOVERY_STAGE_LOG="$LOG.recovery-stage"
-      if curl -fsS -X POST http://127.0.0.1:18080/api/v1/recovery/key >"$RECOVERY_KEY_LOG" 2>/dev/null && \
-         curl -fsS -X POST http://127.0.0.1:18080/api/v1/recovery/export >"$RECOVERY_EXPORT_LOG" 2>/dev/null && \
-         curl -fsS http://127.0.0.1:18080/api/v1/recovery/status >"$RECOVERY_STATUS_LOG" 2>/dev/null && \
-         curl -fsS http://127.0.0.1:18080/api/v1/recovery/plan >"$RECOVERY_PLAN_LOG" 2>/dev/null && \
-         curl -fsS -X POST -H 'Content-Type: application/json' -d '{"confirmed":true,"reauthenticated":true}' http://127.0.0.1:18080/api/v1/recovery/restore/stage >"$RECOVERY_STAGE_LOG" 2>/dev/null && \
+      if curl -kfsS -X POST https://127.0.0.1:18080/api/v1/recovery/key >"$RECOVERY_KEY_LOG" 2>/dev/null && \
+         curl -kfsS -X POST https://127.0.0.1:18080/api/v1/recovery/export >"$RECOVERY_EXPORT_LOG" 2>/dev/null && \
+         curl -kfsS https://127.0.0.1:18080/api/v1/recovery/status >"$RECOVERY_STATUS_LOG" 2>/dev/null && \
+         curl -kfsS https://127.0.0.1:18080/api/v1/recovery/plan >"$RECOVERY_PLAN_LOG" 2>/dev/null && \
+         curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"confirmed":true,"reauthenticated":true}' https://127.0.0.1:18080/api/v1/recovery/restore/stage >"$RECOVERY_STAGE_LOG" 2>/dev/null && \
          grep -F 'retry: 3000' "$EVENTS_LOG" >/dev/null 2>&1 && \
          grep -F 'system.metrics' "$EVENTS_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_EXPORT_LOG" >/dev/null 2>&1 && \
@@ -151,8 +151,8 @@ for attempt in $(seq 1 60); do
         LUMONAS_QEMU_REORDER=true run_qemu >"$LOG.reordered" 2>&1 &
         QEMU_PID=$!
         for reorder_attempt in $(seq 1 60); do
-          if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
-             curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null; then
+          if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
+             curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null; then
             snapshot_disk_identities "$LOG.disks.reordered" "$LOG.identities.reordered"
             cut -f1 "$LOG.identities.initial" >"$LOG.ids.initial"
             cut -f1 "$LOG.identities.reordered" >"$LOG.ids.reordered"

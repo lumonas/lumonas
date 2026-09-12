@@ -42,7 +42,7 @@ chroot "$WORK/mnt" /bin/sh -eux <<'EOF'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
-  systemd systemd-sysv linux-image-amd64 grub-pc openssh-server curl ca-certificates \
+  systemd systemd-sysv linux-image-amd64 grub-pc openssh-server curl ca-certificates openssl \
   iproute2 util-linux smartmontools lm-sensors nut e2fsprogs xfsprogs mergerfs snapraid \
   network-manager docker.io docker-compose samba samba-common-bin vsftpd avahi-daemon
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
