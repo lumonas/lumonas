@@ -187,6 +187,11 @@ Tagged CI downloads the previous release `.deb`, installs it in Debian 13,
 adds an administrator-owned configuration marker, upgrades to the current
 package, and verifies that the marker and runtime layout survive.
 
+The Debian maintainer scripts stop services in dependent-to-provider order
+(web, daemon, workers, broker) before an upgrade and start them in the reverse
+dependency order afterward. A packaging smoke test checks both the script
+ordering and that `prerm` is included in the generated `.deb`.
+
 ## Installer matrix
 
 - UEFI;

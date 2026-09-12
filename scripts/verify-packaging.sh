@@ -48,6 +48,8 @@ require_line "$ROOT/packaging/debian/postinst" '/etc/docker/daemon.json'
 require_line "$ROOT/packaging/docker-daemon.json" '"max-size": "10m"'
 require_line "$ROOT/packaging/docker-daemon.json" '"max-file": "3"'
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
+require_line "$ROOT/packaging/debian/prerm" 'lumonas-web.service'
+require_line "$ROOT/packaging/build-deb.sh" 'DEBIAN/prerm'
 require_line "$ROOT/installer/build-iso.sh" 'dpkg-scanpackages'
 require_line "$ROOT/installer/build-iso.sh" 'lumonas-local.list'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_WEB_LISTEN=0.0.0.0:8081'
@@ -72,6 +74,7 @@ require_line "$ROOT/Makefile" 'log-retention-smoke:'
 require_line "$ROOT/Makefile" 'check-api-contract:'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/upgrade-service-order-smoke.sh" ] || { echo "upgrade service ordering smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/permission-smoke.sh" ] || { echo "permission smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/log-retention-smoke.sh" ] || { echo "log retention smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'

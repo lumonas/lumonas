@@ -312,6 +312,14 @@ Run the packaging and log-retention smoke tests.
 Pass if the packaged journald drop-in enforces bounded system/runtime usage,
 30-day retention, and seven-day log-file rotation.
 
+## AI. Upgrade service restart ordering
+
+Run the upgrade service ordering smoke test and Debian package verification.
+
+Pass if the upgrade stops `lumonas-web`, `lumonasd`, the privileged workers,
+and broker before unpacking, then starts the broker, workers, daemon, and web
+service in dependency order.
+
 ## AE. Disk API identity contract
 
 Run the backend disk contract test and the OpenAPI parity check.

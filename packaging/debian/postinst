@@ -61,6 +61,9 @@ fi
 if [ ! -e /etc/docker/daemon.json ] && [ -f /etc/docker/daemon.json.lumonas ]; then
 	install -o root -g root -m 0644 /etc/docker/daemon.json.lumonas /etc/docker/daemon.json
 fi
+# prerm stops the dependency graph before an upgrade so the newly unpacked
+# binaries are used immediately. Start in dependency order after reloading the
+# units; the || true behavior keeps dpkg usable in chroots without PID 1.
 systemctl daemon-reload || true
 systemctl try-reload-or-restart systemd-journald.service || true
 systemctl enable lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true

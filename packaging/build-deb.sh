@@ -44,6 +44,7 @@ printf '%s\n' \
 	"  \"debianRecommends\": \"$DEB_RECOMMENDS\"" \
 	'}' > "$OUT/usr/share/lumonas/build-manifest.json"
 cp "$ROOT/packaging/debian/postinst" "$OUT/DEBIAN/postinst"
-chmod 0755 "$OUT/DEBIAN/postinst" "$OUT/usr/lib/lumonas/"*
+cp "$ROOT/packaging/debian/prerm" "$OUT/DEBIAN/prerm"
+chmod 0755 "$OUT/DEBIAN/postinst" "$OUT/DEBIAN/prerm" "$OUT/usr/lib/lumonas/"*
 dpkg-deb --root-owner-group --build "$OUT" "$ROOT/lumonas_${VERSION}_amd64.deb"
 echo "Created $ROOT/lumonas_${VERSION}_amd64.deb"

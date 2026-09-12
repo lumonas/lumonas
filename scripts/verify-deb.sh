@@ -109,6 +109,7 @@ for key in ("sourceCommit", "goVersion", "frontendLockSHA256", "catalogSHA256"):
 PY
 
 [ -x "$CONTROL_DIR/postinst" ] || { echo "package postinst is missing or not executable" >&2; exit 1; }
+[ -x "$CONTROL_DIR/prerm" ] || { echo "package prerm is missing or not executable" >&2; exit 1; }
 
 printf '%s\n' "$CONTENTS" | awk '{print $6}' | grep -E '^\./(var/lib/lumonas|srv/lumonas)' >/dev/null 2>&1 && {
 	echo "package must not ship mutable runtime state" >&2
