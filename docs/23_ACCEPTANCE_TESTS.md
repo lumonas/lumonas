@@ -404,3 +404,11 @@ Run the log-retention and packaging smoke tests.
 Pass if the package ships a Docker `json-file` baseline capped at 10 MiB per
 file and three files, applies it only when `/etc/docker/daemon.json` is absent,
 and never overwrites an administrator-owned Docker configuration on upgrade.
+
+## AR. Docker mutation authorization
+
+Attempt Docker stack, container, image, and offline-import mutations without a
+management session.
+
+Pass if every mutation is rejected before the Docker command runs, while a
+successful mutation produces a correlated audit record.

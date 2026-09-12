@@ -1882,6 +1882,10 @@ func (s *apiServer) decoratedDockerStacks(ctx context.Context) ([]dockerruntime.
 }
 
 func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		Name        string            `json:"name"`
 		CatalogID   string            `json:"catalogId"`
@@ -1932,6 +1936,7 @@ func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.advanceGeneration("docker.stack.create")
+	s.recordRequestAudit(r, actor, "docker.stack.create", stack.ID, map[string]any{"name": stack.Name})
 	s.publish("docker.stack.created", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID})
 	writeJSON(w, http.StatusCreated, stack)
 }
@@ -1939,7 +1944,7 @@ func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
 func (s *apiServer) dockerStack(w http.ResponseWriter, r *http.Request, id string) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	stacks, err := s.dockerService.Stacks(ctx)
+	stacks, err := s.decoratedDockerStacks(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -1954,6 +1959,10 @@ func (s *apiServer) dockerStack(w http.ResponseWriter, r *http.Request, id strin
 }
 
 func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, endpoint string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
 	if len(parts) != 4 {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "stack action not found"})
@@ -1999,6 +2008,7 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
+		s.recordRequestAudit(r, actor, "docker.stack.action", stack.ID, map[string]any{"action": action})
 		s.publish("docker.stack.action", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "action": action})
 		writeJSON(w, http.StatusAccepted, stack)
 		return
@@ -2031,6 +2041,10 @@ func (s *apiServer) dockerImages(w http.ResponseWriter, r *http.Request) {
 const dockerImportMaxBytes int64 = 20 << 30
 
 func (s *apiServer) dockerImageImport(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, dockerImportMaxBytes+1)
 	file, _, err := r.FormFile("archive")
 	if err != nil {
@@ -2082,11 +2096,16 @@ func (s *apiServer) dockerImageImport(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Docker image import failed"})
 		return
 	}
+	s.recordRequestAudit(r, actor, "docker.image.import", "images", map[string]any{"bytes": written})
 	s.publish("docker.image.imported", "info", nil, map[string]any{"bytes": written})
 	writeJSON(w, http.StatusOK, map[string]any{"status": "imported", "bytes": written})
 }
 
 func (s *apiServer) dockerContainerAction(w http.ResponseWriter, r *http.Request, endpoint string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
 	if len(parts) != 4 {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "container action not found"})
@@ -2099,6 +2118,7 @@ func (s *apiServer) dockerContainerAction(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
+	s.recordRequestAudit(r, actor, "docker.container.action", id, map[string]any{"action": action})
 	containers, err := s.dockerService.Containers(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
@@ -2115,6 +2135,10 @@ func (s *apiServer) dockerContainerAction(w http.ResponseWriter, r *http.Request
 }
 
 func (s *apiServer) dockerImageAction(w http.ResponseWriter, r *http.Request, endpoint string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
 	if len(parts) != 4 || parts[3] != "update" {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "image action not found"})
@@ -2136,6 +2160,7 @@ func (s *apiServer) dockerImageAction(w http.ResponseWriter, r *http.Request, en
 			return
 		}
 		s.publish("docker.image.updated", "info", &model.ResourceRef{Type: "image", ID: image.ID}, map[string]any{"repository": image.Repo, "tag": image.Tag})
+		s.recordRequestAudit(r, actor, "docker.image.update", image.ID, map[string]any{"repository": image.Repo, "tag": image.Tag})
 		writeJSON(w, http.StatusAccepted, image)
 		return
 	}

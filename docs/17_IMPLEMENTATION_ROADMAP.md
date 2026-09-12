@@ -31,6 +31,8 @@ Deliver:
 - catalog recovery contracts are applied to runtime Docker stack responses;
   unknown Compose stacks remain conservative by default.
 - bounded offline Docker image import through the controlled backend.
+- Docker mutations require management authorization and produce request audit
+  records.
 
 Exit criteria:
 

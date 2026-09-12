@@ -147,6 +147,11 @@ Recommended defaults:
 - root login disabled;
 - admin SSH key;
 - password authentication disabled if key exists;
+
+Docker stack creation/actions, container actions, image updates, and offline
+image imports use the same management-role check and request audit path as
+other mutating API operations. Read-only Docker inventory remains available to
+authenticated management users.
 - UI public-key management.
 
 ## API

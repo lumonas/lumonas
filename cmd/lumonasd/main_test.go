@@ -302,6 +302,16 @@ func TestDockerImageImportStagesBoundedArchiveAndLoadsIt(t *testing.T) {
 	}
 }
 
+func TestDockerMutationsRequireManagementIdentity(t *testing.T) {
+	server := testServer(t)
+	server.authRequired = true
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/docker/stacks", strings.NewReader(`{"name":"media","composeYaml":"services:\n  media:\n    image: example/media:latest\n"}`)))
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected Docker mutation to require management identity, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestRecoveryPlanWarnsOnNASAndDiskMismatch(t *testing.T) {
 	server := testServer(t)
 	directory := t.TempDir()
