@@ -8,8 +8,11 @@ func TestPlanVerifiesBundleContents(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan, err := Plan(bundle, []byte("key"))
-	if err != nil || !plan.Verified || !plan.EncryptedSecrets || !contains(plan.Files, "config/shares.json") {
+	if err != nil || !plan.Verified || plan.DatabaseValid || !plan.DesiredStateValid || !plan.EncryptedSecrets || !contains(plan.Files, "config/shares.json") {
 		t.Fatalf("unexpected restore plan: %#v err=%v", plan, err)
+	}
+	if len(plan.Warnings) == 0 || !contains(plan.Warnings, "database payload does not contain a valid SQLite header") {
+		t.Fatalf("expected invalid database warning: %#v", plan.Warnings)
 	}
 }
 

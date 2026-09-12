@@ -40,11 +40,13 @@ type Input struct {
 }
 
 type RestorePlan struct {
-	Manifest         Manifest `json:"manifest"`
-	Files            []string `json:"files"`
-	Verified         bool     `json:"verified"`
-	EncryptedSecrets bool     `json:"encryptedSecrets"`
-	Warnings         []string `json:"warnings,omitempty"`
+	Manifest          Manifest `json:"manifest"`
+	Files             []string `json:"files"`
+	Verified          bool     `json:"verified"`
+	DatabaseValid     bool     `json:"databaseValid"`
+	DesiredStateValid bool     `json:"desiredStateValid"`
+	EncryptedSecrets  bool     `json:"encryptedSecrets"`
+	Warnings          []string `json:"warnings,omitempty"`
 }
 
 func Create(input Input, key []byte) ([]byte, error) {
@@ -261,11 +263,15 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 	if err != nil {
 		return RestorePlan{}, err
 	}
+	files, err := readBundleFiles(bundle)
+	if err != nil {
+		return RestorePlan{}, err
+	}
 	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
 	if err != nil {
 		return RestorePlan{}, err
 	}
-	plan := RestorePlan{Manifest: manifest, Verified: true, Files: make([]string, 0, len(reader.File))}
+	plan := RestorePlan{Manifest: manifest, Verified: true, Files: make([]string, 0, len(reader.File)), DatabaseValid: isSQLiteDatabase(files["mynas.db"]), DesiredStateValid: json.Valid(files["desired-state.json"])}
 	for _, file := range reader.File {
 		plan.Files = append(plan.Files, file.Name)
 		if file.Name == "encrypted-secrets.bin" {
@@ -276,10 +282,25 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 	if !contains(plan.Files, "desired-state.json") || !contains(plan.Files, "mynas.db") {
 		plan.Warnings = append(plan.Warnings, "bundle is missing desired state or database")
 	}
+	if !plan.DatabaseValid {
+		plan.Warnings = append(plan.Warnings, "database payload does not contain a valid SQLite header")
+	}
+	if !plan.DesiredStateValid {
+		plan.Warnings = append(plan.Warnings, "desired state is not valid JSON")
+	}
+	for _, diskID := range manifest.DiskIDs {
+		if strings.TrimSpace(diskID) == "" {
+			plan.Warnings = append(plan.Warnings, "manifest contains an empty disk identity")
+		}
+	}
 	if !plan.EncryptedSecrets {
 		plan.Warnings = append(plan.Warnings, "bundle contains no encrypted secret payload")
 	}
 	return plan, nil
+}
+
+func isSQLiteDatabase(data []byte) bool {
+	return bytes.HasPrefix(data, []byte("SQLite format 3\x00"))
 }
 
 func DecryptSecrets(bundle, key []byte) ([]byte, error) {
