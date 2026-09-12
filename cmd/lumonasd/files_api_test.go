@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lumonas/lumonas/internal/shares"
 )
@@ -197,6 +198,20 @@ func TestFilesAPIDeleteQueuesJob(t *testing.T) {
 	}
 	if result.JobID == "" {
 		t.Fatal("expected a job ID in the response")
+	}
+	// Wait for the async job to reach a terminal state before returning:
+	// the goroutine writes into the t.TempDir() share root and touches the
+	// store, so tearing them down mid-flight races the cleanup.
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		job, err := server.store.Job(result.JobID)
+		if err == nil && (job.State == "successful" || job.State == "failed") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if job, err := server.store.Job(result.JobID); err != nil || job.State != "successful" {
+		t.Fatalf("delete job did not complete: %#v err=%v", job, err)
 	}
 }
 
