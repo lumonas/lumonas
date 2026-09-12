@@ -939,6 +939,9 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 	if err := s.store.SaveEvent(event); err != nil {
 		s.log.Warn("persist event failed", "error", err)
 	}
+	if err := s.store.PruneEvents(10000); err != nil {
+		s.log.Warn("prune events failed", "error", err)
+	}
 	entry := store.AuditEntry{Actor: "system", Action: kind, Outcome: "recorded", Metadata: data}
 	if resource != nil {
 		entry.ResourceType, entry.ResourceID = resource.Type, resource.ID

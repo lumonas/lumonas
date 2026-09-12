@@ -292,6 +292,16 @@ func (s *Store) Events(limit int) ([]model.Event, error) {
 	return result, rows.Err()
 }
 
+// PruneEvents keeps the event database bounded. Events are intentionally
+// append-only for the retained window; older telemetry is not an audit record.
+func (s *Store) PruneEvents(keep int) error {
+	if keep < 100 {
+		keep = 100
+	}
+	_, err := s.db.Exec(`DELETE FROM events WHERE id NOT IN (SELECT id FROM events ORDER BY timestamp DESC LIMIT ?)`, keep)
+	return err
+}
+
 func (s *Store) SavePlan(plan storage.Plan) error {
 	payload, err := json.Marshal(plan)
 	if err != nil {
