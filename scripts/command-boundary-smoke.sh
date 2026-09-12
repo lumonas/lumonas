@@ -25,6 +25,8 @@ if [ -n "$unexpected" ]; then
 fi
 
 require_line "$ROOT/internal/runner/runner.go" 'const DefaultTimeout = 30 * time.Second'
+require_line "$ROOT/internal/runner/runner.go" 'const MaxOutputBytes = 1 << 20'
+require_line "$ROOT/internal/runner/runner.go" 'ErrOutputLimit'
 require_line "$ROOT/internal/runner/runner.go" 'configureProcessGroup(command)'
 require_line "$ROOT/internal/runner/runner.go" 'killProcessGroup(command)'
 require_line "$ROOT/cmd/lumonas-privd/main.go" 'var networkCheckpointCommand = exec.Command'

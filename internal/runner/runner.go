@@ -4,6 +4,8 @@ package runner
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os/exec"
 	"sync"
@@ -11,6 +13,13 @@ import (
 )
 
 const DefaultTimeout = 30 * time.Second
+
+// MaxOutputBytes prevents a broken or hostile host utility from turning a
+// bounded command into an unbounded memory allocation. Callers receive
+// ErrOutputLimit rather than silently consuming partial command output.
+const MaxOutputBytes = 1 << 20
+
+var ErrOutputLimit = errors.New("command output exceeded limit")
 
 // ConfigureProcessGroup makes an interactive command and its descendants
 // share a killable process group. It is exported for privileged operations
@@ -43,8 +52,8 @@ func OutputContext(parent context.Context, name string, args ...string) ([]byte,
 	defer cancel()
 	command := exec.Command(name, args...)
 	configureProcessGroup(command)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout boundedBuffer
+	var stderr boundedBuffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 
@@ -55,6 +64,9 @@ func OutputContext(parent context.Context, name string, args ...string) ([]byte,
 	go func() { done <- command.Wait() }()
 	select {
 	case err := <-done:
+		if stdout.Exceeded() || stderr.Exceeded() {
+			return stdout.Bytes(), fmt.Errorf("%w: %s", ErrOutputLimit, name)
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitErr.Stderr = stderr.Bytes()
 		}
@@ -91,7 +103,7 @@ func combinedOutputContext(ctx context.Context, stdin io.Reader, name string, ar
 	if stdin != nil {
 		command.Stdin = stdin
 	}
-	var output synchronizedBuffer
+	var output boundedBuffer
 	command.Stdout = &output
 	command.Stderr = &output
 
@@ -103,6 +115,9 @@ func combinedOutputContext(ctx context.Context, stdin io.Reader, name string, ar
 	go func() { done <- command.Wait() }()
 	select {
 	case err := <-done:
+		if output.Exceeded() {
+			return output.Bytes(), fmt.Errorf("%w: %s", ErrOutputLimit, name)
+		}
 		return output.Bytes(), err
 	case <-ctx.Done():
 		killProcessGroup(command)
@@ -111,19 +126,37 @@ func combinedOutputContext(ctx context.Context, stdin io.Reader, name string, ar
 	}
 }
 
-type synchronizedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
+type boundedBuffer struct {
+	mu       sync.Mutex
+	buf      bytes.Buffer
+	exceeded bool
 }
 
-func (b *synchronizedBuffer) Write(p []byte) (int, error) {
+func (b *boundedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.buf.Write(p)
+	originalLength := len(p)
+	remaining := MaxOutputBytes - b.buf.Len()
+	if remaining <= 0 {
+		b.exceeded = true
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		b.exceeded = true
+		p = p[:remaining]
+	}
+	_, _ = b.buf.Write(p)
+	return originalLength, nil
 }
 
-func (b *synchronizedBuffer) Bytes() []byte {
+func (b *boundedBuffer) Bytes() []byte {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return bytes.Clone(b.buf.Bytes())
+}
+
+func (b *boundedBuffer) Exceeded() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.exceeded
 }

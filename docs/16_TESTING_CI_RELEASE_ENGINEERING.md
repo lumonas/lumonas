@@ -148,6 +148,11 @@ only permitted interactive exception is the allow-listed NetworkManager
 checkpoint, which is required to use a process group and a finite confirmation
 deadline. The same check rejects shell entrypoints in service code.
 
+The shared runner also caps captured stdout and stderr at 1 MiB and fails the
+operation closed when a utility exceeds that limit. Runner tests exercise both
+stdout-only and combined-output paths so command diagnostics cannot become an
+unbounded memory sink.
+
 ## Destructive safety tests
 
 Explicit cases:

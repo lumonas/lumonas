@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -46,5 +47,19 @@ func TestCombinedOutputContextKillsDescendantsOnCancellation(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > 750*time.Millisecond {
 		t.Fatalf("command group outlived cancellation: elapsed=%s err=%v", elapsed, err)
+	}
+}
+
+func TestOutputContextRejectsExcessiveOutput(t *testing.T) {
+	_, err := OutputContext(context.Background(), "sh", "-c", "head -c 1048577 /dev/zero")
+	if !errors.Is(err, ErrOutputLimit) {
+		t.Fatalf("expected output limit error, got %v", err)
+	}
+}
+
+func TestCombinedOutputRejectsExcessiveOutput(t *testing.T) {
+	_, err := CombinedOutput("sh", "-c", "head -c 1048577 /dev/zero")
+	if !errors.Is(err, ErrOutputLimit) {
+		t.Fatalf("expected output limit error, got %v", err)
 	}
 }

@@ -452,6 +452,9 @@ through the shared bounded runner, the interactive NetworkManager checkpoint
 remains process-group bounded with a finite deadline, and service code has no
 shell command escape hatch.
 
+The same gate must reject command output larger than the shared 1 MiB capture
+limit instead of returning success with unbounded memory use.
+
 ## AN. Mutation operation identity
 
 Submit a confirmed filesystem or SnapRAID mutation without an operation ID.
