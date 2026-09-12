@@ -514,11 +514,7 @@ type stdinRunner func(name string, args []string, stdin string) ([]byte, error)
 func stdinCommandRunner(name string, args []string, stdin string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), privilegedCommandTimeout)
 	defer cancel()
-	command := exec.CommandContext(ctx, name, args...)
-	if stdin != "" {
-		command.Stdin = strings.NewReader(stdin)
-	}
-	return command.CombinedOutput()
+	return commandrunner.CombinedOutputContextWithStdin(ctx, strings.NewReader(stdin), name, args...)
 }
 
 func connectWiFi(req request, run stdinRunner) response {

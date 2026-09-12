@@ -10,6 +10,10 @@ command -v dpkg-deb >/dev/null 2>&1 || {
 	 echo "dpkg-deb is required" >&2
 	 exit 1
 }
+command -v file >/dev/null 2>&1 || {
+	 echo "file is required" >&2
+	 exit 1
+}
 [ -f "$PACKAGE" ] || { echo "package not found: $PACKAGE" >&2; exit 1; }
 
 CONTROL_DIR=$(mktemp -d "${TMPDIR:-/tmp}/lumonas-deb-control.XXXXXX")
@@ -40,6 +44,10 @@ for binary in lumonasd lumonas-web lumonas-privd lumonas-recover; do
 	require_path "./usr/lib/lumonas/$binary"
 	dpkg-deb -c "$PACKAGE" | awk -v path="./usr/lib/lumonas/$binary" '$6 == path { print $1 }' | grep -E '^-rwx' >/dev/null 2>&1 || {
 		echo "$binary is not executable in the package" >&2
+		exit 1
+	}
+	file "$DATA_DIR/usr/lib/lumonas/$binary" | grep -E 'ELF 64-bit.*x86-64' >/dev/null 2>&1 || {
+		echo "$binary is not a Linux amd64 executable" >&2
 		exit 1
 	}
 done

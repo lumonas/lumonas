@@ -12,6 +12,7 @@ User=root
 Group=lumonas
 RuntimeDirectory=lumonas
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 UMask=007
 NoNewPrivileges=true
 PrivateTmp=true

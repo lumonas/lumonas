@@ -4,7 +4,7 @@ set -eu
 getent group lumonas >/dev/null 2>&1 || groupadd --system lumonas
 id lumonas >/dev/null 2>&1 || useradd --system --gid lumonas --home-dir /var/lib/lumonas --no-create-home --shell /usr/sbin/nologin lumonas
 install -d -o root -g lumonas -m 0750 /etc/lumonas
-install -d -o root -g root -m 0755 /etc/docker
+install -d -o root -g root -m 0755 /etc/exports.d /etc/ssh/sshd_config.d /etc/docker
 install -d -o lumonas -g lumonas -m 0750 /var/lib/lumonas /var/lib/lumonas/secrets /var/lib/lumonas/generated /var/lib/lumonas/recovery /srv/lumonas /srv/lumonas/docker /srv/disks /srv/pools
 if getent group docker >/dev/null 2>&1; then usermod -aG docker lumonas || true; fi
 
@@ -64,5 +64,7 @@ fi
 systemctl daemon-reload || true
 systemctl try-reload-or-restart systemd-journald.service || true
 systemctl enable lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
-systemctl try-restart lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+for unit in lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service; do
+	systemctl start "$unit" || true
+done
 exit 0

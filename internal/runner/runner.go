@@ -2,9 +2,11 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os/exec"
+	"sync"
 	"time"
 )
 
@@ -55,18 +57,39 @@ func combinedOutputContext(ctx context.Context, stdin io.Reader, name string, ar
 	if stdin != nil {
 		command.Stdin = stdin
 	}
+	var output synchronizedBuffer
+	command.Stdout = &output
+	command.Stderr = &output
 
 	if err := command.Start(); err != nil {
 		return nil, err
 	}
 
-	output, done := collectCombinedOutput(command)
+	done := make(chan error, 1)
+	go func() { done <- command.Wait() }()
 	select {
 	case err := <-done:
-		return output(), err
+		return output.Bytes(), err
 	case <-ctx.Done():
 		killProcessGroup(command)
 		<-done
-		return output(), ctx.Err()
+		return output.Bytes(), ctx.Err()
 	}
+}
+
+type synchronizedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *synchronizedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *synchronizedBuffer) Bytes() []byte {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return bytes.Clone(b.buf.Bytes())
 }
