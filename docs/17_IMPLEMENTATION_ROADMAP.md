@@ -35,6 +35,8 @@ Deliver:
   records.
 - release verification validates Cosign bundles and GitHub Actions provenance,
   not only signature-file presence.
+- recovery bundles carry bounded, validated Docker appdata archives with
+  fail-closed extraction targets.
 
 Exit criteria:
 

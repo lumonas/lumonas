@@ -206,6 +206,11 @@ temporary staging directory followed by a typed `docker load --input`
 invocation. The archive is removed after import and user input never passes
 through a shell.
 
+Recovery appdata payloads use bounded tar.gz archives and record the source
+host path separately from the container path. The restore path rejects unsafe
+host roots, symlinks, traversal, special files, and archives over the configured
+limit before writing anything.
+
 When stack image is unavailable and no Internet:
 
 ```text

@@ -13,7 +13,8 @@ import (
 // verified recovery bundle. Root must be absolute so a recovery invocation
 // cannot accidentally write into the caller's working directory.
 type ApplyOptions struct {
-	Root string
+	Root            string
+	AppdataMaxBytes int64
 }
 
 type ApplyResult struct {
@@ -22,6 +23,7 @@ type ApplyResult struct {
 	AppliedFiles     []string `json:"appliedFiles"`
 	SecretsRestored  bool     `json:"secretsRestored"`
 	DatabaseRestored bool     `json:"databaseRestored"`
+	AppdataRestored  []string `json:"appdataRestored,omitempty"`
 }
 
 // Apply verifies the complete bundle before writing anything. It is intended
@@ -48,7 +50,29 @@ func Apply(bundle, key []byte, options ApplyOptions) (ApplyResult, error) {
 		return ApplyResult{}, fmt.Errorf("create recovery root: %w", err)
 	}
 
-	result := ApplyResult{Manifest: plan.Manifest, Verified: true, AppliedFiles: make([]string, 0)}
+	result := ApplyResult{Manifest: plan.Manifest, Verified: true, AppliedFiles: make([]string, 0), AppdataRestored: make([]string, 0)}
+	appdataLimit := options.AppdataMaxBytes
+	if appdataLimit <= 0 {
+		appdataLimit = DefaultAppdataArchiveLimit
+	}
+	for _, record := range plan.Appdata {
+		archive, ok := files[record.ArchivePath]
+		if !ok {
+			return ApplyResult{}, fmt.Errorf("appdata archive is missing: %s", record.ArchivePath)
+		}
+		target := filepath.Join(root, strings.TrimPrefix(filepath.Clean(record.HostPath), string(filepath.Separator)))
+		if !withinRoot(root, target) || !validAppdataHostPath(filepath.Clean(record.HostPath)) {
+			return ApplyResult{}, fmt.Errorf("unsafe appdata restore target: %s", record.HostPath)
+		}
+		if err := rejectSymlinkPath(root, filepath.Dir(target)); err != nil {
+			return ApplyResult{}, err
+		}
+		if err := ExtractAppdata(archive, target, appdataLimit); err != nil {
+			return ApplyResult{}, fmt.Errorf("restore appdata %s: %w", record.Stack, err)
+		}
+		result.AppdataRestored = append(result.AppdataRestored, record.Stack+":"+record.ContainerPath)
+		result.AppliedFiles = append(result.AppliedFiles, record.ArchivePath)
+	}
 	names := make([]string, 0, len(files))
 	for name := range files {
 		names = append(names, name)

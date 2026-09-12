@@ -146,6 +146,10 @@ The API also exposes the matched catalog recovery contract for known images and
 uses a conservative default for imported stacks; this metadata must not be
 interpreted as appdata content backup.
 
+The recovery bundle format additionally accepts verified appdata archives and
+restores them only to approved data roots after traversal, symlink, special-file,
+and size-limit checks.
+
 ## N. UPS shutdown
 
 Simulate UPS on-battery threshold.

@@ -283,6 +283,12 @@ the API. Imported or unknown Compose stacks receive a conservative default
 contract. Appdata content is still reported as incomplete until a verified
 content backup is included in the recovery bundle.
 
+Recovery bundles now support bounded tar.gz appdata payloads with an explicit
+stack/container/host-path manifest. Restore validates the manifest and archive
+members before extracting only into approved appliance data roots; appdata
+archives are never allowed to write into `/etc`, `/usr`, or another system
+root.
+
 ## Partial restore
 
 Design format to allow future selective restore:

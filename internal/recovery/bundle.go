@@ -41,18 +41,20 @@ type Input struct {
 	Database      []byte
 	Compose       map[string][]byte
 	Files         map[string][]byte
+	Appdata       []AppdataPayload
 	EncryptedData []byte
 }
 
 type RestorePlan struct {
-	Manifest          Manifest `json:"manifest"`
-	Files             []string `json:"files"`
-	Verified          bool     `json:"verified"`
-	DatabaseValid     bool     `json:"databaseValid"`
-	DesiredStateValid bool     `json:"desiredStateValid"`
-	ComposeValid      bool     `json:"composeValid"`
-	EncryptedSecrets  bool     `json:"encryptedSecrets"`
-	Warnings          []string `json:"warnings,omitempty"`
+	Manifest          Manifest        `json:"manifest"`
+	Files             []string        `json:"files"`
+	Verified          bool            `json:"verified"`
+	DatabaseValid     bool            `json:"databaseValid"`
+	DesiredStateValid bool            `json:"desiredStateValid"`
+	ComposeValid      bool            `json:"composeValid"`
+	EncryptedSecrets  bool            `json:"encryptedSecrets"`
+	Appdata           []AppdataRecord `json:"appdata,omitempty"`
+	Warnings          []string        `json:"warnings,omitempty"`
 }
 
 type StageResult struct {
@@ -85,6 +87,25 @@ func Create(input Input, key []byte) ([]byte, error) {
 			return nil, fmt.Errorf("invalid recovery file name %q", name)
 		}
 		files[name] = content
+	}
+	appdataRecords := make([]AppdataRecord, 0, len(input.Appdata))
+	for _, payload := range input.Appdata {
+		if err := validateAppdataPayload(payload); err != nil {
+			return nil, err
+		}
+		archivePath := appdataArchivePath(payload.Stack, payload.ContainerPath)
+		if _, exists := files[archivePath]; exists {
+			return nil, fmt.Errorf("duplicate appdata payload %q", archivePath)
+		}
+		files[archivePath] = payload.Archive
+		appdataRecords = append(appdataRecords, AppdataRecord{Stack: payload.Stack, ContainerPath: payload.ContainerPath, HostPath: filepath.Clean(payload.HostPath), ArchivePath: archivePath, ArchiveBytes: int64(len(payload.Archive))})
+	}
+	if len(appdataRecords) > 0 {
+		manifestData, err := json.Marshal(appdataRecords)
+		if err != nil {
+			return nil, err
+		}
+		files["docker/appdata/manifest.json"] = manifestData
 	}
 	if len(input.EncryptedData) > 0 {
 		encrypted, err := encrypt(input.EncryptedData, key)
@@ -175,6 +196,11 @@ func verifyFiles(files map[string][]byte, key []byte) (Manifest, error) {
 	if encrypted, ok := files["encrypted-secrets.bin"]; ok {
 		if _, err := decrypt(encrypted, key); err != nil {
 			return Manifest{}, fmt.Errorf("encrypted data verification failed: %w", err)
+		}
+	}
+	if raw, ok := files["docker/appdata/manifest.json"]; ok {
+		if _, err := parseAppdataManifest(raw, files); err != nil {
+			return Manifest{}, err
 		}
 	}
 	return manifest, nil
@@ -285,6 +311,13 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 		return RestorePlan{}, err
 	}
 	plan := RestorePlan{Manifest: manifest, Verified: true, Files: make([]string, 0, len(reader.File)), DatabaseValid: isSQLiteDatabase(files["lumonas.db"]), DesiredStateValid: json.Valid(files["desired-state.json"]), ComposeValid: true}
+	if raw, ok := files["docker/appdata/manifest.json"]; ok {
+		appdata, appdataErr := parseAppdataManifest(raw, files)
+		if appdataErr != nil {
+			return RestorePlan{}, appdataErr
+		}
+		plan.Appdata = appdata
+	}
 	for _, file := range reader.File {
 		plan.Files = append(plan.Files, file.Name)
 		if file.Name == "encrypted-secrets.bin" {
@@ -446,7 +479,7 @@ func allowedPayloadEntry(name string) bool {
 	case "desired-state.json", "lumonas.db", "encrypted-secrets.bin":
 		return true
 	}
-	for _, prefix := range []string{"docker/stacks/", "config/", "storage/", "acl/", "certificates/", "encrypted-secrets/"} {
+	for _, prefix := range []string{"docker/stacks/", "docker/appdata/", "config/", "storage/", "acl/", "certificates/", "encrypted-secrets/"} {
 		if strings.HasPrefix(name, prefix) {
 			return len(strings.TrimPrefix(name, prefix)) > 0
 		}
