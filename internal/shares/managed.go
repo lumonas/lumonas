@@ -32,9 +32,23 @@ type ManagedShare struct {
 
 func (s ManagedShare) Legacy() Share {
 	protocols := make([]string, 0, len(s.Protocols))
+	hasSMB := false
 	access := make(map[string]string, len(s.Access))
 	for _, protocol := range s.Protocols {
-		protocols = append(protocols, protocol.Name)
+		if protocol.Name == "smb" {
+			hasSMB = true
+		}
+		if protocol.Name != "timemachine" {
+			protocols = append(protocols, protocol.Name)
+		}
+	}
+	if !hasSMB {
+		for _, protocol := range s.Protocols {
+			if protocol.Name == "timemachine" {
+				protocols = append(protocols, "smb")
+				break
+			}
+		}
 	}
 	for _, rule := range s.Access {
 		name := rule.PrincipalName

@@ -42,7 +42,12 @@ func main() {
 }
 
 func newHandler(root string, target *url.URL) http.Handler {
+	return newHandlerWithTransport(root, target, http.DefaultTransport)
+}
+
+func newHandlerWithTransport(root string, target *url.URL, transport http.RoundTripper) http.Handler {
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.Transport = transport
 	static := http.FileServer(http.Dir(root))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {

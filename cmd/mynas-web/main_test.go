@@ -1,28 +1,33 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestHandlerProxiesAPIAndHealthRequests(t *testing.T) {
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/server" && r.URL.Path != "/healthz" {
-			t.Fatalf("unexpected proxied path %s", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"status":"ok"}`))
-	}))
-	defer backend.Close()
-	target, err := url.Parse(backend.URL)
+	target, err := url.Parse("http://backend.invalid")
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := newHandler(t.TempDir(), target)
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/api/v1/server" && r.URL.Path != "/healthz" {
+			t.Fatalf("unexpected proxied path %s", r.URL.Path)
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(`{"status":"ok"}`)),
+			Request:    r,
+		}, nil
+	})
+	handler := newHandlerWithTransport(t.TempDir(), target, transport)
 	for _, path := range []string{"/api/v1/server", "/healthz"} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
@@ -31,6 +36,10 @@ func TestHandlerProxiesAPIAndHealthRequests(t *testing.T) {
 		}
 	}
 }
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestHandlerServesAssetsAndFallsBackToSPA(t *testing.T) {
 	root := t.TempDir()

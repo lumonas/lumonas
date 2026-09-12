@@ -54,13 +54,67 @@ func (s *apiServer) listUsers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	filtered := make([]identity.Principal, 0, len(values))
+	management := make([]map[string]any, 0)
+	file := make([]map[string]any, 0)
 	for _, value := range values {
-		if value.Kind != identity.KindGroup {
-			filtered = append(filtered, value)
+		if value.Kind == identity.KindGroup {
+			continue
 		}
+		if value.ManagementRole != identity.RoleNone {
+			role := string(value.ManagementRole)
+			if role == string(identity.RoleAdmin) {
+				role = string(identity.RoleOwner)
+			}
+			management = append(management, map[string]any{
+				"id": value.ID, "username": value.Name, "role": role,
+				"twoFactor": false, "enabled": value.Enabled,
+			})
+			continue
+		}
+		typeName := "user"
+		if value.Kind == identity.KindService {
+			typeName = "service"
+		}
+		file = append(file, map[string]any{
+			"id": value.ID, "username": value.Name, "type": typeName,
+			"groups": value.Groups, "enabled": value.Enabled, "uid": value.UID,
+		})
 	}
-	writeJSON(w, http.StatusOK, filtered)
+	groups, err := s.store.ListPrincipals(identity.KindGroup)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	groupValues := make([]map[string]any, 0, len(groups))
+	for _, group := range groups {
+		members, memberErr := s.store.GroupMembers(group.ID)
+		if memberErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": memberErr.Error()})
+			return
+		}
+		names := make([]string, 0, len(members))
+		for _, member := range members {
+			names = append(names, member.Name)
+		}
+		groupValues = append(groupValues, map[string]any{"id": group.ID, "name": group.Name, "members": names})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"management": management, "file": file, "groups": groupValues})
+}
+
+func (s *apiServer) listPrincipals(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	values, err := s.store.ListPrincipals("")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	result := make([]map[string]any, 0, len(values))
+	for _, value := range values {
+		result = append(result, map[string]any{"id": value.ID, "name": value.Name, "type": value.Kind})
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *apiServer) listGroups(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +137,10 @@ func (s *apiServer) createUser(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Kind               identity.Kind           `json:"kind"`
 		Name               string                  `json:"name"`
+		Type               string                  `json:"type"`
+		Username           string                  `json:"username"`
+		FullName           string                  `json:"fullName"`
+		Group              string                  `json:"group"`
 		Password           string                  `json:"password"`
 		ManagementRole     identity.ManagementRole `json:"managementRole"`
 		ExpectedGeneration *int64                  `json:"expectedGeneration"`
@@ -95,7 +153,17 @@ func (s *apiServer) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Kind == "" {
-		input.Kind = identity.KindUser
+		if input.Type == "management" || input.ManagementRole != "" {
+			input.Kind = identity.KindUser
+		} else {
+			input.Kind = identity.KindUser
+		}
+	}
+	if input.Name == "" {
+		input.Name = input.Username
+	}
+	if input.ManagementRole == "" && input.Type == "management" {
+		input.ManagementRole = identity.RoleOperator
 	}
 	if input.Kind != identity.KindUser && input.Kind != identity.KindService {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "users endpoint accepts user or service identities"})
@@ -105,6 +173,11 @@ func (s *apiServer) createUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
+	}
+	if input.Group != "" {
+		if group, groupErr := s.store.PrincipalByName(input.Group); groupErr == nil && group.Kind == identity.KindGroup {
+			_ = s.store.SetGroupMembers(group.ID, []string{principal.ID})
+		}
 	}
 	s.recordIdentityAudit(actor, "identity.create", principal.ID, map[string]any{"kind": principal.Kind})
 	s.advanceGeneration("identity.create")

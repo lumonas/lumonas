@@ -49,12 +49,27 @@ func (s *Store) syncLegacyUsers() error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	type legacyUser struct {
+		id, username, passwordHash, createdAt string
+	}
+	legacy := make([]legacyUser, 0)
 	for rows.Next() {
 		var id, username, passwordHash, createdAt string
 		if err := rows.Scan(&id, &username, &passwordHash, &createdAt); err != nil {
+			rows.Close()
 			return err
 		}
+		legacy = append(legacy, legacyUser{id: id, username: username, passwordHash: passwordHash, createdAt: createdAt})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, user := range legacy {
+		id, username, passwordHash, createdAt := user.id, user.username, user.passwordHash, user.createdAt
 		var exists int
 		if err := s.db.QueryRow(`SELECT 1 FROM principals WHERE id=?`, id).Scan(&exists); err != sql.ErrNoRows {
 			if err != nil {

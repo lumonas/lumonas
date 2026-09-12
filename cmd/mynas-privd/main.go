@@ -58,6 +58,10 @@ var checkpointState = struct {
 	items map[string]activeCheckpoint
 }{items: make(map[string]activeCheckpoint)}
 
+var workerDial = func(socket string) (net.Conn, error) {
+	return net.DialTimeout("unix", socket, 3*time.Second)
+}
+
 func main() {
 	socket := flag.String("socket", "/run/mynas/privd.sock", "Unix socket path")
 	worker := flag.String("worker", "", "run as a restricted operation worker (storage, network, power, or general)")
@@ -139,7 +143,7 @@ func executeBroker(req request) response {
 
 func forwardToWorker(req request, worker string) response {
 	socket := filepath.Join(envOr("MYNAS_PRIVD_WORKER_DIR", "/run/mynas"), worker+".sock")
-	connection, err := net.DialTimeout("unix", socket, 3*time.Second)
+	connection, err := workerDial(socket)
 	if err != nil {
 		return response{Error: "privileged worker unavailable"}
 	}

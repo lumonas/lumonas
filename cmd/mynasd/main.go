@@ -80,6 +80,7 @@ func main() {
 	server.ensureRestartedJobs()
 	go server.metricsLoop()
 	go server.capacityLoop()
+	go server.backupLoop()
 
 	httpServer := &http.Server{Addr: *listen, Handler: server.routes(), ReadHeaderTimeout: 5 * time.Second}
 	stop := make(chan os.Signal, 1)
@@ -127,6 +128,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.authLogout(w, r)
 	case r.Method == http.MethodGet && endpoint == "/users":
 		s.listUsers(w, r)
+	case r.Method == http.MethodGet && endpoint == "/principals":
+		s.listPrincipals(w, r)
 	case r.Method == http.MethodPost && endpoint == "/users":
 		s.createUser(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/password"):
@@ -181,6 +184,20 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.recoveryStage(w, r)
 	case r.Method == http.MethodPost && endpoint == "/recovery/export":
 		s.recoveryExport(w)
+	case r.Method == http.MethodGet && endpoint == "/backups/status":
+		s.backupStatus(w, r)
+	case r.Method == http.MethodGet && endpoint == "/backups/destinations":
+		s.listBackupDestinations(w, r)
+	case r.Method == http.MethodPost && endpoint == "/backups/destinations":
+		s.saveBackupDestination(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/backups/destinations/"):
+		s.deleteBackupDestination(w, r, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/backups/runs":
+		s.listBackupRuns(w, r)
+	case r.Method == http.MethodPost && endpoint == "/backups/run":
+		s.runBackupNow(w, r)
+	case r.Method == http.MethodPost && endpoint == "/backups/verify":
+		s.verifyBackupNow(w, r)
 	case r.Method == http.MethodGet && endpoint == "/jobs":
 		s.listJobs(w)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/jobs/"):
@@ -195,6 +212,14 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.alerts(w)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alerts/"):
 		s.ackAlert(w, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/alert-rules":
+		s.alertRules(w)
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alert-rules/"):
+		s.updateAlertRule(w, r, alertRuleID(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/notification-channels":
+		s.notificationChannels(w)
+	case r.Method == http.MethodGet && endpoint == "/schedules":
+		s.schedules(w)
 	case r.Method == http.MethodGet && endpoint == "/activity":
 		s.activity(w)
 	case r.Method == http.MethodGet && endpoint == "/audit":
@@ -241,14 +266,18 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.powerAction(w, r)
 	case r.Method == http.MethodGet && endpoint == "/shares":
 		s.listManagedShares(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/shares/"):
+		s.getManagedShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodPost && endpoint == "/shares":
 		s.createManagedShare(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/shares/") && strings.HasSuffix(endpoint, "/access"):
+		s.updateShareAccess(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/shares/") && strings.Contains(strings.TrimPrefix(endpoint, "/shares/"), "/protocols/"):
+		s.updateShareProtocol(w, r, endpoint)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/shares/"):
 		s.updateManagedShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/shares/"):
 		s.deleteManagedShare(w, r, path.Base(endpoint))
-	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/shares/"):
-		s.updateShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/events/stream":
 		s.stream(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/summary":
@@ -609,11 +638,13 @@ func (s *apiServer) advanceGeneration(action string) {
 		if s.log != nil {
 			s.log.Warn("configuration generation commit failed", "action", action, "error", err)
 		}
+	} else {
+		s.requestAutomaticBackup("config-change")
 	}
 }
 
 func (s *apiServer) recoveryStatus(w http.ResponseWriter) {
-	key := os.Getenv("MYNAS_RECOVERY_KEY")
+	key := s.recoveryKeyString()
 	directory := envOr("MYNAS_RECOVERY_DIR", "/var/lib/mynas/recovery")
 	bundlePath := filepath.Join(directory, "latest.mrb")
 	status := map[string]any{"configured": key != "", "latestPath": bundlePath, "verified": false}
@@ -632,7 +663,7 @@ func (s *apiServer) recoveryStatus(w http.ResponseWriter) {
 }
 
 func (s *apiServer) recoveryExport(w http.ResponseWriter) {
-	key := os.Getenv("MYNAS_RECOVERY_KEY")
+	key := s.recoveryKeyString()
 	if key == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "MYNAS_RECOVERY_KEY is not configured"})
 		return
@@ -738,7 +769,7 @@ func (s *apiServer) recoveryFiles() map[string][]byte {
 }
 
 func (s *apiServer) recoveryPlan(w http.ResponseWriter) {
-	key := os.Getenv("MYNAS_RECOVERY_KEY")
+	key := s.recoveryKeyString()
 	if key == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "MYNAS_RECOVERY_KEY is not configured"})
 		return
@@ -786,7 +817,7 @@ func (s *apiServer) recoveryStage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusLocked, map[string]string{"error": "explicit confirmation and reauthentication are required"})
 		return
 	}
-	key := os.Getenv("MYNAS_RECOVERY_KEY")
+	key := s.recoveryKeyString()
 	if key == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "MYNAS_RECOVERY_KEY is not configured"})
 		return

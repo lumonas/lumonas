@@ -24,6 +24,9 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 	for _, value := range values {
 		for _, protocol := range value.Protocols {
 			protocols[protocol.Name] = true
+			if protocol.Name == "timemachine" {
+				protocols["smb"] = true
+			}
 		}
 	}
 	configs := make([]struct {
@@ -221,7 +224,7 @@ func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.Man
 	for _, value := range values {
 		for _, protocol := range value.Protocols {
 			switch protocol.Name {
-			case "smb":
+			case "smb", "timemachine":
 				services["smbd.service"] = true
 			case "nfs":
 				services["nfs-server.service"] = true

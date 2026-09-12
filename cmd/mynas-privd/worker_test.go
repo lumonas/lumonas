@@ -3,8 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -24,27 +22,15 @@ func TestWorkerRejectsOperationsOutsideItsCapabilityDomain(t *testing.T) {
 }
 
 func TestBrokerForwardsConfirmedOperationToRootOnlyWorker(t *testing.T) {
-	directory, err := os.MkdirTemp("/tmp", "mw-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(directory)
-	t.Setenv("MYNAS_PRIVD_WORKER_DIR", directory)
-	listener, err := net.Listen("unix", filepath.Join(directory, "power.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
+	client, server := net.Pipe()
+	previousDial := workerDial
+	workerDial = func(_ string) (net.Conn, error) { return client, nil }
+	t.Cleanup(func() { workerDial = previousDial })
 	done := make(chan error, 1)
 	go func() {
-		connection, err := listener.Accept()
-		if err != nil {
-			done <- err
-			return
-		}
-		defer connection.Close()
+		defer server.Close()
 		var received request
-		if err := json.NewDecoder(connection).Decode(&received); err != nil {
+		if err := json.NewDecoder(server).Decode(&received); err != nil {
 			done <- err
 			return
 		}
@@ -52,7 +38,7 @@ func TestBrokerForwardsConfirmedOperationToRootOnlyWorker(t *testing.T) {
 			done <- &workerTestError{message: "unexpected operation"}
 			return
 		}
-		done <- json.NewEncoder(connection).Encode(response{OK: true})
+		done <- json.NewEncoder(server).Encode(response{OK: true})
 	}()
 	result := executeBroker(request{Operation: "power.action", PlanHash: "plan-1", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute)})
 	if !result.OK {

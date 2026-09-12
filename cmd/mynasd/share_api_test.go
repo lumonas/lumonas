@@ -81,3 +81,51 @@ func TestManagedShareAPIGeneratesNonSMBConfigurations(t *testing.T) {
 		}
 	}
 }
+
+func TestModernShareAPIContract(t *testing.T) {
+	server := testServer(t)
+	t.Setenv("MYNAS_SHARES_FILE", t.TempDir()+"/legacy-shares.json")
+	t.Setenv("MYNAS_SAMBA_CONFIG", t.TempDir()+"/generated/smb.conf")
+
+	user := httptest.NewRecorder()
+	server.routes().ServeHTTP(user, httptest.NewRequest(http.MethodPost, "/api/v1/users", strings.NewReader(`{"name":"family"}`)))
+	if user.Code != http.StatusCreated {
+		t.Fatalf("user creation failed: %d %s", user.Code, user.Body.String())
+	}
+	var principal struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(user.Body).Decode(&principal); err != nil {
+		t.Fatal(err)
+	}
+
+	create := httptest.NewRecorder()
+	server.routes().ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/v1/shares", strings.NewReader(`{"name":"Documents","resourceId":"share-documents","resourceLabel":"Documents (share)","relativePath":"/","access":[],"protocols":[{"protocol":"smb","enabled":true},{"protocol":"nfs","enabled":false}]}`)))
+	if create.Code != http.StatusCreated || !strings.Contains(create.Body.String(), `"resourceId"`) {
+		t.Fatalf("modern create failed: %d %s", create.Code, create.Body.String())
+	}
+	var share struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&share); err != nil {
+		t.Fatal(err)
+	}
+
+	access := httptest.NewRecorder()
+	server.routes().ServeHTTP(access, httptest.NewRequest(http.MethodPatch, "/api/v1/shares/"+share.ID+"/access", strings.NewReader(`{"principalId":"`+principal.ID+`","level":"read"}`)))
+	if access.Code != http.StatusOK || !strings.Contains(access.Body.String(), principal.ID) {
+		t.Fatalf("modern access update failed: %d %s", access.Code, access.Body.String())
+	}
+
+	protocol := httptest.NewRecorder()
+	server.routes().ServeHTTP(protocol, httptest.NewRequest(http.MethodPatch, "/api/v1/shares/"+share.ID+"/protocols/smb", strings.NewReader(`{"enabled":false}`)))
+	if protocol.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected last protocol protection, got %d %s", protocol.Code, protocol.Body.String())
+	}
+
+	settings := httptest.NewRecorder()
+	server.routes().ServeHTTP(settings, httptest.NewRequest(http.MethodPatch, "/api/v1/shares/"+share.ID, strings.NewReader(`{"description":"Updated"}`)))
+	if settings.Code != http.StatusOK || !strings.Contains(settings.Body.String(), "Updated") {
+		t.Fatalf("modern settings update failed: %d %s", settings.Code, settings.Body.String())
+	}
+}
