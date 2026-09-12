@@ -175,7 +175,7 @@ func executeWorker(req request, worker string) response {
 
 func operationWorker(operation string) string {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "storage.mountpersist.apply":
 		return "storage"
 	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "firewall.apply":
 		return "network"
@@ -256,6 +256,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return executePoolMount(req, discover, run)
 	case "pool.unmount":
 		return executePoolUnmount(req, run)
+	case "storage.mountpersist.apply":
+		return applyMountPersistence(req, run)
 	case "service.reload":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}

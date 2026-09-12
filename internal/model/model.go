@@ -55,8 +55,9 @@ type Disk struct {
 }
 
 type PoolMember struct {
-	DiskID  string `json:"diskId"`
-	Enabled bool   `json:"enabled"`
+	DiskID     string `json:"diskId"`
+	Enabled    bool   `json:"enabled"`
+	BranchPath string `json:"branchPath,omitempty"`
 }
 
 type Pool struct {

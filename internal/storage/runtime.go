@@ -44,10 +44,11 @@ func DiscoverPools(ctx context.Context, disks []model.Disk, runner RuntimeRunner
 			if branch == "" {
 				continue
 			}
-			member := model.PoolMember{Enabled: true}
+			member := model.PoolMember{Enabled: true, BranchPath: branch}
 			for _, disk := range disks {
 				if pathMatchesDisk(branch, disk) {
 					member.DiskID = disk.ID
+					member.BranchPath = DiskBranchPath(disk.ID)
 					break
 				}
 			}

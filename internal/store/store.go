@@ -88,6 +88,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate backup schema: %w", err)
 	}
+	if err := s.ensureMountSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate storage mount schema: %w", err)
+	}
 	return s, nil
 }
 
