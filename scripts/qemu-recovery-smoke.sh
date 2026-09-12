@@ -43,8 +43,18 @@ mkdir -p "$RECOVERY_MOUNT" "$TARGET_MOUNT"
 if [ -n "$FIXTURE" ]; then
 	"$FIXTURE" --bundle "$WORK/latest.mrb" --key "$WORK/recovery.key"
 else
-	go run ./cmd/lumonas-recovery-fixture --bundle "$WORK/latest.mrb" --key "$WORK/recovery.key"
+	(cd "$ROOT" && go run ./cmd/lumonas-recovery-fixture --bundle "$WORK/latest.mrb" --key "$WORK/recovery.key")
 fi
+PLAN_PATH="$WORK/recovery-plan.json"
+if [ -n "${LUMONAS_RECOVER_BIN:-}" ]; then
+	"$LUMONAS_RECOVER_BIN" --bundle "$WORK/latest.mrb" --key-file "$WORK/recovery.key" >"$PLAN_PATH"
+else
+	(cd "$ROOT" && go run ./cmd/lumonas-recover --bundle "$WORK/latest.mrb" --key-file "$WORK/recovery.key" >"$PLAN_PATH")
+fi
+grep -F '"verified":true' "$PLAN_PATH" >/dev/null
+grep -F '"databaseValid":true' "$PLAN_PATH" >/dev/null
+grep -F '"desiredStateValid":true' "$PLAN_PATH" >/dev/null
+grep -F '"composeValid":true' "$PLAN_PATH" >/dev/null
 truncate -s 128M "$RECOVERY_IMAGE"
 mkfs.ext4 -F -L LUMONAS-RECOVERY "$RECOVERY_IMAGE" >/dev/null
 mount -o loop "$RECOVERY_IMAGE" "$RECOVERY_MOUNT"
@@ -123,4 +133,4 @@ grep -F 'fuse.mergerfs' "$TARGET_MOUNT/restored-mounts.json" >/dev/null
 grep -F 'serial_DATA1' "$TARGET_MOUNT/restored-mounts.json" >/dev/null
 grep -F '"id":"lan"' "$TARGET_MOUNT/restored-network.json" >/dev/null
 grep -F '"interface":"eth0"' "$TARGET_MOUNT/restored-network.json" >/dev/null
-echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, users/shares/network/mounts/Compose/appdata/SnapRAID restored, API ready)"
+echo "QEMU recovery smoke test passed (bundle checksums verified, offline ISO, blank replacement disk, users/shares/network/mounts/Compose/appdata/SnapRAID restored, API ready)"

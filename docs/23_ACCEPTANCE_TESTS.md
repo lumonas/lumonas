@@ -141,6 +141,8 @@ principals and shares API before powering off, so API readiness is not supplied
 only by the live ISO runtime. It also queries the restored storage-mounts API and
 network-connections API, and storage-mounts API; these checks cover the LAN
 mapping, mergerfs pool, and stable disk branch identities.
+Before booting the ISO, the host harness must independently verify the bundle
+with `lumonas-recover` and confirm its checksums and payload validity.
 
 ## M. Incomplete Docker backup
 
