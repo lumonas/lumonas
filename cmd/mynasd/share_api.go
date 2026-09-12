@@ -3,10 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/lumonas/lumonas/internal/shares"
@@ -126,21 +124,26 @@ func (s *apiServer) createManagedShare(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	candidate := append(append([]shares.ManagedShare(nil), existing...), share)
-	temporary, config, err := s.prepareSambaConfig(candidate)
+	prepared, err := s.prepareShareConfigs(candidate)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	created, err := s.store.CreateManagedShare(share)
 	if err != nil {
-		_ = os.Remove(temporary)
+		cleanupShareConfigs(prepared)
 		writeJSON(w, statusForShareError(err), map[string]string{"error": err.Error()})
 		return
 	}
-	if err := os.Rename(temporary, config); err != nil {
-		_ = os.Remove(temporary)
+	if err := activateShareConfigs(prepared); err != nil {
 		_ = s.store.DeleteManagedShare(created.ID)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "activate Samba configuration: " + err.Error()})
+		return
+	}
+	if err := s.reloadShareServices(r.Context(), candidate); err != nil {
+		restoreShareConfigs(prepared)
+		_ = s.store.DeleteManagedShare(created.ID)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "activate share services: " + err.Error()})
 		return
 	}
 	s.recordIdentityAudit(actor, "share.create", created.ID, map[string]any{"name": created.Name})
@@ -183,21 +186,26 @@ func (s *apiServer) updateManagedShare(w http.ResponseWriter, r *http.Request, i
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "share not found"})
 		return
 	}
-	temporary, config, err := s.prepareSambaConfig(existing)
+	prepared, err := s.prepareShareConfigs(existing)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	updated, err := s.store.UpdateManagedShare(share)
 	if err != nil {
-		_ = os.Remove(temporary)
+		cleanupShareConfigs(prepared)
 		writeJSON(w, statusForShareError(err), map[string]string{"error": err.Error()})
 		return
 	}
-	if err := os.Rename(temporary, config); err != nil {
-		_ = os.Remove(temporary)
+	if err := activateShareConfigs(prepared); err != nil {
 		_, _ = s.store.UpdateManagedShare(previous)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "activate Samba configuration: " + err.Error()})
+		return
+	}
+	if err := s.reloadShareServices(r.Context(), existing); err != nil {
+		restoreShareConfigs(prepared)
+		_, _ = s.store.UpdateManagedShare(previous)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "activate share services: " + err.Error()})
 		return
 	}
 	s.recordIdentityAudit(actor, "share.update", updated.ID, map[string]any{"name": updated.Name})
@@ -228,20 +236,25 @@ func (s *apiServer) deleteManagedShare(w http.ResponseWriter, r *http.Request, i
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "share not found"})
 		return
 	}
-	temporary, config, err := s.prepareSambaConfig(filtered)
+	prepared, err := s.prepareShareConfigs(filtered)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	if err := s.store.DeleteManagedShare(id); err != nil {
-		_ = os.Remove(temporary)
+		cleanupShareConfigs(prepared)
 		writeJSON(w, statusForShareError(err), map[string]string{"error": err.Error()})
 		return
 	}
-	if err := os.Rename(temporary, config); err != nil {
-		_ = os.Remove(temporary)
+	if err := activateShareConfigs(prepared); err != nil {
 		_, _ = s.store.CreateManagedShare(existingShareByID(existing, id))
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "activate Samba configuration: " + err.Error()})
+		return
+	}
+	if err := s.reloadShareServices(r.Context(), filtered); err != nil {
+		restoreShareConfigs(prepared)
+		_, _ = s.store.CreateManagedShare(existingShareByID(existing, id))
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "activate share services: " + err.Error()})
 		return
 	}
 	s.recordIdentityAudit(actor, "share.delete", id, nil)
@@ -256,44 +269,6 @@ func existingShareByID(values []shares.ManagedShare, id string) shares.ManagedSh
 		}
 	}
 	return shares.ManagedShare{}
-}
-
-func (s *apiServer) prepareSambaConfig(values []shares.ManagedShare) (string, string, error) {
-	legacy := make([]shares.Share, 0, len(values))
-	for _, value := range values {
-		legacy = append(legacy, value.Legacy())
-	}
-	config, err := shares.RenderSamba(legacy)
-	if err != nil {
-		return "", "", err
-	}
-	configPath := envOr("MYNAS_SAMBA_CONFIG", "/var/lib/mynas/generated/smb.conf")
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
-		return "", "", err
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(configPath), ".smb-validated-*.conf")
-	if err != nil {
-		return "", "", err
-	}
-	temporaryPath := temporary.Name()
-	cleanup := func() { temporary.Close(); _ = os.Remove(temporaryPath) }
-	if _, err := temporary.WriteString(config); err != nil {
-		cleanup()
-		return "", "", err
-	}
-	if err := temporary.Chmod(0o640); err != nil {
-		cleanup()
-		return "", "", err
-	}
-	if err := temporary.Close(); err != nil {
-		_ = os.Remove(temporaryPath)
-		return "", "", err
-	}
-	if err := shares.ValidateSamba(temporaryPath); err != nil {
-		_ = os.Remove(temporaryPath)
-		return "", "", fmt.Errorf("Samba configuration validation failed: %w", err)
-	}
-	return temporaryPath, configPath, nil
 }
 
 func statusForShareError(err error) int {

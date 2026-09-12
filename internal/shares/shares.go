@@ -72,7 +72,7 @@ func Validate(share Share) error {
 	if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$`).MatchString(share.Name) {
 		return errors.New("share name contains unsupported characters")
 	}
-	if !filepath.IsAbs(share.Path) || strings.ContainsRune(share.Path, '\x00') {
+	if !filepath.IsAbs(share.Path) || filepath.Clean(share.Path) != share.Path || strings.ContainsAny(share.Path, "\x00\r\n") {
 		return errors.New("share path must be an absolute local path")
 	}
 	if len(share.Protocols) == 0 {

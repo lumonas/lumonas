@@ -60,10 +60,19 @@ func (s ManagedShare) Validate() error {
 			return err
 		}
 	}
+	principals := map[string]bool{}
 	for _, rule := range s.Access {
 		if strings.TrimSpace(rule.PrincipalID) == "" && strings.TrimSpace(rule.PrincipalName) == "" {
 			return errors.New("access rule requires a principal")
 		}
+		principal := strings.TrimSpace(rule.PrincipalID)
+		if principal == "" {
+			principal = strings.TrimSpace(rule.PrincipalName)
+		}
+		if principals[principal] {
+			return fmt.Errorf("access principal %q is listed more than once", principal)
+		}
+		principals[principal] = true
 		switch rule.Level {
 		case "none", "read", "write":
 		default:
@@ -80,13 +89,12 @@ func ValidateProtocolSettings(protocol string, settings map[string]any) error {
 	switch protocol {
 	case "nfs":
 		if value, ok := settings["allowedNetworks"]; ok {
-			networks, ok := value.([]any)
+			networks, ok := networkStrings(value)
 			if !ok {
 				return errors.New("nfs allowedNetworks must be an array")
 			}
 			for _, item := range networks {
-				value, ok := item.(string)
-				if !ok || parseCIDR(value) == nil {
+				if parseCIDR(item) == nil {
 					return fmt.Errorf("nfs network %q is not a valid CIDR", item)
 				}
 			}
@@ -94,6 +102,18 @@ func ValidateProtocolSettings(protocol string, settings map[string]any) error {
 		if value, ok := settings["rootSquash"]; ok {
 			if _, ok := value.(bool); !ok {
 				return errors.New("nfs rootSquash must be boolean")
+			}
+		}
+	case "sftp":
+		if value, ok := settings["chroot"]; ok {
+			path, valid := value.(string)
+			if !valid || !strings.HasPrefix(path, "/") || strings.ContainsAny(path, "\x00\r\n") || strings.Contains(path, "..") {
+				return errors.New("sftp chroot must be an absolute local path")
+			}
+		}
+		if value, ok := settings["readOnly"]; ok {
+			if _, ok := value.(bool); !ok {
+				return errors.New("sftp readOnly must be boolean")
 			}
 		}
 	case "ftp", "ftps":
@@ -107,8 +127,38 @@ func ValidateProtocolSettings(protocol string, settings map[string]any) error {
 				return fmt.Errorf("%s passivePortEnd must be between 1024 and 65535", protocol)
 			}
 		}
+		if start, startOK := settings["passivePortStart"]; startOK {
+			if end, endOK := settings["passivePortEnd"]; endOK && validPort(start) && validPort(end) && numberValue(start) > numberValue(end) {
+				return fmt.Errorf("%s passive port range is inverted", protocol)
+			}
+		}
+	case "rsync":
+		if value, ok := settings["readOnly"]; ok {
+			if _, ok := value.(bool); !ok {
+				return errors.New("rsync readOnly must be boolean")
+			}
+		}
 	}
 	return nil
+}
+
+func networkStrings(value any) ([]string, bool) {
+	switch values := value.(type) {
+	case []string:
+		return values, true
+	case []any:
+		result := make([]string, 0, len(values))
+		for _, value := range values {
+			text, ok := value.(string)
+			if !ok {
+				return nil, false
+			}
+			result = append(result, text)
+		}
+		return result, true
+	default:
+		return nil, false
+	}
 }
 
 func parseCIDR(value string) *net.IPNet {
@@ -124,6 +174,11 @@ func networkOrNil(network *net.IPNet, err error) *net.IPNet {
 }
 
 func validPort(value any) bool {
+	port := numberValue(value)
+	return port >= 1024 && port <= 65535
+}
+
+func numberValue(value any) int {
 	var port int
 	switch value := value.(type) {
 	case float64:
@@ -133,11 +188,11 @@ func validPort(value any) bool {
 	case json.Number:
 		parsed, err := value.Int64()
 		if err != nil {
-			return false
+			return 0
 		}
 		port = int(parsed)
 	default:
-		return false
+		return 0
 	}
-	return port >= 1024 && port <= 65535
+	return port
 }

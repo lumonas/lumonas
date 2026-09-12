@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -13,17 +15,27 @@ type IPConfig struct {
 	Addresses []string `json:"addresses,omitempty"`
 	Gateway   string   `json:"gateway,omitempty"`
 	DNS       []string `json:"dns,omitempty"`
+	Metric    int      `json:"metric,omitempty"`
+	Routes    []Route  `json:"routes,omitempty"`
+}
+
+type Route struct {
+	Destination string `json:"destination"`
+	Via         string `json:"via,omitempty"`
+	Metric      int    `json:"metric,omitempty"`
 }
 
 type Connection struct {
-	ID        string   `json:"id"`
-	UUID      string   `json:"uuid"`
-	Name      string   `json:"name"`
-	Interface string   `json:"interface"`
-	Enabled   bool     `json:"enabled"`
-	IPv4      IPConfig `json:"ipv4"`
-	IPv6      IPConfig `json:"ipv6"`
-	MTU       int      `json:"mtu,omitempty"`
+	ID         string   `json:"id"`
+	UUID       string   `json:"uuid"`
+	Name       string   `json:"name"`
+	Interface  string   `json:"interface"`
+	Enabled    bool     `json:"enabled"`
+	Generation int64    `json:"generation"`
+	Status     string   `json:"status"`
+	IPv4       IPConfig `json:"ipv4"`
+	IPv6       IPConfig `json:"ipv6"`
+	MTU        int      `json:"mtu,omitempty"`
 }
 
 type Binding struct {
@@ -39,9 +51,10 @@ type FirewallService struct {
 }
 
 type FirewallPolicy struct {
-	Enabled  bool                       `json:"enabled"`
-	Default  string                     `json:"default"`
-	Services map[string]FirewallService `json:"services"`
+	Enabled        bool                       `json:"enabled"`
+	Default        string                     `json:"default"`
+	Services       map[string]FirewallService `json:"services"`
+	GeneratedRules string                     `json:"generatedRules,omitempty"`
 }
 
 var connectionIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -101,6 +114,20 @@ func (c IPConfig) validate(version int) error {
 			return fmt.Errorf("DNS server %q is invalid", value)
 		}
 	}
+	if c.Metric < 0 || c.Metric > 4294967295 {
+		return errors.New("route metric is invalid")
+	}
+	for _, route := range c.Routes {
+		if _, _, err := net.ParseCIDR(strings.TrimSpace(route.Destination)); err != nil {
+			return fmt.Errorf("route destination %q is invalid", route.Destination)
+		}
+		if route.Via != "" && net.ParseIP(strings.TrimSpace(route.Via)) == nil {
+			return fmt.Errorf("route gateway %q is invalid", route.Via)
+		}
+		if route.Metric < 0 || route.Metric > 4294967295 {
+			return fmt.Errorf("route metric for %q is invalid", route.Destination)
+		}
+	}
 	return nil
 }
 
@@ -143,6 +170,65 @@ func (p FirewallPolicy) Validate() error {
 		}
 	}
 	return nil
+}
+
+func ValidateExposure(bindings []Binding, policy FirewallPolicy) error {
+	if err := ValidateBindings(bindings); err != nil {
+		return err
+	}
+	if err := policy.Validate(); err != nil {
+		return err
+	}
+	for _, binding := range bindings {
+		if !binding.Enabled {
+			continue
+		}
+		access := policy.Services[binding.Service]
+		if !access.LAN && !access.Tailscale {
+			return fmt.Errorf("enabled service %q has no permitted network scope", binding.Service)
+		}
+	}
+	return nil
+}
+
+func RenderNftables(policy FirewallPolicy, bindings []Binding) (string, error) {
+	if err := ValidateExposure(bindings, policy); err != nil {
+		return "", err
+	}
+	services := make([]Binding, 0, len(bindings))
+	for _, binding := range bindings {
+		if binding.Enabled {
+			services = append(services, binding)
+		}
+	}
+	sort.Slice(services, func(left, right int) bool { return services[left].Service < services[right].Service })
+	policyName := "drop"
+	if policy.Default == "allow" {
+		policyName = "accept"
+	}
+	var builder strings.Builder
+	builder.WriteString("table inet mynas {\n  chain input { type filter hook input priority 0; policy ")
+	builder.WriteString(policyName)
+	builder.WriteString(";\n    ct state established,related accept\n    iifname \"lo\" accept\n")
+	for _, binding := range services {
+		access := policy.Services[binding.Service]
+		if access.LAN {
+			builder.WriteString("    tcp dport ")
+			builder.WriteString(strconv.Itoa(binding.Port))
+			builder.WriteString(" accept # ")
+			builder.WriteString(binding.Service)
+			builder.WriteString(" LAN\n")
+		}
+		if access.Tailscale {
+			builder.WriteString("    iifname \"tailscale0\" tcp dport ")
+			builder.WriteString(strconv.Itoa(binding.Port))
+			builder.WriteString(" accept # ")
+			builder.WriteString(binding.Service)
+			builder.WriteString(" Tailscale\n")
+		}
+	}
+	builder.WriteString("  }\n}\n")
+	return builder.String(), nil
 }
 
 func DefaultFirewallPolicy() FirewallPolicy {

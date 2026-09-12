@@ -194,6 +194,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.networkInterfaces(w)
 	case r.Method == http.MethodGet && endpoint == "/network/connections":
 		s.listNetworkConnections(w, r)
+	case r.Method == http.MethodPost && endpoint == "/network/connections":
+		s.createNetworkConnection(w, r)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/network/connections/"):
 		s.updateNetworkConnection(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/network/bindings":
@@ -206,6 +208,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.updateNetworkFirewall(w, r)
 	case r.Method == http.MethodPost && endpoint == "/network/diagnostics":
 		s.networkDiagnostic(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/network/diagnostics/"):
+		s.networkDiagnosticJob(w, r, path.Base(endpoint))
 	case r.Method == http.MethodPost && endpoint == "/network/checkpoints":
 		s.networkCheckpoint(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/network/checkpoints/"):

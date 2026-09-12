@@ -3,14 +3,19 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/network"
+	"github.com/lumonas/lumonas/internal/privileged"
 )
 
 func (s *apiServer) listNetworkConnections(w http.ResponseWriter, r *http.Request) {
@@ -23,6 +28,46 @@ func (s *apiServer) listNetworkConnections(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, values)
+}
+
+func (s *apiServer) createNetworkConnection(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	var input struct {
+		network.Connection
+		ExpectedGeneration *int64 `json:"expectedGeneration"`
+		Reauthenticated    bool   `json:"reauthenticated"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
+		return
+	}
+	if !input.Reauthenticated {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication is required for network changes"})
+		return
+	}
+	if input.ID == "" {
+		input.ID = newID("connection")
+	}
+	input.Generation, input.Status = s.currentGeneration()+1, "pending-checkpoint"
+	if err := input.Connection.Validate(); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	value, err := s.store.UpsertNetworkConnection(input.Connection)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordIdentityAudit(actor, "network.connection.create", value.ID, map[string]any{"interface": value.Interface})
+	s.advanceGeneration("network.connection.create")
+	s.publish("network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: value.ID}, map[string]any{"requiresCheckpoint": true})
+	writeJSON(w, http.StatusCreated, value)
 }
 
 func (s *apiServer) updateNetworkConnection(w http.ResponseWriter, r *http.Request, id string) {
@@ -43,6 +88,7 @@ func (s *apiServer) updateNetworkConnection(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	input.ID = id
+	input.Generation, input.Status = s.currentGeneration()+1, "pending-checkpoint"
 	if err := input.Connection.Validate(); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
@@ -95,9 +141,31 @@ func (s *apiServer) updateNetworkBindings(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication is required for network changes"})
 		return
 	}
-	values, err := s.store.ReplaceNetworkBindings(input.Bindings)
+	policy, err := s.store.NetworkFirewallPolicy()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	rules, err := network.RenderNftables(policy, input.Bindings)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	policy.GeneratedRules = rules
+	rollbackFirewall, err := s.activateFirewallRules(r.Context(), rules)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "firewall activation failed: " + err.Error()})
+		return
+	}
+	values, err := s.store.ReplaceNetworkBindings(input.Bindings)
+	if err != nil {
+		rollbackFirewall()
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := s.store.SaveNetworkFirewallPolicy(policy); err != nil {
+		rollbackFirewall()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	s.recordIdentityAudit(actor, "network.binding.update", "bindings", nil)
@@ -139,8 +207,25 @@ func (s *apiServer) updateNetworkFirewall(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication is required for firewall changes"})
 		return
 	}
+	bindings, err := s.store.ListNetworkBindings()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	rules, err := network.RenderNftables(input.FirewallPolicy, bindings)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	input.GeneratedRules = rules
+	rollbackFirewall, err := s.activateFirewallRules(r.Context(), rules)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "firewall activation failed: " + err.Error()})
+		return
+	}
 	value, err := s.store.SaveNetworkFirewallPolicy(input.FirewallPolicy)
 	if err != nil {
+		rollbackFirewall()
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
@@ -148,6 +233,41 @@ func (s *apiServer) updateNetworkFirewall(w http.ResponseWriter, r *http.Request
 	s.advanceGeneration("network.firewall.update")
 	s.publish("network.firewall.updated", "warning", nil, nil)
 	writeJSON(w, http.StatusOK, value)
+}
+
+func (s *apiServer) activateFirewallRules(ctx context.Context, rules string) (func(), error) {
+	path := envOr("MYNAS_FIREWALL_CONFIG", "/var/lib/mynas/generated/nftables.conf")
+	previous, readErr := os.ReadFile(path)
+	existed := readErr == nil
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return func() {}, readErr
+	}
+	if err := network.WriteNftables(path, rules); err != nil {
+		return func() {}, err
+	}
+	rollback := func() {
+		if existed {
+			_ = os.WriteFile(path, previous, 0o640)
+		} else {
+			_ = os.Remove(path)
+		}
+	}
+	socket := envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")
+	if _, err := os.Stat(socket); err == nil {
+		result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
+			Operation: "firewall.apply", OperationID: newID("firewall"), PlanHash: newID("firewall-plan"),
+			RequestedState: map[string]any{"configPath": path}, Confirmed: true,
+		})
+		if err != nil {
+			rollback()
+			return func() {}, err
+		}
+		if !result.OK {
+			rollback()
+			return func() {}, fmt.Errorf("%s", result.Error)
+		}
+	}
+	return rollback, nil
 }
 
 func (s *apiServer) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
@@ -163,40 +283,158 @@ func (s *apiServer) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	switch input.Kind {
-	case "interfaces":
-		values, err := network.Interfaces()
-		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
-			return
+	if err := validateDiagnostic(input.Kind, input.Target, input.Port); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	job := model.Job{ID: newID("job"), Type: "network.diagnostic", Title: "Network " + input.Kind, ResourceID: input.Target, State: "queued", CreatedAt: time.Now().UTC()}
+	if err := s.store.SaveJob(job); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+	go s.runNetworkDiagnostic(job, input.Kind, input.Target, input.Port)
+	writeJSON(w, http.StatusAccepted, job)
+}
+
+func (s *apiServer) networkDiagnosticJob(w http.ResponseWriter, r *http.Request, id string) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	job, err := s.store.Job(id)
+	if err != nil || job.Type != "network.diagnostic" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "network diagnostic job not found"})
+		return
+	}
+	result, err := s.store.NetworkDiagnosticResult(id)
+	if err == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"job": job, "result": result})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job": job})
+}
+
+type diagnosticInput struct {
+	Kind   string
+	Target string
+	Port   int
+}
+
+func validateDiagnostic(kind, target string, port int) error {
+	switch kind {
+	case "interfaces", "route-table", "neighbor-table":
+		if target != "" || port != 0 {
+			return fmt.Errorf("%s does not accept a target", kind)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"kind": input.Kind, "result": values})
-	case "dns-lookup":
-		if strings.TrimSpace(input.Target) == "" || len(input.Target) > 253 || strings.ContainsAny(input.Target, " /\\") {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "DNS target is invalid"})
-			return
+	case "ping", "dns-lookup", "traceroute", "gateway-reachability", "internet-reachability", "update-endpoint", "docker-registry":
+		if !validDiagnosticHost(target) {
+			return errors.New("diagnostic target is invalid")
 		}
-		values, err := net.DefaultResolver.LookupHost(ctx, input.Target)
-		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "DNS lookup failed"})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"kind": input.Kind, "target": input.Target, "result": values})
 	case "port-test":
-		if strings.TrimSpace(input.Target) == "" || strings.ContainsAny(input.Target, " /\\") || input.Port < 1 || input.Port > 65535 {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "port test target or port is invalid"})
-			return
+		if !validDiagnosticHost(target) || port < 1 || port > 65535 {
+			return errors.New("port test target or port is invalid")
 		}
-		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", input.Target, input.Port))
+	default:
+		return errors.New("unsupported diagnostic kind")
+	}
+	return nil
+}
+
+func validDiagnosticHost(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 253 || strings.ContainsAny(value, " /\\\r\n") {
+		return false
+	}
+	if net.ParseIP(value) != nil {
+		return true
+	}
+	for _, label := range strings.Split(value, ".") {
+		if label == "" || len(label) > 63 || strings.HasPrefix(label, "-") || strings.HasSuffix(label, "-") {
+			return false
+		}
+		for _, char := range label {
+			if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') && (char < '0' || char > '9') && char != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (s *apiServer) runNetworkDiagnostic(job model.Job, kind, target string, port int) {
+	now := time.Now().UTC()
+	progress := 10.0
+	job.State, job.Stage, job.StartedAt, job.Progress = "running", "Running diagnostic", &now, &progress
+	_ = s.store.SaveJob(job)
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := executeDiagnostic(ctx, kind, target, port)
+	now = time.Now().UTC()
+	progress = 100
+	job.FinishedAt, job.Progress = &now, &progress
+	if err != nil {
+		job.State, job.Stage, job.Error = "failed", "Diagnostic failed", err.Error()
+		_ = s.store.SaveJob(job)
+		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		return
+	}
+	job.State, job.Stage = "successful", "Diagnostic completed"
+	_ = s.store.SaveNetworkDiagnosticResult(job.ID, result)
+	_ = s.store.SaveJob(job)
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "result": result})
+}
+
+func executeDiagnostic(ctx context.Context, kind, target string, port int) (any, error) {
+	switch kind {
+	case "interfaces":
+		return network.Interfaces()
+	case "dns-lookup":
+		return net.DefaultResolver.LookupHost(ctx, target)
+	case "port-test":
+		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", net.JoinHostPort(target, strconv.Itoa(port)))
 		if err != nil {
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "port test failed"})
-			return
+			return nil, err
 		}
 		_ = conn.Close()
-		writeJSON(w, http.StatusOK, map[string]any{"kind": input.Kind, "target": input.Target, "port": input.Port, "reachable": true})
+		return map[string]any{"target": target, "port": port, "reachable": true}, nil
+	case "ping", "traceroute":
+		command := "ping"
+		args := []string{"-c", "1", "-W", "2", target}
+		if kind == "traceroute" {
+			command, args = "traceroute", []string{"-m", "8", "-w", "2", target}
+		}
+		output, err := exec.CommandContext(ctx, command, args...).CombinedOutput()
+		if err != nil {
+			return nil, fmt.Errorf("%s failed", kind)
+		}
+		if len(output) > 4096 {
+			output = output[:4096]
+		}
+		return map[string]any{"target": target, "output": string(output)}, nil
+	case "route-table":
+		return readDiagnosticFile("/proc/net/route")
+	case "neighbor-table":
+		return readDiagnosticFile("/proc/net/arp")
+	case "gateway-reachability", "internet-reachability", "update-endpoint", "docker-registry":
+		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", net.JoinHostPort(target, "443"))
+		if err != nil {
+			return nil, err
+		}
+		_ = conn.Close()
+		return map[string]any{"target": target, "port": 443, "reachable": true}, nil
 	default:
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "unsupported diagnostic kind"})
+		return nil, errors.New("unsupported diagnostic kind")
 	}
+}
+
+func readDiagnosticFile(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	if len(data) > 16384 {
+		data = data[:16384]
+	}
+	return string(data), nil
 }

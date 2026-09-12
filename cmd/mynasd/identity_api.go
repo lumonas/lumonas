@@ -199,6 +199,18 @@ func (s *apiServer) deletePrincipal(w http.ResponseWriter, r *http.Request, id s
 	if !ok {
 		return
 	}
+	var input struct {
+		ExpectedGeneration *int64 `json:"expectedGeneration"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
+		return
+	}
 	if err := s.store.DeletePrincipal(id); err != nil {
 		writeJSON(w, statusForIdentityError(err), map[string]string{"error": err.Error()})
 		return

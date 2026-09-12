@@ -31,4 +31,14 @@ func TestBindingsAndFirewallValidation(t *testing.T) {
 	if err := policy.Validate(); err == nil {
 		t.Fatal("unsupported firewall default should fail")
 	}
+	policy = DefaultFirewallPolicy()
+	bindings := []Binding{{Service: "ftp", Port: 21, Enabled: true}}
+	if err := ValidateExposure(bindings, policy); err == nil {
+		t.Fatal("service without an allowed scope should fail")
+	}
+	policy.Services["ftp"] = FirewallService{LAN: true}
+	rules, err := RenderNftables(policy, bindings)
+	if err != nil || len(rules) == 0 {
+		t.Fatalf("expected generated nftables rules: %q err=%v", rules, err)
+	}
 }
