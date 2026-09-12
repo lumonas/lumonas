@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { ArrowUpCircle, FileUp } from 'lucide-react'
-import { useDockerImages, useImportDockerImage, useUpdateImage } from '@/api/queries'
+import { ArrowUpCircle, FileUp, RefreshCw } from 'lucide-react'
+import { useCheckImageUpdates, useDockerImages, useImportDockerImage, useUpdateImage } from '@/api/queries'
 import { EmptyState } from '@/components/core/empty-state'
 import { ResourceTable, type Column } from '@/components/core/resource-table'
 import { Badge } from '@/components/ui/badge'
@@ -13,6 +13,7 @@ export function ImagesTab() {
   const { data: images, isLoading } = useDockerImages()
   const updateImage = useUpdateImage()
   const importImage = useImportDockerImage()
+  const checkUpdates = useCheckImageUpdates()
   const fileInput = useRef<HTMLInputElement>(null)
   const [importOpen, setImportOpen] = useState(false)
 
@@ -91,7 +92,16 @@ export function ImagesTab() {
           />
         }
       />
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => checkUpdates.mutate(undefined)}
+          disabled={checkUpdates.isPending}
+        >
+          <RefreshCw className={checkUpdates.isPending ? 'animate-spin' : undefined} />
+          {checkUpdates.isPending ? 'Checking…' : 'Check for updates'}
+        </Button>
         <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
           <FileUp />
           Import image…

@@ -24,6 +24,14 @@ func (s *apiServer) evaluateEventAlert(kind string, data map[string]any) {
 		s.fireAlertForRule("rule-sync", "SnapRAID operation failed", message, &model.ResourceRef{Type: "protection", ID: "protection"})
 	case "snapraid.sync.completed":
 		s.resolveAlertForRule("rule-sync", "protection")
+	case "docker.stack.rollback":
+		stackID, _ := data["stackId"].(string)
+		reason, _ := data["reason"].(string)
+		s.fireAlertForRule("rule-container", "Stack update rolled back", reason, &model.ResourceRef{Type: "stack", ID: stackID})
+	case "docker.stack.update.failed":
+		stackID, _ := data["stackId"].(string)
+		reason, _ := data["reason"].(string)
+		s.fireAlertForRule("rule-container", "Stack update failed", reason, &model.ResourceRef{Type: "stack", ID: stackID})
 	}
 }
 

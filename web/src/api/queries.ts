@@ -244,6 +244,13 @@ export function useDockerImages() {
   })
 }
 
+export function useCheckImageUpdates() {
+  return useDockerMutation(async () => {
+    const images = await apiPost<DockerImage[]>('/docker/images/check-updates')
+    return images.filter((image) => image.updateAvailable).length
+  })
+}
+
 export function useDockerVolumes() {
   return useQuery({
     queryKey: queryKeys.dockerVolumes,

@@ -321,6 +321,27 @@ paths:
         '404':
           description: Disk is not in the known inventory
 
+  /docker/images/check-updates:
+    post:
+      tags: [Docker]
+      summary: Compare local images against the registry
+      operationId: checkImageUpdates
+      description: >-
+        Fetches manifest digests for locally present images (no image layers
+        are pulled) and reports which ones have a newer build upstream. The
+        result feeds the "updates available" counters.
+      responses:
+        '200':
+          description: Images with update flags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DockerImage'
+        '503':
+          description: Docker unavailable
+
   /docker/summary:
     get:
       tags: [Docker]

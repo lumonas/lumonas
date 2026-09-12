@@ -557,6 +557,15 @@ export const handlers = [
 
   http.get(`${BASE}/docker/images`, () => HttpResponse.json(images)),
 
+  http.post(`${BASE}/docker/images/check-updates`, () => {
+    const updated = images.map((image, index) => ({
+      ...image,
+      inUse: image.inUse ?? index % 2 === 0,
+      updateAvailable: index === 0,
+    }))
+    return HttpResponse.json(updated)
+  }),
+
   http.post(`${BASE}/docker/images/:id/update`, ({ params }) => {
     const image = images.find((i) => i.id === params.id)
     if (!image) return new HttpResponse(null, { status: 404 })

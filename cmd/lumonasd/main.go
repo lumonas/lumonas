@@ -514,6 +514,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.dockerContainerAction(w, r, endpoint)
 	case r.Method == http.MethodGet && endpoint == "/docker/images":
 		s.dockerImages(w, r)
+	case r.Method == http.MethodPost && endpoint == "/docker/images/check-updates":
+		s.dockerImagesCheckUpdates(w, r)
 	case r.Method == http.MethodPost && endpoint == "/docker/images/import":
 		s.dockerImageImport(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/images/"):
@@ -2189,6 +2191,24 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 			stack = updated
 			s.advanceGeneration("docker.stack.compose.update")
 		}
+		if action == "update" {
+			result, updateErr := s.dockerService.UpdateStack(ctx, stack, func(probeCtx context.Context) error {
+				return s.probeStackHealth(probeCtx, stack.Name)
+			}, dockerruntime.UpdateOptions{})
+			if updateErr != nil {
+				eventKind := "docker.stack.update.failed"
+				if result.RolledBack {
+					eventKind = "docker.stack.rollback"
+				}
+				s.publish(eventKind, "warning", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "reason": result.Reason})
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": updateErr.Error(), "rolledBack": result.RolledBack, "reason": result.Reason})
+				return
+			}
+			s.recordRequestAudit(r, actor, "docker.stack.action", stack.ID, map[string]any{"action": action, "healthGated": true})
+			s.publish("docker.stack.action", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "action": action})
+			writeJSON(w, http.StatusAccepted, stack)
+			return
+		}
 		if err := s.dockerService.Action(ctx, stack, action); err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
@@ -2199,6 +2219,31 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "stack not found"})
+}
+
+// probeStackHealth reports whether every container of a stack is currently
+// running. It is the health gate for stack updates: restart loops or
+// crash-looping services keep failing the probe until the rollback window
+// closes.
+func (s *apiServer) probeStackHealth(ctx context.Context, stackName string) error {
+	containers, err := s.dockerService.Containers(ctx)
+	if err != nil {
+		return err
+	}
+	found := 0
+	for _, container := range containers {
+		if container.StackID != stackName {
+			continue
+		}
+		found++
+		if container.State != "running" {
+			return fmt.Errorf("container %s is %s", container.Name, container.State)
+		}
+	}
+	if found == 0 {
+		return fmt.Errorf("no containers are running for stack %s", stackName)
+	}
+	return nil
 }
 
 func (s *apiServer) dockerContainers(w http.ResponseWriter, r *http.Request) {
@@ -2220,6 +2265,32 @@ func (s *apiServer) dockerImages(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
+	writeJSON(w, http.StatusOK, images)
+}
+
+// dockerImagesCheckUpdates compares local images against the registry and
+// reports which ones have a newer build upstream. The result also feeds the
+// "updates available" counters, which are otherwise permanently zero.
+func (s *apiServer) dockerImagesCheckUpdates(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	defer cancel()
+	images, err := s.dockerService.CheckImageUpdates(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	updates := 0
+	for _, image := range images {
+		if image.UpdateAvailable {
+			updates++
+		}
+	}
+	s.recordRequestAudit(r, actor, "docker.images.check_updates", "docker", map[string]any{"updates": updates})
+	s.publish("docker.updates.checked", "info", nil, map[string]any{"updates": updates, "images": len(images)})
 	writeJSON(w, http.StatusOK, images)
 }
 
