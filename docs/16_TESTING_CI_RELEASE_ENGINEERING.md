@@ -144,6 +144,10 @@ execution without invoking a shell.
 The privileged safety suite also submits a confirmed filesystem mutation
 without an operation ID and requires rejection before any command is run.
 
+The broker logging test verifies that operation metadata is retained while
+requested state and expected identity payloads are excluded from structured
+logs.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until

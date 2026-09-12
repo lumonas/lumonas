@@ -5,6 +5,9 @@ After=local-fs.target
 [Service]
 Type=simple
 ExecStart=/usr/lib/lumonas/lumonas-privd --socket /run/lumonas/privd.sock
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lumonas-privd
 User=root
 Group=lumonas
 RuntimeDirectory=lumonas

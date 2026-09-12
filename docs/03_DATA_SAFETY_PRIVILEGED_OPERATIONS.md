@@ -74,6 +74,11 @@ ID alongside its immutable plan hash. The privileged boundary rejects a
 confirmed mutation before discovery or command execution when that ID is
 missing.
 
+The privileged broker emits structured journal records for accepted requests
+and results with operation, correlation, plan, target, worker, success, and
+error fields. Requested state and identity maps are intentionally excluded so
+credentials and detailed hardware metadata cannot enter the journal.
+
 ### Class D — destructive
 
 Examples:

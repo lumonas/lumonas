@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
@@ -66,6 +67,8 @@ var checkpointState = struct {
 	sync.Mutex
 	items map[string]activeCheckpoint
 }{items: make(map[string]activeCheckpoint)}
+
+var privilegedLogger = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})).With("service", "lumonas-privd")
 
 var workerDial = func(socket string) (net.Conn, error) {
 	return net.DialTimeout("unix", socket, 3*time.Second)
@@ -136,10 +139,16 @@ func serve(conn net.Conn) {
 	for scanner.Scan() {
 		var req request
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+			privilegedLogger.Warn("invalid privileged request", "error", err)
 			_ = encoder.Encode(response{Error: "invalid request"})
 			continue
 		}
-		_ = encoder.Encode(executeBroker(req))
+		privilegedLogger.Info("privileged request", privilegedRequestAttrs(req)...)
+		result := executeBroker(req)
+		resultAttrs := privilegedRequestAttrs(req)
+		resultAttrs = append(resultAttrs, "ok", result.OK, "error", result.Error)
+		privilegedLogger.Info("privileged result", resultAttrs...)
+		_ = encoder.Encode(result)
 	}
 }
 
@@ -150,11 +159,22 @@ func serveWorker(conn net.Conn, worker string) {
 	for scanner.Scan() {
 		var req request
 		if err := json.Unmarshal(scanner.Bytes(), &req); err != nil {
+			privilegedLogger.Warn("invalid worker request", "worker", worker, "error", err)
 			_ = encoder.Encode(response{Error: "invalid request"})
 			continue
 		}
-		_ = encoder.Encode(executeWorker(req, worker))
+		privilegedLogger.Info("worker request", append(privilegedRequestAttrs(req), "worker", worker)...)
+		result := executeWorker(req, worker)
+		resultAttrs := append(privilegedRequestAttrs(req), "worker", worker, "ok", result.OK, "error", result.Error)
+		privilegedLogger.Info("worker result", resultAttrs...)
+		_ = encoder.Encode(result)
 	}
+}
+
+// privilegedRequestAttrs deliberately excludes RequestedState and ExpectedIdentity:
+// those payloads can contain credentials or sensitive hardware metadata.
+func privilegedRequestAttrs(req request) []any {
+	return []any{"operation", req.Operation, "operation_id", req.OperationID, "correlation_id", req.CorrelationID, "plan_hash", req.PlanHash, "target_disk_id", req.TargetDiskID}
 }
 
 func executeBroker(req request) response {

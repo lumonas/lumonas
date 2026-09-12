@@ -9,6 +9,9 @@ EnvironmentFile=-/etc/lumonas/lumonas-web.env
 Environment=LUMONAS_WEB_ROOT=/usr/share/lumonas/web
 Environment=LUMONAS_API_URL=http://127.0.0.1:8080
 ExecStart=/usr/lib/lumonas/lumonas-web
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lumonas-web
 User=lumonas
 Group=lumonas
 Restart=on-failure

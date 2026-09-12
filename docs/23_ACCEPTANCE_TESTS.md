@@ -359,3 +359,12 @@ Submit a confirmed filesystem or SnapRAID mutation without an operation ID.
 
 Pass if `lumonas-privd` rejects it before disk discovery or command execution;
 normal API confirmations and scheduled jobs must include the operation ID.
+
+## AM. Privileged journal observability
+
+Inspect a broker request/result pair in the service journal using a test
+operation containing sensitive requested-state and identity values.
+
+Pass if structured records include operation/correlation/plan/result metadata,
+while sensitive payload values are absent and the packaged units identify their
+logs as `lumonas-privd`, `lumonasd`, and `lumonas-web`.
