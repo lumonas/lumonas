@@ -190,6 +190,20 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.metrics(w)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
 		s.networkInterfaces(w)
+	case r.Method == http.MethodGet && endpoint == "/network/connections":
+		s.listNetworkConnections(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/network/connections/"):
+		s.updateNetworkConnection(w, r, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/network/bindings":
+		s.listNetworkBindings(w, r)
+	case r.Method == http.MethodPatch && endpoint == "/network/bindings":
+		s.updateNetworkBindings(w, r)
+	case r.Method == http.MethodGet && endpoint == "/network/firewall/policy":
+		s.getNetworkFirewall(w, r)
+	case r.Method == http.MethodPatch && endpoint == "/network/firewall/policy":
+		s.updateNetworkFirewall(w, r)
+	case r.Method == http.MethodPost && endpoint == "/network/diagnostics":
+		s.networkDiagnostic(w, r)
 	case r.Method == http.MethodPost && endpoint == "/network/checkpoints":
 		s.networkCheckpoint(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/network/checkpoints/"):
@@ -326,6 +340,7 @@ func (s *apiServer) serverHealth() model.HealthState {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	protection := storage.DiscoverProtection(ctx, disks, nil, envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf"))
+	s.enrichProtection(&protection)
 	if protection.Status == model.Critical {
 		return model.Critical
 	}
