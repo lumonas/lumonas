@@ -20,6 +20,7 @@ Deliver:
 - typed bounded network diagnostic command runner.
 - GPT disk GUID and partition UUID revalidation across destructive plans.
 - bounded stdin-aware runners for WireGuard and SFTP integrations.
+- operation IDs are required at the privileged boundary for storage/protection mutations.
 
 Exit criteria:
 

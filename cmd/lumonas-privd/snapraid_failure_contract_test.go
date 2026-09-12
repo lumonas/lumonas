@@ -16,7 +16,7 @@ func TestSnapraidMutationsFailClosedWhenCommandFails(t *testing.T) {
 				requested["scrubPercent"] = "10"
 			}
 			result := execute(request{
-				Operation: operation, PlanHash: "failure-plan", RequestedState: requested,
+				Operation: operation, OperationID: "failure-operation", PlanHash: "failure-plan", RequestedState: requested,
 				ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true,
 			}, nil, func(name string, args ...string) ([]byte, error) {
 				command = name + " " + strings.Join(args, " ")

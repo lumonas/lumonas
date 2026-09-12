@@ -69,6 +69,11 @@ stdin-bearing operations. Command names and arguments remain typed, while
 private keys and transfer instructions are passed through stdin without shell
 interpolation.
 
+Every confirmed storage and protection mutation carries a non-empty operation
+ID alongside its immutable plan hash. The privileged boundary rejects a
+confirmed mutation before discovery or command execution when that ID is
+missing.
+
 ### Class D — destructive
 
 Examples:

@@ -352,3 +352,10 @@ Run the WireGuard and SFTP command-boundary tests.
 
 Pass if exact command arguments and stdin are captured through injectable
 bounded runners, and no integration path constructs a shell command.
+
+## AL. Mutation operation identity
+
+Submit a confirmed filesystem or SnapRAID mutation without an operation ID.
+
+Pass if `lumonas-privd` rejects it before disk discovery or command execution;
+normal API confirmations and scheduled jobs must include the operation ID.

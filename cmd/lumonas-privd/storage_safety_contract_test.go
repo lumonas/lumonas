@@ -12,6 +12,7 @@ import (
 func storageSafetyRequest(target string) request {
 	return request{
 		Operation:        "filesystem.format",
+		OperationID:      "storage-safety-operation",
 		PlanHash:         "storage-safety-plan",
 		TargetDiskID:     target,
 		ExpectedIdentity: map[string]string{"id": target, "serial": "SERIAL-1", "sizeBytes": "100"},

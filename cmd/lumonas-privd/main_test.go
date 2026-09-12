@@ -46,6 +46,16 @@ func TestPrivilegedProtocolRequiresConfirmationForTypedOperation(t *testing.T) {
 	}
 }
 
+func TestExecuteRequiresOperationIDForConfirmedStorageMutation(t *testing.T) {
+	result := execute(request{Operation: "filesystem.format", PlanHash: "plan", TargetDiskID: "wwn:test", Confirmed: true}, nil, func(string, ...string) ([]byte, error) {
+		t.Fatal("storage command ran without an operation ID")
+		return nil, nil
+	})
+	if result.OK || result.Error != "operationId is required" {
+		t.Fatalf("unexpected operation-id response: %#v", result)
+	}
+}
+
 func TestExecuteMountRevalidatesIdentityAndUsesAllowListedCommand(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", GPTDiskGUID: "gpt-test", PartitionUUID: "part-test", SizeBytes: 100}
 	var command string
@@ -53,7 +63,7 @@ func TestExecuteMountRevalidatesIdentityAndUsesAllowListedCommand(t *testing.T) 
 		command = name + " " + strings.Join(args, " ")
 		return nil, nil
 	}
-	result := execute(request{Operation: "filesystem.mount", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "gptDiskGuid": "gpt-test", "partitionUuid": "part-test", "sizeBytes": "100"}, RequestedState: map[string]any{"mountPath": "/srv/disks/wwn-test", "filesystem": "ext4"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, run)
+	result := execute(request{Operation: "filesystem.mount", OperationID: "op-mount", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "gptDiskGuid": "gpt-test", "partitionUuid": "part-test", "sizeBytes": "100"}, RequestedState: map[string]any{"mountPath": "/srv/disks/wwn-test", "filesystem": "ext4"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, run)
 	if !result.OK || command != "mount -t ext4 /dev/sda /srv/disks/wwn-test" {
 		t.Fatalf("unexpected result: %#v command=%q", result, command)
 	}
@@ -62,7 +72,7 @@ func TestExecuteMountRevalidatesIdentityAndUsesAllowListedCommand(t *testing.T) 
 func TestExecuteCreateFormatsLabelsAndMounts(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
 	commands := make([]string, 0)
-	result := execute(request{Operation: "filesystem.create", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"}, RequestedState: map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test", "label": "media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, args ...string) ([]byte, error) {
+	result := execute(request{Operation: "filesystem.create", OperationID: "op-create", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"}, RequestedState: map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test", "label": "media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, args ...string) ([]byte, error) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
 		return nil, nil
 	})
@@ -78,7 +88,7 @@ func TestExecuteCreateEnforcesCanonicalPathFilesystemAndLabel(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
 	discover := func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }
 	run := func(string, ...string) ([]byte, error) { return nil, nil }
-	base := request{Operation: "filesystem.create", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}
+	base := request{Operation: "filesystem.create", OperationID: "op-create", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}
 	cases := []struct {
 		name     string
 		request  map[string]any
@@ -89,7 +99,7 @@ func TestExecuteCreateEnforcesCanonicalPathFilesystemAndLabel(t *testing.T) {
 		{"invalid label", map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test", "label": "-bad label"}, "label is invalid"},
 	}
 	for _, testCase := range cases {
-		result := execute(request{Operation: base.Operation, PlanHash: base.PlanHash, TargetDiskID: base.TargetDiskID, ExpectedIdentity: base.ExpectedIdentity, RequestedState: testCase.request, ExpiresAt: base.ExpiresAt, Confirmed: true}, discover, run)
+		result := execute(request{Operation: base.Operation, OperationID: base.OperationID, PlanHash: base.PlanHash, TargetDiskID: base.TargetDiskID, ExpectedIdentity: base.ExpectedIdentity, RequestedState: testCase.request, ExpiresAt: base.ExpiresAt, Confirmed: true}, discover, run)
 		if result.OK || !strings.Contains(result.Error, testCase.expected) {
 			t.Fatalf("%s: expected rejection %q, got %#v", testCase.name, testCase.expected, result)
 		}
@@ -98,7 +108,7 @@ func TestExecuteCreateEnforcesCanonicalPathFilesystemAndLabel(t *testing.T) {
 
 func TestExecuteCreateRejectsDestructiveTargets(t *testing.T) {
 	mounted := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100, Mounted: true}
-	result := execute(request{Operation: "filesystem.create", PlanHash: "hash", TargetDiskID: mounted.ID, ExpectedIdentity: map[string]string{"wwn": "test"}, RequestedState: map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{mounted}, nil }, func(string, ...string) ([]byte, error) { return nil, nil })
+	result := execute(request{Operation: "filesystem.create", OperationID: "op-create-mounted", PlanHash: "hash", TargetDiskID: mounted.ID, ExpectedIdentity: map[string]string{"wwn": "test"}, RequestedState: map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{mounted}, nil }, func(string, ...string) ([]byte, error) { return nil, nil })
 	if result.OK || !strings.Contains(result.Error, "mounted") {
 		t.Fatalf("expected mounted target rejection: %#v", result)
 	}
@@ -107,7 +117,7 @@ func TestExecuteCreateRejectsDestructiveTargets(t *testing.T) {
 func TestExecuteMountCanBeReadOnlyForImport(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
 	var command string
-	result := execute(request{Operation: "filesystem.mount", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"}, RequestedState: map[string]any{"mountPath": "/srv/disks/wwn-test", "filesystem": "xfs", "readOnly": true}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, args ...string) ([]byte, error) {
+	result := execute(request{Operation: "filesystem.mount", OperationID: "op-readonly", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"}, RequestedState: map[string]any{"mountPath": "/srv/disks/wwn-test", "filesystem": "xfs", "readOnly": true}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, args ...string) ([]byte, error) {
 		command = name + " " + strings.Join(args, " ")
 		return nil, nil
 	})
@@ -118,7 +128,7 @@ func TestExecuteMountCanBeReadOnlyForImport(t *testing.T) {
 
 func TestExecuteRejectsStaleIdentity(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "new"}
-	result := execute(request{Operation: "disk.erase", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "old"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(string, ...string) ([]byte, error) { return nil, nil })
+	result := execute(request{Operation: "disk.erase", OperationID: "op-erase", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "old"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(string, ...string) ([]byte, error) { return nil, nil })
 	if result.OK || !strings.Contains(result.Error, "identity mismatch") {
 		t.Fatalf("expected stale identity rejection: %#v", result)
 	}
@@ -126,7 +136,7 @@ func TestExecuteRejectsStaleIdentity(t *testing.T) {
 
 func TestExecuteRejectsMountedPartitionForDestructiveAction(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", SizeBytes: 100}
-	result := execute(request{Operation: "filesystem.format", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"sizeBytes": "100"}, RequestedState: map[string]any{"filesystem": "ext4"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, _ ...string) ([]byte, error) {
+	result := execute(request{Operation: "filesystem.format", OperationID: "op-format", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"sizeBytes": "100"}, RequestedState: map[string]any{"filesystem": "ext4"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, _ ...string) ([]byte, error) {
 		if name == "findmnt" {
 			return []byte("/srv/pools/main"), nil
 		}
@@ -139,7 +149,7 @@ func TestExecuteRejectsMountedPartitionForDestructiveAction(t *testing.T) {
 
 func TestExecuteSnapraidUsesAllowListedConfigAndPercent(t *testing.T) {
 	var command string
-	result := execute(request{Operation: "snapraid.scrub", PlanHash: "job-1", RequestedState: map[string]any{"configPath": "/etc/lumonas/snapraid.conf", "scrubPercent": "10"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
+	result := execute(request{Operation: "snapraid.scrub", OperationID: "job-1", PlanHash: "job-1", RequestedState: map[string]any{"configPath": "/etc/lumonas/snapraid.conf", "scrubPercent": "10"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
 		command = name + " " + strings.Join(args, " ")
 		return nil, nil
 	})
@@ -162,7 +172,7 @@ func TestExecutePowerActionIsAllowListed(t *testing.T) {
 func TestExecutePoolMountRevalidatesEveryDisk(t *testing.T) {
 	disks := []model.Disk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "b", SizeBytes: 200}}
 	var command string
-	result := execute(request{Operation: "pool.mount", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "b", SizeBytes: 200}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a", "/srv/disks/wwn_b"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return disks, nil }, func(name string, args ...string) ([]byte, error) {
+	result := execute(request{Operation: "pool.mount", OperationID: "pool-1", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "b", SizeBytes: 200}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a", "/srv/disks/wwn_b"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return disks, nil }, func(name string, args ...string) ([]byte, error) {
 		command = name + " " + strings.Join(args, " ")
 		if name == "findmnt" && len(args) > 0 && strings.HasPrefix(args[len(args)-1], "/srv/disks/") {
 			return []byte("/dev/sdX"), nil
@@ -173,7 +183,7 @@ func TestExecutePoolMountRevalidatesEveryDisk(t *testing.T) {
 		t.Fatalf("unexpected pool mount result=%#v command=%q", result, command)
 	}
 	changed := []model.Disk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "replaced", SizeBytes: 200}}
-	result = execute(request{Operation: "pool.mount", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "b", SizeBytes: 200}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a", "/srv/disks/wwn_b"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return changed, nil }, func(name string, args ...string) ([]byte, error) {
+	result = execute(request{Operation: "pool.mount", OperationID: "pool-1", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "b", SizeBytes: 200}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a", "/srv/disks/wwn_b"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return changed, nil }, func(name string, args ...string) ([]byte, error) {
 		if name == "findmnt" && len(args) > 0 && strings.HasPrefix(args[len(args)-1], "/srv/disks/") {
 			return []byte("/dev/sdX"), nil
 		}
@@ -186,7 +196,7 @@ func TestExecutePoolMountRevalidatesEveryDisk(t *testing.T) {
 
 func TestExecutePoolMountRejectsNewCriticalDisk(t *testing.T) {
 	disk := model.Disk{ID: "wwn:a", WWN: "a", SizeBytes: 100, Health: model.Critical}
-	result := execute(request{Operation: "pool.mount", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, args ...string) ([]byte, error) {
+	result := execute(request{Operation: "pool.mount", OperationID: "pool-1", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, args ...string) ([]byte, error) {
 		if name == "findmnt" && len(args) > 0 && strings.HasPrefix(args[len(args)-1], "/srv/disks/") {
 			return []byte("/dev/sdX"), nil
 		}
@@ -199,7 +209,7 @@ func TestExecutePoolMountRejectsNewCriticalDisk(t *testing.T) {
 
 func TestExecutePoolUnmountOnlyAllowsMergerfsMounts(t *testing.T) {
 	commands := make([]string, 0)
-	result := execute(request{Operation: "pool.unmount", PlanHash: "pool-unmount", RequestedState: map[string]any{"mountPath": "/srv/pools/media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
+	result := execute(request{Operation: "pool.unmount", OperationID: "pool-unmount", PlanHash: "pool-unmount", RequestedState: map[string]any{"mountPath": "/srv/pools/media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
 		if name == "findmnt" {
 			return []byte("fuse.mergerfs"), nil
@@ -209,7 +219,7 @@ func TestExecutePoolUnmountOnlyAllowsMergerfsMounts(t *testing.T) {
 	if !result.OK || len(commands) != 2 || commands[1] != "umount -- /srv/pools/media" {
 		t.Fatalf("unexpected pool unmount: %#v commands=%v", result, commands)
 	}
-	result = execute(request{Operation: "pool.unmount", PlanHash: "pool-unmount", RequestedState: map[string]any{"mountPath": "/srv/pools/media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, _ ...string) ([]byte, error) {
+	result = execute(request{Operation: "pool.unmount", OperationID: "pool-unmount", PlanHash: "pool-unmount", RequestedState: map[string]any{"mountPath": "/srv/pools/media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, _ ...string) ([]byte, error) {
 		if name == "findmnt" {
 			return []byte("ext4"), nil
 		}

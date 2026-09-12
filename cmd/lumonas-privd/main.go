@@ -241,6 +241,9 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 	if !req.ExpiresAt.IsZero() && !time.Now().UTC().Before(req.ExpiresAt) {
 		return response{Error: "operation plan has expired"}
 	}
+	if req.Confirmed && requiresOperationID(req.Operation) && strings.TrimSpace(req.OperationID) == "" {
+		return response{Error: "operationId is required"}
+	}
 	switch req.Operation {
 	case "ping":
 		return response{OK: true, Data: map[string]string{"service": "lumonas-privd"}}
@@ -370,6 +373,15 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return applyAvahiConfig(req, run)
 	default:
 		return response{Error: fmt.Sprintf("operation %q is not allow-listed", strings.TrimSpace(req.Operation))}
+	}
+}
+
+func requiresOperationID(operation string) bool {
+	switch operation {
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub":
+		return true
+	default:
+		return false
 	}
 }
 
