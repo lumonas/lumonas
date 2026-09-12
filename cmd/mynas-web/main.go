@@ -25,18 +25,7 @@ func main() {
 		logger.Error("invalid backend URL", "error", err)
 		os.Exit(1)
 	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	static := http.FileServer(http.Dir(*root))
-	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
-			proxy.ServeHTTP(w, r)
-			return
-		}
-		if _, err := fs.Stat(os.DirFS(*root), strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")); err != nil || r.URL.Path == "/" {
-			r.URL.Path = "/index.html"
-		}
-		static.ServeHTTP(w, r)
-	})
+	handler := newHandler(*root, target)
 	if (*cert == "") != (*key == "") {
 		logger.Error("both TLS certificate and key are required for HTTPS")
 		os.Exit(1)
@@ -50,6 +39,26 @@ func main() {
 	}
 	logger.Error("mynas-web stopped", "error", serveErr)
 	os.Exit(1)
+}
+
+func newHandler(root string, target *url.URL) http.Handler {
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	static := http.FileServer(http.Dir(root))
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" {
+			proxy.ServeHTTP(w, r)
+			return
+		}
+		if _, err := fs.Stat(os.DirFS(root), strings.TrimPrefix(filepath.Clean(r.URL.Path), "/")); err != nil || r.URL.Path == "/" {
+			// Let FileServer resolve the directory index. Rewriting to
+			// /index.html causes its canonical redirect to ./, which breaks
+			// client-side routes such as /dashboard.
+			r.URL.Path = "/"
+			r.URL.RawPath = ""
+		}
+		static.ServeHTTP(w, r)
+	})
+	return handler
 }
 
 func envOr(key, fallback string) string {
