@@ -21,6 +21,13 @@ Automate destructive failure scenarios in disposable virtual environments.
 Retention tests cover bounded terminal job history while ensuring active jobs
 survive pruning.
 
+The daemon also prunes operational SQLite history at startup and every fifteen
+minutes. Notification deliveries, completed backup runs, expired storage
+plans, and completed network checkpoints are bounded, while active backup
+runs, pending rollback checkpoints, and unexpired plans are retained. The
+release security-controls job runs `scripts/retention-smoke.sh` so an
+unbounded operational table cannot silently ship.
+
 ### Integration
 
 Run system tools in containers/VMs where appropriate:

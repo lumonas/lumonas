@@ -1,0 +1,82 @@
+package store
+
+import "time"
+
+const defaultOperationalRetention = 1000
+
+func retentionLimit(keep int) int {
+	if keep < 100 {
+		return 100
+	}
+	return keep
+}
+
+// PruneNotificationDeliveries bounds delivery history without touching the
+// configured notification channels.
+func (s *Store) PruneNotificationDeliveries(keep int) error {
+	keep = retentionLimit(keep)
+	_, err := s.db.Exec(`DELETE FROM notification_deliveries
+WHERE id NOT IN (SELECT id FROM notification_deliveries ORDER BY attempted_at DESC LIMIT ?)`, keep)
+	return err
+}
+
+// PruneBackupRuns removes only finished runs outside the retained history.
+// Cascading foreign keys remove their copies and verification records.
+func (s *Store) PruneBackupRuns(keep int) error {
+	keep = retentionLimit(keep)
+	_, err := s.db.Exec(`DELETE FROM backup_runs
+WHERE finished_at IS NOT NULL
+  AND id NOT IN (
+    SELECT id FROM backup_runs
+    WHERE finished_at IS NOT NULL
+    ORDER BY started_at DESC
+    LIMIT ?
+  )`, keep)
+	return err
+}
+
+// PruneStorageOperations removes expired plans outside the retained window.
+// Unexpired plans remain available for confirmation even when they are older
+// than the normal history window.
+func (s *Store) PruneStorageOperations(now time.Time, keep int) error {
+	keep = retentionLimit(keep)
+	_, err := s.db.Exec(`DELETE FROM storage_operations
+WHERE expires_at <= ?
+  AND operation_id NOT IN (
+    SELECT operation_id FROM storage_operations
+    WHERE expires_at <= ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  )`, now.UTC().Format(timeFormat), now.UTC().Format(timeFormat), keep)
+	return err
+}
+
+// PruneNetworkCheckpoints removes completed checkpoint history while keeping
+// pending/active rollback state regardless of age.
+func (s *Store) PruneNetworkCheckpoints(keep int) error {
+	keep = retentionLimit(keep)
+	_, err := s.db.Exec(`DELETE FROM network_checkpoints
+WHERE state NOT IN ('pending','active')
+  AND operation_id NOT IN (
+    SELECT operation_id FROM network_checkpoints
+    WHERE state NOT IN ('pending','active')
+    ORDER BY updated_at DESC
+    LIMIT ?
+  )`, keep)
+	return err
+}
+
+// PruneOperationalHistory applies one bounded policy to operational tables.
+// It is safe to call at startup and periodically while the daemon is running.
+func (s *Store) PruneOperationalHistory(now time.Time) error {
+	if err := s.PruneNotificationDeliveries(defaultOperationalRetention); err != nil {
+		return err
+	}
+	if err := s.PruneBackupRuns(defaultOperationalRetention); err != nil {
+		return err
+	}
+	if err := s.PruneStorageOperations(now, defaultOperationalRetention); err != nil {
+		return err
+	}
+	return s.PruneNetworkCheckpoints(defaultOperationalRetention)
+}

@@ -1,10 +1,13 @@
 package store
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/backup"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/notify"
 )
 
 func TestPruneEventsKeepsNewestWindow(t *testing.T) {
@@ -58,5 +61,95 @@ func TestEventsAfterReplaysInInsertionOrder(t *testing.T) {
 	}
 	if len(missing) != 0 {
 		t.Fatalf("missing cursor unexpectedly replayed events: %#v", missing)
+	}
+}
+
+func TestOperationalRetentionKeepsActiveAndNewestHistory(t *testing.T) {
+	database, err := Open(t.TempDir() + "/lumonas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	now := time.Now().UTC()
+	for index := 0; index < 105; index++ {
+		attempted := now.Add(-time.Duration(index) * time.Minute)
+		if err := database.SaveNotificationDelivery(notify.Delivery{ID: fmt.Sprintf("delivery-%03d", index), ChannelID: "channel", EventType: "test", State: "failed", AttemptedAt: attempted}); err != nil {
+			t.Fatal(err)
+		}
+		finished := attempted
+		started := attempted.Add(-time.Second)
+		if err := database.SaveBackupRun(backup.Run{ID: fmt.Sprintf("run-%03d", index), Trigger: "test", State: "completed", StartedAt: started, FinishedAt: &finished}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := database.db.Exec(`INSERT INTO storage_operations(operation_id,plan_hash,status,expires_at,plan_json,created_at) VALUES(?,?,?,?,?,?)`, fmt.Sprintf("operation-%03d", index), "hash", "planned", now.Add(-time.Hour).Format(timeFormat), "{}", attempted.Format(timeFormat)); err != nil {
+			t.Fatal(err)
+		}
+		if err := database.RecordNetworkCheckpoint(fmt.Sprintf("checkpoint-%03d", index), "lan", "commit"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := database.RecordNetworkCheckpoint("checkpoint-active", "lan", "pending"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.db.Exec(`INSERT INTO storage_operations(operation_id,plan_hash,status,expires_at,plan_json,created_at) VALUES(?,?,?,?,?,?)`, "operation-active", "hash", "planned", now.Add(time.Hour).Format(timeFormat), "{}", now.Add(-time.Hour).Format(timeFormat)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := database.PruneNotificationDeliveries(100); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.PruneBackupRuns(100); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.PruneStorageOperations(now, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.PruneNetworkCheckpoints(100); err != nil {
+		t.Fatal(err)
+	}
+
+	assertCount(t, database, "notification_deliveries", 100)
+	assertCount(t, database, "backup_runs", 100)
+	assertCount(t, database, "storage_operations", 101)
+	assertCount(t, database, "network_checkpoints", 101)
+	assertExists(t, database, "storage_operations", "operation-active")
+	assertExists(t, database, "network_checkpoints", "checkpoint-active")
+}
+
+func TestPruneOperationalHistoryRunsWithDefaultPolicy(t *testing.T) {
+	database, err := Open(t.TempDir() + "/lumonas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if err := database.PruneOperationalHistory(time.Now().UTC()); err != nil {
+		t.Fatalf("default operational retention failed: %v", err)
+	}
+}
+
+func assertCount(t *testing.T, database *Store, table string, want int) {
+	t.Helper()
+	var got int
+	if err := database.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("%s: expected %d rows, got %d", table, want, got)
+	}
+}
+
+func assertExists(t *testing.T, database *Store, table, id string) {
+	t.Helper()
+	var count int
+	column := "id"
+	if table == "storage_operations" || table == "network_checkpoints" {
+		column = "operation_id"
+	}
+	if err := database.db.QueryRow("SELECT COUNT(*) FROM "+table+" WHERE "+column+"=?", id).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("%s %s was pruned", table, id)
 	}
 }

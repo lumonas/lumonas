@@ -571,3 +571,13 @@ Run `scripts/disk-full-smoke.sh` on the Linux CI runner.
 
 Pass if a disposable ext4 filesystem filled beyond 95% is reported by the
 production collector as `critical`, and the gate blocks tagged publication.
+
+## AX. Operational SQLite retention
+
+Run `scripts/retention-smoke.sh`.
+
+Pass if notification deliveries, completed backup runs, expired storage
+plans, and completed network checkpoints are bounded to the configured
+history window, while active backup work, pending network rollback state, and
+unexpired storage plans remain available. The daemon must run the same policy
+at startup and periodically while serving requests.

@@ -171,6 +171,7 @@ func main() {
 	go server.backupLoop()
 	go server.upsMonitorLoop()
 	go server.scheduleLoop()
+	go server.retentionLoop()
 
 	httpServer := &http.Server{Addr: *listen, Handler: server.routes(), ReadHeaderTimeout: 5 * time.Second}
 	stop := make(chan os.Signal, 1)
