@@ -289,7 +289,8 @@ Run the privileged loopback smoke test with mergerfs and SnapRAID installed.
 
 Pass if two disposable filesystem branches form a real mergerfs pool, a file
 created through the pool is found on a backing branch, the pool unmounts
-cleanly, and `snapraid status` completes against the disposable configuration.
+cleanly, `snapraid status`, `sync`, and `scrub` complete against the
+disposable configuration, and a missing SnapRAID configuration fails closed.
 
 ## AB. Privileged IPC timeout
 

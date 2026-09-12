@@ -142,5 +142,12 @@ data d1 $WORK/branch-a
 data d2 $WORK/branch-b
 EOF
 snapraid -c "$SNAPRAID_CONFIG" status >/dev/null
+snapraid -c "$SNAPRAID_CONFIG" sync >/dev/null
+[ -s "$WORK/branch-a/snapraid.parity" ] || { echo "SnapRAID sync did not create parity data" >&2; exit 1; }
+snapraid -c "$SNAPRAID_CONFIG" scrub -p 100 >/dev/null
+if snapraid -c "$WORK/missing-snapraid.conf" scrub -p 10 >/dev/null 2>&1; then
+	echo "SnapRAID scrub unexpectedly succeeded with a missing configuration" >&2
+	exit 1
+fi
 
-echo "loopback storage smoke test passed (ext4/xfs identity, read-only import, format/erase, mergerfs pool, SnapRAID status, mismatch rejected)"
+echo "loopback storage smoke test passed (ext4/xfs identity, read-only import, format/erase, mergerfs pool, SnapRAID sync/scrub/failure, mismatch rejected)"

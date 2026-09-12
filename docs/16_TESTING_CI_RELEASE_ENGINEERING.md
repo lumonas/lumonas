@@ -315,7 +315,8 @@ identities, so the endpoint’s read-only discovery path is exercised separately
 from destructive operation tests.
 
 The release-blocking loopback job requires `mergerfs` and `snapraid` and
-exercises their real mount/status commands against disposable filesystems; it
+exercises their real mount, status, sync, and scrub commands against
+disposable filesystems, including a missing-configuration failure check; it
 does not silently fall back to mocks when either integration is unavailable.
 
 ## Release artifacts
