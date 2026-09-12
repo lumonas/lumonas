@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +17,11 @@ import (
 type notificationChannelRequest struct {
 	notify.Channel
 	Credentials notify.Credentials `json:"credentials"`
+}
+
+type notificationFailureState struct {
+	Failures        int
+	SuppressedUntil time.Time
 }
 
 func (s *apiServer) saveNotificationChannel(w http.ResponseWriter, r *http.Request) {
@@ -136,13 +142,68 @@ func (s *apiServer) testNotificationChannel(w http.ResponseWriter, r *http.Reque
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
-	if err := notify.SendWithRetry(ctx, 3, func(ctx context.Context) error { return notify.SendChannel(ctx, nil, channel, credentials, message) }); err != nil {
+	if err := notify.SendWithRetry(ctx, 3, func(ctx context.Context) error {
+		return notify.SendChannel(ctx, s.notificationClient, channel, credentials, message)
+	}); err != nil {
 		s.recordIdentityAudit(actor, "notification.channel.test", id, map[string]any{"outcome": "failed"})
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "notification test delivery failed"})
 		return
 	}
 	s.recordIdentityAudit(actor, "notification.channel.test", id, map[string]any{"outcome": "sent"})
 	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "channelId": id})
+}
+
+func (s *apiServer) listNotificationDeliveries(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	limit := 50
+	if value := r.URL.Query().Get("limit"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			limit = parsed
+		}
+	}
+	deliveries, err := s.store.NotificationDeliveries(limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, deliveries)
+}
+
+func (s *apiServer) notificationDeliveryAllowed(channelID, eventType string) bool {
+	key := channelID + "\x00" + eventType
+	now := time.Now().UTC()
+	s.notificationMu.Lock()
+	defer s.notificationMu.Unlock()
+	if state, ok := s.notificationFailures[key]; ok {
+		if now.Before(state.SuppressedUntil) {
+			return false
+		}
+		// Start a fresh failure window after suppression expires. Otherwise the
+		// next isolated failure would immediately re-suppress the channel.
+		delete(s.notificationFailures, key)
+	}
+	return true
+}
+
+func (s *apiServer) recordNotificationDeliveryFailure(channelID, eventType string, failed bool) {
+	key := channelID + "\x00" + eventType
+	s.notificationMu.Lock()
+	defer s.notificationMu.Unlock()
+	if s.notificationFailures == nil {
+		s.notificationFailures = make(map[string]notificationFailureState)
+	}
+	if !failed {
+		delete(s.notificationFailures, key)
+		return
+	}
+	state := s.notificationFailures[key]
+	state.Failures++
+	if state.Failures >= 3 {
+		state.SuppressedUntil = time.Now().UTC().Add(5 * time.Minute)
+	}
+	s.notificationFailures[key] = state
 }
 
 func (s *apiServer) saveNotificationRule(w http.ResponseWriter, r *http.Request) {

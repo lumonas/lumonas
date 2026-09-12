@@ -24,6 +24,10 @@ func testServer(t *testing.T) *apiServer {
 	// API tests should not launch asynchronous production backups after the
 	// store cleanup has started; backup scheduling has dedicated tests.
 	t.Setenv("MYNAS_AUTO_BACKUP_DISABLED", "true")
+	// API tests do not configure notification channels. Suppress the
+	// asynchronous warning delivery path so event publishing cannot outlive
+	// the SQLite store cleanup.
+	t.Setenv("MYNAS_NOTIFY_MIN_SEVERITY", "critical")
 	db, err := store.Open(t.TempDir() + "/mynas.db")
 	if err != nil {
 		t.Fatal(err)

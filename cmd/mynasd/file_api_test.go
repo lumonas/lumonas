@@ -52,9 +52,23 @@ func TestFileAPIProvidesSearchPropertiesDownloadAndDependencyConfirmation(t *tes
 	upload := httptest.NewRecorder()
 	uploadRequest := httptest.NewRequest(http.MethodPost, "/api/v1/files/upload", multipartBody)
 	uploadRequest.Header.Set("Content-Type", writer.FormDataContentType())
+	uploadRequest.Header.Set("Idempotency-Key", "upload-report-1")
 	server.routes().ServeHTTP(upload, uploadRequest)
 	if upload.Code != http.StatusAccepted || !strings.Contains(upload.Body.String(), "uploaded.txt") {
 		t.Fatalf("multipart upload failed: %d %s", upload.Code, upload.Body.String())
+	}
+	var firstUpload struct {
+		JobID string `json:"jobId"`
+	}
+	if err := json.NewDecoder(upload.Body).Decode(&firstUpload); err != nil || firstUpload.JobID == "" {
+		t.Fatalf("unexpected upload response: %#v err=%v", firstUpload, err)
+	}
+	retry := httptest.NewRecorder()
+	retryRequest := httptest.NewRequest(http.MethodPost, "/api/v1/files/upload", nil)
+	retryRequest.Header.Set("Idempotency-Key", "upload-report-1")
+	server.routes().ServeHTTP(retry, retryRequest)
+	if retry.Code != http.StatusOK || !strings.Contains(retry.Body.String(), firstUpload.JobID) {
+		t.Fatalf("upload retry was not idempotent: %d %s", retry.Code, retry.Body.String())
 	}
 
 	t.Setenv("MYNAS_DOCKER_APPDATA_ROOT", root)
@@ -65,8 +79,25 @@ func TestFileAPIProvidesSearchPropertiesDownloadAndDependencyConfirmation(t *tes
 	}
 	confirmed := httptest.NewRecorder()
 	server.routes().ServeHTTP(confirmed, httptest.NewRequest(http.MethodPost, "/api/v1/files/delete", strings.NewReader(`{"shareId":"share-search","path":"/","names":["report.txt"],"confirmDependencies":true}`)))
-	if confirmed.Code != http.StatusOK {
+	if confirmed.Code != http.StatusAccepted {
 		t.Fatalf("confirmed delete failed: %d %s", confirmed.Code, confirmed.Body.String())
+	}
+	var confirmedJob struct {
+		JobID string `json:"jobId"`
+	}
+	if err := json.NewDecoder(confirmed.Body).Decode(&confirmedJob); err != nil || confirmedJob.JobID == "" {
+		t.Fatalf("unexpected confirmed delete response: %#v err=%v", confirmedJob, err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		value, err := server.store.Job(confirmedJob.JobID)
+		if err == nil && (value.State == "successful" || value.State == "failed") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if value, err := server.store.Job(confirmedJob.JobID); err != nil || value.State != "successful" {
+		t.Fatalf("confirmed delete job did not complete: %#v err=%v", value, err)
 	}
 }
 
@@ -107,8 +138,25 @@ func TestFileAPIUsesShareRootAndRecycleBin(t *testing.T) {
 
 	remove := httptest.NewRecorder()
 	server.routes().ServeHTTP(remove, httptest.NewRequest(http.MethodPost, "/api/v1/files/delete", strings.NewReader(`{"shareId":"share-files","path":"/Documents","names":["notes.txt"]}`)))
-	if remove.Code != http.StatusOK || !strings.Contains(remove.Body.String(), `"deleted":1`) {
+	if remove.Code != http.StatusAccepted || !strings.Contains(remove.Body.String(), `"jobId"`) {
 		t.Fatalf("delete failed: %d %s", remove.Code, remove.Body.String())
+	}
+	var removeJob struct {
+		JobID string `json:"jobId"`
+	}
+	if err := json.NewDecoder(remove.Body).Decode(&removeJob); err != nil || removeJob.JobID == "" {
+		t.Fatalf("unexpected delete response: %#v err=%v", removeJob, err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		value, err := server.store.Job(removeJob.JobID)
+		if err == nil && (value.State == "successful" || value.State == "failed") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if value, err := server.store.Job(removeJob.JobID); err != nil || value.State != "successful" {
+		t.Fatalf("delete job did not complete: %#v err=%v", value, err)
 	}
 
 	bin := httptest.NewRecorder()

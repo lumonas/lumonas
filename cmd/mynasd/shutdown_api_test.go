@@ -55,3 +55,13 @@ func TestUPSPolicyIsPersistedAndValidated(t *testing.T) {
 		t.Fatalf("unexpected persisted UPS policy %d: %s", readback.Code, readback.Body.String())
 	}
 }
+
+func TestPowerActionRequiresAdministrativeIdentity(t *testing.T) {
+	server := testServer(t)
+	server.authRequired = true
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/power/action", strings.NewReader(`{"action":"reboot","reauthenticated":true}`)))
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected power action auth gate, got %d: %s", response.Code, response.Body.String())
+	}
+}

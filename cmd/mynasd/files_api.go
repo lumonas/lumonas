@@ -15,8 +15,9 @@ import (
 )
 
 type filePathRequest struct {
-	ShareID string `json:"shareId"`
-	Path    string `json:"path"`
+	ShareID            string `json:"shareId"`
+	Path               string `json:"path"`
+	ExpectedGeneration *int64 `json:"expectedGeneration"`
 }
 
 type fileJobTask func() (map[string]any, error)
@@ -121,6 +122,9 @@ func (s *apiServer) makeDirectory(w http.ResponseWriter, r *http.Request) {
 	if !decodeFileJSON(w, r, &input) {
 		return
 	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
+		return
+	}
 	share, err := s.fileShare(input.ShareID)
 	if err == nil {
 		err = fileops.MakeDir(share.Path, input.Path, input.Name)
@@ -147,6 +151,9 @@ func (s *apiServer) renameFile(w http.ResponseWriter, r *http.Request) {
 	if !decodeFileJSON(w, r, &input) {
 		return
 	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
+		return
+	}
 	share, err := s.fileShare(input.ShareID)
 	if err == nil {
 		err = fileops.Rename(share.Path, input.Path, input.OldName, input.NewName)
@@ -165,12 +172,19 @@ func (s *apiServer) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	idempotencyKey, replayed := s.fileJobIdempotency(w, r, "file.delete")
+	if replayed {
+		return
+	}
 	var input struct {
 		filePathRequest
 		Names               []string `json:"names"`
 		ConfirmDependencies bool     `json:"confirmDependencies"`
 	}
 	if !decodeFileJSON(w, r, &input) {
+		return
+	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
 		return
 	}
 	share, err := s.fileShare(input.ShareID)
@@ -182,14 +196,16 @@ func (s *apiServer) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "explicit confirmation is required before deleting Docker appdata", "dependencyWarning": warning})
 		return
 	}
-	deleted, err := fileops.Delete(share.Path, share.ID, input.Path, input.Names)
-	if err != nil {
-		writeFileError(w, err)
-		return
-	}
-	s.recordIdentityAudit(actor, "file.delete", share.ID, map[string]any{"path": input.Path, "deleted": deleted})
-	s.publish("file.changed", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"operation": "delete", "path": input.Path, "deleted": deleted})
-	writeJSON(w, http.StatusOK, map[string]int{"deleted": deleted})
+	job := s.queueFileJob("delete files", share.ID, func() (map[string]any, error) {
+		deleted, err := fileops.Delete(share.Path, share.ID, input.Path, input.Names)
+		if err == nil {
+			s.publish("file.changed", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"operation": "delete", "path": input.Path, "deleted": deleted})
+		}
+		return map[string]any{"deleted": deleted}, err
+	})
+	s.recordIdentityAudit(actor, "file.delete.queued", share.ID, map[string]any{"jobId": job.ID, "path": input.Path, "count": len(input.Names)})
+	s.rememberFileJob("file.delete", idempotencyKey, job.ID)
+	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "deleted": 0})
 }
 
 func (s *apiServer) transferFiles(w http.ResponseWriter, r *http.Request) {
@@ -197,16 +213,24 @@ func (s *apiServer) transferFiles(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	idempotencyKey, replayed := s.fileJobIdempotency(w, r, "file.transfer")
+	if replayed {
+		return
+	}
 	var input struct {
-		ShareID       string   `json:"shareId"`
-		SourcePath    string   `json:"sourcePath"`
-		Names         []string `json:"names"`
-		TargetShareID string   `json:"targetShareId"`
-		TargetPath    string   `json:"targetPath"`
-		Operation     string   `json:"op"`
-		Conflict      string   `json:"conflict"`
+		ShareID            string   `json:"shareId"`
+		SourcePath         string   `json:"sourcePath"`
+		Names              []string `json:"names"`
+		TargetShareID      string   `json:"targetShareId"`
+		TargetPath         string   `json:"targetPath"`
+		Operation          string   `json:"op"`
+		Conflict           string   `json:"conflict"`
+		ExpectedGeneration *int64   `json:"expectedGeneration"`
 	}
 	if !decodeFileJSON(w, r, &input) {
+		return
+	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
 		return
 	}
 	if input.Operation != "copy" && input.Operation != "move" {
@@ -245,12 +269,17 @@ func (s *apiServer) transferFiles(w http.ResponseWriter, r *http.Request) {
 		return map[string]any{"transferred": count, "strategy": strategy}, err
 	})
 	s.recordIdentityAudit(actor, "file.transfer.queued", target.ID, map[string]any{"jobId": job.ID, "operation": input.Operation, "strategy": strategy, "count": len(input.Names)})
+	s.rememberFileJob("file.transfer", idempotencyKey, job.ID)
 	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "transferred": 0, "strategy": strategy})
 }
 
 func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 	actor, ok := s.identityActor(w, r, true)
 	if !ok {
+		return
+	}
+	idempotencyKey, replayed := s.fileJobIdempotency(w, r, "file.upload")
+	if replayed {
 		return
 	}
 	var input struct {
@@ -286,10 +315,14 @@ func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 		job := s.queueFileJob("upload file", share.ID, func() (map[string]any, error) { return map[string]any{"name": name, "sizeBytes": input.SizeBytes}, nil })
 		s.recordIdentityAudit(actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
+		s.rememberFileJob("file.upload", idempotencyKey, job.ID)
 		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "name": name})
 		return
 	}
 	if !decodeFileJSON(w, r, &input) {
+		return
+	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
 		return
 	}
 	share, err := s.fileShare(input.ShareID)
@@ -306,6 +339,7 @@ func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 		return map[string]any{"name": name, "sizeBytes": input.SizeBytes}, nil
 	})
 	s.recordIdentityAudit(actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
+	s.rememberFileJob("file.upload", idempotencyKey, job.ID)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "name": name})
 }
 
@@ -497,6 +531,30 @@ func writeFileError(w http.ResponseWriter, err error) {
 }
 
 func float64Ptr(value float64) *float64 { return &value }
+
+func (s *apiServer) fileJobIdempotency(w http.ResponseWriter, r *http.Request, scope string) (string, bool) {
+	key, err := requestIdempotencyKey(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return "", true
+	}
+	if key == "" {
+		return "", false
+	}
+	if jobID, found := s.store.Meta(idempotencyMetaKey(scope, key)); found {
+		if job, jobErr := s.store.Job(jobID); jobErr == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"jobId": job.ID, "state": job.State})
+			return key, true
+		}
+	}
+	return key, false
+}
+
+func (s *apiServer) rememberFileJob(scope, key, jobID string) {
+	if key != "" {
+		_ = s.store.SetMeta(idempotencyMetaKey(scope, key), jobID)
+	}
+}
 
 func fileEntryType(info os.FileInfo) string {
 	if info.IsDir() {

@@ -38,19 +38,22 @@ import (
 )
 
 type apiServer struct {
-	store         *store.Store
-	hub           *events.Hub
-	log           *slog.Logger
-	jobsMu        sync.Mutex
-	version       string
-	diskFunc      func() ([]model.Disk, error)
-	authRequired  bool
-	dockerService dockerruntime.Service
-	catalogFile   string
-	alertMu       sync.Mutex
-	acknowledged  map[string]bool
-	safetyMu      sync.Mutex
-	safetyUntil   time.Time
+	store                *store.Store
+	hub                  *events.Hub
+	log                  *slog.Logger
+	jobsMu               sync.Mutex
+	version              string
+	diskFunc             func() ([]model.Disk, error)
+	authRequired         bool
+	dockerService        dockerruntime.Service
+	catalogFile          string
+	alertMu              sync.Mutex
+	acknowledged         map[string]bool
+	notificationMu       sync.Mutex
+	notificationFailures map[string]notificationFailureState
+	notificationClient   *http.Client
+	safetyMu             sync.Mutex
+	safetyUntil          time.Time
 }
 
 var version = "0.1.0-dev"
@@ -270,6 +273,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.saveNotificationRule(w, r)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/notification-rules/"):
 		s.updateAlertRule(w, r, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/notification-deliveries":
+		s.listNotificationDeliveries(w, r)
 	case r.Method == http.MethodGet && endpoint == "/schedules":
 		s.schedules(w)
 	case r.Method == http.MethodGet && endpoint == "/activity":
@@ -1078,6 +1083,10 @@ func (s *apiServer) ups(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		Action          string `json:"action"`
 		Reauthenticated bool   `json:"reauthenticated"`
@@ -1104,6 +1113,7 @@ func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
 		return
 	}
+	s.recordIdentityAudit(actor, "power.action", operationID, map[string]any{"action": input.Action})
 	s.publish("power.action", "critical", nil, map[string]any{"operationId": operationID, "action": input.Action})
 	writeJSON(w, http.StatusAccepted, result)
 }
@@ -1966,6 +1976,11 @@ func (s *apiServer) sendConfiguredNotifications(eventType, severity string, mess
 		if !channel.Enabled || channel.Type == "web" || (len(routes) > 0 && !routes[channel.ID] && !routes[channel.Type] && !routes["*"] && !routes["all"]) {
 			continue
 		}
+		deliveryID := newID("notification-delivery")
+		if !s.notificationDeliveryAllowed(channel.ID, eventType) {
+			_ = s.store.SaveNotificationDelivery(notify.Delivery{ID: deliveryID, ChannelID: channel.ID, EventType: eventType, State: "suppressed", AttemptedAt: time.Now().UTC(), Error: "temporarily suppressed after repeated delivery failures"})
+			continue
+		}
 		_, credentials, credentialErr := s.store.NotificationChannel(channel.ID, key)
 		if credentialErr != nil {
 			if s.log != nil {
@@ -1973,14 +1988,21 @@ func (s *apiServer) sendConfiguredNotifications(eventType, severity string, mess
 			}
 			continue
 		}
-		go func() {
+		go func(channel notify.Channel, credentials notify.Credentials, deliveryID string) {
 			err := notify.SendWithRetry(context.Background(), 3, func(ctx context.Context) error {
 				return notify.SendChannel(ctx, nil, channel, credentials, message)
 			})
+			state := "sent"
+			failure := false
+			if err != nil {
+				state, failure = "failed", true
+			}
+			_ = s.store.SaveNotificationDelivery(notify.Delivery{ID: deliveryID, ChannelID: channel.ID, EventType: eventType, State: state, AttemptedAt: time.Now().UTC(), Error: notificationDeliveryError(err)})
+			s.recordNotificationDeliveryFailure(channel.ID, eventType, failure)
 			if err != nil && s.log != nil {
 				s.log.Warn("notification delivery failed", "channel", channel.ID, "event", message.Title, "error", err)
 			}
-		}()
+		}(channel, credentials, deliveryID)
 	}
 	legacy := notify.Sender{Config: notify.Config{WebhookURL: os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL"), NtfyURL: os.Getenv("MYNAS_NOTIFY_NTFY_URL")}, UserAgent: "LumoNAS/" + s.version}
 	if legacy.Config.WebhookURL != "" || legacy.Config.NtfyURL != "" {
@@ -1988,6 +2010,13 @@ func (s *apiServer) sendConfiguredNotifications(eventType, severity string, mess
 			s.log.Warn("legacy notification delivery failed", "event", message.Title, "error", err)
 		}
 	}
+}
+
+func notificationDeliveryError(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 func (s *apiServer) notificationRoutes(eventType, severity string) map[string]bool {

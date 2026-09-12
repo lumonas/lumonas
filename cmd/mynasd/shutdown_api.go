@@ -60,6 +60,9 @@ func (s *apiServer) upsMonitorLoop() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
+		if s.maintenanceModeEnabled() {
+			continue
+		}
 		if !s.autoShutdownPolicy().Enabled {
 			continue
 		}
@@ -73,6 +76,22 @@ func (s *apiServer) upsMonitorLoop() {
 		}
 		cancel()
 	}
+}
+
+func (s *apiServer) maintenanceModeEnabled() bool {
+	settings, err := s.loadSettings()
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("maintenance mode lookup failed", "error", err)
+		}
+		return false
+	}
+	powerSettings, ok := settings["power"].(map[string]any)
+	if !ok {
+		return false
+	}
+	enabled, _ := powerSettings["maintenanceMode"].(bool)
+	return enabled
 }
 
 func (s *apiServer) requestUPSShutdown(upsName string) {

@@ -31,6 +31,15 @@ type Credentials struct {
 	Address  string `json:"address,omitempty"`
 }
 
+type Delivery struct {
+	ID          string    `json:"id"`
+	ChannelID   string    `json:"channelId"`
+	EventType   string    `json:"eventType"`
+	State       string    `json:"state"`
+	AttemptedAt time.Time `json:"attemptedAt"`
+	Error       string    `json:"error,omitempty"`
+}
+
 var channelTypes = map[string]bool{"webhook": true, "ntfy": true, "telegram": true, "slack": true, "discord": true, "gotify": true, "smtp": true}
 
 func (c Channel) Validate() error {

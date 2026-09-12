@@ -17,7 +17,12 @@ CREATE TABLE IF NOT EXISTS notification_channels (
   credentials_ciphertext BLOB,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
-);`
+);
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+  id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, event_type TEXT NOT NULL,
+  state TEXT NOT NULL, attempted_at TEXT NOT NULL, error TEXT
+);
+CREATE INDEX IF NOT EXISTS notification_deliveries_attempted_idx ON notification_deliveries(attempted_at);`
 
 func (s *Store) ensureNotificationSchema() error {
 	_, err := s.db.Exec(notificationSchema)
@@ -98,6 +103,48 @@ func (s *Store) DeleteNotificationChannel(id string) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (s *Store) SaveNotificationDelivery(value notify.Delivery) error {
+	if value.ID == "" || value.ChannelID == "" || value.EventType == "" || value.State == "" {
+		return sql.ErrNoRows
+	}
+	if err := s.ensureNotificationSchema(); err != nil {
+		return err
+	}
+	if value.AttemptedAt.IsZero() {
+		value.AttemptedAt = time.Now().UTC()
+	}
+	_, err := s.db.Exec(`INSERT INTO notification_deliveries(id,channel_id,event_type,state,attempted_at,error) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,attempted_at=excluded.attempted_at,error=excluded.error`, value.ID, value.ChannelID, value.EventType, value.State, value.AttemptedAt.Format(timeFormat), nullable(value.Error))
+	return err
+}
+
+func (s *Store) NotificationDeliveries(limit int) ([]notify.Delivery, error) {
+	if err := s.ensureNotificationSchema(); err != nil {
+		return nil, err
+	}
+	if limit < 1 || limit > 500 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`SELECT id,channel_id,event_type,state,attempted_at,COALESCE(error,'') FROM notification_deliveries ORDER BY attempted_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]notify.Delivery, 0)
+	for rows.Next() {
+		var value notify.Delivery
+		var attempted string
+		if err := rows.Scan(&value.ID, &value.ChannelID, &value.EventType, &value.State, &attempted, &value.Error); err != nil {
+			return nil, err
+		}
+		value.AttemptedAt, err = time.Parse(timeFormat, attempted)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, value)
+	}
+	return result, rows.Err()
 }
 
 type notificationScanner interface {
