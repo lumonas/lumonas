@@ -232,11 +232,11 @@ func netInterfaceMetrics(now time.Time) []model.NetInterfaceMetrics {
 			continue
 		}
 		m := model.NetInterfaceMetrics{
-			Interface: name,
-			Up:        upMap[name],
-			ErrorsIn:  e.errsIn,
-			ErrorsOut: e.errsOut,
-			DroppedIn: e.dropIn,
+			Interface:  name,
+			Up:         upMap[name],
+			ErrorsIn:   e.errsIn,
+			ErrorsOut:  e.errsOut,
+			DroppedIn:  e.dropIn,
 			DroppedOut: e.dropOut,
 		}
 		prev, ok := metricState.ifaces[name]
@@ -257,9 +257,9 @@ func netInterfaceMetrics(now time.Time) []model.NetInterfaceMetrics {
 }
 
 type netDevEntry struct {
-	rx, tx             uint64
-	errsIn, errsOut    uint64
-	dropIn, dropOut    uint64
+	rx, tx          uint64
+	errsIn, errsOut uint64
+	dropIn, dropOut uint64
 }
 
 func parseAllNetDev(data string) map[string]netDevEntry {

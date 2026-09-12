@@ -100,9 +100,9 @@ func TestRenderWireGuardConfig(t *testing.T) {
 		DNS:        []string{"1.1.1.1"},
 		Peers: []WireGuardPeer{
 			{
-				PublicKey:       "pub456",
-				Endpoint:        "1.2.3.4:51820",
-				AllowedIPs:      []string{"10.0.0.2/32"},
+				PublicKey:           "pub456",
+				Endpoint:            "1.2.3.4:51820",
+				AllowedIPs:          []string{"10.0.0.2/32"},
 				PersistentKeepalive: 25,
 			},
 		},

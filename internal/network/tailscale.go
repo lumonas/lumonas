@@ -9,18 +9,18 @@ import (
 )
 
 type TailscaleStatus struct {
-	Running    bool   `json:"running"`
-	Connected  bool   `json:"connected"`
-	Health     string `json:"health,omitempty"`
-	BackendState string `json:"backendState"`
-	Version    string `json:"version,omitempty"`
-	TailscaleIP4 string `json:"tailscaleIp4,omitempty"`
-	TailscaleIP6 string `json:"tailscaleIp6,omitempty"`
-	HostName   string `json:"hostName"`
-	MagicDNSSuffix string `json:"magicDnsSuffix,omitempty"`
-	ExitNode   string `json:"exitNode,omitempty"`
-	ExitNodeAllow bool  `json:"exitNodeAllow"`
-	SubnetRoutes []string `json:"subnetRoutes"`
+	Running        bool     `json:"running"`
+	Connected      bool     `json:"connected"`
+	Health         string   `json:"health,omitempty"`
+	BackendState   string   `json:"backendState"`
+	Version        string   `json:"version,omitempty"`
+	TailscaleIP4   string   `json:"tailscaleIp4,omitempty"`
+	TailscaleIP6   string   `json:"tailscaleIp6,omitempty"`
+	HostName       string   `json:"hostName"`
+	MagicDNSSuffix string   `json:"magicDnsSuffix,omitempty"`
+	ExitNode       string   `json:"exitNode,omitempty"`
+	ExitNodeAllow  bool     `json:"exitNodeAllow"`
+	SubnetRoutes   []string `json:"subnetRoutes"`
 }
 
 type TailscalePeer struct {

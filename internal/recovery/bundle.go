@@ -25,14 +25,14 @@ import (
 const FormatVersion = 1
 
 type Manifest struct {
-	FormatVersion int               `json:"formatVersion"`
-	ConfigSchema  int               `json:"configSchema"`
-	LumoNASVersion  string            `json:"lumonasVersion"`
-	NASUUID       string            `json:"nasUuid"`
-	Generation    int64             `json:"generation"`
-	CreatedAt     time.Time         `json:"createdAt"`
-	DiskIDs       []string          `json:"diskIds"`
-	Checksums     map[string]string `json:"checksums"`
+	FormatVersion  int               `json:"formatVersion"`
+	ConfigSchema   int               `json:"configSchema"`
+	LumoNASVersion string            `json:"lumonasVersion"`
+	NASUUID        string            `json:"nasUuid"`
+	Generation     int64             `json:"generation"`
+	CreatedAt      time.Time         `json:"createdAt"`
+	DiskIDs        []string          `json:"diskIds"`
+	Checksums      map[string]string `json:"checksums"`
 }
 
 type Input struct {

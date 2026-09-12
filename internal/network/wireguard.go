@@ -9,30 +9,30 @@ import (
 )
 
 type WireGuardPeer struct {
-	PublicKey    string   `json:"publicKey"`
-	PresharedKey string   `json:"presharedKey,omitempty"`
-	Endpoint     string   `json:"endpoint,omitempty"`
-	AllowedIPs   []string `json:"allowedIps"`
-	PersistentKeepalive int `json:"persistentKeepalive"`
+	PublicKey           string   `json:"publicKey"`
+	PresharedKey        string   `json:"presharedKey,omitempty"`
+	Endpoint            string   `json:"endpoint,omitempty"`
+	AllowedIPs          []string `json:"allowedIps"`
+	PersistentKeepalive int      `json:"persistentKeepalive"`
 }
 
 type WireGuardConfig struct {
-	Interface   string            `json:"interface"`
-	PrivateKey  string            `json:"privateKey,omitempty"`
-	Address     []string          `json:"address"`
-	ListenPort  int               `json:"listenPort"`
-	DNS         []string          `json:"dns,omitempty"`
-	Peers       []WireGuardPeer   `json:"peers"`
-	PostUp      string            `json:"postUp,omitempty"`
-	PostDown    string            `json:"postDown,omitempty"`
+	Interface  string          `json:"interface"`
+	PrivateKey string          `json:"privateKey,omitempty"`
+	Address    []string        `json:"address"`
+	ListenPort int             `json:"listenPort"`
+	DNS        []string        `json:"dns,omitempty"`
+	Peers      []WireGuardPeer `json:"peers"`
+	PostUp     string          `json:"postUp,omitempty"`
+	PostDown   string          `json:"postDown,omitempty"`
 }
 
 type WireGuardStatus struct {
-	Interface string `json:"interface"`
-	IP        string `json:"ip"`
-	ListenPort int  `json:"listenPort"`
-	Peers     int    `json:"peers"`
-	Connected bool   `json:"connected"`
+	Interface  string `json:"interface"`
+	IP         string `json:"ip"`
+	ListenPort int    `json:"listenPort"`
+	Peers      int    `json:"peers"`
+	Connected  bool   `json:"connected"`
 }
 
 func GenerateWireGuardKeyPair() (string, string, error) {
