@@ -42,6 +42,10 @@ Pass if:
 - individual files remain on normal backing disks;
 - pool persists across reboot/device-letter reorder.
 
+The QEMU release smoke compares stable identity metadata independently of
+`currentPath` and requires at least one changed transient path; a stable
+sorted list of IDs alone is insufficient.
+
 ## D. SnapRAID protection
 
 If the privileged configuration step fails or a disk identity is stale,

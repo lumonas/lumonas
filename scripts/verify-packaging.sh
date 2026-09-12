@@ -65,6 +65,8 @@ require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_WEB_LISTEN=0.0.0.0:8081'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_ENABLE_RECOVERY_SMOKE'
 require_line "$ROOT/scripts/qemu-smoke.sh" '<title>LumoNAS</title>'
 require_line "$ROOT/scripts/qemu-smoke.sh" '<div id="root"></div>'
+require_line "$ROOT/scripts/qemu-smoke.sh" 'snapshot_disk_identities'
+require_line "$ROOT/scripts/qemu-smoke.sh" 'device reorder did not change any transient device path'
 for worker in storage network power general; do
   require_line "$ROOT/scripts/qemu-smoke.sh" "lumonas-privd-$worker.service"
 done

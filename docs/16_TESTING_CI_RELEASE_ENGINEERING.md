@@ -166,6 +166,11 @@ state event. The restart probe is assertion-required in Ubuntu CI; macOS
 development runs without Linux block-device discovery and reports that
 disk-dependent probe as skipped.
 
+The QEMU reorder assertion compares each disk's stable identity tuple (ID,
+serial, WWN/UUID fields, and capacity) independently of `currentPath`, then
+requires at least one transient device path to change after the virtual disk
+order is rearranged.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until

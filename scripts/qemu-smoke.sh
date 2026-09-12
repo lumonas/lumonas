@@ -26,6 +26,11 @@ if ! command -v qemu-img >/dev/null 2>&1; then
   exit 1
 fi
 
+if [ "$ASSERT_MODE" = "true" ] && ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required for QEMU disk identity assertions" >&2
+  exit 1
+fi
+
 DATA_DIR="${LUMONAS_QEMU_DATA_DIR:-/tmp/lumonas-qemu-disks}"
 mkdir -p "$DATA_DIR"
 for disk in data1 data2 data3 parity; do
@@ -59,6 +64,29 @@ qemu-system-x86_64 \
   -nographic \
   -serial mon:stdio \
   -no-reboot
+}
+
+snapshot_disk_identities() {
+  input=$1
+  output=$2
+  python3 - "$input" "$output" <<'PY'
+import json
+import sys
+
+input_path, output_path = sys.argv[1:]
+with open(input_path, encoding="utf-8") as handle:
+    disks = json.load(handle)
+
+fields = ("id", "serial", "wwn", "gptDiskGuid", "partitionUuid", "filesystemUuid", "sizeBytes")
+rows = []
+for disk in disks:
+    identity = {field: disk.get(field, "") for field in fields}
+    rows.append((json.dumps(identity, sort_keys=True, separators=(",", ":")), disk.get("currentPath", "")))
+
+with open(output_path, "w", encoding="utf-8") as handle:
+    for identity, current_path in sorted(rows):
+        handle.write(f"{identity}\t{current_path}\n")
+PY
 }
 
 if [ "$ASSERT_MODE" != "true" ]; then
@@ -113,7 +141,7 @@ for attempt in $(seq 1 60); do
          grep -F '"verified":true' "$RECOVERY_STATUS_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_PLAN_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_STAGE_LOG" >/dev/null 2>&1; then
-        printf '%s\n' "$(grep -o '"id":"[^"]*"' "$LOG.disks" | sort)" >"$LOG.ids.initial"
+        snapshot_disk_identities "$LOG.disks" "$LOG.identities.initial"
         kill "$QEMU_PID" 2>/dev/null || true
         wait "$QEMU_PID" 2>/dev/null || true
         LUMONAS_QEMU_REORDER=true run_qemu >"$LOG.reordered" 2>&1 &
@@ -121,9 +149,17 @@ for attempt in $(seq 1 60); do
         for reorder_attempt in $(seq 1 60); do
           if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
              curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null; then
-            printf '%s\n' "$(grep -o '"id":"[^"]*"' "$LOG.disks.reordered" | sort)" >"$LOG.ids.reordered"
+            snapshot_disk_identities "$LOG.disks.reordered" "$LOG.identities.reordered"
+            cut -f1 "$LOG.identities.initial" >"$LOG.ids.initial"
+            cut -f1 "$LOG.identities.reordered" >"$LOG.ids.reordered"
+            cut -f2 "$LOG.identities.initial" >"$LOG.paths.initial"
+            cut -f2 "$LOG.identities.reordered" >"$LOG.paths.reordered"
             if cmp -s "$LOG.ids.initial" "$LOG.ids.reordered"; then
-              echo "QEMU appliance smoke test passed (disks=$disk_count, recovery=verified, reorder=verified)"
+              if cmp -s "$LOG.paths.initial" "$LOG.paths.reordered"; then
+                echo "QEMU appliance device reorder did not change any transient device path" >&2
+                exit 1
+              fi
+              echo "QEMU appliance smoke test passed (disks=$disk_count, recovery=verified, stable identities=verified, reorder=verified)"
               exit 0
             fi
           fi
