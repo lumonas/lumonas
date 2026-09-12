@@ -46,3 +46,25 @@ func TestNotificationRoutingHonorsSeverityAndCategoryRoutes(t *testing.T) {
 		t.Fatalf("disk route leaked into Docker event: %#v", routes)
 	}
 }
+
+func TestNotificationChannelSendTestUsesEncryptedChannelCredentials(t *testing.T) {
+	server := testServer(t)
+	t.Setenv("MYNAS_RECOVERY_KEY", "notification-test-key")
+	var received bool
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = r.Method == http.MethodPost
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer provider.Close()
+
+	save := httptest.NewRecorder()
+	server.routes().ServeHTTP(save, httptest.NewRequest(http.MethodPost, "/api/v1/notification-channels", strings.NewReader(`{"id":"channel-test","type":"webhook","label":"Test","target":"`+provider.URL+`","enabled":true,"credentials":{"token":"not-returned"}}`)))
+	if save.Code != http.StatusOK {
+		t.Fatalf("channel save failed: %d %s", save.Code, save.Body.String())
+	}
+	test := httptest.NewRecorder()
+	server.routes().ServeHTTP(test, httptest.NewRequest(http.MethodPost, "/api/v1/notification-channels/channel-test/test", strings.NewReader(`{"title":"hello","body":"world"}`)))
+	if test.Code != http.StatusOK || !strings.Contains(test.Body.String(), `"sent":true`) || !received {
+		t.Fatalf("channel test failed: %d %s received=%v", test.Code, test.Body.String(), received)
+	}
+}

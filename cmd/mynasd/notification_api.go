@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/lumonas/lumonas/internal/monitoring"
 	"github.com/lumonas/lumonas/internal/notify"
@@ -107,6 +109,40 @@ func (s *apiServer) deleteNotificationChannel(w http.ResponseWriter, r *http.Req
 	s.recordIdentityAudit(actor, "notification.channel.delete", id, nil)
 	s.advanceGeneration("notification.channel.delete")
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *apiServer) testNotificationChannel(w http.ResponseWriter, r *http.Request, id string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	key := []byte(s.recoveryKeyString())
+	channel, credentials, err := s.store.NotificationChannel(id, key)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "notification channel not found or credentials unavailable"})
+		return
+	}
+	message := notify.Message{Title: "LumoNAS test notification", Body: "This is a test notification from LumoNAS.", Severity: "info"}
+	if r.Body != nil {
+		var requested notify.Message
+		if err := json.NewDecoder(r.Body).Decode(&requested); err == nil {
+			if strings.TrimSpace(requested.Title) != "" {
+				message.Title = requested.Title
+			}
+			if strings.TrimSpace(requested.Body) != "" {
+				message.Body = requested.Body
+			}
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	if err := notify.SendWithRetry(ctx, 3, func(ctx context.Context) error { return notify.SendChannel(ctx, nil, channel, credentials, message) }); err != nil {
+		s.recordIdentityAudit(actor, "notification.channel.test", id, map[string]any{"outcome": "failed"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "notification test delivery failed"})
+		return
+	}
+	s.recordIdentityAudit(actor, "notification.channel.test", id, map[string]any{"outcome": "sent"})
+	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "channelId": id})
 }
 
 func (s *apiServer) saveNotificationRule(w http.ResponseWriter, r *http.Request) {

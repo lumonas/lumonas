@@ -258,6 +258,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.listNotificationChannels(w, r)
 	case r.Method == http.MethodPost && endpoint == "/notification-channels":
 		s.saveNotificationChannel(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/notification-channels/") && strings.HasSuffix(endpoint, "/test"):
+		s.testNotificationChannel(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/notification-channels/"):
 		s.updateNotificationChannel(w, r, path.Base(endpoint))
 	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/notification-channels/"):
@@ -1343,6 +1345,10 @@ func (s *apiServer) audit(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) notificationTest(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input notify.Message
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -1353,7 +1359,7 @@ func (s *apiServer) notificationTest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	_ = s.store.SaveAudit(store.AuditEntry{Actor: "admin", Action: "notification.test", Outcome: "sent", Metadata: map[string]any{"severity": input.Severity}})
+	_ = s.store.SaveAudit(store.AuditEntry{Actor: actor, Action: "notification.test", Outcome: "sent", Metadata: map[string]any{"severity": input.Severity}})
 	writeJSON(w, http.StatusNoContent, nil)
 }
 
