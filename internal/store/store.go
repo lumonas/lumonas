@@ -214,6 +214,14 @@ func (s *Store) Audit(limit int) ([]AuditEntry, error) {
 	return result, rows.Err()
 }
 
+func (s *Store) PruneAudit(keep int) error {
+	if keep < 100 {
+		keep = 100
+	}
+	_, err := s.db.Exec(`DELETE FROM audit_log WHERE id NOT IN (SELECT id FROM audit_log ORDER BY timestamp DESC LIMIT ?)`, keep)
+	return err
+}
+
 func (s *Store) Jobs() ([]model.Job, error) {
 	rows, err := s.db.Query(`SELECT id,type,title,COALESCE(resource_id,''),state,progress,COALESCE(stage,''),created_at,started_at,finished_at,COALESCE(error,'') FROM jobs ORDER BY created_at DESC`)
 	if err != nil {

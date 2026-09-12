@@ -1347,13 +1347,18 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 			s.log.Warn("prune events failed", "error", err)
 		}
 	}
-	entry := store.AuditEntry{Actor: "system", Action: kind, Outcome: "recorded", Metadata: data}
-	if resource != nil {
-		entry.ResourceType, entry.ResourceID = resource.Type, resource.ID
-	}
-	if err := s.store.SaveAudit(entry); err != nil {
-		if s.log != nil {
-			s.log.Warn("persist audit entry failed", "error", err)
+	if auditableEvent(kind) {
+		entry := store.AuditEntry{Actor: "system", Action: kind, Outcome: "recorded", Metadata: data}
+		if resource != nil {
+			entry.ResourceType, entry.ResourceID = resource.Type, resource.ID
+		}
+		if err := s.store.SaveAudit(entry); err != nil {
+			if s.log != nil {
+				s.log.Warn("persist audit entry failed", "error", err)
+			}
+		}
+		if err := s.store.PruneAudit(10000); err != nil && s.log != nil {
+			s.log.Warn("prune audit entries failed", "error", err)
 		}
 	}
 	if notify.ShouldSend(envOr("MYNAS_NOTIFY_MIN_SEVERITY", "warning"), severity) && (os.Getenv("MYNAS_NOTIFY_WEBHOOK_URL") != "" || os.Getenv("MYNAS_NOTIFY_NTFY_URL") != "") {
@@ -1366,6 +1371,15 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 		}()
 	}
 	s.hub.Publish(event)
+}
+
+func auditableEvent(kind string) bool {
+	switch kind {
+	case "system.metrics", "docker.log.line", "docker.container.metrics", "job.progress":
+		return false
+	default:
+		return true
+	}
 }
 
 func requestMiddleware(next http.Handler) http.Handler {
