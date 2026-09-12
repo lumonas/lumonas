@@ -75,6 +75,8 @@ done
 mkdir -p /mnt/lumonas-recovery /mnt/lumonas-target
 mount -o ro "$recovery_device" /mnt/lumonas-recovery
 [ -f /mnt/lumonas-recovery/.lumonas-recovery-test ] || exit 0
+source_mode=false
+[ -f /mnt/lumonas-recovery/.lumonas-recovery-source ] && source_mode=true
 mkfs.ext4 -F "$target_device" >/dev/null
 mount "$target_device" /mnt/lumonas-target
 /usr/lib/lumonas/lumonas-recover \
@@ -115,10 +117,12 @@ done
 [ "$backend_ready" = true ]
 grep -F 'operator' /mnt/lumonas-target/restored-principals.json >/dev/null
 grep -F 'share-media' /mnt/lumonas-target/restored-shares.json >/dev/null
-grep -F 'fuse.mergerfs' /mnt/lumonas-target/restored-mounts.json >/dev/null
-grep -F 'serial_DATA1' /mnt/lumonas-target/restored-mounts.json >/dev/null
-grep -F '"id":"lan"' /mnt/lumonas-target/restored-network.json >/dev/null
-grep -F '"interface":"eth0"' /mnt/lumonas-target/restored-network.json >/dev/null
+if [ "$source_mode" = false ]; then
+  grep -F 'fuse.mergerfs' /mnt/lumonas-target/restored-mounts.json >/dev/null
+  grep -F 'serial_DATA1' /mnt/lumonas-target/restored-mounts.json >/dev/null
+  grep -F '"id":"lan"' /mnt/lumonas-target/restored-network.json >/dev/null
+  grep -F '"interface":"eth0"' /mnt/lumonas-target/restored-network.json >/dev/null
+fi
 cleanup_backend
 backend_pid=""
 printf '%s\n' recovery-applied > /mnt/lumonas-target/recovery-success

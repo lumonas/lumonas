@@ -76,12 +76,14 @@ done
 [ -x "$ROOT/scripts/share-config-smoke.sh" ] || { echo "share configuration smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/qemu-recovery-smoke.sh" ] || { echo "QEMU recovery smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/qemu-live-recovery-source.sh" ] || { echo "live recovery source helper must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/recovery-api-smoke.sh" ] || { echo "recovery API smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/security-smoke.sh" ] || { echo "security smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
 require_line "$ROOT/Makefile" 'share-config-smoke:'
 require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'
+require_line "$ROOT/Makefile" 'qemu-recovery-live:'
 require_line "$ROOT/Makefile" 'recovery-fixture:'
 require_line "$ROOT/Makefile" 'recovery-api-smoke:'
 require_line "$ROOT/Makefile" 'security-smoke:'
@@ -113,6 +115,8 @@ require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'config-generation.json'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'fuse.mergerfs'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'cmd/lumonas-recover'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'LUMONAS_RECOVER_BIN'
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'LUMONAS_RECOVERY_SOURCE_IMAGE'
+require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'api/v1/recovery/export'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" '"databaseValid":true'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'databaseRestored'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'secretsRestored'

@@ -151,6 +151,11 @@ then exports, verifies, applies, and reopens the restored database. It must
 pass independently of the QEMU fixture so recovery export regressions cannot
 be hidden by fixture-only coverage.
 
+Tagged CI additionally boots the generated Debian appliance as the configured
+source, persists its exported bundle, shuts it down cleanly, and performs the
+offline restore against a blank replacement disk. The fixture-only path is
+retained for local development but is not the release source of truth.
+
 ## M. Incomplete Docker backup
 
 One app has no appdata protection.

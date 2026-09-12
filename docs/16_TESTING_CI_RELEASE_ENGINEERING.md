@@ -216,6 +216,12 @@ The API smoke is the source-state half of this scenario; the QEMU ISO smoke is
 the offline replacement-disk half. Both are release-blocking and intentionally
 kept as separate gates so a fixture cannot make an export regression invisible.
 
+Release CI now feeds the generated Debian appliance image into the recovery
+harness as the live source. The harness configures disks, a management user,
+share, and Compose stack through the running appliance API, exports and
+persists the bundle, then boots the ISO against a blank replacement disk. The
+fixture remains a local fallback, while tagged CI asserts the live-source path.
+
 ## Upgrade matrix
 
 At minimum:

@@ -229,12 +229,19 @@ jobs:
         with:
           name: lumonas-deb
           path: .
-      - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso dpkg-dev qemu-system-x86 qemu-utils curl
+      - uses: actions/download-artifact@v4
+        with:
+          name: lumonas-qemu
+          path: build/qemu
+      - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso dpkg-dev qemu-system-x86 qemu-utils curl python3
       - run: go build -trimpath -o "$RUNNER_TEMP/lumonas-recovery-fixture" ./cmd/lumonas-recovery-fixture
       - run: go build -trimpath -o "$RUNNER_TEMP/lumonas-recover" ./cmd/lumonas-recover
       - run: sudo env LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_ENABLE_RECOVERY_SMOKE=true bash installer/build-iso.sh "${GITHUB_SHA::12}"
       - run: LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_ISO_ASSERT=true LUMONAS_ISO_LOG="$PWD/build/iso-smoke.log" bash scripts/iso-smoke.sh
-      - run: sudo env LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_RECOVERY_ASSERT=true LUMONAS_RECOVERY_FIXTURE="$RUNNER_TEMP/lumonas-recovery-fixture" LUMONAS_RECOVER_BIN="$RUNNER_TEMP/lumonas-recover" LUMONAS_RECOVERY_LOG="$PWD/build/qemu-recovery.log" bash scripts/qemu-recovery-smoke.sh
+      - run: |
+          source_image="$(find "$PWD/build/qemu" -type f -name '*.raw' -print -quit)"
+          test -n "$source_image"
+          sudo env LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_RECOVERY_ASSERT=true LUMONAS_RECOVERY_SOURCE_IMAGE="$source_image" LUMONAS_RECOVERY_FIXTURE="$RUNNER_TEMP/lumonas-recovery-fixture" LUMONAS_RECOVER_BIN="$RUNNER_TEMP/lumonas-recover" LUMONAS_RECOVERY_LOG="$PWD/build/qemu-recovery.log" bash scripts/qemu-recovery-smoke.sh
       - uses: actions/upload-artifact@v4
         with:
           name: lumonas-iso
@@ -251,7 +258,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst packaging/debian/prerm scripts/api-smoke.sh scripts/compose-smoke.sh scripts/container-image-scan.sh scripts/dependency-smoke.sh scripts/frontend-runtime-smoke.sh scripts/iso-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/qemu-recovery-smoke.sh scripts/recovery-api-smoke.sh scripts/security-smoke.sh scripts/storage-loopback-smoke.sh scripts/systemd-smoke.sh scripts/permission-smoke.sh scripts/log-retention-smoke.sh scripts/upgrade-smoke.sh scripts/upgrade-service-order-smoke.sh scripts/release-artifacts.sh scripts/verify-deb.sh
+      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst packaging/debian/prerm scripts/api-smoke.sh scripts/compose-smoke.sh scripts/container-image-scan.sh scripts/dependency-smoke.sh scripts/frontend-runtime-smoke.sh scripts/iso-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/qemu-recovery-smoke.sh scripts/qemu-live-recovery-source.sh scripts/recovery-api-smoke.sh scripts/security-smoke.sh scripts/storage-loopback-smoke.sh scripts/systemd-smoke.sh scripts/permission-smoke.sh scripts/log-retention-smoke.sh scripts/upgrade-smoke.sh scripts/upgrade-service-order-smoke.sh scripts/release-artifacts.sh scripts/verify-deb.sh
       - run: bash scripts/upgrade-service-order-smoke.sh
       - run: python3 scripts/check-api-contract.py
       - run: bash scripts/log-retention-smoke.sh

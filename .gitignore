@@ -14,3 +14,4 @@ build/qemu/work/
 *.db
 *.db-shm
 *.db-wal
+__pycache__/

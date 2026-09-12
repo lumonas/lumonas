@@ -20,3 +20,8 @@ The recovery fixture is deliberately generated from the production SQLite migrat
 Run `make recovery-api-smoke` to exercise the production API export path with a
 configured user, share, Compose stack, encrypted secret, and restored SQLite
 database before booting the ISO.
+
+When a Debian appliance image is available, `make qemu-recovery-live
+LUMONAS_ISO=... LUMONAS_QEMU_IMAGE=...` runs the stronger live-source recovery
+path: it configures the source appliance through its API, exports the bundle,
+and restores it onto a blank replacement disk through the offline ISO.
