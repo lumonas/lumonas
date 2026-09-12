@@ -260,6 +260,12 @@ validated `LUMONAS_DB_PATH` setting, applies the production SQLite migration
 chain, and fails the package transaction if migration cannot complete. This
 keeps schema upgrades explicit and makes a broken migration release-blocking.
 
+The release artifact smoke test invokes the same relative `build/releases`
+layout used by CI, creates Debian and disk-image fixtures, verifies that both
+are present in `SHA256SUMS`, and runs the release verifier against those
+checksums. This prevents a working-directory bug from producing a seemingly
+successful release with missing checksum entries.
+
 ## Installer matrix
 
 - UEFI;

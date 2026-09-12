@@ -58,6 +58,8 @@ require_line "$ROOT/packaging/docker-daemon.json" '"max-file": "3"'
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
 require_line "$ROOT/packaging/debian/postinst" 'LUMONAS_ZRAM_ENABLED=false'
 require_line "$ROOT/scripts/upgrade-service-order-smoke.sh" 'lumonas-runtime.service'
+require_line "$ROOT/scripts/release-artifacts.sh" 'sha256sum "$artifact"'
+require_line "$ROOT/scripts/release-artifacts-smoke.sh" 'verify-release.sh'
 require_line "$ROOT/scripts/permission-smoke.sh" '/etc/lumonas/runtime.env'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'lumonas-runtime.service'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.crt'
@@ -116,6 +118,7 @@ require_line "$ROOT/Makefile" 'check-api-contract:'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/upgrade-service-order-smoke.sh" ] || { echo "upgrade service ordering smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/release-artifacts-smoke.sh" ] || { echo "release artifact smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/permission-smoke.sh" ] || { echo "permission smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/log-retention-smoke.sh" ] || { echo "log retention smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'
