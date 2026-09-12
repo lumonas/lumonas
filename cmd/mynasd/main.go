@@ -48,6 +48,8 @@ type apiServer struct {
 	catalogFile   string
 	alertMu       sync.Mutex
 	acknowledged  map[string]bool
+	safetyMu      sync.Mutex
+	safetyUntil   time.Time
 }
 
 var version = "0.1.0-dev"
@@ -133,7 +135,11 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && endpoint == "/storage/protection":
 		s.protection(w)
 	case r.Method == http.MethodGet && endpoint == "/storage/safety":
-		writeJSON(w, http.StatusOK, map[string]any{"state": "locked", "unlockedUntil": nil})
+		s.storageSafety(w)
+	case r.Method == http.MethodPost && endpoint == "/storage/safety/unlock":
+		s.unlockStorageSafety(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/safety/lock":
+		s.lockStorageSafety(w)
 	case r.Method == http.MethodPost && endpoint == "/storage/operations/plan":
 		s.planStorageOperation(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/operations/") && strings.HasSuffix(endpoint, "/confirm"):
@@ -376,7 +382,7 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "plan hash mismatch"})
 		return
 	}
-	if !input.Reauthenticated || !input.StorageSafetyUnlocked {
+	if !input.Reauthenticated || !input.StorageSafetyUnlocked || !s.safetyUnlocked() {
 		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication and the storage safety unlock are required"})
 		return
 	}
@@ -417,6 +423,50 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 	s.advanceGeneration("storage." + string(plan.Action))
 	s.publish("storage.operation.completed", "warning", &model.ResourceRef{Type: "disk", ID: plan.Target.DiskID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *apiServer) safetyUnlocked() bool {
+	s.safetyMu.Lock()
+	defer s.safetyMu.Unlock()
+	return time.Now().UTC().Before(s.safetyUntil)
+}
+
+func (s *apiServer) storageSafety(w http.ResponseWriter) {
+	s.safetyMu.Lock()
+	defer s.safetyMu.Unlock()
+	if time.Now().UTC().Before(s.safetyUntil) {
+		writeJSON(w, http.StatusOK, map[string]any{"state": "unlocked", "unlockedUntil": s.safetyUntil})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"state": "locked", "unlockedUntil": nil})
+}
+
+func (s *apiServer) unlockStorageSafety(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Reauthenticated bool `json:"reauthenticated"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if !input.Reauthenticated {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication is required"})
+		return
+	}
+	s.safetyMu.Lock()
+	s.safetyUntil = time.Now().UTC().Add(15 * time.Minute)
+	unlockedUntil := s.safetyUntil
+	s.safetyMu.Unlock()
+	s.publish("storage.safety.unlocked", "warning", nil, map[string]any{"unlockedUntil": unlockedUntil})
+	writeJSON(w, http.StatusOK, map[string]any{"state": "unlocked", "unlockedUntil": unlockedUntil})
+}
+
+func (s *apiServer) lockStorageSafety(w http.ResponseWriter) {
+	s.safetyMu.Lock()
+	s.safetyUntil = time.Time{}
+	s.safetyMu.Unlock()
+	s.publish("storage.safety.locked", "info", nil, nil)
+	writeJSON(w, http.StatusOK, map[string]any{"state": "locked", "unlockedUntil": nil})
 }
 
 func (s *apiServer) currentGeneration() int64 {
@@ -902,13 +952,18 @@ func (s *apiServer) dockerSummary(w http.ResponseWriter, r *http.Request) {
 	containers, _ := s.dockerService.Containers(ctx)
 	images, _ := s.dockerService.Images(ctx)
 	running := 0
+	updates := 0
 	for _, container := range containers {
 		if container.State == "running" || container.State == "restarting" {
 			running++
 		}
 	}
-	_ = images
-	writeJSON(w, http.StatusOK, map[string]int{"stacks": len(stacks), "appsRunning": running, "updatesAvailable": 0})
+	for _, image := range images {
+		if image.UpdateAvailable {
+			updates++
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"stacks": len(stacks), "appsRunning": running, "updatesAvailable": updates})
 }
 
 func (s *apiServer) dockerApps(w http.ResponseWriter) {

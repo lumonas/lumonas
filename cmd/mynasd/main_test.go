@@ -93,3 +93,23 @@ func TestAuthRequiredProtectsAPIButNotHealth(t *testing.T) {
 		t.Fatalf("expected health endpoint, got %d", healthResponse.Code)
 	}
 }
+
+func TestStorageSafetyUnlockExpiresServerSide(t *testing.T) {
+	server := testServer(t)
+	unlock := httptest.NewRequest(http.MethodPost, "/api/v1/storage/safety/unlock", strings.NewReader(`{"reauthenticated":true}`))
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, unlock)
+	if response.Code != http.StatusOK {
+		t.Fatalf("unlock status %d: %s", response.Code, response.Body.String())
+	}
+	status := httptest.NewRecorder()
+	server.routes().ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/api/v1/storage/safety", nil))
+	if status.Code != http.StatusOK || !strings.Contains(status.Body.String(), `"state":"unlocked"`) {
+		t.Fatalf("expected unlocked state: %d %s", status.Code, status.Body.String())
+	}
+	lock := httptest.NewRecorder()
+	server.routes().ServeHTTP(lock, httptest.NewRequest(http.MethodPost, "/api/v1/storage/safety/lock", nil))
+	if lock.Code != http.StatusOK {
+		t.Fatalf("lock status %d", lock.Code)
+	}
+}
