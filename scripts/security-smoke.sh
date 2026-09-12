@@ -14,6 +14,7 @@ if git -C "$ROOT" grep -nE -- \
 fi
 
 cd "$ROOT"
-go test -count=1 ./internal/diagnostics ./internal/privileged ./internal/runner ./cmd/lumonas-privd \
+GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" \
+	go test -count=1 ./internal/diagnostics ./internal/privileged ./internal/runner ./cmd/lumonas-privd \
 	-run 'TestRedactionRemovesSecretCanaries|TestBundleRejectsUnsafeNamesAndRedactsText|TestPrivilegedProtocolRejectsUnknownOperation|TestWorkerRejectsOperationsOutsideItsCapabilityDomain|TestExecuteRejectsStaleIdentity|TestClientDeadlineInterruptsPendingResponse|TestCommandRunnerKillsDescendantsAfterTimeout|TestCombinedOutputContextKillsDescendantsOnCancellation|TestWaitProcessGroupKillsNetworkCheckpointDescendants|TestOutputContextRejectsExcessiveOutput|TestCombinedOutputRejectsExcessiveOutput'
 echo "LumoNAS security smoke checks passed"

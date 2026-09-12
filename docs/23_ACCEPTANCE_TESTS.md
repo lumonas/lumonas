@@ -267,6 +267,12 @@ The same release controls must execute bounded Go fuzzing for path validation,
 backup manifests, Compose transformations, network payloads, recovery bundles,
 and storage configuration, rather than only running their seed cases.
 
+Run `scripts/request-limits-smoke.sh`.
+
+Pass if oversized JSON and multipart requests are rejected before the handler
+runs, while an accepted multipart request is not parsed until endpoint
+authentication and routing have completed.
+
 ## V. systemd unit validation
 
 Run packaging checks on the Debian/Ubuntu build runner.

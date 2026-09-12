@@ -2965,14 +2965,18 @@ func (s *apiServer) requestMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
+			limit := int64(32 << 20)
 			if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
-				if err := r.ParseMultipartForm(2 << 30); err != nil {
-					writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
-					return
-				}
-			} else {
-				r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+				limit = 2 << 30
 			}
+			if r.ContentLength > limit {
+				writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
+				return
+			}
+			// Do not parse multipart data before authentication. The endpoint
+			// handler chooses its own ParseMultipartForm memory budget while
+			// this reader enforces the total on-wire request size.
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
 		}
 		next.ServeHTTP(w, r)
 	})

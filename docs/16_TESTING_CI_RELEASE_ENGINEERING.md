@@ -464,6 +464,11 @@ The race/fuzz job runs the Go fuzz engine with a bounded duration for path,
 backup-manifest, Compose, network, recovery, and storage validators. It is
 not satisfied by merely selecting `Fuzz` functions as ordinary unit tests.
 
+Request middleware applies a 32 MiB cap to JSON writes and a 2 GiB streaming
+cap to multipart writes, rejecting an oversized declared body before routing.
+Multipart parsing is left to the authenticated endpoint so unauthenticated
+requests cannot force large temporary-file work.
+
 The release job has an explicit gate-policy smoke test that checks its `needs`
 set includes package, QEMU, ISO, recovery, storage safety, integration,
 security, dependency, race/fuzz, schema-compatibility, and upgrade jobs. A
