@@ -59,10 +59,14 @@ func Create(input Input, key []byte) ([]byte, error) {
 		if name == "" || content == nil {
 			continue
 		}
-		files["docker/stacks/"+name] = content
+		stackPath := "docker/stacks/" + name
+		if !allowedPayloadEntry(stackPath) {
+			return nil, fmt.Errorf("invalid recovery file name %q", stackPath)
+		}
+		files[stackPath] = content
 	}
 	for name, content := range input.Files {
-		if !safeName(name) || content == nil {
+		if !allowedPayloadEntry(name) || content == nil {
 			return nil, fmt.Errorf("invalid recovery file name %q", name)
 		}
 		files[name] = content
@@ -126,25 +130,18 @@ func Create(input Input, key []byte) ([]byte, error) {
 }
 
 func Verify(bundle, key []byte) (Manifest, error) {
-	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
+	files, err := readBundleFiles(bundle)
 	if err != nil {
 		return Manifest{}, err
 	}
-	files := map[string][]byte{}
-	for _, file := range reader.File {
-		if !safeName(file.Name) && file.Name != "manifest.json" && file.Name != "checksums.sha256" {
-			return Manifest{}, fmt.Errorf("unsafe bundle entry %q", file.Name)
+	return verifyFiles(files, key)
+}
+
+func verifyFiles(files map[string][]byte, key []byte) (Manifest, error) {
+	for _, name := range []string{"manifest.json", "checksums.sha256", "desired-state.json", "mynas.db"} {
+		if _, ok := files[name]; !ok {
+			return Manifest{}, fmt.Errorf("bundle entry %q is missing", name)
 		}
-		handle, err := file.Open()
-		if err != nil {
-			return Manifest{}, err
-		}
-		data, err := io.ReadAll(handle)
-		handle.Close()
-		if err != nil {
-			return Manifest{}, err
-		}
-		files[file.Name] = data
 	}
 	var manifest Manifest
 	raw, ok := files["manifest.json"]
@@ -154,15 +151,11 @@ func Verify(bundle, key []byte) (Manifest, error) {
 	if manifest.FormatVersion != FormatVersion {
 		return Manifest{}, fmt.Errorf("unsupported recovery bundle version %d", manifest.FormatVersion)
 	}
-	for name, expected := range manifest.Checksums {
-		content, ok := files[name]
-		if !ok {
-			return Manifest{}, fmt.Errorf("bundle entry %q is missing", name)
-		}
-		digest := sha256.Sum256(content)
-		if hex.EncodeToString(digest[:]) != expected {
-			return Manifest{}, fmt.Errorf("checksum mismatch for %q", name)
-		}
+	if err := validateChecksumCoverage(files, manifest.Checksums); err != nil {
+		return Manifest{}, err
+	}
+	if err := validateChecksumFile(files["checksums.sha256"], manifest.Checksums); err != nil {
+		return Manifest{}, err
 	}
 	if encrypted, ok := files["encrypted-secrets.bin"]; ok {
 		if _, err := decrypt(encrypted, key); err != nil {
@@ -170,6 +163,97 @@ func Verify(bundle, key []byte) (Manifest, error) {
 		}
 	}
 	return manifest, nil
+}
+
+func readBundleFiles(bundle []byte) (map[string][]byte, error) {
+	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
+	if err != nil {
+		return nil, err
+	}
+	files := make(map[string][]byte, len(reader.File))
+	for _, file := range reader.File {
+		if _, exists := files[file.Name]; exists {
+			return nil, fmt.Errorf("duplicate bundle entry %q", file.Name)
+		}
+		if !allowedBundleEntry(file.Name) {
+			return nil, fmt.Errorf("unsupported or unsafe bundle entry %q", file.Name)
+		}
+		handle, err := file.Open()
+		if err != nil {
+			return nil, err
+		}
+		data, readErr := io.ReadAll(handle)
+		closeErr := handle.Close()
+		if readErr != nil {
+			return nil, readErr
+		}
+		if closeErr != nil {
+			return nil, closeErr
+		}
+		files[file.Name] = data
+	}
+	return files, nil
+}
+
+func validateChecksumCoverage(files map[string][]byte, checksums map[string]string) error {
+	if checksums == nil {
+		return errors.New("manifest checksums are missing")
+	}
+	for name := range files {
+		if name == "manifest.json" || name == "checksums.sha256" {
+			continue
+		}
+		if _, ok := checksums[name]; !ok {
+			return fmt.Errorf("checksum is missing for bundle entry %q", name)
+		}
+	}
+	for name, expected := range checksums {
+		if name == "manifest.json" || name == "checksums.sha256" {
+			return fmt.Errorf("manifest checksum contains metadata entry %q", name)
+		}
+		content, ok := files[name]
+		if !ok {
+			return fmt.Errorf("bundle entry %q is missing", name)
+		}
+		digest := sha256.Sum256(content)
+		if hex.EncodeToString(digest[:]) != expected {
+			return fmt.Errorf("checksum mismatch for %q", name)
+		}
+	}
+	return nil
+}
+
+func validateChecksumFile(raw []byte, manifestChecksums map[string]string) error {
+	lines := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return errors.New("checksums.sha256 is empty")
+	}
+	seen := make(map[string]bool, len(lines))
+	for _, line := range lines {
+		parts := strings.SplitN(line, "  ", 2)
+		if len(parts) != 2 || len(parts[0]) != sha256.Size*2 {
+			return fmt.Errorf("invalid checksums.sha256 entry %q", line)
+		}
+		if _, err := hex.DecodeString(parts[0]); err != nil {
+			return fmt.Errorf("invalid checksum for %q", parts[1])
+		}
+		name := parts[1]
+		if !allowedPayloadEntry(name) {
+			return fmt.Errorf("unsupported or unsafe checksum entry %q", name)
+		}
+		if seen[name] {
+			return fmt.Errorf("duplicate checksum entry %q", name)
+		}
+		seen[name] = true
+		expected, ok := manifestChecksums[name]
+		if !ok || expected != parts[0] {
+			return fmt.Errorf("checksum manifest mismatch for %q", name)
+		}
+	}
+	if len(seen) != len(manifestChecksums) {
+		return errors.New("checksums.sha256 does not cover the manifest checksum set")
+	}
+	return nil
 }
 
 func Plan(bundle, key []byte) (RestorePlan, error) {
@@ -199,26 +283,18 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 }
 
 func DecryptSecrets(bundle, key []byte) ([]byte, error) {
-	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
+	files, err := readBundleFiles(bundle)
 	if err != nil {
 		return nil, err
 	}
-	for _, file := range reader.File {
-		if file.Name != "encrypted-secrets.bin" {
-			continue
-		}
-		handle, err := file.Open()
-		if err != nil {
-			return nil, err
-		}
-		data, err := io.ReadAll(handle)
-		handle.Close()
-		if err != nil {
-			return nil, err
-		}
-		return decrypt(data, key)
+	if _, err := verifyFiles(files, key); err != nil {
+		return nil, err
 	}
-	return nil, nil
+	data, ok := files["encrypted-secrets.bin"]
+	if !ok {
+		return nil, nil
+	}
+	return decrypt(data, key)
 }
 
 func encrypt(plaintext, key []byte) ([]byte, error) {
@@ -253,7 +329,35 @@ func decrypt(ciphertext, key []byte) ([]byte, error) {
 func normalizeKey(key []byte) []byte { digest := sha256.Sum256(key); return digest[:] }
 
 func safeName(name string) bool {
-	return name != "" && !strings.HasPrefix(name, "/") && !strings.Contains(name, "..")
+	if name == "" || strings.HasPrefix(name, "/") || strings.HasPrefix(name, "\\") || strings.ContainsAny(name, "\\\x00") {
+		return false
+	}
+	for _, segment := range strings.Split(name, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return false
+		}
+	}
+	return true
+}
+
+func allowedBundleEntry(name string) bool {
+	return name == "manifest.json" || name == "checksums.sha256" || allowedPayloadEntry(name)
+}
+
+func allowedPayloadEntry(name string) bool {
+	if !safeName(name) {
+		return false
+	}
+	switch name {
+	case "desired-state.json", "mynas.db", "encrypted-secrets.bin":
+		return true
+	}
+	for _, prefix := range []string{"docker/stacks/", "config/", "acl/", "certificates/", "encrypted-secrets/"} {
+		if strings.HasPrefix(name, prefix) {
+			return len(strings.TrimPrefix(name, prefix)) > 0
+		}
+	}
+	return false
 }
 
 func contains(values []string, wanted string) bool {
