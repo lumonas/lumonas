@@ -32,7 +32,7 @@ func testServer(t *testing.T) *apiServer {
 	// API tests do not configure notification channels. Suppress the
 	// asynchronous warning delivery path so event publishing cannot outlive
 	// the SQLite store cleanup.
-	t.Setenv("LUMONAS_NOTIFY_MIN_SEVERITY", "critical")
+	t.Setenv("LUMONAS_NOTIFY_MIN_SEVERITY", "off")
 	db, err := store.Open(t.TempDir() + "/lumonas.db")
 	if err != nil {
 		t.Fatal(err)

@@ -40,3 +40,11 @@ func TestShouldSendUsesSeverityThreshold(t *testing.T) {
 		t.Fatal("severity threshold was not enforced")
 	}
 }
+
+func TestShouldSendSupportsDisabledPolicy(t *testing.T) {
+	for _, policy := range []string{"off", "disabled", "none"} {
+		if ShouldSend(policy, "critical") {
+			t.Fatalf("%q policy unexpectedly enabled critical notifications", policy)
+		}
+	}
+}

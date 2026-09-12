@@ -63,6 +63,10 @@ func (s Sender) Send(ctx context.Context, message Message) error {
 }
 
 func ShouldSend(minimum, severity string) bool {
+	minimum = strings.ToLower(strings.TrimSpace(minimum))
+	if minimum == "off" || minimum == "disabled" || minimum == "none" {
+		return false
+	}
 	weight := map[string]int{"info": 0, "attention": 1, "warning": 2, "critical": 3}
 	if minimum == "" {
 		minimum = "warning"
