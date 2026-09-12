@@ -7,6 +7,10 @@ WORK="${LUMONAS_ISO_WORKDIR:-$ROOT/build/iso-live}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${VERSION}_amd64.deb}"
 REPO_ORIGIN="LumoNAS"
 REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY:-}"
+if [ "${LUMONAS_REQUIRE_REPO_SIGNATURE:-false}" = "true" ] && [ -z "$REPO_SIGN_KEY" ]; then
+	echo "LUMONAS_REPO_SIGN_KEY is required for a signed offline repository" >&2
+	exit 1
+fi
 
 command -v lb >/dev/null 2>&1 || { echo "live-build is required" >&2; exit 1; }
 command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required" >&2; exit 1; }
@@ -42,6 +46,9 @@ if [ -n "$REPO_SIGN_KEY" ]; then
 	gpg --batch --pinentry-mode loopback --yes --detach-sign --default-key "$REPO_SIGN_KEY" --output Release.gpg Release
 	gpg --batch --pinentry-mode loopback --yes --clearsign --default-key "$REPO_SIGN_KEY" --output InRelease Release
 	gpg --batch --yes --export "$REPO_SIGN_KEY" > "$WORK/config/includes.chroot/usr/share/keyrings/lumonas-archive-keyring.gpg"
+	test -s Release.gpg
+	test -s InRelease
+	test -s "$WORK/config/includes.chroot/usr/share/keyrings/lumonas-archive-keyring.gpg"
 	chmod 0644 "$WORK/config/includes.chroot/usr/share/keyrings/lumonas-archive-keyring.gpg"
 	REPO_SOURCE="deb [signed-by=/usr/share/keyrings/lumonas-archive-keyring.gpg] file:/opt/lumonas-repo ./"
 	echo "Embedded APT repository signed with $REPO_SIGN_KEY"

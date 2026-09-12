@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all dev dev-full test test-go test-web check-openapi check-api-contract build build-go build-web package recovery-fixture recovery-api-smoke api-smoke storage-loopback share-config-smoke iso-smoke qemu-recovery-smoke qemu-recovery-live security-smoke dependency-smoke container-scan systemd-smoke systemd-security-smoke permission-smoke log-retention-smoke upgrade-smoke release-artifacts-smoke qemu-image qemu-smoke verify-release
+.PHONY: all dev dev-full test test-go test-web check-openapi check-api-contract build build-go build-web package recovery-fixture recovery-api-smoke api-smoke storage-loopback share-config-smoke iso-smoke qemu-recovery-smoke qemu-recovery-live security-smoke dependency-smoke container-scan systemd-smoke systemd-security-smoke permission-smoke log-retention-smoke upgrade-smoke release-artifacts-smoke installer-signature-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -95,6 +95,9 @@ upgrade-smoke:
 
 release-artifacts-smoke:
 	bash scripts/release-artifacts-smoke.sh
+
+installer-signature-smoke:
+	bash scripts/installer-signature-policy-smoke.sh
 
 qemu-image:
 	sudo LUMONAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh

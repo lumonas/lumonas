@@ -60,6 +60,7 @@ require_line "$ROOT/packaging/debian/postinst" 'LUMONAS_ZRAM_ENABLED=false'
 require_line "$ROOT/scripts/upgrade-service-order-smoke.sh" 'lumonas-runtime.service'
 require_line "$ROOT/scripts/release-artifacts.sh" 'sha256sum "$artifact"'
 require_line "$ROOT/scripts/release-artifacts-smoke.sh" 'verify-release.sh'
+require_line "$ROOT/scripts/installer-signature-policy-smoke.sh" 'LUMONAS_REPO_SIGN_KEY is required'
 require_line "$ROOT/scripts/permission-smoke.sh" '/etc/lumonas/runtime.env'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'lumonas-runtime.service'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.crt'
@@ -83,6 +84,8 @@ require_line "$ROOT/installer/build-iso.sh" 'signed-by=/usr/share/keyrings/lumon
 require_line "$ROOT/installer/build-iso.sh" 'etc/apt/preferences.d/lumonas'
 require_line "$ROOT/installer/build-iso.sh" 'Pin-Priority: 1001'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_REPO_SIGN_KEY'
+require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_REQUIRE_REPO_SIGNATURE'
+require_line "$ROOT/installer/build-iso.sh" 'test -s InRelease'
 require_line "$ROOT/scripts/qemu-smoke.sh" '<title>LumoNAS</title>'
 require_line "$ROOT/scripts/qemu-smoke.sh" '<div id="root"></div>'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'snapshot_disk_identities'
@@ -119,6 +122,7 @@ require_line "$ROOT/Makefile" 'upgrade-smoke:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/upgrade-service-order-smoke.sh" ] || { echo "upgrade service ordering smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/release-artifacts-smoke.sh" ] || { echo "release artifact smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/installer-signature-policy-smoke.sh" ] || { echo "installer signature policy smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/permission-smoke.sh" ] || { echo "permission smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/log-retention-smoke.sh" ] || { echo "log retention smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'

@@ -495,3 +495,7 @@ Run tagged-release artifact verification with Cosign available.
 Pass if every `.deb`, ISO, and QEMU artifact has a signature and verification
 bundle, and `cosign verify-blob` validates the artifact against the configured
 GitHub Actions OIDC issuer and tag workflow identity.
+
+The ISO’s embedded APT repository must additionally contain signed `Release`
+metadata and its archive keyring on tagged builds; a missing repository
+signing key fails the build.

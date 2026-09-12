@@ -275,6 +275,11 @@ image in addition to the checksum, SBOM, and signature checks. Pull requests
 continue to use the lighter artifact smoke test because they do not publish a
 release set.
 
+The ISO job also requires the embedded APT repository to be signed on tagged
+builds. It receives the release-only GPG key through the CI secret and checks
+for `Release.gpg`, `InRelease`, and the exported keyring; unsigned
+`[trusted=yes]` media is limited to non-release development builds.
+
 ## Installer matrix
 
 - UEFI;

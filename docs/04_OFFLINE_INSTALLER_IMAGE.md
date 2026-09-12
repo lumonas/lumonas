@@ -105,6 +105,11 @@ Installation points APT to the media/local repo first.
 
 Network availability may add official mirrors, but cannot be mandatory.
 
+Release builds must set `LUMONAS_REQUIRE_REPO_SIGNATURE=true` and provide the
+release signing key. The installer then fails closed unless `Release.gpg`,
+`InRelease`, and the embedded archive keyring are present; `[trusted=yes]` is
+reserved for local development images.
+
 ## Boot menu
 
 ```text
