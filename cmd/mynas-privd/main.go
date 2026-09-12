@@ -149,6 +149,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return executeStorage(req, *target, run)
 	case "pool.mount":
 		return executePoolMount(req, discover, run)
+	case "pool.unmount":
+		return executePoolUnmount(req, run)
 	case "service.reload":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -436,6 +438,27 @@ func executePoolMount(req request, discover func(collector.CommandRunner) ([]mod
 		return response{Error: "mergerfs pool mount failed"}
 	}
 	return response{OK: true, Data: map[string]any{"mountPath": path, "branches": branches}}
+}
+
+func executePoolUnmount(req request, run command) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	path := requestedString(req.RequestedState, "mountPath")
+	if !safePoolPath(path) {
+		return response{Error: "pool mount path is not allow-listed"}
+	}
+	mounted, err := run("findmnt", "-rn", "-o", "FSTYPE", "-T", path)
+	if err != nil || strings.TrimSpace(string(mounted)) == "" {
+		return response{Error: "pool mount path is not mounted"}
+	}
+	if !strings.Contains(strings.ToLower(string(mounted)), "mergerfs") {
+		return response{Error: "refusing to unmount a non-mergerfs mount"}
+	}
+	if _, err := run("umount", "--", path); err != nil {
+		return response{Error: "pool unmount failed"}
+	}
+	return response{OK: true, Data: map[string]string{"mountPath": path}}
 }
 
 func validateExpectedDisk(actual model.Disk, expected expectedDisk) error {

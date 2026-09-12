@@ -38,6 +38,60 @@ type PoolPlan struct {
 	Status           string           `json:"status"`
 }
 
+type PoolUnmountPlan struct {
+	OperationID      string    `json:"operationId"`
+	PoolID           string    `json:"poolId"`
+	Name             string    `json:"name"`
+	MountPath        string    `json:"mountPath"`
+	ConfigGeneration int64     `json:"configGeneration"`
+	ExpiresAt        time.Time `json:"expiresAt"`
+	PlanHash         string    `json:"planHash"`
+	Status           string    `json:"status"`
+}
+
+func NewPoolUnmountPlan(id string, pool model.Pool, generation int64, now time.Time) (PoolUnmountPlan, error) {
+	if id == "" {
+		return PoolUnmountPlan{}, errors.New("operation id is required")
+	}
+	if !poolNamePattern.MatchString(pool.Name) || pool.MountPath != "/srv/pools/"+pool.Name {
+		return PoolUnmountPlan{}, errors.New("pool mount path is invalid")
+	}
+	plan := PoolUnmountPlan{OperationID: id, PoolID: pool.ID, Name: pool.Name, MountPath: pool.MountPath, ConfigGeneration: generation, ExpiresAt: now.Add(15 * time.Minute), Status: "planned"}
+	plan.PlanHash = HashPoolUnmountPlan(plan)
+	return plan, nil
+}
+
+func HashPoolUnmountPlan(plan PoolUnmountPlan) string {
+	plan.PlanHash = ""
+	data, _ := json.Marshal(plan)
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:])
+}
+
+func ValidatePoolUnmountPlan(plan PoolUnmountPlan, pools []model.Pool, now time.Time, generation int64) error {
+	if plan.Status != "planned" && plan.Status != "confirmed" {
+		return fmt.Errorf("pool unmount plan status %q cannot be executed", plan.Status)
+	}
+	if !now.Before(plan.ExpiresAt) {
+		return errors.New("pool unmount plan has expired")
+	}
+	if plan.PlanHash == "" || plan.PlanHash != HashPoolUnmountPlan(plan) {
+		return errors.New("pool unmount plan hash mismatch")
+	}
+	if plan.ConfigGeneration != generation {
+		return errors.New("configuration generation changed after planning")
+	}
+	if !poolNamePattern.MatchString(plan.Name) || plan.MountPath != "/srv/pools/"+plan.Name {
+		return errors.New("pool unmount path is invalid")
+	}
+	for _, pool := range pools {
+		if pool.ID == plan.PoolID && pool.Name == plan.Name && pool.MountPath == plan.MountPath {
+			return nil
+		}
+	}
+	return fmt.Errorf("pool %q is no longer mounted", plan.Name)
+}
+
 func NewPoolPlan(id, name, mountPath string, disks []model.Disk, generation int64, now time.Time) (PoolPlan, error) {
 	if id == "" {
 		return PoolPlan{}, errors.New("operation id is required")

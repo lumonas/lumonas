@@ -27,3 +27,22 @@ func TestPoolPlanRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected pool plan %#v err=%v", loaded, err)
 	}
 }
+
+func TestPoolUnmountPlanRoundTrip(t *testing.T) {
+	db, err := Open(t.TempDir() + "/mynas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	plan, err := storage.NewPoolUnmountPlan("unmount-1", model.Pool{ID: "pool-1", Name: "media", MountPath: "/srv/pools/media"}, 1, time.Now().UTC())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.SavePoolUnmountPlan(plan); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := db.PoolUnmountPlan(plan.OperationID)
+	if err != nil || loaded.PlanHash != plan.PlanHash || loaded.MountPath != plan.MountPath {
+		t.Fatalf("unexpected unmount plan %#v err=%v", loaded, err)
+	}
+}

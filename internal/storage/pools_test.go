@@ -64,3 +64,18 @@ func TestPoolPlanRejectsBranchPathCollision(t *testing.T) {
 		t.Fatal("expected branch collision rejection")
 	}
 }
+
+func TestPoolUnmountPlanRequiresTheSameMountedPool(t *testing.T) {
+	now := time.Now().UTC()
+	pool := model.Pool{ID: "pool-1", Name: "media", MountPath: "/srv/pools/media", Status: model.Healthy}
+	plan, err := NewPoolUnmountPlan("unmount-1", pool, 4, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidatePoolUnmountPlan(plan, []model.Pool{pool}, now.Add(time.Minute), 4); err != nil {
+		t.Fatalf("expected matching pool to validate: %v", err)
+	}
+	if err := ValidatePoolUnmountPlan(plan, nil, now.Add(time.Minute), 4); err == nil {
+		t.Fatal("missing mounted pool should fail closed")
+	}
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"path"
@@ -131,10 +132,107 @@ func (s *apiServer) confirmStoragePool(w http.ResponseWriter, r *http.Request, o
 	writeJSON(w, http.StatusAccepted, result)
 }
 
+func (s *apiServer) planStoragePoolUnmount(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name               string `json:"name"`
+		ExpectedGeneration *int64 `json:"expectedGeneration"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if input.ExpectedGeneration != nil && *input.ExpectedGeneration != s.currentGeneration() {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "configuration generation changed", "currentGeneration": s.currentGeneration()})
+		return
+	}
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity discovery unavailable"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	for _, pool := range storage.DiscoverPools(ctx, disks, nil) {
+		if pool.Name != input.Name {
+			continue
+		}
+		plan, err := storage.NewPoolUnmountPlan(newID("pool-unmount"), pool, s.currentGeneration(), time.Now().UTC())
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := s.store.SavePoolUnmountPlan(plan); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		s.publish("storage.pool.unmount.planned", "warning", &model.ResourceRef{Type: "pool", ID: pool.ID}, map[string]any{"operationId": plan.OperationID, "planHash": plan.PlanHash})
+		writeJSON(w, http.StatusCreated, plan)
+		return
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "pool is not mounted"})
+}
+
+func (s *apiServer) confirmStoragePoolUnmount(w http.ResponseWriter, r *http.Request, operationID string) {
+	plan, err := s.store.PoolUnmountPlan(operationID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "pool unmount plan not found"})
+		return
+	}
+	var input struct {
+		PlanHash              string `json:"planHash"`
+		Reauthenticated       bool   `json:"reauthenticated"`
+		StorageSafetyUnlocked bool   `json:"storageSafetyUnlocked"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if input.PlanHash == "" || input.PlanHash != plan.PlanHash {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "plan hash mismatch"})
+		return
+	}
+	if !input.Reauthenticated || !input.StorageSafetyUnlocked || !s.safetyUnlocked() {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication and the storage safety unlock are required"})
+		return
+	}
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity discovery unavailable"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	pools := storage.DiscoverPools(ctx, disks, nil)
+	if err := storage.ValidatePoolUnmountPlan(plan, pools, time.Now().UTC(), s.currentGeneration()); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "pool unmount plan revalidation failed: " + err.Error()})
+		return
+	}
+	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "pool.unmount", OperationID: plan.OperationID, PlanHash: plan.PlanHash, RequestedState: map[string]any{"mountPath": plan.MountPath}, ExpiresAt: plan.ExpiresAt, Confirmed: true})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
+		return
+	}
+	s.advanceGeneration("storage.pool.unmount")
+	s.publish("storage.pool.unmounted", "warning", &model.ResourceRef{Type: "pool", ID: plan.PoolID}, map[string]any{"operationId": plan.OperationID, "mountPath": plan.MountPath})
+	writeJSON(w, http.StatusAccepted, result)
+}
+
 func poolOperationID(endpoint string) string {
 	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
 	if len(parts) == 4 && parts[0] == "storage" && parts[1] == "pools" && parts[3] == "confirm" {
 		return path.Base(parts[2])
+	}
+	return ""
+}
+
+func poolUnmountOperationID(endpoint string) string {
+	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
+	if len(parts) == 5 && parts[0] == "storage" && parts[1] == "pools" && parts[2] == "unmount" && parts[4] == "confirm" {
+		return path.Base(parts[3])
 	}
 	return ""
 }

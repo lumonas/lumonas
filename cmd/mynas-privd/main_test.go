@@ -152,6 +152,29 @@ func TestExecutePoolMountRejectsNewCriticalDisk(t *testing.T) {
 	}
 }
 
+func TestExecutePoolUnmountOnlyAllowsMergerfsMounts(t *testing.T) {
+	commands := make([]string, 0)
+	result := execute(request{Operation: "pool.unmount", PlanHash: "pool-unmount", RequestedState: map[string]any{"mountPath": "/srv/pools/media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		if name == "findmnt" {
+			return []byte("fuse.mergerfs"), nil
+		}
+		return nil, nil
+	})
+	if !result.OK || len(commands) != 2 || commands[1] != "umount -- /srv/pools/media" {
+		t.Fatalf("unexpected pool unmount: %#v commands=%v", result, commands)
+	}
+	result = execute(request{Operation: "pool.unmount", PlanHash: "pool-unmount", RequestedState: map[string]any{"mountPath": "/srv/pools/media"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, _ ...string) ([]byte, error) {
+		if name == "findmnt" {
+			return []byte("ext4"), nil
+		}
+		return nil, nil
+	})
+	if result.OK || !strings.Contains(result.Error, "non-mergerfs") {
+		t.Fatalf("expected non-mergerfs rejection: %#v", result)
+	}
+}
+
 func TestNetworkCheckpointRejectsUnapprovedSetting(t *testing.T) {
 	_, err := requestedChanges(map[string]any{"changes": map[string]any{"connection.secondaries": "bad"}})
 	if err == nil || !strings.Contains(err.Error(), "not allow-listed") {
