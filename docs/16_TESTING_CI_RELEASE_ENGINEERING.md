@@ -47,6 +47,10 @@ Run:
 - Docker;
 - backup/recovery.
 
+The generated offline ISO is also booted under QEMU with a blank replacement
+disk. The smoke test waits for the live image's health, readiness, and server
+API before the ISO artifact is considered valid.
+
 ## Destructive safety tests
 
 Explicit cases:

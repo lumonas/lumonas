@@ -38,6 +38,13 @@ cat >/etc/apt/sources.list.d/lumonas-local.list <<'APT'
 deb [trusted=yes] file:/opt/lumonas-repo ./
 APT
 dpkg -i /opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb
+cat >/etc/lumonas/lumonas-web.env <<'ENV'
+LUMONAS_WEB_LISTEN=0.0.0.0:8081
+LUMONAS_WEB_ROOT=/usr/share/lumonas/web
+LUMONAS_API_URL=http://127.0.0.1:8080
+ENV
+chown root:lumonas /etc/lumonas/lumonas-web.env
+chmod 0640 /etc/lumonas/lumonas-web.env
 systemctl enable lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
 EOF
 chmod 0755 "$WORK/config/hooks/live/020-install-lumonas.hook.chroot"

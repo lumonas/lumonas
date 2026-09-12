@@ -150,18 +150,24 @@ jobs:
         with:
           name: lumonas-deb
           path: .
-      - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso dpkg-dev
+      - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso dpkg-dev qemu-system-x86 qemu-utils curl
       - run: sudo LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" bash installer/build-iso.sh "${GITHUB_SHA::12}"
+      - run: LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_ISO_ASSERT=true LUMONAS_ISO_LOG="$PWD/build/iso-smoke.log" bash scripts/iso-smoke.sh
       - uses: actions/upload-artifact@v4
         with:
           name: lumonas-iso
           path: build/releases/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumonas-iso-smoke
+          path: build/iso-smoke.log
+          if-no-files-found: warn
 
   installer-scripts:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst scripts/api-smoke.sh scripts/compose-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/storage-loopback-smoke.sh scripts/release-artifacts.sh scripts/verify-deb.sh
+      - run: sh -n installer/build-iso.sh packaging/build-deb.sh packaging/debian/postinst scripts/api-smoke.sh scripts/compose-smoke.sh scripts/iso-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/storage-loopback-smoke.sh scripts/release-artifacts.sh scripts/verify-deb.sh
       - run: sh scripts/verify-packaging.sh
       - run: sh -n scripts/verify-release.sh
       - run: git diff --check
