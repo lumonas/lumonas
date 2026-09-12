@@ -563,10 +563,17 @@ func (s *Store) Plan(operationID string) (storage.Plan, error) {
 }
 
 func (s *Store) EnsureAdmin(username, password string) error {
+	// Keep the legacy authentication table and the principal table coherent
+	// before callers perform immediate two-factor or session lookups. Startup
+	// provisions the admin before the first HTTP request, so lazy migration
+	// here would otherwise make the first login fail with missing TOTP state.
+	if err := s.ensureIdentitySchema(); err != nil {
+		return err
+	}
 	var existing string
 	err := s.db.QueryRow(`SELECT id FROM users WHERE username = ?`, username).Scan(&existing)
 	if err == nil {
-		return nil
+		return s.syncLegacyUsers()
 	}
 	if err != sql.ErrNoRows {
 		return err
@@ -576,7 +583,10 @@ func (s *Store) EnsureAdmin(username, password string) error {
 		return err
 	}
 	_, err = s.db.Exec(`INSERT INTO users(id,username,password_hash,created_at) VALUES(?,?,?,?)`, newStoreID("user"), username, hash, time.Now().UTC().Format(timeFormat))
-	return err
+	if err != nil {
+		return err
+	}
+	return s.syncLegacyUsers()
 }
 
 func (s *Store) HasUsers() bool {

@@ -14,8 +14,13 @@ LOG_PATH="$TEMP_DIR/lumonasd.log"
 COOKIE_JAR="$TEMP_DIR/cookies.txt"
 ADMIN_PASSWORD='api-smoke-password-123'
 SERVER_PID=''
+RESTART_SSE_PID=''
 
 cleanup() {
+	if [ -n "$RESTART_SSE_PID" ]; then
+		kill "$RESTART_SSE_PID" 2>/dev/null || true
+		wait "$RESTART_SSE_PID" 2>/dev/null || true
+	fi
 	if [ -n "$SERVER_PID" ]; then
 		kill "$SERVER_PID" 2>/dev/null || true
 		wait "$SERVER_PID" 2>/dev/null || true
@@ -50,14 +55,18 @@ if [ ! -x "$LUMONASD_BIN" ]; then
 	exit 1
 fi
 
-LUMONAS_DB_PATH="$DB_PATH" \
-LUMONAS_AUTH_REQUIRED=true \
-LUMONAS_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
-LUMONAS_CATALOG_FILE="$ROOT_DIR/catalog/apps.json" \
-LUMONAS_STACK_ROOT="$TEMP_DIR/stacks" \
-LUMONAS_RECOVERY_DIR="$TEMP_DIR/recovery" \
-"$LUMONASD_BIN" -listen "$LISTEN_ADDR" >"$LOG_PATH" 2>&1 &
-SERVER_PID=$!
+start_server() {
+	LUMONAS_DB_PATH="$DB_PATH" \
+	LUMONAS_AUTH_REQUIRED=true \
+	LUMONAS_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+	LUMONAS_CATALOG_FILE="$ROOT_DIR/catalog/apps.json" \
+	LUMONAS_STACK_ROOT="$TEMP_DIR/stacks" \
+	LUMONAS_RECOVERY_DIR="$TEMP_DIR/recovery" \
+	"$LUMONASD_BIN" -listen "$LISTEN_ADDR" >"$LOG_PATH" 2>&1 &
+	SERVER_PID=$!
+}
+
+start_server
 
 wait_for_status() {
 	endpoint=$1
@@ -198,6 +207,65 @@ if ! grep -F 'retry: 3000' "$SSE_PATH" >/dev/null 2>&1 || ! grep -F 'system.metr
 	echo "authenticated SSE stream did not deliver system metrics" >&2
 	sed -n '1,80p' "$SSE_PATH" >&2
 	exit 1
+fi
+
+# Restart the real daemon against the same SQLite state. The metrics event is
+# the replay cursor; the short SMART job is deliberately interrupted while it
+# is queued/running, and its persisted event must be replayable after restart.
+RESTART_SSE_PATH="$TEMP_DIR/restart-events.sse"
+curl -sS --max-time 10 -N -b "$COOKIE_JAR" "$BASE_URL/api/v1/events/stream" >"$RESTART_SSE_PATH" 2>/dev/null &
+RESTART_SSE_PID=$!
+for attempt in $(seq 1 30); do
+	if grep -F '"type":"system.metrics"' "$RESTART_SSE_PATH" >/dev/null 2>&1; then
+		break
+	fi
+	if ! kill -0 "$RESTART_SSE_PID" 2>/dev/null; then
+		echo "restart SSE stream exited before a replay cursor was observed" >&2
+		exit 1
+	fi
+	sleep 0.2
+done
+LAST_EVENT_ID=$(awk '/data: .*"type":"system.metrics"/ { print event_id; exit } /^id: / { event_id=$2 }' "$RESTART_SSE_PATH")
+[ -n "$LAST_EVENT_ID" ] || { echo "could not extract SSE replay cursor" >&2; exit 1; }
+DISK_ID=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "$TEMP_DIR/disks.json" | head -n 1)
+
+if [ -z "$DISK_ID" ]; then
+	kill "$RESTART_SSE_PID" 2>/dev/null || true
+	wait "$RESTART_SSE_PID" 2>/dev/null || true
+	RESTART_SSE_PID=''
+	if [ "${LUMONAS_API_SMOKE_ASSERT:-false}" = "true" ]; then
+		echo "could not select a disk for restart job in assertion mode" >&2
+		exit 1
+	fi
+	echo "API restart job probe skipped: no Linux disk inventory is available" >&2
+else
+	JOB_PATH="$TEMP_DIR/restart-job.json"
+	JOB_STATUS=$(curl -sS -o "$JOB_PATH" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF_TOKEN" \
+	-X POST -H 'Content-Type: application/json' \
+	-d "{\"type\":\"smart.short\",\"resourceId\":\"$DISK_ID\"}" \
+	"$BASE_URL/api/v1/jobs")
+	[ "$JOB_STATUS" = 202 ] || { echo "restart job was not accepted (HTTP $JOB_STATUS)" >&2; sed -n '1,80p' "$JOB_PATH" >&2; exit 1; }
+	JOB_ID=$(sed -n 's/.*"id":"\([^"]*\)".*/\1/p' "$JOB_PATH" | head -n 1)
+	[ -n "$JOB_ID" ] || { echo "restart job response did not contain an id" >&2; exit 1; }
+	kill "$RESTART_SSE_PID" 2>/dev/null || true
+	wait "$RESTART_SSE_PID" 2>/dev/null || true
+	RESTART_SSE_PID=''
+	kill "$SERVER_PID" 2>/dev/null || true
+	wait "$SERVER_PID" 2>/dev/null || true
+	SERVER_PID=''
+	start_server
+	wait_for_status /healthz 200
+	RESTARTED_JOB_PATH="$TEMP_DIR/restarted-job.json"
+	RESTARTED_JOB_STATUS=$(curl -sS -o "$RESTARTED_JOB_PATH" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/jobs/$JOB_ID")
+	[ "$RESTARTED_JOB_STATUS" = 200 ] || { echo "restarted job lookup failed (HTTP $RESTARTED_JOB_STATUS)" >&2; exit 1; }
+	grep -F '"state":"failed"' "$RESTARTED_JOB_PATH" >/dev/null
+	grep -F 'daemon restarted before the job completed' "$RESTARTED_JOB_PATH" >/dev/null
+	REPLAY_PATH="$TEMP_DIR/replayed-events.sse"
+	curl -sS --max-time 5 -N -b "$COOKIE_JAR" -H "Last-Event-ID: $LAST_EVENT_ID" "$BASE_URL/api/v1/events/stream" >"$REPLAY_PATH" 2>/dev/null || true
+	grep -F 'retry: 3000' "$REPLAY_PATH" >/dev/null
+	grep -F '"type":"job.state_changed"' "$REPLAY_PATH" >/dev/null
 fi
 
 # SnapRAID jobs are accepted and delegated to the privileged broker.

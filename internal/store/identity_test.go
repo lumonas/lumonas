@@ -94,3 +94,26 @@ func TestLegacyAdminIsImportedAndDisablingManagementUserRevokesSession(t *testin
 		t.Fatalf("re-enabled management user could not authenticate: %v", err)
 	}
 }
+
+func TestEnsureAdminSynchronizesPrincipalBeforeTwoFactorLookup(t *testing.T) {
+	database, err := Open(t.TempDir() + "/lumonas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	if err := database.EnsureAdmin("admin", "a-long-development-password"); err != nil {
+		t.Fatal(err)
+	}
+	userID, err := database.VerifyCredentials("admin", "a-long-development-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled, err := database.TOTPEnabled(userID)
+	if err != nil {
+		t.Fatalf("immediate two-factor lookup failed: %v", err)
+	}
+	if enabled {
+		t.Fatal("newly provisioned administrator unexpectedly has two-factor enabled")
+	}
+}

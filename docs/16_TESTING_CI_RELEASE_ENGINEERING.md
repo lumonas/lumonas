@@ -159,6 +159,13 @@ The QEMU smoke fetches `/` through `lumonas-web` and checks the compiled title
 and React root markers, so a package with a healthy API but missing frontend
 assets fails the release gate.
 
+The black-box API smoke restarts `lumonasd` against the same SQLite database,
+verifies an interrupted SMART job is failed closed after startup, and resumes
+an authenticated SSE stream from a retained metrics event to replay the job
+state event. The restart probe is assertion-required in Ubuntu CI; macOS
+development runs without Linux block-device discovery and reports that
+disk-dependent probe as skipped.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until

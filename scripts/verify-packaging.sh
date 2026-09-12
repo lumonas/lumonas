@@ -56,6 +56,9 @@ if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/de
 fi
 require_line "$ROOT/packaging/debian/prerm" 'lumonas-web.service'
 require_line "$ROOT/packaging/build-deb.sh" 'DEBIAN/prerm'
+require_line "$ROOT/scripts/api-smoke.sh" 'start_server()'
+require_line "$ROOT/scripts/api-smoke.sh" 'daemon restarted before the job completed'
+require_line "$ROOT/scripts/api-smoke.sh" 'Last-Event-ID'
 require_line "$ROOT/installer/build-iso.sh" 'dpkg-scanpackages'
 require_line "$ROOT/installer/build-iso.sh" 'lumonas-local.list'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_WEB_LISTEN=0.0.0.0:8081'

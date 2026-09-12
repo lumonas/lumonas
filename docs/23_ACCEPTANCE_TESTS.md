@@ -257,11 +257,12 @@ input hashes.
 
 ## Y. Daemon restart and SSE replay
 
-Run the `lumonasd` restart and event-stream tests.
+Run the black-box API smoke and `lumonasd` restart/event-stream tests.
 
 Pass if interrupted queued/preparing/running jobs become failed with a
 completion timestamp, and an SSE client resuming from `Last-Event-ID` receives
-only events after that cursor before live delivery begins.
+only events after that cursor before live delivery begins. The smoke must do
+this against the same persisted SQLite database after restarting the daemon.
 
 ## Z. Read-only protection discovery
 
