@@ -68,7 +68,8 @@ for attempt in $(seq 1 60); do
      curl -fsS http://127.0.0.1:18080/api/v1/server >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
      curl -fsS http://127.0.0.1:18080/api/v1/system/metrics >/dev/null 2>&1 && \
-     curl -fsS http://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1; then
+     curl -fsS http://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1 && \
+     curl -fsS http://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1; then
     disk_count=$(grep -o '"id"' "$LOG.disks" | wc -l | tr -d ' ')
     if [ "$disk_count" -ge 5 ]; then
       echo "QEMU appliance smoke test passed (disks=$disk_count)"

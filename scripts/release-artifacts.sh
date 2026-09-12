@@ -4,7 +4,7 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 RELEASE_DIR="${1:-$ROOT/build/releases}"
 mkdir -p "$RELEASE_DIR"
-find "$RELEASE_DIR" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.iso' -o -name '*.qcow2' \) -print0 | xargs -0 -r sha256sum > "$RELEASE_DIR/SHA256SUMS"
+find "$RELEASE_DIR" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.iso' -o -name '*.qcow2' -o -name '*.raw' \) -print0 | xargs -0 -r sha256sum > "$RELEASE_DIR/SHA256SUMS"
 if command -v syft >/dev/null 2>&1; then
 	for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw; do
 		[ -f "$artifact" ] || continue
