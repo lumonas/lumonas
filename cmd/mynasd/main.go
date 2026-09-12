@@ -184,6 +184,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.listShares(w)
 	case r.Method == http.MethodPost && endpoint == "/shares":
 		s.createShare(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/shares/"):
+		s.updateShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/events/stream":
 		s.stream(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/summary":
@@ -358,7 +360,27 @@ func (s *apiServer) protection(w http.ResponseWriter) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	configPath := envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf")
-	writeJSON(w, http.StatusOK, storage.DiscoverProtection(ctx, disks, nil, configPath))
+	protection := storage.DiscoverProtection(ctx, disks, nil, configPath)
+	s.enrichProtection(&protection)
+	writeJSON(w, http.StatusOK, protection)
+}
+
+func (s *apiServer) enrichProtection(protection *model.Protection) {
+	if value, ok := s.store.Meta("snapraid_last_sync_at"); ok {
+		if timestamp, err := time.Parse(time.RFC3339Nano, value); err == nil {
+			protection.LastSyncAt = &timestamp
+			result := "successful"
+			protection.LastSyncResult = &result
+			if protection.Status == model.Attention {
+				protection.Status = model.Healthy
+			}
+		}
+	}
+	if value, ok := s.store.Meta("snapraid_last_scrub_at"); ok {
+		if timestamp, err := time.Parse(time.RFC3339Nano, value); err == nil {
+			protection.LastScrubAt = &timestamp
+		}
+	}
 }
 
 func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request) {
@@ -862,6 +884,58 @@ func (s *apiServer) createShare(w http.ResponseWriter, r *http.Request) {
 	s.advanceGeneration("share.create")
 	s.publish("share.created", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"name": share.Name})
 	writeJSON(w, http.StatusCreated, share)
+}
+
+func (s *apiServer) updateShare(w http.ResponseWriter, r *http.Request, id string) {
+	var replacement shares.Share
+	if err := json.NewDecoder(r.Body).Decode(&replacement); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	replacement.ID = id
+	if err := shares.Validate(replacement); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	shareStore := s.shareStore()
+	existing, err := shareStore.Load()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	found := false
+	for index := range existing {
+		if existing[index].ID == id {
+			existing[index] = replacement
+			found = true
+			break
+		}
+	}
+	if !found {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "share not found"})
+		return
+	}
+	config, err := shares.RenderSamba(existing)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	configPath := envOr("MYNAS_SAMBA_CONFIG", "/var/lib/mynas/generated/smb.conf")
+	if err := shares.WriteGenerated(configPath, config); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := shares.ValidateSamba(configPath); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := shareStore.Save(existing); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.advanceGeneration("share.update")
+	s.publish("share.updated", "info", &model.ResourceRef{Type: "share", ID: id}, map[string]any{"name": replacement.Name})
+	writeJSON(w, http.StatusOK, replacement)
 }
 
 func (s *apiServer) alerts(w http.ResponseWriter) {
@@ -1414,6 +1488,12 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 	}
 	progress = 100
 	job.State, job.Stage, job.FinishedAt, job.Progress = "successful", "SnapRAID operation completed", &now, &progress
+	if job.Type == "snapraid.sync" {
+		_ = s.store.SetMeta("snapraid_last_sync_at", now.Format(time.RFC3339Nano))
+	}
+	if job.Type == "snapraid.scrub" {
+		_ = s.store.SetMeta("snapraid_last_scrub_at", now.Format(time.RFC3339Nano))
+	}
 	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 	s.publish(job.Type+".completed", "info", &model.ResourceRef{Type: "protection", ID: "protection"}, map[string]any{"jobId": job.ID})
