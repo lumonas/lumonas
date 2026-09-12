@@ -194,3 +194,15 @@ Pass if:
 - pre-update recovery verification runs;
 - data/share/Docker configuration remains valid;
 - recovery bundle from old version can migrate.
+
+## U. Dependency and image security
+
+Run the release dependency controls on a clean checkout.
+
+Pass if:
+
+- Go vulnerability checks pass;
+- production frontend dependencies have no HIGH or CRITICAL advisories;
+- repository dependency manifests pass the Trivy scan;
+- every catalog container image passes the Trivy scan;
+- the tagged release is blocked when any of these checks fails.

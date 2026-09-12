@@ -68,6 +68,10 @@ The ISO pipeline boots the generated offline image under QEMU with a blank repla
 
 Release CI includes a security gate that checks tracked files for high-confidence credential formats and runs secret-redaction plus privileged-operation rejection tests.
 
+Release CI also runs pinned Go/frontend dependency checks and scans the catalog
+container images with Trivy; HIGH and CRITICAL unfixed findings block a tagged
+release.
+
 Offline recovery includes the plan-first `lumonas-recover` utility. Restoration requires explicit `--apply` plus an absolute target root and writes verified configuration, Compose state, the SQLite database, and encrypted secrets atomically.
 
 Management sessions can be reviewed and revoked by token digest, while Time Machine shares render Samba fruit support only when explicitly enabled.

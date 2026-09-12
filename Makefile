@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all test test-go test-web check-openapi build build-go build-web package api-smoke storage-loopback iso-smoke qemu-recovery-smoke security-smoke upgrade-smoke qemu-image qemu-smoke verify-release
+.PHONY: all test test-go test-web check-openapi build build-go build-web package api-smoke storage-loopback iso-smoke qemu-recovery-smoke security-smoke dependency-smoke container-scan upgrade-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -48,6 +48,12 @@ qemu-recovery-smoke:
 
 security-smoke:
 	bash scripts/security-smoke.sh
+
+dependency-smoke:
+	bash scripts/dependency-smoke.sh
+
+container-scan:
+	bash scripts/container-image-scan.sh
 
 upgrade-smoke:
 	bash scripts/upgrade-smoke.sh "$(OLD_DEB)" "$(NEW_DEB)"

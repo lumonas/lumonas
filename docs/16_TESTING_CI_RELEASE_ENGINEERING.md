@@ -172,6 +172,13 @@ The `security-controls` job is also release-blocking. It scans tracked files
 for high-confidence private-key and token formats, then runs the diagnostics
 redaction and privileged-operation rejection tests with a clean checkout.
 
+The `dependency-controls` job is release-blocking as well. It runs the pinned
+Go vulnerability scanner and the production frontend dependency audit, then
+uses the pinned Trivy container to scan the repository dependency manifests and
+every application image declared in `catalog/apps.json`. Unfixed HIGH and
+CRITICAL findings fail the job. The scanner is required in CI; local execution
+may skip it when Docker or the scanner tool is unavailable.
+
 ## Release artifacts
 
 CI should produce:
@@ -181,6 +188,9 @@ CI should produce:
 - hashes/signature;
 - SBOM;
 - release notes.
+
+Dependency and container-image vulnerability scans are required before tagged
+release publication, in addition to the generated SBOM and signatures.
 
 ## Reproducibility
 
