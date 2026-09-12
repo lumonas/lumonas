@@ -52,10 +52,6 @@ func (s *apiServer) notificationChannels(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, channels)
 }
 
-func (s *apiServer) schedules(w http.ResponseWriter) {
-	writeJSON(w, http.StatusOK, monitoring.DefaultSchedules())
-}
-
 func alertRuleID(endpoint string) string {
 	return path.Base(endpoint)
 }

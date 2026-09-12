@@ -3,6 +3,7 @@ package monitoring
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -53,11 +54,181 @@ type NotificationChannel struct {
 }
 
 type Schedule struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Schedule string `json:"schedule"`
-	Next     string `json:"next"`
-	Enabled  bool   `json:"enabled"`
+	ID            string     `json:"id"`
+	Name          string     `json:"name"`
+	JobType       string     `json:"jobType"`
+	Kind          string     `json:"kind"`
+	TimeOfDay     string     `json:"timeOfDay"`
+	Weekday       string     `json:"weekday,omitempty"`
+	Enabled       bool       `json:"enabled"`
+	LastStartedAt *time.Time `json:"lastStartedAt,omitempty"`
+	NextDueAt     *time.Time `json:"nextDueAt,omitempty"`
+	Schedule      string     `json:"schedule"`
+	Next          string     `json:"next"`
+}
+
+const (
+	ScheduleDaily  = "daily"
+	ScheduleWeekly = "weekly"
+	ScheduleEvent  = "event"
+)
+
+func (s Schedule) Validate() error {
+	if strings.TrimSpace(s.ID) == "" || strings.TrimSpace(s.Name) == "" {
+		return errors.New("schedule id and name are required")
+	}
+	switch s.Kind {
+	case ScheduleEvent:
+		if strings.TrimSpace(s.JobType) == "" {
+			return errors.New("schedule job type is required")
+		}
+		return nil
+	case ScheduleDaily, ScheduleWeekly:
+	default:
+		return fmt.Errorf("unsupported schedule kind %q", s.Kind)
+	}
+	switch s.JobType {
+	case "smart.short", "smart.extended", "snapraid.sync", "snapraid.scrub", "backup.run":
+	default:
+		return fmt.Errorf("unsupported schedule job type %q", s.JobType)
+	}
+	if _, _, err := ParseTimeOfDay(s.TimeOfDay); err != nil {
+		return err
+	}
+	if s.Kind == ScheduleWeekly {
+		if _, err := ParseWeekday(s.Weekday); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Humanize refreshes the derived human-readable cadence string.
+func (s *Schedule) Humanize() {
+	switch s.Kind {
+	case ScheduleDaily:
+		s.Schedule = "Daily at " + s.TimeOfDay
+	case ScheduleWeekly:
+		if weekday, err := ParseWeekday(s.Weekday); err == nil {
+			s.Schedule = pluralWeekday(weekday) + " at " + s.TimeOfDay
+		}
+	default:
+		s.Schedule = "After every change"
+	}
+}
+
+// DescribeNext renders the next-run description relative to now.
+func (s Schedule) DescribeNext(now time.Time) string {
+	if s.Kind == ScheduleEvent {
+		return "on change"
+	}
+	if !s.Enabled {
+		return "paused"
+	}
+	if s.NextDueAt == nil {
+		return "pending"
+	}
+	until := s.NextDueAt.Sub(now)
+	if until <= 0 {
+		return "due now"
+	}
+	days := int(until.Hours()) / 24
+	hours := int(until.Hours()) % 24
+	minutes := int(until.Minutes()) % 60
+	switch {
+	case days >= 1:
+		return fmt.Sprintf("in %dd %dh", days, hours)
+	case hours >= 1:
+		return fmt.Sprintf("in %dh %dm", hours, minutes)
+	default:
+		return fmt.Sprintf("in %dm", minutes)
+	}
+}
+
+// MarkStarted records that the schedule fired at now and advances the next due time.
+func (s *Schedule) MarkStarted(now time.Time) {
+	last := now
+	s.LastStartedAt = &last
+	next := NextOccurrence(*s, now)
+	s.NextDueAt = &next
+}
+
+// NextOccurrence returns the next wall-clock occurrence strictly after now
+// in now's location. Calendar-day arithmetic keeps the wall-clock time stable
+// across daylight-saving transitions. Zero time for event schedules.
+func NextOccurrence(schedule Schedule, now time.Time) time.Time {
+	if schedule.Kind != ScheduleDaily && schedule.Kind != ScheduleWeekly {
+		return time.Time{}
+	}
+	hour, minute, err := ParseTimeOfDay(schedule.TimeOfDay)
+	if err != nil {
+		return time.Time{}
+	}
+	candidate := time.Date(now.Year(), now.Month(), now.Day(), hour, minute, 0, 0, now.Location())
+	if schedule.Kind == ScheduleWeekly {
+		weekday, err := ParseWeekday(schedule.Weekday)
+		if err != nil {
+			return time.Time{}
+		}
+		delta := (int(weekday) - int(candidate.Weekday()) + 7) % 7
+		candidate = candidate.AddDate(0, 0, delta)
+	}
+	if !candidate.After(now) {
+		if schedule.Kind == ScheduleWeekly {
+			candidate = candidate.AddDate(0, 0, 7)
+		} else {
+			candidate = candidate.AddDate(0, 0, 1)
+		}
+	}
+	return candidate
+}
+
+// ParseTimeOfDay parses an HH:MM 24-hour clock string.
+func ParseTimeOfDay(value string) (int, int, error) {
+	parts := strings.Split(strings.TrimSpace(value), ":")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("time of day %q must use HH:MM format", value)
+	}
+	hour, err := strconv.Atoi(parts[0])
+	if err != nil || hour < 0 || hour > 23 {
+		return 0, 0, fmt.Errorf("time of day %q has an invalid hour", value)
+	}
+	minute, err := strconv.Atoi(parts[1])
+	if err != nil || minute < 0 || minute > 59 {
+		return 0, 0, fmt.Errorf("time of day %q has an invalid minute", value)
+	}
+	return hour, minute, nil
+}
+
+// ParseWeekday parses a lowercase weekday name.
+func ParseWeekday(value string) (time.Weekday, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "sunday":
+		return time.Sunday, nil
+	case "monday":
+		return time.Monday, nil
+	case "tuesday":
+		return time.Tuesday, nil
+	case "wednesday":
+		return time.Wednesday, nil
+	case "thursday":
+		return time.Thursday, nil
+	case "friday":
+		return time.Friday, nil
+	case "saturday":
+		return time.Saturday, nil
+	default:
+		return time.Sunday, fmt.Errorf("unsupported weekday %q", value)
+	}
+}
+
+func pluralWeekday(weekday time.Weekday) string {
+	names := map[time.Weekday]string{
+		time.Sunday: "Sundays", time.Monday: "Mondays", time.Tuesday: "Tuesdays",
+		time.Wednesday: "Wednesdays", time.Thursday: "Thursdays", time.Friday: "Fridays",
+		time.Saturday: "Saturdays",
+	}
+	return names[weekday]
 }
 
 func DefaultAlertRules() []AlertRule {
@@ -74,10 +245,10 @@ func DefaultAlertRules() []AlertRule {
 
 func DefaultSchedules() []Schedule {
 	return []Schedule{
-		{ID: "sched-sync", Name: "SnapRAID sync", Schedule: "Daily at 02:00", Next: "configured", Enabled: true},
-		{ID: "sched-scrub", Name: "SnapRAID scrub", Schedule: "Sundays at 03:00", Next: "configured", Enabled: true},
-		{ID: "sched-smart", Name: "SMART short tests", Schedule: "Saturdays at 04:00", Next: "configured", Enabled: true},
-		{ID: "sched-backup", Name: "App backups", Schedule: "Daily at 03:30", Next: "configured", Enabled: true},
-		{ID: "sched-config", Name: "Config snapshot", Schedule: "After every change", Next: "on change", Enabled: true},
+		{ID: "sched-sync", Name: "SnapRAID sync", JobType: "snapraid.sync", Kind: ScheduleDaily, TimeOfDay: "02:00", Enabled: true},
+		{ID: "sched-scrub", Name: "SnapRAID scrub", JobType: "snapraid.scrub", Kind: ScheduleWeekly, Weekday: "sunday", TimeOfDay: "03:00", Enabled: true},
+		{ID: "sched-smart", Name: "SMART short tests", JobType: "smart.short", Kind: ScheduleWeekly, Weekday: "saturday", TimeOfDay: "04:00", Enabled: true},
+		{ID: "sched-backup", Name: "App backups", JobType: "backup.run", Kind: ScheduleDaily, TimeOfDay: "03:30", Enabled: true},
+		{ID: "sched-config", Name: "Config snapshot", JobType: "config.snapshot", Kind: ScheduleEvent, Enabled: true},
 	}
 }

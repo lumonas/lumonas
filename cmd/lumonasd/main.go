@@ -86,6 +86,7 @@ func main() {
 	go server.capacityLoop()
 	go server.backupLoop()
 	go server.upsMonitorLoop()
+	go server.scheduleLoop()
 
 	httpServer := &http.Server{Addr: *listen, Handler: server.routes(), ReadHeaderTimeout: 5 * time.Second}
 	stop := make(chan os.Signal, 1)
@@ -282,7 +283,9 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && endpoint == "/notification-deliveries":
 		s.listNotificationDeliveries(w, r)
 	case r.Method == http.MethodGet && endpoint == "/schedules":
-		s.schedules(w)
+		s.schedules(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/schedules/"):
+		s.updateSchedule(w, r, scheduleID(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/activity":
 		s.activity(w)
 	case r.Method == http.MethodGet && endpoint == "/audit":

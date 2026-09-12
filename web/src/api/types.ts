@@ -85,6 +85,22 @@ export interface Job {
   error?: string
 }
 
+export type ScheduleKind = 'daily' | 'weekly' | 'event'
+
+export interface JobSchedule {
+  id: string
+  name: string
+  jobType: string
+  kind: ScheduleKind
+  timeOfDay: string
+  weekday?: string
+  enabled: boolean
+  lastStartedAt?: string
+  nextDueAt?: string
+  schedule: string
+  next: string
+}
+
 export type AlertSeverity = 'info' | 'attention' | 'warning' | 'critical'
 
 export interface Alert {

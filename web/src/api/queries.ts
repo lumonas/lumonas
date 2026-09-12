@@ -20,6 +20,7 @@ import type {
   FileUser,
   HealthBreakdown,
   Job,
+  JobSchedule,
   LogLine,
   ManagementUser,
   NotificationChannel,
@@ -364,10 +365,29 @@ export function useTestNotificationChannel() {
 export function useSchedules() {
   return useQuery({
     queryKey: queryKeys.schedules,
-    queryFn: () =>
-      apiGet<{ id: string; name: string; schedule: string; next: string; enabled: boolean }[]>(
-        '/schedules',
-      ),
+    queryFn: () => apiGet<JobSchedule[]>('/schedules'),
+  })
+}
+
+export interface SchedulePatch {
+  id: string
+  enabled?: boolean
+  timeOfDay?: string
+  weekday?: string
+}
+
+export function useUpdateSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...patch }: Omit<SchedulePatch, 'id'> & { id: string }) =>
+      apiPatch<JobSchedule>(`/schedules/${id}`, patch),
+    onSuccess: (schedule) => {
+      toast.success(
+        schedule.enabled ? `Schedule enabled — ${schedule.name}` : `Schedule paused — ${schedule.name}`,
+      )
+      void qc.invalidateQueries({ queryKey: queryKeys.schedules })
+      void qc.invalidateQueries({ queryKey: queryKeys.jobs })
+    },
   })
 }
 

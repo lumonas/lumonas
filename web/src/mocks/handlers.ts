@@ -567,6 +567,30 @@ export const handlers = [
 
   http.get(`${BASE}/schedules`, () => HttpResponse.json(scheduledJobs)),
 
+  http.patch(`${BASE}/schedules/:id`, async ({ params, request }) => {
+    const schedule = scheduledJobs.find((s) => s.id === params.id)
+    if (!schedule) return new HttpResponse(null, { status: 404 })
+    if (schedule.kind === 'event') return new HttpResponse(null, { status: 422 })
+    const body = (await request.json()) as {
+      enabled?: boolean
+      timeOfDay?: string
+      weekday?: string
+    }
+    if (body.enabled !== undefined) schedule.enabled = body.enabled
+    if (body.timeOfDay) {
+      schedule.timeOfDay = body.timeOfDay
+      schedule.schedule =
+        schedule.kind === 'weekly'
+          ? `${(schedule.weekday ?? '').charAt(0).toUpperCase()}${(schedule.weekday ?? '').slice(1)}s at ${body.timeOfDay}`
+          : `Daily at ${body.timeOfDay}`
+    }
+    if (body.weekday) {
+      schedule.weekday = body.weekday
+      schedule.schedule = `${body.weekday.charAt(0).toUpperCase()}${body.weekday.slice(1)}s at ${schedule.timeOfDay}`
+    }
+    return HttpResponse.json(schedule)
+  }),
+
   http.get(`${BASE}/shares`, () => HttpResponse.json(shares)),
 
   http.get(`${BASE}/shares/:id`, ({ params }) => {

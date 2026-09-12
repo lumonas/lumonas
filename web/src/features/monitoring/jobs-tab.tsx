@@ -1,12 +1,24 @@
 import { CalendarClock } from 'lucide-react'
-import { useJobs, useSchedules } from '@/api/queries'
+import {
+  useJobs,
+  useSchedules,
+  useUpdateSchedule,
+} from '@/api/queries'
 import { JobProgress } from '@/components/core/job-progress'
 import { ResourceTable, type Column } from '@/components/core/resource-table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { formatDuration, timeAgo } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { Job } from '@/api/types'
+import { useState } from 'react'
+import type { Job, JobSchedule } from '@/api/types'
 
 const STATE_STYLES: Record<Job['state'], string> = {
   queued: 'text-muted-foreground',
@@ -16,6 +28,91 @@ const STATE_STYLES: Record<Job['state'], string> = {
   successful: 'text-success',
   failed: 'text-critical',
   cancelled: 'text-muted-foreground',
+}
+
+const WEEKDAYS = [
+  { value: 'monday', label: 'Mondays' },
+  { value: 'tuesday', label: 'Tuesdays' },
+  { value: 'wednesday', label: 'Wednesdays' },
+  { value: 'thursday', label: 'Thursdays' },
+  { value: 'friday', label: 'Fridays' },
+  { value: 'saturday', label: 'Saturdays' },
+  { value: 'sunday', label: 'Sundays' },
+]
+
+function ScheduleRow({ schedule }: { schedule: JobSchedule }) {
+  const update = useUpdateSchedule()
+  const editable = schedule.kind !== 'event'
+  const [time, setTime] = useState(schedule.timeOfDay)
+  const [weekday, setWeekday] = useState(schedule.weekday ?? 'sunday')
+  const timeDirty = editable && time !== schedule.timeOfDay
+  const weekdayDirty = schedule.kind === 'weekly' && weekday !== (schedule.weekday ?? 'sunday')
+
+  function saveTime() {
+    update.mutate({ id: schedule.id, timeOfDay: time })
+  }
+  function saveWeekday(day: string) {
+    setWeekday(day)
+    update.mutate({ id: schedule.id, weekday: day })
+  }
+
+  return (
+    <li className="flex items-center justify-between gap-3 px-3 py-2.5">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{schedule.name}</p>
+        <p className="text-xs text-muted-foreground">{schedule.schedule}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="text-xs text-muted-foreground">{schedule.next}</span>
+        {schedule.kind === 'weekly' && (
+          <Select
+            value={weekday}
+            onValueChange={saveWeekday}
+            disabled={!schedule.enabled || update.isPending}
+          >
+            <SelectTrigger className="h-7 w-[110px] text-xs" aria-label="Weekday">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {WEEKDAYS.map((day) => (
+                <SelectItem key={day.value} value={day.value} className="text-xs">
+                  {day.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {editable && (
+          <>
+            <input
+              type="time"
+              value={time}
+              disabled={!schedule.enabled || update.isPending}
+              onChange={(event) => setTime(event.target.value)}
+              className="h-7 rounded-md border bg-transparent px-2 text-xs tabular-nums outline-none disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label="Time of day"
+            />
+            {(timeDirty || weekdayDirty) && (
+              <button
+                type="button"
+                onClick={saveTime}
+                disabled={update.isPending}
+                className="h-7 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground disabled:opacity-50"
+              >
+                Save
+              </button>
+            )}
+          </>
+        )}
+        <Switch
+          checked={schedule.enabled}
+          disabled={!editable || update.isPending}
+          onCheckedChange={(checked) => update.mutate({ id: schedule.id, enabled: checked })}
+          aria-label={`Toggle ${schedule.name}`}
+        />
+      </div>
+    </li>
+  )
 }
 
 export function JobsTab() {
@@ -93,24 +190,12 @@ export function JobsTab() {
           <CardContent>
             <ul className="flex flex-col divide-y rounded-lg border">
               {(schedules ?? []).map((schedule) => (
-                <li key={schedule.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{schedule.name}</p>
-                    <p className="text-xs text-muted-foreground">{schedule.schedule}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-xs text-muted-foreground">{schedule.next}</span>
-                    {schedule.enabled ? (
-                      <Badge variant="success">On</Badge>
-                    ) : (
-                      <Badge variant="secondary">Off</Badge>
-                    )}
-                  </div>
-                </li>
+                <ScheduleRow key={schedule.id} schedule={schedule} />
               ))}
             </ul>
             <p className="mt-3 text-xs text-muted-foreground">
-              Jobs that would collide are queued sequentially — never run in parallel.
+              Schedules run on the appliance clock — collisions are re-armed to the next slot,
+              never run in parallel.
             </p>
           </CardContent>
         </Card>
