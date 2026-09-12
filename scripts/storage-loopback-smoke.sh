@@ -89,10 +89,12 @@ umount "$WORK/ext4-mount"
 MISMATCH_IMAGE="$WORK/mismatch.img"
 make_disk "$MISMATCH_IMAGE" ext4
 MISMATCH_UUID=$LAST_UUID
+MISMATCH_LOOP=$LAST_LOOP
 [ "$MISMATCH_UUID" != "$EXT4_UUID" ] || {
 	echo "independent ext4 test disks unexpectedly share an identity" >&2
 	exit 1
 }
+[ -n "$MISMATCH_LOOP" ] || { echo "mismatch disk attachment failed" >&2; exit 1; }
 
 XFS_IMAGE="$WORK/xfs.img"
 make_disk "$XFS_IMAGE" xfs

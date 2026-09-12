@@ -304,3 +304,11 @@ Run the event encoding test and resume an SSE client from `Last-Event-ID`.
 Pass if the JSON event preserves `correlationId`, `operationId`, `planHash`,
 `actor`, `generation`, resource identity, schema version, and payload data,
 and the frontend event type exposes the same optional metadata.
+
+## AG. Destructive storage fail-closed gate
+
+Run the privileged storage safety tests and the Linux loopback smoke test.
+
+Pass if missing disks, mounted disks, and disks reported as mounted by
+`findmnt` are rejected before `mkfs` or `wipefs`, and the real loopback test
+can create both mergerfs branches and complete SnapRAID status cleanup.

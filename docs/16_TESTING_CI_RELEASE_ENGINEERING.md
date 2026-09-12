@@ -110,6 +110,10 @@ Explicit cases:
 - disk disconnect during SnapRAID job;
 - simulated partial command failure.
 
+The privileged safety contract also asserts that a missing target, an already
+mounted target, and a target reported by `findmnt` all fail before any
+destructive command is invoked.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until

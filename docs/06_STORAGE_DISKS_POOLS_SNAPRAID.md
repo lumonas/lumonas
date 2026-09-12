@@ -16,6 +16,11 @@ ext4 UUID stability is checked across device reattachment, existing media is
 imported read-only, writes are rejected while read-only, and XFS import is
 exercised when the runner provides the toolchain.
 
+The release gate also attaches a second disposable ext4 image, uses both
+branches in a real mergerfs pool, and runs `snapraid status` against a
+throwaway configuration. Each loop device is tracked explicitly so pool
+setup and cleanup cannot operate on an empty or unrelated path.
+
 ## Physical disk model
 
 Store:
