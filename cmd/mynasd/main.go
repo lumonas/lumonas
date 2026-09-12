@@ -124,6 +124,26 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.authLogin(w, r)
 	case r.Method == http.MethodPost && endpoint == "/auth/logout":
 		s.authLogout(w, r)
+	case r.Method == http.MethodGet && endpoint == "/users":
+		s.listUsers(w, r)
+	case r.Method == http.MethodPost && endpoint == "/users":
+		s.createUser(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/password"):
+		s.setUserPassword(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/users/"):
+		s.updateUser(w, r, path.Base(endpoint))
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/users/"):
+		s.deletePrincipal(w, r, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/groups":
+		s.listGroups(w, r)
+	case r.Method == http.MethodPost && endpoint == "/groups":
+		s.createGroup(w, r)
+	case r.Method == http.MethodPut && strings.HasPrefix(endpoint, "/groups/") && strings.HasSuffix(endpoint, "/members"):
+		s.setGroupMembers(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/groups/"):
+		s.updateGroup(w, r, path.Base(endpoint))
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/groups/"):
+		s.deletePrincipal(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/server":
 		s.serverInfo(w)
 	case r.Method == http.MethodGet && endpoint == "/disks":

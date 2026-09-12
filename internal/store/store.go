@@ -48,6 +48,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureIdentitySchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate identity schema: %w", err)
+	}
 	return s, nil
 }
 
