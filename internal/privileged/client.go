@@ -15,10 +15,20 @@ type Request struct {
 	PlanHash         string            `json:"planHash"`
 	TargetDiskID     string            `json:"targetDiskId,omitempty"`
 	ExpectedIdentity map[string]string `json:"expectedIdentity,omitempty"`
+	ExpectedDisks    []ExpectedDisk    `json:"expectedDisks,omitempty"`
 	ExpectedState    map[string]string `json:"expectedState,omitempty"`
 	RequestedState   map[string]any    `json:"requestedState,omitempty"`
 	ExpiresAt        time.Time         `json:"expiresAt,omitempty"`
 	Confirmed        bool              `json:"confirmed"`
+}
+
+type ExpectedDisk struct {
+	ID             string `json:"id"`
+	WWN            string `json:"wwn,omitempty"`
+	Serial         string `json:"serial,omitempty"`
+	Model          string `json:"model,omitempty"`
+	SizeBytes      uint64 `json:"sizeBytes"`
+	FilesystemUUID string `json:"filesystemUuid,omitempty"`
 }
 
 type Response struct {

@@ -114,9 +114,57 @@ func TestExecutePowerActionIsAllowListed(t *testing.T) {
 	}
 }
 
+func TestExecutePoolMountRevalidatesEveryDisk(t *testing.T) {
+	disks := []model.Disk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "b", SizeBytes: 200}}
+	var command string
+	result := execute(request{Operation: "pool.mount", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "b", SizeBytes: 200}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a", "/srv/disks/wwn_b"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return disks, nil }, func(name string, args ...string) ([]byte, error) {
+		command = name + " " + strings.Join(args, " ")
+		return nil, nil
+	})
+	if !result.OK || !strings.Contains(command, "mount -t fuse.mergerfs") {
+		t.Fatalf("unexpected pool mount result=%#v command=%q", result, command)
+	}
+	changed := []model.Disk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "replaced", SizeBytes: 200}}
+	result = execute(request{Operation: "pool.mount", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}, {ID: "wwn:b", WWN: "b", SizeBytes: 200}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a", "/srv/disks/wwn_b"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return changed, nil }, func(string, ...string) ([]byte, error) { return nil, nil })
+	if result.OK || !strings.Contains(result.Error, "WWN mismatch") {
+		t.Fatalf("expected pool identity rejection: %#v", result)
+	}
+}
+
 func TestNetworkCheckpointRejectsUnapprovedSetting(t *testing.T) {
 	_, err := requestedChanges(map[string]any{"changes": map[string]any{"connection.secondaries": "bad"}})
 	if err == nil || !strings.Contains(err.Error(), "not allow-listed") {
 		t.Fatalf("expected network setting rejection, got %v", err)
+	}
+}
+
+func TestTypedIdentityAndACLOperationsAreAllowListed(t *testing.T) {
+	commands := make([]string, 0)
+	run := func(name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return nil, nil
+	}
+	user := execute(request{Operation: "identity.system-user.ensure", PlanHash: "identity", Confirmed: true, RequestedState: map[string]any{"name": "media", "uid": 1001, "gid": 1001, "home": "/srv/pools/media"}}, nil, run)
+	if !user.OK || !strings.HasPrefix(commands[0], "useradd --system") {
+		t.Fatalf("unexpected system-user result: %#v commands=%v", user, commands)
+	}
+	acl := execute(request{Operation: "acl.apply", PlanHash: "acl", Confirmed: true, RequestedState: map[string]any{"path": "/srv/pools/media", "entries": []any{map[string]any{"principal": "media", "level": "read"}}}}, nil, run)
+	if !acl.OK || !strings.HasPrefix(commands[1], "setfacl") {
+		t.Fatalf("unexpected ACL result: %#v commands=%v", acl, commands)
+	}
+	unsafe := execute(request{Operation: "acl.apply", PlanHash: "acl", Confirmed: true, RequestedState: map[string]any{"path": "/etc/passwd", "entries": []any{map[string]any{"principal": "media", "level": "write"}}}}, nil, run)
+	if unsafe.OK || !strings.Contains(unsafe.Error, "allow-listed") {
+		t.Fatalf("unsafe ACL path was accepted: %#v", unsafe)
+	}
+}
+
+func TestFirewallApplyValidatesBeforeActivation(t *testing.T) {
+	commands := make([]string, 0)
+	result := execute(request{Operation: "firewall.apply", PlanHash: "firewall", Confirmed: true, RequestedState: map[string]any{"configPath": "/var/lib/mynas/generated/nftables.conf"}}, nil, func(name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return nil, nil
+	})
+	if !result.OK || len(commands) != 2 || commands[0] != "nft -c -f /var/lib/mynas/generated/nftables.conf" || commands[1] != "nft -f /var/lib/mynas/generated/nftables.conf" {
+		t.Fatalf("unexpected firewall apply: %#v commands=%v", result, commands)
 	}
 }

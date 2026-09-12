@@ -19,6 +19,7 @@ import (
 
 	"github.com/lumonas/lumonas/internal/collector"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/storage"
 )
 
 type request struct {
@@ -27,10 +28,19 @@ type request struct {
 	PlanHash         string            `json:"planHash"`
 	TargetDiskID     string            `json:"targetDiskId,omitempty"`
 	ExpectedIdentity map[string]string `json:"expectedIdentity,omitempty"`
+	ExpectedDisks    []expectedDisk    `json:"expectedDisks,omitempty"`
 	ExpectedState    map[string]string `json:"expectedState,omitempty"`
 	RequestedState   map[string]any    `json:"requestedState,omitempty"`
 	ExpiresAt        time.Time         `json:"expiresAt,omitempty"`
 	Confirmed        bool              `json:"confirmed"`
+}
+type expectedDisk struct {
+	ID             string `json:"id"`
+	WWN            string `json:"wwn,omitempty"`
+	Serial         string `json:"serial,omitempty"`
+	Model          string `json:"model,omitempty"`
+	SizeBytes      uint64 `json:"sizeBytes"`
+	FilesystemUUID string `json:"filesystemUuid,omitempty"`
 }
 type response struct {
 	OK    bool   `json:"ok"`
@@ -137,6 +147,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 			return response{Error: "target device or one of its partitions is mounted"}
 		}
 		return executeStorage(req, *target, run)
+	case "pool.mount":
+		return executePoolMount(req, discover, run)
 	case "service.reload":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -149,6 +161,14 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 			return response{Error: "service reload failed"}
 		}
 		return response{OK: true, Data: map[string]string{"service": name}}
+	case "service.config.apply":
+		return applyServiceConfig(req, run)
+	case "firewall.apply":
+		return applyFirewall(req, run)
+	case "identity.system-user.ensure":
+		return ensureSystemUser(req, run)
+	case "samba.user.ensure":
+		return ensureSambaUser(req, run)
 	case "snapraid.sync", "snapraid.scrub":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -191,8 +211,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 			return response{Error: "power action failed"}
 		}
 		return response{OK: true, Data: map[string]string{"action": action}}
-	case "network.apply", "acl.apply":
-		return response{Error: fmt.Sprintf("typed operation %q requires its dedicated checkpointed worker", req.Operation)}
+	case "acl.apply":
+		return applyACL(req, run)
 	default:
 		return response{Error: fmt.Sprintf("operation %q is not allow-listed", strings.TrimSpace(req.Operation))}
 	}
@@ -367,6 +387,80 @@ func executeStorage(req request, disk model.Disk, run command) response {
 	return response{Error: "storage operation is not implemented"}
 }
 
+func executePoolMount(req request, discover func(collector.CommandRunner) ([]model.Disk, error), run command) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	if len(req.ExpectedDisks) == 0 {
+		return response{Error: "expected pool disks are required"}
+	}
+	path := requestedString(req.RequestedState, "mountPath")
+	if !safePoolPath(path) {
+		return response{Error: "pool mount path is not allow-listed"}
+	}
+	branches := requestedStrings(req.RequestedState, "branches")
+	if len(branches) != len(req.ExpectedDisks) {
+		return response{Error: "pool branches do not match expected disks"}
+	}
+	actual, err := discover(nil)
+	if err != nil {
+		return response{Error: "disk identity discovery failed"}
+	}
+	byID := make(map[string]model.Disk, len(actual))
+	for _, disk := range actual {
+		byID[disk.ID] = disk
+	}
+	for index, expected := range req.ExpectedDisks {
+		disk, ok := byID[expected.ID]
+		if !ok {
+			return response{Error: "pool disk is no longer present"}
+		}
+		if err := validateExpectedDisk(disk, expected); err != nil {
+			return response{Error: err.Error()}
+		}
+		if branches[index] != storage.DiskBranchPath(expected.ID) {
+			return response{Error: "pool branch identity mismatch"}
+		}
+	}
+	if mounted, err := run("findmnt", "-rn", "-T", path); err == nil && strings.TrimSpace(string(mounted)) != "" {
+		return response{Error: "pool mount path is already mounted"}
+	}
+	if _, err := run("mkdir", "-p", path); err != nil {
+		return response{Error: "pool mount path could not be created"}
+	}
+	if _, err := run("mount", "-t", "fuse.mergerfs", "-o", "defaults,allow_other,use_ino,category.create=mfs", strings.Join(branches, ":"), path); err != nil {
+		return response{Error: "mergerfs pool mount failed"}
+	}
+	return response{OK: true, Data: map[string]any{"mountPath": path, "branches": branches}}
+}
+
+func validateExpectedDisk(actual model.Disk, expected expectedDisk) error {
+	if expected.WWN != "" && actual.WWN != expected.WWN {
+		return fmt.Errorf("pool disk %q WWN mismatch", expected.ID)
+	}
+	if expected.Serial != "" && actual.Serial != expected.Serial {
+		return fmt.Errorf("pool disk %q serial mismatch", expected.ID)
+	}
+	if expected.Model != "" && actual.Model != expected.Model {
+		return fmt.Errorf("pool disk %q model mismatch", expected.ID)
+	}
+	if expected.SizeBytes != 0 && actual.SizeBytes != expected.SizeBytes {
+		return fmt.Errorf("pool disk %q capacity mismatch", expected.ID)
+	}
+	if expected.FilesystemUUID != "" && actual.FilesystemUUID != expected.FilesystemUUID {
+		return fmt.Errorf("pool disk %q filesystem UUID mismatch", expected.ID)
+	}
+	if actual.PoolID != "" {
+		return fmt.Errorf("pool disk %q is already assigned to pool %q", expected.ID, actual.PoolID)
+	}
+	return nil
+}
+
+func safePoolPath(value string) bool {
+	clean := filepath.Clean(value)
+	return strings.HasPrefix(clean, "/srv/pools/") && clean != "/srv/pools/" && !strings.Contains(strings.TrimPrefix(clean, "/srv/pools/"), "/")
+}
+
 func requestedString(values map[string]any, key string) string {
 	value, _ := values[key].(string)
 	return strings.TrimSpace(value)
@@ -456,14 +550,158 @@ func safePath(value string) bool {
 
 func allowedService(value string) bool {
 	switch value {
-	case "mynas-privd.service", "mynasd.service", "mynas-web.service", "docker.service", "smbd.service", "nfs-server.service", "ssh.service":
+	case "mynas-privd.service", "mynasd.service", "mynas-web.service", "docker.service", "smbd.service", "nfs-server.service", "ssh.service", "rsync.service", "vsftpd.service":
 		return true
 	default:
 		return false
 	}
 }
 
+func applyServiceConfig(req request, run command) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	service := requestedString(req.RequestedState, "service")
+	if !allowedService(service) {
+		return response{Error: "service is not allow-listed"}
+	}
+	if _, err := run("systemctl", "reload", service); err != nil {
+		return response{Error: "service configuration reload failed"}
+	}
+	return response{OK: true, Data: map[string]string{"service": service, "state": "reloaded"}}
+}
+
+func applyFirewall(req request, run command) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	path := requestedString(req.RequestedState, "configPath")
+	if !safeFirewallConfig(path) {
+		return response{Error: "firewall config path is not allow-listed"}
+	}
+	if _, err := run("nft", "-c", "-f", path); err != nil {
+		return response{Error: "firewall validation failed"}
+	}
+	if _, err := run("nft", "-f", path); err != nil {
+		return response{Error: "firewall activation failed"}
+	}
+	return response{OK: true, Data: map[string]string{"configPath": path, "state": "active"}}
+}
+
+func ensureSystemUser(req request, run command) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	name := requestedString(req.RequestedState, "name")
+	if !validUnixName(name) {
+		return response{Error: "system user name is invalid"}
+	}
+	uid := requestedInt(req.RequestedState, "uid", 0)
+	gid := requestedInt(req.RequestedState, "gid", 0)
+	if uid < 100 || uid > 60000 || gid < 100 || gid > 60000 {
+		return response{Error: "system user uid and gid must be between 100 and 60000"}
+	}
+	home := requestedString(req.RequestedState, "home")
+	if home != "" && !safePath(home) {
+		return response{Error: "system user home is not allow-listed"}
+	}
+	shell := requestedString(req.RequestedState, "shell")
+	if shell == "" {
+		shell = "/usr/sbin/nologin"
+	}
+	if shell != "/usr/sbin/nologin" && shell != "/bin/false" {
+		return response{Error: "system user shell is not allow-listed"}
+	}
+	args := []string{"--system", "--uid", strconv.Itoa(uid), "--gid", strconv.Itoa(gid), "--shell", shell}
+	if home != "" {
+		args = append(args, "--home-dir", home)
+	}
+	args = append(args, name)
+	if _, err := run("useradd", args...); err != nil {
+		return response{Error: "system user configuration failed"}
+	}
+	return response{OK: true, Data: map[string]string{"name": name, "state": "configured"}}
+}
+
+func ensureSambaUser(req request, run command) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	name := requestedString(req.RequestedState, "name")
+	if !validUnixName(name) {
+		return response{Error: "Samba user name is invalid"}
+	}
+	args := []string{"-a", "-u", name}
+	if requestedBool(req.RequestedState, "disabled") {
+		args = []string{"-u", name, "-d"}
+	}
+	if _, err := run("pdbedit", args...); err != nil {
+		return response{Error: "Samba user configuration failed"}
+	}
+	return response{OK: true, Data: map[string]string{"name": name, "state": "configured"}}
+}
+
+func applyACL(req request, run command) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	path := requestedString(req.RequestedState, "path")
+	if !safePath(path) {
+		return response{Error: "ACL path is not allow-listed"}
+	}
+	entries, ok := req.RequestedState["entries"].([]any)
+	if !ok || len(entries) == 0 || len(entries) > 1000 {
+		return response{Error: "ACL entries must contain between 1 and 1000 items"}
+	}
+	args := []string{}
+	if requestedBool(req.RequestedState, "recursive") {
+		args = append(args, "-R")
+	}
+	args = append(args, "-m")
+	for _, raw := range entries {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			return response{Error: "ACL entry is invalid"}
+		}
+		principal, _ := entry["principal"].(string)
+		level, _ := entry["level"].(string)
+		if !validUnixName(principal) {
+			return response{Error: "ACL principal is invalid"}
+		}
+		var permission string
+		switch level {
+		case "none":
+			permission = ""
+		case "read":
+			permission = "r-X"
+		case "write":
+			permission = "rwX"
+		default:
+			return response{Error: "ACL level is invalid"}
+		}
+		if permission == "" {
+			args = append(args, "u:"+principal+":")
+		} else {
+			args = append(args, "u:"+principal+":"+permission)
+		}
+	}
+	args = append(args, path)
+	if _, err := run("setfacl", args...); err != nil {
+		return response{Error: "ACL application failed"}
+	}
+	return response{OK: true, Data: map[string]string{"path": path, "state": "applied"}}
+}
+
+func validUnixName(value string) bool {
+	return regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,31}$`).MatchString(value)
+}
+
 func safeSnapraidConfig(value string) bool {
 	clean := filepath.Clean(value)
 	return clean == "/etc/snapraid.conf" || strings.HasPrefix(clean, "/etc/mynas/") || strings.HasPrefix(clean, "/var/lib/mynas/")
+}
+
+func safeFirewallConfig(value string) bool {
+	clean := filepath.Clean(value)
+	return strings.HasPrefix(clean, "/etc/mynas/") || strings.HasPrefix(clean, "/var/lib/mynas/")
 }
