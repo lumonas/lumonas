@@ -306,6 +306,17 @@ func (s *apiServer) executeBackup(run backup.Run) {
 		s.finishBackup(run, "failed", fmt.Errorf("recovery export failed: %s", strings.TrimSpace(recorder.Body.String())))
 		return
 	}
+	var export struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &export); err != nil {
+		s.finishBackup(run, "failed", fmt.Errorf("recovery export response was invalid: %w", err))
+		return
+	}
+	if len(export.Warnings) > 0 {
+		s.finishBackup(run, "failed", fmt.Errorf("recovery export is incomplete: %s", strings.Join(export.Warnings, "; ")))
+		return
+	}
 	bundlePath := filepath.Join(envOr("LUMONAS_RECOVERY_DIR", "/var/lib/lumonas/recovery"), "latest.mrb")
 	bundle, err := os.ReadFile(bundlePath)
 	if err != nil {

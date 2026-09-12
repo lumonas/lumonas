@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/backup"
+	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 )
 
 func TestBackupDestinationAPIDoesNotReturnCredentials(t *testing.T) {
@@ -84,5 +88,45 @@ func TestBackupScheduleAPIRequiresValidIntervalAndPersists(t *testing.T) {
 	server.routes().ServeHTTP(readback, httptest.NewRequest(http.MethodGet, "/api/v1/backups/schedule", nil))
 	if readback.Code != http.StatusOK || !strings.Contains(readback.Body.String(), `"enabled":false`) {
 		t.Fatalf("schedule readback failed: %d: %s", readback.Code, readback.Body.String())
+	}
+}
+
+func TestAutomaticBackupFailsWhenDockerAppdataExportIsIncomplete(t *testing.T) {
+	root := t.TempDir()
+	stackDir := filepath.Join(root, "media")
+	if err := os.MkdirAll(stackDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stackDir, "compose.yaml"), []byte("services:\n  media:\n    image: example/media:latest\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	catalog := filepath.Join(t.TempDir(), "apps.json")
+	if err := os.WriteFile(catalog, []byte(`[{"id":"media","image":"example/media:latest","recovery":{"strategy":"stop-backup","appdataPaths":["/config"]}}]`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	recoveryDir := t.TempDir()
+	t.Setenv("LUMONAS_RECOVERY_KEY", "backup-key")
+	t.Setenv("LUMONAS_RECOVERY_DIR", recoveryDir)
+	server := testServer(t)
+	t.Setenv("LUMONAS_AUTO_BACKUP_DISABLED", "false")
+	server.catalogFile = catalog
+	server.dockerService = dockerruntime.New(root, func(_ context.Context, name string, args ...string) ([]byte, error) {
+		command := name + " " + strings.Join(args, " ")
+		if strings.Contains(command, "config --format json") {
+			return []byte(`{"services":{"media":{"volumes":[{"type":"bind","source":"/srv/lumonas/missing-appdata","target":"/config"}]}}}`), nil
+		}
+		return nil, nil
+	})
+	run := backup.Run{ID: "run-incomplete", Trigger: "scheduled", State: "queued", StartedAt: time.Now().UTC()}
+	if err := server.store.SaveBackupRun(run); err != nil {
+		t.Fatal(err)
+	}
+	server.executeBackup(run)
+	runs, err := server.store.BackupRuns(1)
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("backup run was not persisted: %#v %v", runs, err)
+	}
+	if runs[0].State != "failed" || !strings.Contains(runs[0].Error, "incomplete") {
+		t.Fatalf("incomplete appdata backup was marked successful: %#v", runs[0])
 	}
 }
