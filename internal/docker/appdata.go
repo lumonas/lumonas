@@ -39,6 +39,9 @@ func (s Service) AppdataSources(ctx context.Context, stack Stack) ([]AppdataSour
 	if stack.Recovery == nil || len(stack.Recovery.AppdataPaths) == 0 {
 		return []AppdataSource{}, nil
 	}
+	if !validStackName(stack.Name) {
+		return nil, fmt.Errorf("invalid stack name %q", stack.Name)
+	}
 	composePath := filepath.Join(s.Root, stack.Name, "compose.yaml")
 	if _, err := os.Stat(composePath); err != nil {
 		return nil, err
@@ -53,7 +56,10 @@ func (s Service) AppdataSources(ctx context.Context, stack Stack) ([]AppdataSour
 	}
 	result := make([]AppdataSource, 0, len(stack.Recovery.AppdataPaths))
 	for _, containerPath := range stack.Recovery.AppdataPaths {
-		volume, serviceName, found := findComposeVolume(config.Services, containerPath)
+		volume, serviceName, found, findErr := findComposeVolume(config.Services, containerPath)
+		if findErr != nil {
+			return nil, findErr
+		}
 		if !found {
 			return nil, fmt.Errorf("appdata path %s is not mounted by stack %s", containerPath, stack.Name)
 		}
@@ -78,16 +84,25 @@ func (s Service) AppdataSources(ctx context.Context, stack Stack) ([]AppdataSour
 	return result, nil
 }
 
-func findComposeVolume(services map[string]composeService, target string) (composeVolume, string, bool) {
+func findComposeVolume(services map[string]composeService, target string) (composeVolume, string, bool, error) {
 	target = filepath.Clean(target)
+	var match composeVolume
+	matchedService := ""
 	for serviceName, service := range services {
 		for _, volume := range service.Volumes {
 			if filepath.Clean(volume.Target) == target {
-				return volume, serviceName, true
+				if matchedService != "" {
+					return composeVolume{}, "", false, fmt.Errorf("appdata path %s is mounted by multiple services", target)
+				}
+				match = volume
+				matchedService = serviceName
 			}
 		}
 	}
-	return composeVolume{}, "", false
+	if matchedService == "" {
+		return composeVolume{}, "", false, nil
+	}
+	return match, matchedService, true, nil
 }
 
 func approvedHostPath(value string) bool {

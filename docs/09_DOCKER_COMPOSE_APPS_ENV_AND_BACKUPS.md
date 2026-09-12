@@ -215,6 +215,11 @@ Named volumes are resolved through Docker volume inspection; the exporter does
 not infer paths from stack names. Unknown or custom contracts that cannot be
 executed are reported as incomplete instead of being marked recoverable.
 
+The resolver also rejects traversal stack names and refuses to choose between
+multiple services mounting the same declared container path. Ambiguous or
+unsafe source resolution fails the appdata export before any archive is
+created.
+
 When stack image is unavailable and no Internet:
 
 ```text

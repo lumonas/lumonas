@@ -153,6 +153,8 @@ and size-limit checks.
 For a configured stack, the exporter must resolve every declared appdata path,
 stop and restart the stack for the default contract, and mark the recovery
 status incomplete if any source or lifecycle step fails.
+It must also reject traversal stack names and duplicate service mounts rather
+than selecting a source nondeterministically.
 
 ## N. UPS shutdown
 

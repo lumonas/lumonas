@@ -271,6 +271,9 @@ func (s Service) Action(ctx context.Context, stack Stack, action string) error {
 	if action != "start" && action != "stop" && action != "restart" && action != "deploy" && action != "update" {
 		return fmt.Errorf("unsupported stack action %q", action)
 	}
+	if !validStackName(stack.Name) {
+		return errors.New("invalid stack name")
+	}
 	composePath := filepath.Join(s.Root, stack.Name, "compose.yaml")
 	if _, err := os.Stat(composePath); err != nil {
 		return err
@@ -330,7 +333,7 @@ func (s Service) ImportImage(ctx context.Context, archivePath string) error {
 }
 
 func (s Service) UpdateCompose(name, compose string) (Stack, error) {
-	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`).MatchString(name) || !strings.Contains(compose, "services:") {
+	if !validStackName(name) || !strings.Contains(compose, "services:") {
 		return Stack{}, errors.New("invalid compose update")
 	}
 	if err := s.ValidateCompose(context.Background(), compose); err != nil {
@@ -368,7 +371,7 @@ func (s Service) UpdateCompose(name, compose string) (Stack, error) {
 }
 
 func (s Service) CreateStack(name, compose string) (Stack, error) {
-	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`).MatchString(name) {
+	if !validStackName(name) {
 		return Stack{}, errors.New("stack name must contain lowercase letters, numbers, and hyphens")
 	}
 	if !strings.Contains(compose, "services:") {
@@ -411,6 +414,10 @@ func (s Service) CreateStack(name, compose string) (Stack, error) {
 		return Stack{}, err
 	}
 	return parseStack(name, composePath, compose), nil
+}
+
+func validStackName(name string) bool {
+	return regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`).MatchString(name)
 }
 
 func (s Service) ValidateCompose(ctx context.Context, compose string) error {

@@ -58,3 +58,17 @@ func TestUnhealthyContainerIsNotReportedAsRunning(t *testing.T) {
 		t.Fatalf("unexpected unhealthy container %#v", containers)
 	}
 }
+
+func TestActionRejectsTraversalStackNames(t *testing.T) {
+	called := false
+	service := New(t.TempDir(), func(context.Context, string, ...string) ([]byte, error) {
+		called = true
+		return nil, nil
+	})
+	if err := service.Action(context.Background(), Stack{Name: "../escape"}, "start"); err == nil {
+		t.Fatal("stack traversal was accepted")
+	}
+	if called {
+		t.Fatal("Docker command ran for an invalid stack name")
+	}
+}

@@ -58,3 +58,28 @@ func TestAppdataSourcesRejectsUnapprovedMountsAndMissingTargets(t *testing.T) {
 		t.Fatal("missing appdata target was accepted")
 	}
 }
+
+func TestAppdataSourcesRejectsTraversalAndAmbiguousMounts(t *testing.T) {
+	service := New(t.TempDir(), func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+		t.Fatal("invalid stack name reached the filesystem or Docker runner")
+		return nil, nil
+	})
+	if _, err := service.AppdataSources(context.Background(), Stack{Name: "../escape", Recovery: &RecoveryContract{AppdataPaths: []string{"/config"}}}); err == nil {
+		t.Fatal("stack traversal was accepted")
+	}
+
+	root := t.TempDir()
+	stackDir := filepath.Join(root, "ambiguous")
+	if err := os.MkdirAll(stackDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stackDir, "compose.yaml"), []byte("services:\n  a:\n    image: example/a:latest\n  b:\n    image: example/b:latest\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	service = New(root, func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+		return []byte(`{"services":{"a":{"volumes":[{"type":"bind","source":"/srv/apps/a","target":"/config"}]},"b":{"volumes":[{"type":"bind","source":"/srv/apps/b","target":"/config"}]}}}`), nil
+	})
+	if _, err := service.AppdataSources(context.Background(), Stack{Name: "ambiguous", Recovery: &RecoveryContract{AppdataPaths: []string{"/config"}}}); err == nil || !strings.Contains(err.Error(), "multiple services") {
+		t.Fatalf("ambiguous appdata mount was accepted: %v", err)
+	}
+}

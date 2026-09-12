@@ -58,6 +58,10 @@ typed allow-listed operations with direct argument passing, finite context
 deadlines, bounded output, and an injectable runner for tests. They never
 construct shell commands, and unsupported or failed probes remain failures.
 
+Docker recovery source resolution follows the same fail-closed rule: stack
+paths are constrained to the managed root, normalized Compose mounts are
+required to be unambiguous, and only approved host data roots can be archived.
+
 Storage plans bind every identity exposed by discovery, including GPT disk
 GUID and partition UUID when available. Confirmation and privileged execution
 revalidate those values in addition to WWN, serial, capacity, and filesystem
