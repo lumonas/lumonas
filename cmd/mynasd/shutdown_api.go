@@ -11,6 +11,51 @@ import (
 	"github.com/lumonas/lumonas/internal/privileged"
 )
 
+type upsPolicyRequest struct {
+	Enabled           bool    `json:"enabled"`
+	MinimumRuntimeSec float64 `json:"minimumRuntimeSec"`
+	MinimumCharge     float64 `json:"minimumCharge"`
+}
+
+func (s *apiServer) upsStatus(w http.ResponseWriter, r *http.Request) {
+	s.ups(w, r)
+}
+
+func (s *apiServer) upsPolicy(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, upsPolicyJSON(s.autoShutdownPolicy()))
+}
+
+func (s *apiServer) updateUPSPolicy(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	var input upsPolicyRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if input.MinimumRuntimeSec < 0 || input.MinimumRuntimeSec > 86400 || input.MinimumCharge < 0 || input.MinimumCharge > 100 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "UPS thresholds are outside the supported range"})
+		return
+	}
+	encoded, _ := json.Marshal(input)
+	if err := s.store.SetMeta("ups_shutdown_policy", string(encoded)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordIdentityAudit(actor, "ups.policy.update", "ups", map[string]any{"enabled": input.Enabled, "minimumRuntimeSec": input.MinimumRuntimeSec, "minimumCharge": input.MinimumCharge})
+	s.advanceGeneration("ups.policy.update")
+	writeJSON(w, http.StatusOK, upsPolicyJSON(power.ShutdownPolicy{Enabled: input.Enabled, MinimumRuntimeSec: input.MinimumRuntimeSec, MinimumCharge: input.MinimumCharge}))
+}
+
+func upsPolicyJSON(policy power.ShutdownPolicy) map[string]any {
+	return map[string]any{"enabled": policy.Enabled, "minimumRuntimeSec": policy.MinimumRuntimeSec, "minimumCharge": policy.MinimumCharge}
+}
+
 func (s *apiServer) upsMonitorLoop() {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
@@ -21,6 +66,7 @@ func (s *apiServer) upsMonitorLoop() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		for _, unit := range power.Discover(ctx, nil, nil) {
 			if power.ShouldShutdown(unit, s.autoShutdownPolicy()) {
+				s.publish("ups.shutdown.pending", "critical", nil, map[string]any{"ups": unit.Name, "runtimeSec": unit.RuntimeSec, "chargePercent": unit.ChargePercent})
 				s.requestUPSShutdown(unit.Name)
 				break
 			}
@@ -94,5 +140,12 @@ func (s *apiServer) shutdownPower(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) autoShutdownPolicy() power.ShutdownPolicy {
-	return power.ShutdownPolicy{Enabled: strings.EqualFold(envOr("MYNAS_UPS_AUTO_SHUTDOWN", "false"), "true"), MinimumRuntimeSec: 300, MinimumCharge: 10}
+	policy := power.ShutdownPolicy{Enabled: strings.EqualFold(envOr("MYNAS_UPS_AUTO_SHUTDOWN", "false"), "true"), MinimumRuntimeSec: 300, MinimumCharge: 10}
+	if encoded, ok := s.store.Meta("ups_shutdown_policy"); ok {
+		var configured upsPolicyRequest
+		if json.Unmarshal([]byte(encoded), &configured) == nil {
+			return power.ShutdownPolicy{Enabled: configured.Enabled, MinimumRuntimeSec: configured.MinimumRuntimeSec, MinimumCharge: configured.MinimumCharge}
+		}
+	}
+	return policy
 }

@@ -31,6 +31,8 @@ type RecycleEntry struct {
 	Name         string    `json:"name"`
 	OriginalPath string    `json:"originalPath"`
 	DeletedAt    time.Time `json:"deletedAt"`
+	ExpiresAt    time.Time `json:"expiresAt"`
+	Owner        string    `json:"owner"`
 	SizeBytes    int64     `json:"sizeBytes"`
 }
 
@@ -139,6 +141,123 @@ func List(root, relative string) ([]Entry, error) {
 	return result, nil
 }
 
+func Search(root, relative, query string) ([]Entry, error) {
+	base, err := Resolve(root, relative)
+	if err != nil {
+		return nil, err
+	}
+	info, err := os.Stat(base)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() {
+		return nil, errors.New("search path is not a directory")
+	}
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return nil, errors.New("search query is required")
+	}
+	result := make([]Entry, 0)
+	err = filepath.WalkDir(base, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == base {
+			return nil
+		}
+		if entry.Name() == trashDirectory {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.Contains(strings.ToLower(entry.Name()), query) {
+			return nil
+		}
+		entryInfo, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		relativePath, err := filepath.Rel(base, path)
+		if err != nil {
+			return err
+		}
+		result = append(result, Entry{ID: entryID(root, relativePath), Name: filepath.ToSlash(relativePath), Type: entryType(entryInfo), SizeBytes: size(entryInfo, path), ModifiedAt: entryInfo.ModTime().UTC()})
+		return nil
+	})
+	sort.Slice(result, func(i, j int) bool { return strings.ToLower(result[i].Name) < strings.ToLower(result[j].Name) })
+	return result, err
+}
+
+func ResolveEntry(root, relative, name string) (string, os.FileInfo, error) {
+	if err := validName(name); err != nil {
+		return "", nil, err
+	}
+	parent, err := Resolve(root, relative)
+	if err != nil {
+		return "", nil, err
+	}
+	path := filepath.Join(parent, name)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", nil, errors.New("symbolic links are not permitted in the file API")
+	}
+	return path, info, nil
+}
+
+func WriteUpload(root, relative, name string, input io.Reader, sizeLimit int64) (string, error) {
+	if err := validName(name); err != nil {
+		return "", err
+	}
+	if sizeLimit < 0 || sizeLimit > 1<<40 {
+		return "", errors.New("upload size is outside the supported range")
+	}
+	parent, err := Resolve(root, relative)
+	if err != nil {
+		return "", err
+	}
+	finalName := uniqueName(parent, name)
+	temporary, err := os.CreateTemp(parent, ".mynas-upload-*")
+	if err != nil {
+		return "", err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o660); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	written, err := io.CopyN(temporary, input, sizeLimit+1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		_ = temporary.Close()
+		return "", err
+	}
+	if written > sizeLimit {
+		_ = temporary.Close()
+		return "", errors.New("upload exceeds declared size limit")
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	if err := temporary.Close(); err != nil {
+		return "", err
+	}
+	if err := os.Rename(temporaryPath, filepath.Join(parent, finalName)); err != nil {
+		return "", err
+	}
+	return finalName, nil
+}
+
 func MakeDir(root, relative, name string) error {
 	if err := validName(name); err != nil {
 		return err
@@ -224,7 +343,7 @@ func Delete(root, shareID, relative string, names []string) (int, error) {
 		}
 		metadata := trashMetadata{RecycleEntry: RecycleEntry{
 			ID: id, ShareID: shareID, Name: name, OriginalPath: normalizeRelative(relative),
-			DeletedAt: time.Now().UTC(), SizeBytes: size(info, source),
+			DeletedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(30 * 24 * time.Hour), Owner: "system", SizeBytes: size(info, source),
 		}, ParentPath: normalizeRelative(relative)}
 		if err := os.Rename(source, filepath.Join(itemRoot, "data")); err != nil {
 			_ = os.RemoveAll(itemRoot)
@@ -395,7 +514,14 @@ func Transfer(input TransferInput) (int, error) {
 		}
 		target := filepath.Join(targetParent, targetName)
 		if input.Operation == "move" {
-			if err := os.Rename(source, target); err != nil {
+			if filepath.Clean(input.SourceRoot) != filepath.Clean(input.TargetRoot) {
+				if err := copyTree(source, target); err != nil {
+					return transferred, err
+				}
+				if err := os.RemoveAll(source); err != nil {
+					return transferred, err
+				}
+			} else if err := os.Rename(source, target); err != nil {
 				return transferred, err
 			}
 		} else if err := copyTree(source, target); err != nil {
@@ -404,6 +530,13 @@ func Transfer(input TransferInput) (int, error) {
 		transferred++
 	}
 	return transferred, nil
+}
+
+func entryType(info os.FileInfo) string {
+	if info.IsDir() {
+		return "dir"
+	}
+	return "file"
 }
 
 func Conflicts(input TransferInput) ([]string, error) {

@@ -21,6 +21,9 @@ import (
 
 func testServer(t *testing.T) *apiServer {
 	t.Helper()
+	// API tests should not launch asynchronous production backups after the
+	// store cleanup has started; backup scheduling has dedicated tests.
+	t.Setenv("MYNAS_AUTO_BACKUP_DISABLED", "true")
 	db, err := store.Open(t.TempDir() + "/mynas.db")
 	if err != nil {
 		t.Fatal(err)

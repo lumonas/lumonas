@@ -43,9 +43,9 @@ func ExecuteShutdown(ctx context.Context, action string, runner ShutdownRunner) 
 }
 
 type ShutdownPolicy struct {
-	Enabled           bool
-	MinimumRuntimeSec float64
-	MinimumCharge     float64
+	Enabled           bool    `json:"enabled"`
+	MinimumRuntimeSec float64 `json:"minimumRuntimeSec"`
+	MinimumCharge     float64 `json:"minimumCharge"`
 }
 
 func ShouldShutdown(unit UPS, policy ShutdownPolicy) bool {

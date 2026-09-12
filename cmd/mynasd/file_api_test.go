@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +14,61 @@ import (
 
 	"github.com/lumonas/lumonas/internal/shares"
 )
+
+func TestFileAPIProvidesSearchPropertiesDownloadAndDependencyConfirmation(t *testing.T) {
+	server := testServer(t)
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "report.txt"), []byte("important"), 0o660); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.store.CreateManagedShare(shares.ManagedShare{ID: "share-search", Name: "Search", Path: root, Enabled: true, Protocols: []shares.Protocol{{Name: "smb"}}}); err != nil {
+		t.Fatal(err)
+	}
+	search := httptest.NewRecorder()
+	server.routes().ServeHTTP(search, httptest.NewRequest(http.MethodGet, "/api/v1/files/search?share=share-search&path=/&q=report", nil))
+	if search.Code != http.StatusOK || !strings.Contains(search.Body.String(), "report.txt") {
+		t.Fatalf("search failed: %d %s", search.Code, search.Body.String())
+	}
+	properties := httptest.NewRecorder()
+	server.routes().ServeHTTP(properties, httptest.NewRequest(http.MethodGet, "/api/v1/files/properties?share=share-search&path=/&name=report.txt", nil))
+	if properties.Code != http.StatusOK || !strings.Contains(properties.Body.String(), `"sizeBytes":9`) {
+		t.Fatalf("properties failed: %d %s", properties.Code, properties.Body.String())
+	}
+	download := httptest.NewRecorder()
+	server.routes().ServeHTTP(download, httptest.NewRequest(http.MethodGet, "/api/v1/files/download?share=share-search&path=/&name=report.txt", nil))
+	if download.Code != http.StatusOK || download.Body.String() != "important" {
+		t.Fatalf("download failed: %d %q", download.Code, download.Body.String())
+	}
+	multipartBody := &bytes.Buffer{}
+	writer := multipart.NewWriter(multipartBody)
+	_ = writer.WriteField("shareId", "share-search")
+	_ = writer.WriteField("path", "/")
+	part, err := writer.CreateFormFile("file", "uploaded.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = part.Write([]byte("uploaded"))
+	_ = writer.Close()
+	upload := httptest.NewRecorder()
+	uploadRequest := httptest.NewRequest(http.MethodPost, "/api/v1/files/upload", multipartBody)
+	uploadRequest.Header.Set("Content-Type", writer.FormDataContentType())
+	server.routes().ServeHTTP(upload, uploadRequest)
+	if upload.Code != http.StatusAccepted || !strings.Contains(upload.Body.String(), "uploaded.txt") {
+		t.Fatalf("multipart upload failed: %d %s", upload.Code, upload.Body.String())
+	}
+
+	t.Setenv("MYNAS_DOCKER_APPDATA_ROOT", root)
+	dependency := httptest.NewRecorder()
+	server.routes().ServeHTTP(dependency, httptest.NewRequest(http.MethodPost, "/api/v1/files/delete", strings.NewReader(`{"shareId":"share-search","path":"/","names":["report.txt"]}`)))
+	if dependency.Code != http.StatusConflict || !strings.Contains(dependency.Body.String(), "dependencyWarning") {
+		t.Fatalf("expected dependency confirmation: %d %s", dependency.Code, dependency.Body.String())
+	}
+	confirmed := httptest.NewRecorder()
+	server.routes().ServeHTTP(confirmed, httptest.NewRequest(http.MethodPost, "/api/v1/files/delete", strings.NewReader(`{"shareId":"share-search","path":"/","names":["report.txt"],"confirmDependencies":true}`)))
+	if confirmed.Code != http.StatusOK {
+		t.Fatalf("confirmed delete failed: %d %s", confirmed.Code, confirmed.Body.String())
+	}
+}
 
 func TestFileAPIUsesShareRootAndRecycleBin(t *testing.T) {
 	server := testServer(t)

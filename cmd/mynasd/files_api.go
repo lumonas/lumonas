@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -50,6 +51,62 @@ func (s *apiServer) listFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"shareId": share.ID, "path": pathOrRoot(requested), "entries": entries})
+}
+
+func (s *apiServer) searchFiles(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	share, err := s.fileShare(r.URL.Query().Get("share"))
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	entries, err := fileops.Search(share.Path, r.URL.Query().Get("path"), r.URL.Query().Get("q"))
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"shareId": share.ID, "entries": entries})
+}
+
+func (s *apiServer) fileProperties(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	share, err := s.fileShare(r.URL.Query().Get("share"))
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	path, info, err := fileops.ResolveEntry(share.Path, r.URL.Query().Get("path"), r.URL.Query().Get("name"))
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"shareId": share.ID, "path": path, "name": info.Name(), "type": fileEntryType(info), "sizeBytes": fileEntrySize(info, path), "modifiedAt": info.ModTime().UTC()})
+}
+
+func (s *apiServer) downloadFile(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	share, err := s.fileShare(r.URL.Query().Get("share"))
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	path, info, err := fileops.ResolveEntry(share.Path, r.URL.Query().Get("path"), r.URL.Query().Get("name"))
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	if info.IsDir() {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "directories cannot be downloaded by this endpoint"})
+		return
+	}
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+info.Name()+"\"")
+	http.ServeFile(w, r, path)
 }
 
 func (s *apiServer) makeDirectory(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +167,8 @@ func (s *apiServer) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	}
 	var input struct {
 		filePathRequest
-		Names []string `json:"names"`
+		Names               []string `json:"names"`
+		ConfirmDependencies bool     `json:"confirmDependencies"`
 	}
 	if !decodeFileJSON(w, r, &input) {
 		return
@@ -118,6 +176,10 @@ func (s *apiServer) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	share, err := s.fileShare(input.ShareID)
 	if err != nil {
 		writeFileError(w, err)
+		return
+	}
+	if warning := dockerDependencyWarning(share.Path, input.Path, input.Names); warning != "" && !input.ConfirmDependencies {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "explicit confirmation is required before deleting Docker appdata", "dependencyWarning": warning})
 		return
 	}
 	deleted, err := fileops.Delete(share.Path, share.ID, input.Path, input.Names)
@@ -188,6 +250,44 @@ func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 		filePathRequest
 		Name      string `json:"name"`
 		SizeBytes int64  `json:"sizeBytes"`
+	}
+	if strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "multipart/form-data") {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid multipart upload"})
+			return
+		}
+		input.ShareID, input.Path, input.Name = r.FormValue("shareId"), r.FormValue("path"), r.FormValue("name")
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "file part is required"})
+			return
+		}
+		defer file.Close()
+		if input.Name == "" {
+			input.Name = header.Filename
+		}
+		input.SizeBytes = header.Size
+		if input.Name == "" {
+			input.Name = header.Filename
+		}
+		actor, ok := s.identityActor(w, r, true)
+		if !ok {
+			return
+		}
+		share, err := s.fileShare(input.ShareID)
+		if err != nil {
+			writeFileError(w, err)
+			return
+		}
+		name, err := fileops.WriteUpload(share.Path, input.Path, input.Name, file, 1<<40)
+		if err != nil {
+			writeFileError(w, err)
+			return
+		}
+		job := s.queueFileJob("upload file", share.ID, func() (map[string]any, error) { return map[string]any{"name": name, "sizeBytes": input.SizeBytes}, nil })
+		s.recordIdentityAudit(actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
+		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "name": name})
+		return
 	}
 	if !decodeFileJSON(w, r, &input) {
 		return
@@ -397,3 +497,46 @@ func writeFileError(w http.ResponseWriter, err error) {
 }
 
 func float64Ptr(value float64) *float64 { return &value }
+
+func fileEntryType(info os.FileInfo) string {
+	if info.IsDir() {
+		return "dir"
+	}
+	return "file"
+}
+
+func fileEntrySize(info os.FileInfo, path string) int64 {
+	if !info.IsDir() {
+		return info.Size()
+	}
+	var total int64
+	_ = filepath.Walk(path, func(_ string, entry os.FileInfo, err error) error {
+		if err == nil && entry != nil && !entry.IsDir() {
+			total += entry.Size()
+		}
+		return nil
+	})
+	return total
+}
+
+func dockerDependencyWarning(root, relative string, names []string) string {
+	appdataRoot := envOr("MYNAS_DOCKER_APPDATA_ROOT", "")
+	stackRoot := envOr("MYNAS_STACK_ROOT", "")
+	if appdataRoot == "" && stackRoot == "" {
+		return ""
+	}
+	parent := filepath.Join(root, filepath.Clean("/"+strings.TrimPrefix(relative, "/")))
+	for _, name := range names {
+		candidate := filepath.Join(parent, name)
+		for _, dependencyRoot := range []string{appdataRoot, stackRoot} {
+			if dependencyRoot == "" {
+				continue
+			}
+			relative, err := filepath.Rel(filepath.Clean(dependencyRoot), filepath.Clean(candidate))
+			if err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(os.PathSeparator)) {
+				return candidate + " is referenced by Docker application data"
+			}
+		}
+	}
+	return ""
+}

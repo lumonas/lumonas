@@ -151,6 +151,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.deletePrincipal(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/server":
 		s.serverInfo(w)
+	case r.Method == http.MethodGet && endpoint == "/onboarding/state":
+		s.onboardingState(w, r)
+	case r.Method == http.MethodPost && endpoint == "/onboarding/complete":
+		s.completeOnboarding(w, r)
 	case r.Method == http.MethodGet && endpoint == "/disks":
 		s.disks(w)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/disks/"):
@@ -299,6 +303,12 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.services(w, r)
 	case r.Method == http.MethodGet && endpoint == "/power/ups":
 		s.ups(w, r)
+	case r.Method == http.MethodGet && endpoint == "/ups/status":
+		s.upsStatus(w, r)
+	case r.Method == http.MethodGet && endpoint == "/ups/policy":
+		s.upsPolicy(w, r)
+	case r.Method == http.MethodPatch && endpoint == "/ups/policy":
+		s.updateUPSPolicy(w, r)
 	case r.Method == http.MethodPost && endpoint == "/power/action":
 		s.powerAction(w, r)
 	case r.Method == http.MethodGet && endpoint == "/power/shutdown/plan":
@@ -321,6 +331,12 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.deleteManagedShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/files":
 		s.listFiles(w, r)
+	case r.Method == http.MethodGet && endpoint == "/files/search":
+		s.searchFiles(w, r)
+	case r.Method == http.MethodGet && endpoint == "/files/properties":
+		s.fileProperties(w, r)
+	case r.Method == http.MethodGet && endpoint == "/files/download":
+		s.downloadFile(w, r)
 	case r.Method == http.MethodPost && endpoint == "/files/mkdir":
 		s.makeDirectory(w, r)
 	case r.Method == http.MethodPost && endpoint == "/files/rename":
@@ -423,7 +439,11 @@ func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 
 func (s *apiServer) serverInfo(w http.ResponseWriter) {
 	uuid, _ := s.store.Meta("nas_uuid")
-	writeJSON(w, http.StatusOK, model.ServerInfo{ID: "server-1", Name: collector.Hostname(), Hostname: collector.Hostname(), Version: s.version, NASUUID: uuid, Timezone: time.Now().Location().String(), Health: s.serverHealth(), IP: primaryIP()})
+	name, ok := s.store.Meta("server_name")
+	if !ok || strings.TrimSpace(name) == "" {
+		name = collector.Hostname()
+	}
+	writeJSON(w, http.StatusOK, model.ServerInfo{ID: "server-1", Name: name, Hostname: collector.Hostname(), Version: s.version, NASUUID: uuid, Timezone: time.Now().Location().String(), Health: s.serverHealth(), IP: primaryIP()})
 }
 
 func (s *apiServer) serverHealth() model.HealthState {
