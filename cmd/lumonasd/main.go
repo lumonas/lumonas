@@ -64,6 +64,8 @@ type apiServer struct {
 	corsOrigins          []string
 	csrfTokens           map[string]csrfBinding
 	csrfMu               sync.Mutex
+	fixStages            map[string]string
+	fixStageMu           sync.Mutex
 	rateMu               sync.Mutex
 	rateAttempts         map[string][]time.Time
 	clock                func() time.Time
@@ -76,6 +78,26 @@ var version = "0.1.0-dev"
 // LUMONAS_AUTH_REQUIRED wins; otherwise the API stays open only until the
 // first management user exists, so a freshly installed appliance is
 // reachable for onboarding but never left wide open on the LAN.
+// fixStage carries the SnapRAID data slot a queued fix job should recover.
+// The map lives in memory: a daemon restart fails every unfinished job, so
+// the stage cannot outlive the process that queued it.
+func (s *apiServer) setFixStage(jobID, dataName string) {
+	s.fixStageMu.Lock()
+	defer s.fixStageMu.Unlock()
+	if s.fixStages == nil {
+		s.fixStages = make(map[string]string)
+	}
+	s.fixStages[jobID] = dataName
+}
+
+func (s *apiServer) takeFixStage(jobID string) string {
+	s.fixStageMu.Lock()
+	defer s.fixStageMu.Unlock()
+	name := s.fixStages[jobID]
+	delete(s.fixStages, jobID)
+	return name
+}
+
 func (s *apiServer) authEnabled() bool {
 	if s.authRequired || !s.dynamicAuth {
 		return s.authRequired
@@ -259,6 +281,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.planStoragePoolSetup(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/pools/setup/confirm":
 		s.confirmStoragePoolSetup(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/protection/replacement/plan":
+		s.planDiskReplacement(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/protection/replacement/confirm":
+		s.confirmDiskReplacement(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/pools/unmount/plan":
 		s.planStoragePoolUnmount(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/pools/unmount/") && strings.HasSuffix(endpoint, "/confirm"):
@@ -2554,6 +2580,16 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 	if job.Type == "snapraid.scrub" {
 		requested["scrubPercent"] = envOr("LUMONAS_SNAPRAID_SCRUB_PERCENT", "5")
 	}
+	if job.Type == "snapraid.fix" {
+		dataName := s.takeFixStage(job.ID)
+		if dataName == "" {
+			job.State, job.Stage, job.Error, job.FinishedAt = "failed", "Missing recovery slot", "no SnapRAID data slot was recorded for this fix job", &now
+			_ = s.store.SaveJob(job)
+			s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+			return
+		}
+		requested["dataName"] = dataName
+	}
 	currentDisks, discoveryErr := s.diskFunc()
 	if discoveryErr != nil {
 		job.State, job.Stage, job.Error, job.FinishedAt = "failed", "Disk discovery failed", discoveryErr.Error(), &now
@@ -2595,6 +2631,15 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 	s.publish(job.Type+".completed", "info", &model.ResourceRef{Type: "protection", ID: "protection"}, map[string]any{"jobId": job.ID})
+	if job.Type == "snapraid.fix" {
+		// Parity recovery restores the retired slot's content; follow it
+		// with a sync so the parity reflects the recovered data again.
+		syncJob := model.Job{ID: newID("job"), CorrelationID: job.CorrelationID, Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+		if err := s.store.SaveJob(syncJob); err == nil {
+			s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: syncJob.ID}, map[string]any{"job": syncJob})
+			go s.runProtectionJob(syncJob)
+		}
+	}
 }
 
 func (s *apiServer) ensureRestartedJobs() {

@@ -29,7 +29,22 @@ func applySnapraidConfig(req request, discover func(collector.CommandRunner) ([]
 	}
 	parity := requestedString(req.RequestedState, "parityDiskId")
 	data := requestedStrings(req.RequestedState, "dataDiskIds")
-	content, err := storage.RenderSnapraidConfig(parity, data)
+	// Replacement flows supply an explicit name→disk mapping so the retired
+	// disk's data slot keeps its name; regular flows use sorted identities.
+	slots, pinned := requestedDataSlots(req.RequestedState, "dataSlots")
+	var content string
+	var err error
+	if pinned {
+		content, err = storage.RenderSnapraidConfigPinned(parity, slots)
+		if err == nil {
+			data = make([]string, 0, len(slots))
+			for _, slot := range slots {
+				data = append(data, slot.DiskID)
+			}
+		}
+	} else {
+		content, err = storage.RenderSnapraidConfig(parity, data)
+	}
 	if err != nil {
 		return response{Error: err.Error()}
 	}

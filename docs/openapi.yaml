@@ -383,6 +383,50 @@ paths:
         '404':
           description: Disk is not in the known inventory
 
+  /storage/protection/replacement/plan:
+    post:
+      tags: [Storage]
+      summary: Plan a SnapRAID data-disk replacement
+      operationId: planDiskReplacement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [retiredDiskId, replacementDiskId]
+              properties:
+                retiredDiskId: {type: string}
+                replacementDiskId: {type: string}
+      responses:
+        '201':
+          description: Replacement plan
+        '4XX':
+          description: Client error
+
+  /storage/protection/replacement/confirm:
+    post:
+      tags: [Storage]
+      summary: Confirm and start SnapRAID disk replacement
+      operationId: confirmDiskReplacement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operationId, planHash, reauthenticated, storageSafetyUnlocked]
+              properties:
+                operationId: {type: string}
+                planHash: {type: string}
+                reauthenticated: {type: boolean}
+                storageSafetyUnlocked: {type: boolean}
+      responses:
+        '202':
+          description: Replacement formatting and parity recovery queued
+        '4XX':
+          description: Client error
+
   /docker/images/check-updates:
     post:
       tags: [Docker]
@@ -403,6 +447,62 @@ paths:
                   $ref: '#/components/schemas/DockerImage'
         '503':
           description: Docker unavailable
+
+  /storage/protection/replacement/plan:
+    post:
+      tags: [Storage]
+      summary: Plan a protected data disk replacement
+      operationId: planDiskReplacement
+      description: >-
+        Builds the reviewed sequence for swapping a failed SnapRAID data
+        disk: the replacement takes over the retired disk's data slot name so
+        parity recovery (snapraid fix) can restore its content.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [retiredDiskId, replacementDiskId]
+              properties:
+                retiredDiskId:
+                  type: string
+                replacementDiskId:
+                  type: string
+      responses:
+        '201':
+          description: Replacement plan
+        '422':
+          description: Retired disk not protected, replacement unsuitable, or config unreadable
+
+  /storage/protection/replacement/confirm:
+    post:
+      tags: [Storage]
+      summary: Execute a confirmed disk replacement
+      operationId: confirmDiskReplacement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operationId, planHash]
+              properties:
+                operationId:
+                  type: string
+                planHash:
+                  type: string
+                reauthenticated:
+                  type: boolean
+                storageSafetyUnlocked:
+                  type: boolean
+      responses:
+        '202':
+          description: Replacement started; format + config applied, parity recovery queued
+        '409':
+          description: Plan hash or identity revalidation failed
+        '423':
+          description: Reauthentication and storage safety unlock required
 
   /docker/summary:
     get:

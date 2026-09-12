@@ -220,7 +220,7 @@ func executeWorker(req request, worker string) response {
 
 func operationWorker(operation string) string {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.config.apply", "storage.mountpersist.apply":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply":
 		return "storage"
 	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wol.set", "firewall.apply":
 		return "network"
@@ -332,7 +332,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return ensureSystemUser(req, run)
 	case "samba.user.ensure":
 		return ensureSambaUser(req, run, stdinCommandRunner)
-	case "snapraid.sync", "snapraid.scrub":
+	case "snapraid.sync", "snapraid.scrub", "snapraid.fix":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
 		}
@@ -343,6 +343,14 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		args := []string{"-c", configPath}
 		if req.Operation == "snapraid.sync" {
 			args = append(args, "sync")
+		} else if req.Operation == "snapraid.fix" {
+			// Recovery from parity targets one data slot; the name is
+			// validated so only managed dN slots can be fixed.
+			dataName := requestedString(req.RequestedState, "dataName")
+			if !regexp.MustCompile(`^d[0-9]+$`).MatchString(dataName) {
+				return response{Error: "dataName must be a managed data slot (dN)"}
+			}
+			args = append(args, "fix", "-d", dataName)
 		} else {
 			percent := requestedString(req.RequestedState, "scrubPercent")
 			if percent == "" {
@@ -409,7 +417,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 
 func requiresOperationID(operation string) bool {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "network.wol.set":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.wol.set":
 		return true
 	default:
 		return false
@@ -1135,4 +1143,27 @@ func safeSnapraidConfig(value string) bool {
 func safeFirewallConfig(value string) bool {
 	clean := filepath.Clean(value)
 	return strings.HasPrefix(clean, "/etc/lumonas/") || strings.HasPrefix(clean, "/var/lib/lumonas/")
+}
+
+// requestedDataSlots decodes an explicit [{name, diskId}] mapping used by
+// replacement flows so a retired disk's data name can be preserved.
+func requestedDataSlots(values map[string]any, key string) ([]storage.DataSlot, bool) {
+	items, ok := values[key].([]any)
+	if !ok || len(items) == 0 {
+		return nil, false
+	}
+	slots := make([]storage.DataSlot, 0, len(items))
+	for _, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		name, _ := entry["name"].(string)
+		diskID, _ := entry["diskId"].(string)
+		if name == "" || diskID == "" {
+			return nil, false
+		}
+		slots = append(slots, storage.DataSlot{Name: name, DiskID: diskID})
+	}
+	return slots, true
 }
