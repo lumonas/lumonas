@@ -322,8 +322,14 @@ func executeStorage(req request, disk model.Disk, run command) response {
 			return response{Error: "filesystem is not allow-listed"}
 		}
 		args := []string{path, target}
+		if requestedBool(req.RequestedState, "readOnly") {
+			args = []string{"-o", "ro", path, target}
+		}
 		if filesystem != "" {
 			args = []string{"-t", filesystem, path, target}
+			if requestedBool(req.RequestedState, "readOnly") {
+				args = []string{"-t", filesystem, "-o", "ro", path, target}
+			}
 		}
 		if _, err := run("mount", args...); err != nil {
 			return response{Error: "mount failed"}
@@ -364,6 +370,19 @@ func executeStorage(req request, disk model.Disk, run command) response {
 func requestedString(values map[string]any, key string) string {
 	value, _ := values[key].(string)
 	return strings.TrimSpace(value)
+}
+
+func requestedBool(values map[string]any, key string) bool {
+	value := values[key]
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		parsed, err := strconv.ParseBool(typed)
+		return err == nil && parsed
+	default:
+		return false
+	}
 }
 
 func requestedInt(values map[string]any, key string, fallback int) int {

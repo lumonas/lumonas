@@ -59,6 +59,18 @@ func TestExecuteMountRevalidatesIdentityAndUsesAllowListedCommand(t *testing.T) 
 	}
 }
 
+func TestExecuteMountCanBeReadOnlyForImport(t *testing.T) {
+	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
+	var command string
+	result := execute(request{Operation: "filesystem.mount", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"}, RequestedState: map[string]any{"mountPath": "/srv/disks/wwn-test", "filesystem": "xfs", "readOnly": true}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, args ...string) ([]byte, error) {
+		command = name + " " + strings.Join(args, " ")
+		return nil, nil
+	})
+	if !result.OK || command != "mount -t xfs -o ro /dev/sda /srv/disks/wwn-test" {
+		t.Fatalf("unexpected read-only mount: %#v command=%q", result, command)
+	}
+}
+
 func TestExecuteRejectsStaleIdentity(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "new"}
 	result := execute(request{Operation: "disk.erase", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "old"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(string, ...string) ([]byte, error) { return nil, nil })
