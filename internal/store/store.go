@@ -406,7 +406,10 @@ func (s *Store) SaveJob(j model.Job) error {
 	_, err := s.db.Exec(`INSERT INTO jobs(id,type,title,resource_id,state,progress,stage,created_at,started_at,finished_at,error)
 VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,progress=excluded.progress,stage=excluded.stage,started_at=excluded.started_at,finished_at=excluded.finished_at,error=excluded.error`,
 		j.ID, j.Type, j.Title, nullable(j.ResourceID), j.State, nullableFloat(j.Progress), nullable(j.Stage), j.CreatedAt.Format(timeFormat), timeValue(j.StartedAt), timeValue(j.FinishedAt), nullable(j.Error))
-	return err
+	if err != nil {
+		return err
+	}
+	return s.PruneJobs(defaultJobRetention)
 }
 
 func (s *Store) SaveEvent(e model.Event) error {

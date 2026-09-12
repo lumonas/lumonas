@@ -321,6 +321,10 @@ Plan response contains dependencies and warnings.
 - recovery.readiness.changed
 - recovery.restore.*
 
+Job history is bounded in SQLite: all queued/running jobs remain available,
+while only the newest 1,000 terminal jobs (`completed`, `failed`, or
+`canceled`) are retained.
+
 ## Idempotency
 
 Mutating HTTP operations should accept/request idempotency keys where repeated browser/API submission could duplicate a job.

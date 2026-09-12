@@ -18,6 +18,9 @@ Automate destructive failure scenarios in disposable virtual environments.
 - backup manifest;
 - migrations.
 
+Retention tests cover bounded terminal job history while ensuring active jobs
+survive pruning.
+
 ### Integration
 
 Run system tools in containers/VMs where appropriate:
