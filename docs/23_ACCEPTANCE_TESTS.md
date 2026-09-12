@@ -142,7 +142,8 @@ only by the live ISO runtime. It also queries the restored storage-mounts API an
 network-connections API, and storage-mounts API; these checks cover the LAN
 mapping, mergerfs pool, and stable disk branch identities.
 Before booting the ISO, the host harness must independently verify the bundle
-with `lumonas-recover` and confirm its checksums and payload validity.
+with the production `lumonas-recover` binary and confirm its checksums and
+payload validity.
 
 ## M. Incomplete Docker backup
 

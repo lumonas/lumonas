@@ -220,9 +220,10 @@ jobs:
           path: .
       - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso dpkg-dev qemu-system-x86 qemu-utils curl
       - run: go build -trimpath -o "$RUNNER_TEMP/lumonas-recovery-fixture" ./cmd/lumonas-recovery-fixture
+      - run: go build -trimpath -o "$RUNNER_TEMP/lumonas-recover" ./cmd/lumonas-recover
       - run: sudo env LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_ENABLE_RECOVERY_SMOKE=true bash installer/build-iso.sh "${GITHUB_SHA::12}"
       - run: LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_ISO_ASSERT=true LUMONAS_ISO_LOG="$PWD/build/iso-smoke.log" bash scripts/iso-smoke.sh
-      - run: sudo env LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_RECOVERY_ASSERT=true LUMONAS_RECOVERY_FIXTURE="$RUNNER_TEMP/lumonas-recovery-fixture" LUMONAS_RECOVERY_LOG="$PWD/build/qemu-recovery.log" bash scripts/qemu-recovery-smoke.sh
+      - run: sudo env LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_RECOVERY_ASSERT=true LUMONAS_RECOVERY_FIXTURE="$RUNNER_TEMP/lumonas-recovery-fixture" LUMONAS_RECOVER_BIN="$RUNNER_TEMP/lumonas-recover" LUMONAS_RECOVERY_LOG="$PWD/build/qemu-recovery.log" bash scripts/qemu-recovery-smoke.sh
       - uses: actions/upload-artifact@v4
         with:
           name: lumonas-iso

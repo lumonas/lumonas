@@ -68,9 +68,10 @@ systemd-managed recovery helper identifies both devices by stable virtio
 serial, formats only the blank target, runs `lumonas-recover --apply`, and
 shuts the guest down. CI mounts the resulting target image and verifies the
 restored desired state, Compose data, encrypted payload, and completion marker.
-The host harness first runs the production `lumonas-recover` planner against
-the same bundle and requires verified checksums plus valid database, desired
-state, and Compose payloads before the guest boots.
+The host harness first runs the production `lumonas-recover` planner binary
+against the same bundle and requires verified checksums plus valid database,
+desired state, and Compose payloads before the guest boots; CI builds and
+passes that binary explicitly rather than relying on a development `go run`.
 This is release-blocking and exercises the offline system-disk replacement path
 end to end.
 The recovery helper has a bounded startup timeout and powers the guest off on
