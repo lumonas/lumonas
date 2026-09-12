@@ -67,6 +67,7 @@ if [ "$ASSERT_MODE" != "true" ]; then
 fi
 
 LOG="${LUMONAS_QEMU_LOG:-/tmp/lumonas-qemu-smoke.log}"
+INDEX_LOG="$LOG.index"
 run_qemu >"$LOG" 2>&1 &
 QEMU_PID=$!
 cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null || true; }
@@ -75,6 +76,7 @@ trap cleanup EXIT
 for attempt in $(seq 1 60); do
   if curl -fsS http://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/readyz >/dev/null 2>&1 && \
+     curl -fsS http://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
      curl -fsS http://127.0.0.1:18080/api/v1/server >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
      curl -fsS http://127.0.0.1:18080/api/v1/system/metrics >/dev/null 2>&1 && \
@@ -84,6 +86,8 @@ for attempt in $(seq 1 60); do
     disk_count=$(grep -o '"id"' "$LOG.disks" | wc -l | tr -d ' ')
     if [ "$disk_count" -ge 5 ] && \
        grep -F 'serial:LUMONAS-DATA1' "$LOG.disks" >/dev/null 2>&1 && \
+       grep -F '<title>LumoNAS</title>' "$INDEX_LOG" >/dev/null 2>&1 && \
+       grep -F '<div id="root"></div>' "$INDEX_LOG" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-privd.service","name":"lumonas-privd.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$LOG.services" >/dev/null 2>&1; then

@@ -148,6 +148,10 @@ The broker logging test verifies that operation metadata is retained while
 requested state and expected identity payloads are excluded from structured
 logs.
 
+The QEMU smoke fetches `/` through `lumonas-web` and checks the compiled title
+and React root markers, so a package with a healthy API but missing frontend
+assets fails the release gate.
+
 Expected result: fail closed.
 
 Onboarding also fails closed: an initial SnapRAID sync is not queued until

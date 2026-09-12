@@ -22,6 +22,7 @@ Deliver:
 - bounded stdin-aware runners for WireGuard and SFTP integrations.
 - operation IDs are required at the privileged boundary for storage/protection mutations.
 - structured redacted journald request/result logging for the privileged broker.
+- QEMU smoke validation of the compiled frontend served by `lumonas-web`.
 
 Exit criteria:
 

@@ -368,3 +368,11 @@ operation containing sensitive requested-state and identity values.
 Pass if structured records include operation/correlation/plan/result metadata,
 while sensitive payload values are absent and the packaged units identify their
 logs as `lumonas-privd`, `lumonasd`, and `lumonas-web`.
+
+## AN. Real frontend appliance smoke
+
+Boot the Debian appliance through the QEMU release smoke and fetch `/` from
+the packaged web service.
+
+Pass if the response contains the compiled LumoNAS title and React root
+element, in addition to the API, SSE, service identity, and disk assertions.

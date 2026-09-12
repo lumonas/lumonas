@@ -79,6 +79,10 @@ and results with operation, correlation, plan, target, worker, success, and
 error fields. Requested state and identity maps are intentionally excluded so
 credentials and detailed hardware metadata cannot enter the journal.
 
+The QEMU release smoke also fetches the web root and validates the compiled
+LumoNAS document before exercising the API, keeping the appliance check tied
+to the real frontend rather than only backend readiness.
+
 ### Class D — destructive
 
 Examples:
