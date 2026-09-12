@@ -27,6 +27,7 @@ Deliver:
   network privileged worker.
 - validated scheduled power execution through the existing ordered shutdown
   and privileged broker path.
+- Debian Docker JSON-file log rotation baseline and retention verification.
 
 Exit criteria:
 

@@ -53,6 +53,11 @@ User specifies maximum size.
 
 Set default log rotation.
 
+The Debian package ships a root-owned baseline with the `json-file` driver,
+10 MiB maximum file size, and three retained files. Installation copies it to
+`/etc/docker/daemon.json` only when that administrator-owned file does not
+already exist; upgrades never overwrite an existing Docker configuration.
+
 UI:
 
 - log driver;

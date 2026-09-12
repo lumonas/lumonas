@@ -40,6 +40,7 @@ test "$(dpkg-query -W -f="${Version}" lumonas)" = "$EXPECTED_VERSION"
 grep -Fx "LumoNAS administrator marker" /etc/lumonas/lumonasd.env
 test -d /var/lib/lumonas/recovery
 test -d /srv/lumonas
+test -f /etc/docker/daemon.json
 test -x /usr/lib/lumonas/lumonasd
 test -x /usr/lib/lumonas/lumonas-recover
 test -f /lib/systemd/system/lumonasd.service

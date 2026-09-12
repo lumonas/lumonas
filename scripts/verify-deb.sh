@@ -55,6 +55,20 @@ for unit in \
 	require_path "./lib/systemd/system/$unit"
 done
 
+[ -f "$DATA_DIR/etc/docker/daemon.json.lumonas" ] || {
+	echo "Docker logging baseline is missing from the package" >&2
+	exit 1
+}
+python3 - "$DATA_DIR/etc/docker/daemon.json.lumonas" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    config = json.load(handle)
+assert config["log-driver"] == "json-file"
+assert config["log-opts"] == {"max-size": "10m", "max-file": "3"}
+PY
+
 for path in \
 	./usr/share/lumonas/web/index.html \
 	./usr/share/lumonas/catalog/apps.json \

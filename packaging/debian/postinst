@@ -4,6 +4,7 @@ set -eu
 getent group lumonas >/dev/null 2>&1 || groupadd --system lumonas
 id lumonas >/dev/null 2>&1 || useradd --system --gid lumonas --home-dir /var/lib/lumonas --no-create-home --shell /usr/sbin/nologin lumonas
 install -d -o root -g lumonas -m 0750 /etc/lumonas
+install -d -o root -g root -m 0755 /etc/docker
 install -d -o lumonas -g lumonas -m 0750 /var/lib/lumonas /var/lib/lumonas/secrets /var/lib/lumonas/generated /var/lib/lumonas/recovery /srv/lumonas /srv/lumonas/docker /srv/disks /srv/pools
 if getent group docker >/dev/null 2>&1; then usermod -aG docker lumonas || true; fi
 
@@ -52,6 +53,13 @@ if command -v openssl >/dev/null 2>&1 && [ ! -e /etc/lumonas/tls/server.key ]; t
 		chmod 0640 /etc/lumonas/tls/server.key
 		chmod 0644 /etc/lumonas/tls/server.crt
 	fi
+fi
+
+# Apply bounded Docker JSON-file logging only when Docker has no administrator
+# configuration yet. Existing daemon.json is never overwritten during install
+# or upgrade.
+if [ ! -e /etc/docker/daemon.json ] && [ -f /etc/docker/daemon.json.lumonas ]; then
+	install -o root -g root -m 0644 /etc/docker/daemon.json.lumonas /etc/docker/daemon.json
 fi
 systemctl daemon-reload || true
 systemctl try-reload-or-restart systemd-journald.service || true

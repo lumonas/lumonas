@@ -392,3 +392,11 @@ Run the power schedule and settings API tests.
 Pass if invalid actions, clock formats, and day selections are rejected, a due
 schedule is matched only once per local minute, and execution uses the typed
 `power.shutdown` broker request with an operation ID.
+
+## AQ. Docker log retention
+
+Run the log-retention and packaging smoke tests.
+
+Pass if the package ships a Docker `json-file` baseline capped at 10 MiB per
+file and three files, applies it only when `/etc/docker/daemon.json` is absent,
+and never overwrites an administrator-owned Docker configuration on upgrade.

@@ -83,6 +83,8 @@ directories remain writable by that account. This check is release-blocking.
 The log-retention smoke test verifies that the packaged journald drop-in keeps
 system and runtime logs bounded and expires old files, preventing appliance
 logs from consuming the data volume without an explicit operator choice.
+It also validates the packaged Docker `json-file` baseline with 10 MiB files
+and three retained files.
 
 The disk API contract test populates every stable identity field and verifies
 that `/api/v1/disks` serializes those fields, including the current device
