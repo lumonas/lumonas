@@ -9,6 +9,6 @@ sudo LUMONAS_DEB="$PWD/lumonas_0.1.0-dev_amd64.deb" \
   scripts/qemu-build-image.sh
 ```
 
-The runtime smoke-test entrypoint is `scripts/qemu-smoke.sh`. It boots the image with one system disk, three virtual data disks, a parity disk, and a virtual NIC. Set `LUMONAS_QEMU_ASSERT=true` to wait for and assert health/readiness, core API endpoints, service discovery, stable disk identity, live SSE metrics, and recovery export/status/restore-plan verification through the guest web service.
+The runtime smoke-test entrypoint is `scripts/qemu-smoke.sh`. It boots the image with one system disk, three virtual data disks, a parity disk, and a virtual NIC. Set `LUMONAS_QEMU_ASSERT=true` to wait for and assert health/readiness, core API endpoints, service discovery, stable disk identity, live SSE metrics, recovery export/status/restore-plan/staging verification, and a second boot with reordered virtual disk attachments through the guest web service.
 
 The GitHub Actions QEMU job builds this image from a clean checkout, runs the asserted smoke test, and publishes the raw appliance image plus the smoke log for release assembly.
