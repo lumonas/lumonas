@@ -74,6 +74,12 @@ The Debian appliance smoke test also requires `lumonas-privd`, `lumonasd`, and
 `lumonas-web` to report active/running through the services API, and requires
 the web service identity to be `lumonas` rather than root.
 
+The daemon restart tests also verify that queued, preparing, and running jobs
+are failed closed when `lumonasd` starts again, and that an SSE client can
+resume from `Last-Event-ID` without receiving its cursor event twice. Host
+integration commands use bounded contexts so a missing or wedged utility
+cannot keep a job or release smoke test alive indefinitely.
+
 ## Destructive safety tests
 
 Explicit cases:
@@ -204,9 +210,9 @@ the original metadata payload for compatibility.
 
 Host integration commands use a shared bounded runner. Privileged commands,
 disk/SMART discovery, Docker, Samba validation, NetworkManager/WireGuard,
-Tailscale, and NUT calls inherit a finite deadline; NetworkManager
-checkpoints additionally remain bounded by their requested confirmation
-timeout.
+Tailscale, NUT, systemd status, mergerfs/SnapRAID discovery, and SFTP backup
+transfers inherit a finite deadline; NetworkManager checkpoints additionally
+remain bounded by their requested confirmation timeout.
 
 ## Release artifacts
 

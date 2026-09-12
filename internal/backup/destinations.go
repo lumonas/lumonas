@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 func UploadWithTimeout(destination Destination, credentials Credentials, source, object string) error {
@@ -218,7 +220,9 @@ func uploadSFTP(ctx context.Context, target string, credentials Credentials, sou
 		args = append(args, "-P", parsed.Port())
 	}
 	args = append(args, "-b", "-", user+"@"+parsed.Host)
-	command := exec.CommandContext(ctx, "sftp", args...)
+	bounded, cancel := runner.Context(ctx)
+	defer cancel()
+	command := exec.CommandContext(bounded, "sftp", args...)
 	command.Stdin = strings.NewReader("-mkdir " + filepath.ToSlash(path.Dir(remote)) + "\nput " + source + " " + remote + "\n")
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("SFTP upload failed: %s", strings.TrimSpace(string(output)))
@@ -240,7 +244,9 @@ func deleteSFTP(ctx context.Context, target string, credentials Credentials, obj
 		args = append(args[:3], append([]string{"-P", parsed.Port()}, args[3:]...)...)
 	}
 	args = append(args, credentials.Username+"@"+parsed.Host)
-	command := exec.CommandContext(ctx, "sftp", args...)
+	bounded, cancel := runner.Context(ctx)
+	defer cancel()
+	command := exec.CommandContext(bounded, "sftp", args...)
 	command.Stdin = strings.NewReader("rm " + remote + "\n")
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("SFTP delete failed: %s", strings.TrimSpace(string(output)))
@@ -269,7 +275,9 @@ func downloadSFTP(ctx context.Context, target string, credentials Credentials, o
 		args = append(args[:3], append([]string{"-P", parsed.Port()}, args[3:]...)...)
 	}
 	args = append(args, user+"@"+parsed.Host)
-	command := exec.CommandContext(ctx, "sftp", args...)
+	bounded, cancel := runner.Context(ctx)
+	defer cancel()
+	command := exec.CommandContext(bounded, "sftp", args...)
 	command.Stdin = strings.NewReader("get " + remote + " " + destination + "\n")
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("SFTP download failed: %s", strings.TrimSpace(string(output)))

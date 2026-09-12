@@ -2,8 +2,9 @@ package services
 
 import (
 	"context"
-	"os/exec"
 	"strings"
+
+	"github.com/lumonas/lumonas/internal/runner"
 )
 
 type Status struct {
@@ -35,8 +36,7 @@ func normalizeState(raw string) string {
 func Collect(ctx context.Context, names []string) []Status {
 	result := make([]Status, 0, len(names))
 	for _, name := range names {
-		command := exec.CommandContext(ctx, "systemctl", "is-active", name)
-		output, err := command.CombinedOutput()
+		output, err := runner.CombinedOutputContext(ctx, "systemctl", "is-active", name)
 		raw := strings.TrimSpace(string(output))
 		if raw == "" {
 			raw = "unknown"
@@ -53,8 +53,7 @@ func Collect(ctx context.Context, names []string) []Status {
 }
 
 func systemdProperty(ctx context.Context, unit, property string) string {
-	command := exec.CommandContext(ctx, "systemctl", "show", unit, "--property="+property, "--value")
-	output, err := command.Output()
+	output, err := runner.OutputContext(ctx, "systemctl", "show", unit, "--property="+property, "--value")
 	if err != nil {
 		return ""
 	}

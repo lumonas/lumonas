@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -11,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/lumonas/lumonas/internal/model"
+	commandrunner "github.com/lumonas/lumonas/internal/runner"
 )
 
 type RuntimeRunner func(context.Context, string, ...string) ([]byte, error)
@@ -24,7 +24,7 @@ type mount struct {
 func DiscoverPools(ctx context.Context, disks []model.Disk, runner RuntimeRunner) []model.Pool {
 	if runner == nil {
 		runner = func(ctx context.Context, command string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, command, args...).Output()
+			return commandrunner.OutputContext(ctx, command, args...)
 		}
 	}
 	output, err := runner(ctx, "findmnt", "-rn", "-o", "TARGET,FSTYPE,SOURCE", "-t", "fuse.mergerfs,mergerfs")
@@ -134,7 +134,7 @@ func DiscoverProtection(ctx context.Context, disks []model.Disk, runner RuntimeR
 	}
 	if runner == nil {
 		runner = func(ctx context.Context, command string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, command, args...).Output()
+			return commandrunner.OutputContext(ctx, command, args...)
 		}
 	}
 	// snapraid status is read-only. A successful invocation proves the configured

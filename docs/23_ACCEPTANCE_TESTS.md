@@ -237,3 +237,11 @@ Inspect the generated `.deb` with `verify-deb.sh`.
 Pass if the embedded build manifest matches the package version, architecture,
 and exact Debian dependency fields, and contains non-empty source/toolchain and
 input hashes.
+
+## Y. Daemon restart and SSE replay
+
+Run the `lumonasd` restart and event-stream tests.
+
+Pass if interrupted queued/preparing/running jobs become failed with a
+completion timestamp, and an SSE client resuming from `Last-Event-ID` receives
+only events after that cursor before live delivery begins.
