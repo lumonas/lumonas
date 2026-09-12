@@ -163,10 +163,16 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.metrics(w)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
 		s.networkInterfaces(w)
+	case r.Method == http.MethodPost && endpoint == "/network/checkpoints":
+		s.networkCheckpoint(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/network/checkpoints/"):
+		s.networkCheckpointAction(w, r, endpoint)
 	case r.Method == http.MethodGet && endpoint == "/services":
 		s.services(w, r)
 	case r.Method == http.MethodGet && endpoint == "/power/ups":
 		s.ups(w, r)
+	case r.Method == http.MethodPost && endpoint == "/power/action":
+		s.powerAction(w, r)
 	case r.Method == http.MethodGet && endpoint == "/shares":
 		s.listShares(w)
 	case r.Method == http.MethodPost && endpoint == "/shares":
@@ -561,6 +567,80 @@ func (s *apiServer) networkInterfaces(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, interfaces)
 }
 
+func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		ConnectionUUID  string            `json:"connectionUuid"`
+		Devices         []string          `json:"devices"`
+		Changes         map[string]string `json:"changes"`
+		TimeoutSeconds  int               `json:"timeoutSeconds"`
+		Reauthenticated bool              `json:"reauthenticated"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if !input.Reauthenticated {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication is required for network changes"})
+		return
+	}
+	if input.TimeoutSeconds == 0 {
+		input.TimeoutSeconds = 60
+	}
+	changes := make(map[string]any, len(input.Changes))
+	for key, value := range input.Changes {
+		changes[key] = value
+	}
+	requested := map[string]any{"connectionUuid": input.ConnectionUUID, "devices": input.Devices, "changes": changes, "timeoutSeconds": input.TimeoutSeconds}
+	operationID := newID("net")
+	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "network.checkpoint.begin", OperationID: operationID, PlanHash: operationID, RequestedState: requested, ExpiresAt: time.Now().UTC().Add(time.Duration(input.TimeoutSeconds+60) * time.Second), Confirmed: true})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": result.Error})
+		return
+	}
+	s.publish("network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
+	writeJSON(w, http.StatusAccepted, result)
+}
+
+func (s *apiServer) networkCheckpointAction(w http.ResponseWriter, r *http.Request, endpoint string) {
+	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
+	if len(parts) != 4 || (parts[3] != "commit" && parts[3] != "rollback") {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "network checkpoint action not found"})
+		return
+	}
+	var input struct {
+		Confirmed bool `json:"confirmed"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+	}
+	if !input.Confirmed {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "explicit checkpoint confirmation is required"})
+		return
+	}
+	operationID := parts[2]
+	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "network.checkpoint." + parts[3], OperationID: operationID, PlanHash: operationID, Confirmed: true})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
+		return
+	}
+	if parts[3] == "commit" {
+		s.advanceGeneration("network.checkpoint.commit")
+	}
+	s.publish("network.checkpoint."+parts[3], "info", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, nil)
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (s *apiServer) services(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -577,6 +657,37 @@ func (s *apiServer) ups(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, power.Discover(ctx, names, nil))
+}
+
+func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Action          string `json:"action"`
+		Reauthenticated bool   `json:"reauthenticated"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if !input.Reauthenticated {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication is required for power actions"})
+		return
+	}
+	if input.Action != "poweroff" && input.Action != "reboot" {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "power action is not allow-listed"})
+		return
+	}
+	operationID := newID("power")
+	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "power.action", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": input.Action}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
+		return
+	}
+	s.publish("power.action", "critical", nil, map[string]any{"operationId": operationID, "action": input.Action})
+	writeJSON(w, http.StatusAccepted, result)
 }
 
 func (s *apiServer) shareStore() shares.Store {
@@ -1045,8 +1156,19 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	if input.Type != "smart.short" && input.Type != "smart.extended" {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "only read-only SMART validation jobs are enabled in this runtime slice"})
+	if input.Type != "smart.short" && input.Type != "smart.extended" && input.Type != "snapraid.sync" && input.Type != "snapraid.scrub" {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "job type is not enabled in this runtime"})
+		return
+	}
+	if input.Type == "snapraid.sync" || input.Type == "snapraid.scrub" {
+		job := model.Job{ID: newID("job"), Type: input.Type, Title: strings.ReplaceAll(input.Type, ".", " "), ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+		if err := s.store.SaveJob(job); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		go s.runProtectionJob(job)
+		writeJSON(w, http.StatusAccepted, job)
 		return
 	}
 	if input.ResourceID == "" {
@@ -1100,6 +1222,35 @@ func (s *apiServer) runReadOnlyJob(job model.Job, target model.Disk) {
 	job.State, job.Stage, job.FinishedAt, job.Progress = "successful", "SMART data collected", &now, &progress
 	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "smart": smart})
+}
+
+func (s *apiServer) runProtectionJob(job model.Job) {
+	now := time.Now().UTC()
+	progress := 5.0
+	job.State, job.Stage, job.StartedAt, job.Progress = "running", "Validating SnapRAID configuration", &now, &progress
+	_ = s.store.SaveJob(job)
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+	requested := map[string]any{"configPath": envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf")}
+	if job.Type == "snapraid.scrub" {
+		requested["scrubPercent"] = envOr("MYNAS_SNAPRAID_SCRUB_PERCENT", "5")
+	}
+	request := privileged.Request{Operation: job.Type, PlanHash: job.ID, RequestedState: requested, ExpiresAt: now.Add(30 * time.Minute), Confirmed: true}
+	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(context.Background(), request)
+	if err != nil || !result.OK {
+		job.State, job.Stage, job.Error, job.FinishedAt = "failed", "SnapRAID operation failed", "", &now
+		if err != nil {
+			job.Error = err.Error()
+		} else {
+			job.Error = result.Error
+		}
+		_ = s.store.SaveJob(job)
+		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		return
+	}
+	progress = 100
+	job.State, job.Stage, job.FinishedAt, job.Progress = "successful", "SnapRAID operation completed", &now, &progress
+	_ = s.store.SaveJob(job)
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 }
 
 func (s *apiServer) ensureRestartedJobs() {
@@ -1164,17 +1315,23 @@ func (s *apiServer) stream(w http.ResponseWriter, r *http.Request) {
 func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, data map[string]any) {
 	event := model.Event{ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Resource: resource, Data: data}
 	if err := s.store.SaveEvent(event); err != nil {
-		s.log.Warn("persist event failed", "error", err)
+		if s.log != nil {
+			s.log.Warn("persist event failed", "error", err)
+		}
 	}
 	if err := s.store.PruneEvents(10000); err != nil {
-		s.log.Warn("prune events failed", "error", err)
+		if s.log != nil {
+			s.log.Warn("prune events failed", "error", err)
+		}
 	}
 	entry := store.AuditEntry{Actor: "system", Action: kind, Outcome: "recorded", Metadata: data}
 	if resource != nil {
 		entry.ResourceType, entry.ResourceID = resource.Type, resource.ID
 	}
 	if err := s.store.SaveAudit(entry); err != nil {
-		s.log.Warn("persist audit entry failed", "error", err)
+		if s.log != nil {
+			s.log.Warn("persist audit entry failed", "error", err)
+		}
 	}
 	s.hub.Publish(event)
 }

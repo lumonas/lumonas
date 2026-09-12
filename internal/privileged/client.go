@@ -11,6 +11,7 @@ import (
 
 type Request struct {
 	Operation        string            `json:"operation"`
+	OperationID      string            `json:"operationId,omitempty"`
 	PlanHash         string            `json:"planHash"`
 	TargetDiskID     string            `json:"targetDiskId,omitempty"`
 	ExpectedIdentity map[string]string `json:"expectedIdentity,omitempty"`

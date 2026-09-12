@@ -79,3 +79,32 @@ func TestExecuteRejectsMountedPartitionForDestructiveAction(t *testing.T) {
 		t.Fatalf("expected mounted partition rejection: %#v", result)
 	}
 }
+
+func TestExecuteSnapraidUsesAllowListedConfigAndPercent(t *testing.T) {
+	var command string
+	result := execute(request{Operation: "snapraid.scrub", PlanHash: "job-1", RequestedState: map[string]any{"configPath": "/etc/mynas/snapraid.conf", "scrubPercent": "10"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
+		command = name + " " + strings.Join(args, " ")
+		return nil, nil
+	})
+	if !result.OK || command != "snapraid -c /etc/mynas/snapraid.conf scrub -p 10" {
+		t.Fatalf("unexpected snapraid execution: %#v command=%q", result, command)
+	}
+}
+
+func TestExecutePowerActionIsAllowListed(t *testing.T) {
+	command := ""
+	result := execute(request{Operation: "power.action", PlanHash: "power-1", RequestedState: map[string]any{"action": "reboot"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
+		command = name + " " + strings.Join(args, " ")
+		return nil, nil
+	})
+	if !result.OK || command != "systemctl reboot" {
+		t.Fatalf("unexpected power action: %#v command=%q", result, command)
+	}
+}
+
+func TestNetworkCheckpointRejectsUnapprovedSetting(t *testing.T) {
+	_, err := requestedChanges(map[string]any{"changes": map[string]any{"connection.secondaries": "bad"}})
+	if err == nil || !strings.Contains(err.Error(), "not allow-listed") {
+		t.Fatalf("expected network setting rejection, got %v", err)
+	}
+}

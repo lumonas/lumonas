@@ -46,13 +46,13 @@ func TestAPIHealthAndDiskIdentity(t *testing.T) {
 	}
 }
 
-func TestUnsupportedJobFailsClosed(t *testing.T) {
+func TestSnapraidJobIsQueuedAndFailsThroughUnavailableBroker(t *testing.T) {
 	server := testServer(t)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/jobs", io.NopCloser(strings.NewReader(`{"type":"snapraid.sync","resourceId":"wwn:test"}`)))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/jobs", io.NopCloser(strings.NewReader(`{"type":"snapraid.sync"}`)))
 	response := httptest.NewRecorder()
 	server.routes().ServeHTTP(response, request)
-	if response.Code != http.StatusNotImplemented {
-		t.Fatalf("expected 501, got %d", response.Code)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d", response.Code)
 	}
 }
 
