@@ -171,6 +171,11 @@ if [ "$source_mode" = false ]; then
   grep -F 'serial_DATA1' /mnt/lumonas-target/restored-mounts.json >/dev/null
   grep -F '"id":"lan"' /mnt/lumonas-target/restored-network.json >/dev/null
   grep -F '"interface":"eth0"' /mnt/lumonas-target/restored-network.json >/dev/null
+else
+  grep -F 'fuse.mergerfs' /mnt/lumonas-target/restored-mounts.json >/dev/null
+  grep -F 'serial_LUMONAS-DATA1' /mnt/lumonas-target/restored-mounts.json >/dev/null
+  grep -F '"id":"lan"' /mnt/lumonas-target/restored-network.json >/dev/null
+  grep -F '"interface":"eth0"' /mnt/lumonas-target/restored-network.json >/dev/null
 fi
 cleanup_backend
 backend_pid=""

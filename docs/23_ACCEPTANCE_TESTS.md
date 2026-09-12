@@ -132,10 +132,14 @@ Pass if:
 - all return correctly.
 
 The release-blocking Debian 13 QEMU recovery test exercises this path against a
-blank replacement disk. Its fixture is created through the production SQLite
-migrations and verifies restored users/groups, share protocol ACLs, committed
-configuration generation, Compose YAML, mergerfs/SnapRAID configuration, disk
-identity metadata, encrypted secrets, and the recovery result after shutdown.
+blank replacement disk. Tagged CI first configures a disposable Debian source
+appliance through the real API, including ext4 mounts, a mergerfs pool, a LAN
+profile, appdata, users, shares, Compose, and SnapRAID. It then verifies the
+encrypted export and restores it through the offline ISO. Its fixture fallback
+is created through the production SQLite migrations and verifies restored
+users/groups, share protocol ACLs, committed configuration generation, Compose
+YAML, mergerfs/SnapRAID configuration, disk identity metadata, encrypted
+secrets, and the recovery result after shutdown.
 The hook also starts the backend against the restored filesystem and checks the
 principals and shares API before powering off, so API readiness is not supplied
 only by the live ISO runtime. It also queries the restored storage-mounts API and

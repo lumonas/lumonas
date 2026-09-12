@@ -120,13 +120,20 @@ grep -Fx 'recovery-applied' "$TARGET_MOUNT/recovery-success" >/dev/null
 if [ "$SOURCE_MODE" = true ]; then
 	grep -F 'configGeneration' "$TARGET_MOUNT/var/lib/lumonas/recovery/restored/desired-state.json" >/dev/null
 	grep -F 'example/media:latest' "$TARGET_MOUNT/srv/lumonas/docker/stacks/media/compose.yaml" >/dev/null
+	grep -F 'mode: live-source' "$TARGET_MOUNT/srv/lumonas/docker/appdata/media/config.yaml" >/dev/null
 	grep -F 'share-media' "$TARGET_MOUNT/var/lib/lumonas/shares.json" >/dev/null
 	grep -a -F 'operator' "$TARGET_MOUNT/var/lib/lumonas/lumonas.db" >/dev/null
 	grep -F 'live-source-recovery-secret' "$TARGET_MOUNT/var/lib/lumonas/secrets/recovered-secrets.bin" >/dev/null
-	grep -F 'parity' "$TARGET_MOUNT/etc/lumonas/snapraid.conf" >/dev/null
+	grep -F 'data d1 /srv/disks/serial_LUMONAS-DATA1' "$TARGET_MOUNT/etc/lumonas/snapraid.conf" >/dev/null
+	grep -F 'parity /srv/disks/serial_LUMONAS-PARITY' "$TARGET_MOUNT/etc/lumonas/snapraid.conf" >/dev/null
+	grep -F 'fuse.mergerfs' "$TARGET_MOUNT/restored-mounts.json" >/dev/null
+	grep -F 'serial_LUMONAS-DATA1' "$TARGET_MOUNT/restored-mounts.json" >/dev/null
+	grep -F '"id":"lan"' "$TARGET_MOUNT/restored-network.json" >/dev/null
+	grep -F '"interface":"eth0"' "$TARGET_MOUNT/restored-network.json" >/dev/null
+	test -s "$TARGET_MOUNT/etc/lumonas/recovery/network-connections.json"
 	grep -F '"databaseRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/null
 	grep -F '"secretsRestored":true' "$TARGET_MOUNT/recovery-result.json" >/dev/null
-	echo "QEMU recovery smoke test passed (live source appliance export, verified bundle, offline ISO, blank replacement disk, users/shares/Compose/secrets/database restored)"
+	echo "QEMU recovery smoke test passed (live source appliance, real filesystems, mergerfs pool, network state, appdata, verified bundle, offline ISO, blank replacement disk restored)"
 else
 	grep -F 'fixture-nas' "$TARGET_MOUNT/var/lib/lumonas/recovery/restored/desired-state.json" >/dev/null
 	grep -F 'example/media:latest' "$TARGET_MOUNT/srv/lumonas/docker/stacks/media/compose.yaml" >/dev/null
