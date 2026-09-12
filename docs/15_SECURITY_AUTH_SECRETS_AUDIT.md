@@ -75,6 +75,11 @@ Never emit secrets into:
 - UI event stream;
 - exports by default.
 
+Release CI adds a high-confidence credential-format scan over tracked files and
+executes canary redaction plus privileged-operation rejection tests. This is a
+leak-detection backstop, not a replacement for keeping real secret values out
+of the repository and diagnostic inputs.
+
 ## Secret references
 
 Domain entities reference secret IDs.

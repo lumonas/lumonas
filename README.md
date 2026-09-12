@@ -66,6 +66,8 @@ Tagged releases run a Debian 13 previous-to-current package upgrade smoke test a
 
 The ISO pipeline boots the generated offline image under QEMU with a blank replacement disk and checks the real health, readiness, and server endpoints before publishing the artifact. Release CI also performs a full offline system-disk recovery: it supplies a separate recovery medium, restores into the blank disk, powers the guest off, and verifies the recovered state directly from the image.
 
+Release CI includes a security gate that checks tracked files for high-confidence credential formats and runs secret-redaction plus privileged-operation rejection tests.
+
 Offline recovery includes the plan-first `lumonas-recover` utility. Restoration requires explicit `--apply` plus an absolute target root and writes verified configuration, Compose state, the SQLite database, and encrypted secrets atomically.
 
 Management sessions can be reviewed and revoked by token digest, while Time Machine shares render Samba fruit support only when explicitly enabled.

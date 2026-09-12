@@ -161,6 +161,10 @@ Good candidates:
 - backup manifests;
 - destructive plan invariants.
 
+The `security-controls` job is also release-blocking. It scans tracked files
+for high-confidence private-key and token formats, then runs the diagnostics
+redaction and privileged-operation rejection tests with a clean checkout.
+
 ## Release artifacts
 
 CI should produce:
@@ -195,4 +199,5 @@ Optional anonymous crash/diagnostic submission can be considered later with expl
 
 ## Acceptance criterion
 
-A build with failed system-disk recovery or destructive safety tests cannot be promoted to Stable.
+A build with failed system-disk recovery, secret-leak checks, or destructive
+safety tests cannot be promoted to Stable.
