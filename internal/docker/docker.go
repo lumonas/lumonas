@@ -263,15 +263,74 @@ func (s Service) Logs(ctx context.Context, container string, tail int) ([]LogLin
 }
 
 func (s Service) Action(ctx context.Context, stack Stack, action string) error {
-	if action != "start" && action != "stop" && action != "restart" {
+	if action != "start" && action != "stop" && action != "restart" && action != "deploy" && action != "update" {
 		return fmt.Errorf("unsupported stack action %q", action)
 	}
 	composePath := filepath.Join(s.Root, stack.Name, "compose.yaml")
 	if _, err := os.Stat(composePath); err != nil {
 		return err
 	}
-	_, err := s.Run(ctx, "docker", "compose", "-f", composePath, action)
+	composeAction := action
+	if action == "deploy" || action == "update" {
+		composeAction = "up"
+	}
+	args := []string{"docker", "compose", "-f", composePath}
+	if action == "update" {
+		args = append(args, "pull")
+		if _, err := s.Run(ctx, args[0], args[1:]...); err != nil {
+			return err
+		}
+		args = []string{"docker", "compose", "-f", composePath}
+	}
+	args = append(args, composeAction)
+	if composeAction == "up" {
+		args = append(args, "-d", "--remove-orphans")
+	}
+	_, err := s.Run(ctx, args[0], args[1:]...)
 	return err
+}
+
+func (s Service) CreateStack(name, compose string) (Stack, error) {
+	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`).MatchString(name) {
+		return Stack{}, errors.New("stack name must contain lowercase letters, numbers, and hyphens")
+	}
+	if !strings.Contains(compose, "services:") {
+		return Stack{}, errors.New("compose must define services")
+	}
+	stackDir := filepath.Join(s.Root, name)
+	if filepath.Dir(stackDir) != filepath.Clean(s.Root) {
+		return Stack{}, errors.New("invalid stack path")
+	}
+	if _, err := os.Stat(stackDir); err == nil {
+		return Stack{}, errors.New("stack already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return Stack{}, err
+	}
+	if err := os.MkdirAll(stackDir, 0o750); err != nil {
+		return Stack{}, err
+	}
+	composePath := filepath.Join(stackDir, "compose.yaml")
+	temporary, err := os.CreateTemp(stackDir, ".compose-*.yaml")
+	if err != nil {
+		return Stack{}, err
+	}
+	tempPath := temporary.Name()
+	defer os.Remove(tempPath)
+	if _, err := temporary.WriteString(compose); err != nil {
+		temporary.Close()
+		return Stack{}, err
+	}
+	if err := temporary.Chmod(0o640); err != nil {
+		temporary.Close()
+		return Stack{}, err
+	}
+	if err := temporary.Close(); err != nil {
+		return Stack{}, err
+	}
+	if err := os.Rename(tempPath, composePath); err != nil {
+		return Stack{}, err
+	}
+	return parseStack(name, composePath, compose), nil
 }
 
 func parseStack(name, composePath, content string) Stack {

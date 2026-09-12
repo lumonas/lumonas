@@ -1,0 +1,52 @@
+[
+  {
+    "id": "jellyfin",
+    "name": "Jellyfin",
+    "category": "Media",
+    "tagline": "Stream your movies, shows and music",
+    "description": "Free software media system for streaming your own media.",
+    "accent": "info",
+    "upstream": "https://jellyfin.org",
+    "image": "jellyfin/jellyfin:10.10.6",
+    "ports": [8096],
+    "popular": true,
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8096"},
+      {"id":"MEDIA","label":"Media library","type":"storage_ref","required":true,"containerPath":"/media","defaultResource":"share-media"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ]
+  },
+  {
+    "id": "immich",
+    "name": "Immich",
+    "category": "Photos",
+    "tagline": "Self-hosted photo and video backup",
+    "description": "High performance photo and video backup solution.",
+    "accent": "primary",
+    "upstream": "https://immich.app",
+    "image": "ghcr.io/immich-app/immich-server:v1.116.0",
+    "ports": [2283],
+    "popular": true,
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"2283"},
+      {"id":"UPLOAD_LOCATION","label":"Upload storage","type":"storage_ref","required":true,"containerPath":"/usr/src/app/upload","defaultResource":"share-photos"},
+      {"id":"DB_PASSWORD","label":"Database password","type":"secret","required":true},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ]
+  },
+  {
+    "id": "homeassistant",
+    "name": "Home Assistant",
+    "category": "Home",
+    "tagline": "Open source home automation",
+    "description": "A home automation hub with broad device support.",
+    "accent": "warning",
+    "upstream": "https://home-assistant.io",
+    "image": "ghcr.io/home-assistant/home-assistant:stable",
+    "ports": [8123],
+    "form": [
+      {"id":"CONFIG","label":"Configuration storage","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
+      {"id":"TZ","label":"Timezone","type":"timezone"}
+    ]
+  }
+]

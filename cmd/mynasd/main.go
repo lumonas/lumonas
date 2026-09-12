@@ -40,6 +40,7 @@ type apiServer struct {
 	diskFunc      func() ([]model.Disk, error)
 	authRequired  bool
 	dockerService dockerruntime.Service
+	catalogFile   string
 	alertMu       sync.Mutex
 	acknowledged  map[string]bool
 }
@@ -68,6 +69,7 @@ func main() {
 	}
 	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("MYNAS_AUTH_REQUIRED") == "true", acknowledged: make(map[string]bool)}
 	server.dockerService = dockerruntime.New(envOr("MYNAS_STACK_ROOT", "/srv/mynas/docker/stacks"), nil)
+	server.catalogFile = envOr("MYNAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
 	server.ensureRestartedJobs()
 	go server.metricsLoop()
 
@@ -160,9 +162,11 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && endpoint == "/docker/summary":
 		s.dockerSummary(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/apps":
-		writeJSON(w, http.StatusOK, []any{})
+		s.dockerApps(w)
 	case r.Method == http.MethodGet && endpoint == "/docker/stacks":
 		s.dockerStacks(w, r)
+	case r.Method == http.MethodPost && endpoint == "/docker/stacks":
+		s.createDockerStack(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/stacks/"):
 		s.dockerStackAction(w, r, endpoint)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/docker/stacks/"):
@@ -601,6 +605,15 @@ func (s *apiServer) dockerSummary(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]int{"stacks": len(stacks), "appsRunning": running, "updatesAvailable": 0})
 }
 
+func (s *apiServer) dockerApps(w http.ResponseWriter) {
+	apps, err := dockerruntime.LoadCatalog(s.catalogFile)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, apps)
+}
+
 func (s *apiServer) dockerStacks(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -610,6 +623,27 @@ func (s *apiServer) dockerStacks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, stacks)
+}
+
+func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Name        string `json:"name"`
+		ComposeYAML string `json:"composeYaml"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if input.Name == "" {
+		input.Name = "imported-stack"
+	}
+	stack, err := s.dockerService.CreateStack(input.Name, input.ComposeYAML)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publish("docker.stack.created", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID})
+	writeJSON(w, http.StatusCreated, stack)
 }
 
 func (s *apiServer) dockerStack(w http.ResponseWriter, r *http.Request, id string) {
