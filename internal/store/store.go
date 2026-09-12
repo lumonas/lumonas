@@ -422,6 +422,14 @@ func (s *Store) KnownDisks() ([]model.Disk, error) {
 	return result, rows.Err()
 }
 
+// DeleteKnownDisk forgets a disk identity from the inventory. Used when an
+// administrator retires a physically replaced disk so stale "disk missing"
+// alerts stop firing and the server health badge can recover.
+func (s *Store) DeleteKnownDisk(id string) error {
+	_, err := s.db.Exec(`DELETE FROM disk_inventory WHERE id = ?`, id)
+	return err
+}
+
 func (s *Store) SaveJob(j model.Job) error {
 	if j.CorrelationID == "" {
 		j.CorrelationID = j.ID

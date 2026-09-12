@@ -28,16 +28,27 @@ func (s *apiServer) evaluateEventAlert(kind string, data map[string]any) {
 }
 
 // fireAlertForRule opens a generated alert owned by an alert rule and stamps
-// the rule's last-triggered time.
-func (s *apiServer) fireAlertForRule(ruleID, title, description string, resource *model.ResourceRef) {
+// the rule's last-triggered time. It reports whether a new alert was opened
+// (deduplicated re-fires return false).
+func (s *apiServer) fireAlertForRule(ruleID, title, description string, resource *model.ResourceRef) bool {
 	rule, err := s.store.AlertRule(ruleID)
 	if err != nil || !rule.Enabled {
-		return
+		return false
+	}
+	return s.fireAlertWithSeverity(ruleID, rule.Severity, title, description, resource)
+}
+
+// fireAlertWithSeverity opens a generated alert with an explicit severity so
+// the same rule can escalate (e.g. SMART wear warning vs failed drive).
+func (s *apiServer) fireAlertWithSeverity(ruleID, severity, title, description string, resource *model.ResourceRef) bool {
+	rule, err := s.store.AlertRule(ruleID)
+	if err != nil || !rule.Enabled {
+		return false
 	}
 	now := time.Now().UTC()
 	alert := model.Alert{
 		ID:          newID("alert"),
-		Severity:    rule.Severity,
+		Severity:    severity,
 		Title:       rule.Name + " — " + title,
 		Description: description,
 		Resource:    resource,
@@ -46,13 +57,14 @@ func (s *apiServer) fireAlertForRule(ruleID, title, description string, resource
 	}
 	inserted, err := s.store.OpenGeneratedAlert(alert, ruleID)
 	if err != nil || !inserted {
-		return
+		return false
 	}
 	rule.LastTriggeredAt = &now
 	_ = s.store.SaveAlertRule(rule)
 	s.publish("alert.created", alert.Severity, &model.ResourceRef{Type: "alert", ID: alert.ID}, map[string]any{
 		"alertId": alert.ID, "ruleId": ruleID, "title": alert.Title,
 	})
+	return true
 }
 
 func (s *apiServer) resolveAlertForRule(ruleID, resourceID string) {
@@ -63,14 +75,51 @@ func (s *apiServer) resolveAlertForRule(ruleID, resourceID string) {
 	s.publish("alert.resolved", "info", nil, map[string]any{"ruleId": ruleID, "resourceId": resourceID})
 }
 
-// evaluatePeriodicAlerts checks time-based rule conditions. Temperature needs
-// SMART reads, so it is sampled every tenth tick (~10 minutes); sync staleness
-// is a cheap meta lookup and runs every tick.
+// evaluatePeriodicAlerts checks time-based rule conditions. Temperature and
+// SMART attributes need disk (SMART) reads, so they are sampled every tenth
+// tick (~10 minutes); sync staleness is a cheap meta lookup and runs every
+// tick.
 func (s *apiServer) evaluatePeriodicAlerts(tick int64) {
 	if tick%10 == 0 {
 		s.evaluateDiskTemperatures()
+		s.evaluateSMARTAlerts()
 	}
 	s.evaluateSyncStaleness()
+}
+
+// evaluateSMARTAlerts turns SMART attribute movement (reallocated/pending/
+// uncorrectable sectors, CRC errors, failed self-assessment) into rule-owned
+// alerts so early failure signals notify instead of only colouring the disk
+// badge. Alerts resolve when the counters stop indicating trouble.
+func (s *apiServer) evaluateSMARTAlerts() {
+	disks, err := s.diskFunc()
+	if err != nil {
+		return
+	}
+	for _, disk := range disks {
+		summary := disk.SMART
+		failed := summary.Overall == model.Critical
+		degraded := summary.PendingSectors > 0 || summary.UncorrectableSectors > 0 || summary.ReallocatedSectors > 0
+		if failed || degraded {
+			severity := "warning"
+			title := "SMART attributes report disk wear"
+			if failed {
+				severity = "critical"
+				title = "SMART self-assessment failed"
+			}
+			description := fmt.Sprintf(
+				"%s (%s): %d reallocated, %d pending, %d uncorrectable sectors, %d CRC errors",
+				disk.Name, disk.Model, summary.ReallocatedSectors, summary.PendingSectors, summary.UncorrectableSectors, summary.CRCErrors,
+			)
+			if s.fireAlertWithSeverity("rule-smart", severity, title, description, &model.ResourceRef{Type: "disk", ID: disk.ID}) {
+				// Publish the dedicated event so notification routing can
+				// send SMART movement to channels beyond the web UI.
+				s.publish("disk.smart.warning", severity, &model.ResourceRef{Type: "disk", ID: disk.ID}, map[string]any{"diskId": disk.ID, "title": title})
+			}
+			continue
+		}
+		s.resolveAlertForRule("rule-smart", disk.ID)
+	}
 }
 
 func (s *apiServer) evaluateDiskTemperatures() {

@@ -291,6 +291,36 @@ paths:
         '201':
           description: Operation plan
 
+  /storage/disks/{id}/retire:
+    post:
+      tags: [Storage]
+      summary: Retire a known disk identity
+      operationId: retireDisk
+      description: >-
+        Forget a disk identity from the inventory after a physical
+        replacement. Stops the synthesized "disk missing" alert and lets the
+        server health badge recover. Requires mutation rights.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Disk retired
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  retired:
+                    type: boolean
+        '404':
+          description: Disk is not in the known inventory
+
   /docker/summary:
     get:
       tags: [Docker]
@@ -856,6 +886,31 @@ paths:
               schema:
                 type: integer
               description: Seconds to wait before retrying
+
+  /auth/csrf:
+    get:
+      tags: [Auth]
+      summary: Reissue a CSRF token for the current session
+      operationId: authCsrf
+      description: >-
+        CSRF tokens live in daemon memory and are bound to the session they
+        were issued for. After a daemon restart (or when a token was issued
+        for a previous session) the client can reissue one here instead of
+        re-authenticating.
+      responses:
+        '200':
+          description: Fresh CSRF token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username:
+                    type: string
+                  csrfToken:
+                    type: string
+        '401':
+          description: Authentication required
 
   /auth/login/2fa:
     post:

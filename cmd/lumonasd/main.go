@@ -277,6 +277,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.lockStorageSafety(w)
 	case r.Method == http.MethodPost && endpoint == "/storage/operations/plan":
 		s.planStorageOperation(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/disks/") && strings.HasSuffix(endpoint, "/retire"):
+		s.retireDisk(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/operations/") && strings.HasSuffix(endpoint, "/confirm"):
 		s.confirmStorageOperation(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/recovery/status":
@@ -932,6 +934,45 @@ func (s *apiServer) enrichProtection(protection *model.Protection) {
 			protection.LastScrubAt = &timestamp
 		}
 	}
+}
+
+// retireDisk forgets a known disk identity after a physical replacement.
+// Without it, the synthesized "disk missing" alert and the server health
+// badge stay critical forever. Persisted generated alerts for the disk are
+// resolved alongside the inventory row.
+func (s *apiServer) retireDisk(w http.ResponseWriter, r *http.Request, diskID string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	known, err := s.store.KnownDisks()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "disk inventory unavailable"})
+		return
+	}
+	var retired *model.Disk
+	for index := range known {
+		if known[index].ID == diskID {
+			retired = &known[index]
+			break
+		}
+	}
+	if retired == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "disk is not in the known inventory"})
+		return
+	}
+	if err := s.store.DeleteKnownDisk(diskID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	// Retire may be used while the disk is absent (replacement already
+	// pulled) or while it is still attached (wiping for reuse).
+	if resolved, err := s.store.ResolveGeneratedAlerts("disk-missing", diskID); err == nil && resolved {
+		s.publish("alert.resolved", "info", nil, map[string]any{"ruleId": "disk-missing", "resourceId": diskID})
+	}
+	s.recordRequestAudit(r, actor, "storage.disk.retire", diskID, map[string]any{"model": retired.Model, "serial": retired.Serial})
+	s.publish("disk.retired", "info", &model.ResourceRef{Type: "disk", ID: diskID}, map[string]any{"diskId": diskID, "model": retired.Model})
+	writeJSON(w, http.StatusOK, map[string]any{"id": diskID, "retired": true})
 }
 
 func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request) {
