@@ -35,7 +35,16 @@ type Input struct {
 	DesiredState  []byte
 	Database      []byte
 	Compose       map[string][]byte
+	Files         map[string][]byte
 	EncryptedData []byte
+}
+
+type RestorePlan struct {
+	Manifest         Manifest `json:"manifest"`
+	Files            []string `json:"files"`
+	Verified         bool     `json:"verified"`
+	EncryptedSecrets bool     `json:"encryptedSecrets"`
+	Warnings         []string `json:"warnings,omitempty"`
 }
 
 func Create(input Input, key []byte) ([]byte, error) {
@@ -51,6 +60,12 @@ func Create(input Input, key []byte) ([]byte, error) {
 			continue
 		}
 		files["docker/stacks/"+name] = content
+	}
+	for name, content := range input.Files {
+		if !safeName(name) || content == nil {
+			return nil, fmt.Errorf("invalid recovery file name %q", name)
+		}
+		files[name] = content
 	}
 	if len(input.EncryptedData) > 0 {
 		encrypted, err := encrypt(input.EncryptedData, key)
@@ -117,6 +132,9 @@ func Verify(bundle, key []byte) (Manifest, error) {
 	}
 	files := map[string][]byte{}
 	for _, file := range reader.File {
+		if !safeName(file.Name) && file.Name != "manifest.json" && file.Name != "checksums.sha256" {
+			return Manifest{}, fmt.Errorf("unsafe bundle entry %q", file.Name)
+		}
 		handle, err := file.Open()
 		if err != nil {
 			return Manifest{}, err
@@ -152,6 +170,32 @@ func Verify(bundle, key []byte) (Manifest, error) {
 		}
 	}
 	return manifest, nil
+}
+
+func Plan(bundle, key []byte) (RestorePlan, error) {
+	manifest, err := Verify(bundle, key)
+	if err != nil {
+		return RestorePlan{}, err
+	}
+	reader, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
+	if err != nil {
+		return RestorePlan{}, err
+	}
+	plan := RestorePlan{Manifest: manifest, Verified: true, Files: make([]string, 0, len(reader.File))}
+	for _, file := range reader.File {
+		plan.Files = append(plan.Files, file.Name)
+		if file.Name == "encrypted-secrets.bin" {
+			plan.EncryptedSecrets = true
+		}
+	}
+	sort.Strings(plan.Files)
+	if !contains(plan.Files, "desired-state.json") || !contains(plan.Files, "mynas.db") {
+		plan.Warnings = append(plan.Warnings, "bundle is missing desired state or database")
+	}
+	if !plan.EncryptedSecrets {
+		plan.Warnings = append(plan.Warnings, "bundle contains no encrypted secret payload")
+	}
+	return plan, nil
 }
 
 func DecryptSecrets(bundle, key []byte) ([]byte, error) {
@@ -207,3 +251,16 @@ func decrypt(ciphertext, key []byte) ([]byte, error) {
 	return gcm.Open(nil, ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():], nil)
 }
 func normalizeKey(key []byte) []byte { digest := sha256.Sum256(key); return digest[:] }
+
+func safeName(name string) bool {
+	return name != "" && !strings.HasPrefix(name, "/") && !strings.Contains(name, "..")
+}
+
+func contains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}

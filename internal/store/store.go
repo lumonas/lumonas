@@ -147,7 +147,10 @@ func (s *Store) CurrentGeneration() int64 {
 func (s *Store) BeginGeneration(planHash string) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := s.CurrentGeneration() + 1
+	var next int64
+	if err := s.db.QueryRow(`SELECT COALESCE(MAX(generation),0) + 1 FROM config_generations`).Scan(&next); err != nil {
+		return 0, err
+	}
 	_, err := s.db.Exec(`INSERT INTO config_generations(generation,state,plan_hash,created_at) VALUES(?,?,?,?)`, next, "pending", planHash, time.Now().UTC().Format(timeFormat))
 	return next, err
 }
@@ -241,6 +244,30 @@ func (s *Store) Jobs() ([]model.Job, error) {
 		result = append(result, j)
 	}
 	return result, rows.Err()
+}
+
+func (s *Store) Job(id string) (model.Job, error) {
+	var job model.Job
+	var progress sql.NullFloat64
+	var created string
+	var started, finished sql.NullString
+	err := s.db.QueryRow(`SELECT id,type,title,COALESCE(resource_id,''),state,progress,COALESCE(stage,''),created_at,started_at,finished_at,COALESCE(error,'') FROM jobs WHERE id = ?`, id).Scan(&job.ID, &job.Type, &job.Title, &job.ResourceID, &job.State, &progress, &job.Stage, &created, &started, &finished, &job.Error)
+	if err != nil {
+		return model.Job{}, err
+	}
+	job.CreatedAt, _ = parseTime(created)
+	if progress.Valid {
+		job.Progress = &progress.Float64
+	}
+	if started.Valid {
+		value, _ := parseTime(started.String)
+		job.StartedAt = &value
+	}
+	if finished.Valid {
+		value, _ := parseTime(finished.String)
+		job.FinishedAt = &value
+	}
+	return job, nil
 }
 
 func (s *Store) SaveJob(j model.Job) error {

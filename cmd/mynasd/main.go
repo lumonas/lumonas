@@ -139,10 +139,14 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.confirmStorageOperation(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/recovery/status":
 		s.recoveryStatus(w)
+	case r.Method == http.MethodGet && endpoint == "/recovery/plan":
+		s.recoveryPlan(w)
 	case r.Method == http.MethodPost && endpoint == "/recovery/export":
 		s.recoveryExport(w)
 	case r.Method == http.MethodGet && endpoint == "/jobs":
 		s.listJobs(w)
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/jobs/"):
+		s.job(w, path.Base(endpoint))
 	case r.Method == http.MethodPost && endpoint == "/jobs":
 		s.createJob(w, r)
 	case r.Method == http.MethodGet && endpoint == "/alerts":
@@ -183,8 +187,12 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.dockerStack(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/docker/containers":
 		s.dockerContainers(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/containers/"):
+		s.dockerContainerAction(w, r, endpoint)
 	case r.Method == http.MethodGet && endpoint == "/docker/images":
 		s.dockerImages(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/images/"):
+		s.dockerImageAction(w, r, endpoint)
 	case r.Method == http.MethodGet && endpoint == "/docker/volumes":
 		s.dockerVolumes(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/docker/logs/"):
@@ -399,12 +407,25 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 	}
 	plan.Status = "executed"
 	_ = s.store.SavePlan(plan)
+	s.advanceGeneration("storage." + string(plan.Action))
 	s.publish("storage.operation.completed", "warning", &model.ResourceRef{Type: "disk", ID: plan.Target.DiskID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
 	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *apiServer) currentGeneration() int64 {
 	return s.store.CurrentGeneration()
+}
+
+func (s *apiServer) advanceGeneration(action string) {
+	generation, err := s.store.BeginGeneration(action)
+	if err == nil {
+		err = s.store.CommitGeneration(generation)
+	}
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("configuration generation commit failed", "action", action, "error", err)
+		}
+	}
 }
 
 func (s *apiServer) recoveryStatus(w http.ResponseWriter) {
@@ -454,7 +475,7 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter) {
 			return
 		}
 	}
-	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, MyNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, EncryptedData: encrypted}, []byte(key))
+	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, MyNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, Files: s.recoveryFiles(), EncryptedData: encrypted}, []byte(key))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "bundle creation failed: " + err.Error()})
 		return
@@ -494,6 +515,39 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter) {
 	manifest, _ := recovery.Verify(bundle, []byte(key))
 	s.publish("recovery.bundle.created", "info", nil, map[string]any{"generation": manifest.Generation})
 	writeJSON(w, http.StatusCreated, map[string]any{"path": filepath.Join(directory, "latest.mrb"), "manifest": manifest, "verified": true})
+}
+
+func (s *apiServer) recoveryFiles() map[string][]byte {
+	files := make(map[string][]byte)
+	for name, path := range map[string]string{
+		"config/shares.json":    envOr("MYNAS_SHARES_FILE", "/var/lib/mynas/shares.json"),
+		"storage/snapraid.conf": envOr("MYNAS_SNAPRAID_CONFIG", "/etc/mynas/snapraid.conf"),
+	} {
+		if data, err := os.ReadFile(path); err == nil {
+			files[name] = data
+		}
+	}
+	return files
+}
+
+func (s *apiServer) recoveryPlan(w http.ResponseWriter) {
+	key := os.Getenv("MYNAS_RECOVERY_KEY")
+	if key == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "MYNAS_RECOVERY_KEY is not configured"})
+		return
+	}
+	bundlePath := filepath.Join(envOr("MYNAS_RECOVERY_DIR", "/var/lib/mynas/recovery"), "latest.mrb")
+	bundle, err := os.ReadFile(bundlePath)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recovery bundle not found"})
+		return
+	}
+	plan, err := recovery.Plan(bundle, []byte(key))
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "recovery verification failed: " + err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, plan)
 }
 
 func (s *apiServer) metrics(w http.ResponseWriter) { writeJSON(w, http.StatusOK, collector.Metrics()) }
@@ -582,6 +636,7 @@ func (s *apiServer) createShare(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.advanceGeneration("share.create")
 	s.publish("share.created", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"name": share.Name})
 	writeJSON(w, http.StatusCreated, share)
 }
@@ -603,6 +658,20 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 			severity = "critical"
 		}
 		alert := model.Alert{ID: "disk-health-" + disk.ID, Severity: severity, Title: "Disk health requires attention", Description: fmt.Sprintf("%s (%s) reported %s health", disk.Name, disk.Model, disk.Health), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "firing", StartedAt: now}
+		s.alertMu.Lock()
+		if s.acknowledged[alert.ID] {
+			alert.State = "acknowledged"
+		}
+		s.alertMu.Unlock()
+		alerts = append(alerts, alert)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for _, unit := range power.Discover(ctx, nil, nil) {
+		if !unit.OnBattery {
+			continue
+		}
+		alert := model.Alert{ID: "ups-on-battery-" + unit.Name, Severity: "critical", Title: "UPS is on battery", Description: fmt.Sprintf("UPS %s reports status %s", unit.Name, unit.Status), Resource: &model.ResourceRef{Type: "ups", ID: unit.Name}, State: "firing", StartedAt: now}
 		s.alertMu.Lock()
 		if s.acknowledged[alert.ID] {
 			alert.State = "acknowledged"
@@ -732,8 +801,15 @@ func (s *apiServer) dockerStacks(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Name        string `json:"name"`
-		ComposeYAML string `json:"composeYaml"`
+		Name        string            `json:"name"`
+		CatalogID   string            `json:"catalogId"`
+		ComposeYAML string            `json:"composeYaml"`
+		Env         map[string]string `json:"env"`
+		StorageMap  []struct {
+			FieldID       string `json:"fieldId"`
+			ContainerPath string `json:"containerPath"`
+			ResourceID    string `json:"resourceId"`
+		} `json:"storageMap"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -742,11 +818,38 @@ func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
 	if input.Name == "" {
 		input.Name = "imported-stack"
 	}
+	if input.ComposeYAML == "" && input.CatalogID != "" {
+		catalog, err := dockerruntime.LoadCatalog(s.catalogFile)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+			return
+		}
+		for _, app := range catalog {
+			if app.ID != input.CatalogID {
+				continue
+			}
+			mappings := make([]dockerruntime.StorageMapping, 0, len(input.StorageMap))
+			for _, item := range input.StorageMap {
+				mappings = append(mappings, dockerruntime.StorageMapping{ContainerPath: item.ContainerPath, ResourceID: item.ResourceID, ResourceLabel: item.FieldID})
+			}
+			input.ComposeYAML, err = dockerruntime.BuildCompose(app, input.Name, input.Env, mappings)
+			if err != nil {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+				return
+			}
+			break
+		}
+		if input.ComposeYAML == "" {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "catalog app not found"})
+			return
+		}
+	}
 	stack, err := s.dockerService.CreateStack(input.Name, input.ComposeYAML)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
+	s.advanceGeneration("docker.stack.create")
 	s.publish("docker.stack.created", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID})
 	writeJSON(w, http.StatusCreated, stack)
 }
@@ -777,6 +880,15 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 	stackID, action := parts[2], parts[3]
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 	defer cancel()
+	var input struct {
+		ComposeYAML string `json:"composeYaml"`
+	}
+	if r.Body != nil && r.ContentLength != 0 {
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+	}
 	stacks, err := s.dockerService.Stacks(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
@@ -785,6 +897,15 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 	for _, stack := range stacks {
 		if stack.ID != stackID {
 			continue
+		}
+		if input.ComposeYAML != "" {
+			updated, updateErr := s.dockerService.UpdateCompose(stack.Name, input.ComposeYAML)
+			if updateErr != nil {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": updateErr.Error()})
+				return
+			}
+			stack = updated
+			s.advanceGeneration("docker.stack.compose.update")
 		}
 		if err := s.dockerService.Action(ctx, stack, action); err != nil {
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
@@ -819,6 +940,62 @@ func (s *apiServer) dockerImages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, images)
 }
 
+func (s *apiServer) dockerContainerAction(w http.ResponseWriter, r *http.Request, endpoint string) {
+	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
+	if len(parts) != 4 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "container action not found"})
+		return
+	}
+	id, action := parts[2], parts[3]
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	if err := s.dockerService.ContainerAction(ctx, id, action); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	containers, err := s.dockerService.Containers(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+		return
+	}
+	for _, container := range containers {
+		if container.ID == id || container.Name == id {
+			s.publish("docker.container.action", "info", &model.ResourceRef{Type: "container", ID: id}, map[string]any{"action": action})
+			writeJSON(w, http.StatusOK, container)
+			return
+		}
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+func (s *apiServer) dockerImageAction(w http.ResponseWriter, r *http.Request, endpoint string) {
+	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
+	if len(parts) != 4 || parts[3] != "update" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "image action not found"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	images, err := s.dockerService.Images(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	for _, image := range images {
+		if image.ID != parts[2] {
+			continue
+		}
+		if err := s.dockerService.UpdateImage(ctx, image); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		s.publish("docker.image.updated", "info", &model.ResourceRef{Type: "image", ID: image.ID}, map[string]any{"repository": image.Repo, "tag": image.Tag})
+		writeJSON(w, http.StatusAccepted, image)
+		return
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "image not found"})
+}
+
 func (s *apiServer) dockerVolumes(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
@@ -848,6 +1025,15 @@ func (s *apiServer) listJobs(w http.ResponseWriter) {
 		return
 	}
 	writeJSON(w, http.StatusOK, jobs)
+}
+
+func (s *apiServer) job(w http.ResponseWriter, id string) {
+	job, err := s.store.Job(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, job)
 }
 
 func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {

@@ -290,6 +290,60 @@ func (s Service) Action(ctx context.Context, stack Stack, action string) error {
 	return err
 }
 
+func (s Service) ContainerAction(ctx context.Context, id, action string) error {
+	if action != "start" && action != "stop" && action != "restart" {
+		return fmt.Errorf("unsupported container action %q", action)
+	}
+	if !regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`).MatchString(id) {
+		return errors.New("invalid container id")
+	}
+	_, err := s.Run(ctx, "docker", action, id)
+	return err
+}
+
+func (s Service) UpdateImage(ctx context.Context, image Image) error {
+	if !regexp.MustCompile(`^[a-zA-Z0-9._/-]+$`).MatchString(image.Repo) || image.Repo == "" || image.Tag == "<none>" || image.Tag == "" {
+		return errors.New("invalid image reference")
+	}
+	_, err := s.Run(ctx, "docker", "pull", image.Repo+":"+image.Tag)
+	return err
+}
+
+func (s Service) UpdateCompose(name, compose string) (Stack, error) {
+	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`).MatchString(name) || !strings.Contains(compose, "services:") {
+		return Stack{}, errors.New("invalid compose update")
+	}
+	stackDir := filepath.Join(s.Root, name)
+	if filepath.Dir(stackDir) != filepath.Clean(s.Root) {
+		return Stack{}, errors.New("invalid stack path")
+	}
+	composePath := filepath.Join(stackDir, "compose.yaml")
+	if _, err := os.Stat(composePath); err != nil {
+		return Stack{}, err
+	}
+	temporary, err := os.CreateTemp(stackDir, ".compose-*.yaml")
+	if err != nil {
+		return Stack{}, err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := temporary.WriteString(compose); err != nil {
+		temporary.Close()
+		return Stack{}, err
+	}
+	if err := temporary.Chmod(0o640); err != nil {
+		temporary.Close()
+		return Stack{}, err
+	}
+	if err := temporary.Close(); err != nil {
+		return Stack{}, err
+	}
+	if err := os.Rename(temporaryPath, composePath); err != nil {
+		return Stack{}, err
+	}
+	return parseStack(name, composePath, compose), nil
+}
+
 func (s Service) CreateStack(name, compose string) (Stack, error) {
 	if !regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`).MatchString(name) {
 		return Stack{}, errors.New("stack name must contain lowercase letters, numbers, and hyphens")

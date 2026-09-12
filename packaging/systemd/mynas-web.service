@@ -1,0 +1,25 @@
+[Unit]
+Description=LumoNAS web interface
+After=mynasd.service
+Requires=mynasd.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/mynas/mynas-web.env
+Environment=MYNAS_WEB_ROOT=/usr/share/lumonas/web
+Environment=MYNAS_API_URL=http://127.0.0.1:8080
+ExecStart=/usr/lib/lumonas/mynas-web
+User=mynas
+Group=mynas
+Restart=on-failure
+RestartSec=3s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
