@@ -182,6 +182,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.job(w, path.Base(endpoint))
 	case r.Method == http.MethodPost && endpoint == "/jobs":
 		s.createJob(w, r)
+	case r.Method == http.MethodPost && endpoint == "/acl/jobs":
+		s.createACLJob(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/acl/jobs/") && strings.HasSuffix(endpoint, "/cancel"):
+		s.cancelACLJob(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/alerts":
 		s.alerts(w)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alerts/"):
