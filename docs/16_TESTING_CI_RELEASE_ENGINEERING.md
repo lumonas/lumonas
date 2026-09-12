@@ -269,6 +269,12 @@ are present in `SHA256SUMS`, and runs the release verifier against those
 checksums. This prevents a working-directory bug from producing a seemingly
 successful release with missing checksum entries.
 
+Tagged releases enable the strict release-set check. It requires exactly one
+amd64 Debian package, at least one installer ISO, and at least one QEMU machine
+image in addition to the checksum, SBOM, and signature checks. Pull requests
+continue to use the lighter artifact smoke test because they do not publish a
+release set.
+
 ## Installer matrix
 
 - UEFI;
