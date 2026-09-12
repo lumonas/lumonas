@@ -1,12 +1,22 @@
 #!/bin/sh
 set -eu
 
+ASSERT_MODE="${MYNAS_QEMU_ASSERT:-false}"
+
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
+  if [ "$ASSERT_MODE" = "true" ]; then
+    echo "qemu-system-x86_64 is required in assertion mode" >&2
+    exit 1
+  fi
   echo "qemu-system-x86_64 is not installed; QEMU smoke test skipped" >&2
   exit 0
 fi
 
 if [ -z "${MYNAS_QEMU_IMAGE:-}" ]; then
+  if [ "$ASSERT_MODE" = "true" ]; then
+    echo "MYNAS_QEMU_IMAGE is required in assertion mode" >&2
+    exit 1
+  fi
   echo "Set MYNAS_QEMU_IMAGE to a Debian 13 image built by scripts/qemu-build-image.sh" >&2
   exit 0
 fi
@@ -41,7 +51,7 @@ qemu-system-x86_64 \
   -no-reboot
 }
 
-if [ "${MYNAS_QEMU_ASSERT:-false}" != "true" ]; then
+if [ "$ASSERT_MODE" != "true" ]; then
   run_qemu
   exit $?
 fi
