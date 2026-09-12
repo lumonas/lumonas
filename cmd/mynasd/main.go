@@ -183,6 +183,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.confirmStorageOperation(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/recovery/status":
 		s.recoveryStatus(w)
+	case r.Method == http.MethodPost && endpoint == "/recovery/key":
+		s.createRecoveryKey(w, r)
 	case r.Method == http.MethodGet && endpoint == "/recovery/plan":
 		s.recoveryPlan(w)
 	case r.Method == http.MethodPost && endpoint == "/recovery/restore/stage":
@@ -191,6 +193,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.recoveryExport(w)
 	case r.Method == http.MethodGet && endpoint == "/backups/status":
 		s.backupStatus(w, r)
+	case r.Method == http.MethodGet && endpoint == "/backups/schedule":
+		s.backupSchedule(w, r)
+	case r.Method == http.MethodPatch && endpoint == "/backups/schedule":
+		s.updateBackupSchedule(w, r)
 	case r.Method == http.MethodGet && endpoint == "/backups/destinations":
 		s.listBackupDestinations(w, r)
 	case r.Method == http.MethodPost && endpoint == "/backups/destinations":

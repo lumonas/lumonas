@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/backup"
@@ -30,7 +31,13 @@ CREATE INDEX IF NOT EXISTS backup_copies_destination_idx ON backup_copies(destin
 CREATE TABLE IF NOT EXISTS backup_schedule (
   id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, interval_seconds INTEGER NOT NULL,
   last_started_at TEXT, next_due_at TEXT, updated_at TEXT NOT NULL
-);`
+);
+CREATE TABLE IF NOT EXISTS backup_verifications (
+  id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES backup_runs(id) ON DELETE CASCADE,
+  destination_id TEXT NOT NULL REFERENCES backup_destinations(id) ON DELETE CASCADE,
+  state TEXT NOT NULL, verified_at TEXT, error TEXT
+);
+CREATE INDEX IF NOT EXISTS backup_verifications_destination_idx ON backup_verifications(destination_id, verified_at);`
 
 func (s *Store) ensureBackupSchema() error {
 	if _, err := s.db.Exec(backupSchema); err != nil {
@@ -114,6 +121,58 @@ func (s *Store) DeleteBackupDestination(id string) error {
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (s *Store) SaveBackupSchedule(value backup.Schedule) (backup.Schedule, error) {
+	if err := value.Validate(); err != nil {
+		return backup.Schedule{}, err
+	}
+	if err := s.ensureBackupSchema(); err != nil {
+		return backup.Schedule{}, err
+	}
+	now := time.Now().UTC()
+	_, err := s.db.Exec(`INSERT INTO backup_schedule(id,enabled,interval_seconds,last_started_at,next_due_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,interval_seconds=excluded.interval_seconds,last_started_at=excluded.last_started_at,next_due_at=excluded.next_due_at,updated_at=excluded.updated_at`, value.ID, value.Enabled, value.IntervalSeconds, timeValue(value.LastStartedAt), timeValue(value.NextDueAt), now.Format(timeFormat))
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	value.UpdatedAt = now
+	return value, nil
+}
+
+func (s *Store) BackupSchedule() (backup.Schedule, error) {
+	if err := s.ensureBackupSchema(); err != nil {
+		return backup.Schedule{}, err
+	}
+	row := s.db.QueryRow(`SELECT id,enabled,interval_seconds,last_started_at,next_due_at,updated_at FROM backup_schedule ORDER BY id LIMIT 1`)
+	var value backup.Schedule
+	var lastStarted, nextDue sql.NullString
+	var updated string
+	if err := row.Scan(&value.ID, &value.Enabled, &value.IntervalSeconds, &lastStarted, &nextDue, &updated); err != nil {
+		if err == sql.ErrNoRows {
+			return backup.DefaultSchedule(), nil
+		}
+		return backup.Schedule{}, err
+	}
+	var err error
+	if lastStarted.Valid {
+		parsed, parseErr := time.Parse(timeFormat, lastStarted.String)
+		if parseErr != nil {
+			return backup.Schedule{}, parseErr
+		}
+		value.LastStartedAt = &parsed
+	}
+	if nextDue.Valid {
+		parsed, parseErr := time.Parse(timeFormat, nextDue.String)
+		if parseErr != nil {
+			return backup.Schedule{}, parseErr
+		}
+		value.NextDueAt = &parsed
+	}
+	value.UpdatedAt, err = time.Parse(timeFormat, updated)
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	return value, nil
 }
 
 func (s *Store) SaveBackupRun(value backup.Run) error {
@@ -243,6 +302,48 @@ func (s *Store) DeleteBackupCopy(id string) error {
 	}
 	_, err := s.db.Exec(`DELETE FROM backup_copies WHERE id=?`, id)
 	return err
+}
+
+func (s *Store) SaveBackupVerification(value backup.Verification) error {
+	if value.ID == "" || value.RunID == "" || value.DestinationID == "" || value.State == "" {
+		return errors.New("backup verification identity and state are required")
+	}
+	if err := s.ensureBackupSchema(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`INSERT INTO backup_verifications(id,run_id,destination_id,state,verified_at,error) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,verified_at=excluded.verified_at,error=excluded.error`, value.ID, value.RunID, value.DestinationID, value.State, timeValue(value.VerifiedAt), nullable(value.Error))
+	return err
+}
+
+func (s *Store) BackupVerifications(limit int) ([]backup.Verification, error) {
+	if err := s.ensureBackupSchema(); err != nil {
+		return nil, err
+	}
+	if limit < 1 || limit > 500 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`SELECT id,run_id,destination_id,state,verified_at,COALESCE(error,'') FROM backup_verifications ORDER BY COALESCE(verified_at,'') DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]backup.Verification, 0)
+	for rows.Next() {
+		var value backup.Verification
+		var verifiedAt sql.NullString
+		if err := rows.Scan(&value.ID, &value.RunID, &value.DestinationID, &value.State, &verifiedAt, &value.Error); err != nil {
+			return nil, err
+		}
+		if verifiedAt.Valid {
+			parsed, parseErr := time.Parse(timeFormat, verifiedAt.String)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			value.VerifiedAt = &parsed
+		}
+		result = append(result, value)
+	}
+	return result, rows.Err()
 }
 
 func scanBackupDestination(rows interface{ Scan(...any) error }) (backup.Destination, error) {

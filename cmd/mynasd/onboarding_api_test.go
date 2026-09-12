@@ -50,3 +50,16 @@ func TestCompleteOnboardingPersistsSafeConfiguration(t *testing.T) {
 		t.Fatalf("unexpected initial sync state: %#v", result)
 	}
 }
+
+func TestRecoveryKeyCanBeGeneratedDuringOnboarding(t *testing.T) {
+	server := testServer(t)
+	t.Setenv("MYNAS_RECOVERY_DIR", t.TempDir())
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/recovery/key", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"key"`) {
+		t.Fatalf("recovery key generation failed: %d %s", response.Code, response.Body.String())
+	}
+	if key := server.recoveryKeyString(); len(key) != 64 {
+		t.Fatalf("unexpected recovery key length: %d", len(key))
+	}
+}

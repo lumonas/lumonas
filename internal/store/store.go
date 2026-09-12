@@ -80,6 +80,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate notification schema: %w", err)
 	}
+	if err := s.ensureBackupSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate backup schema: %w", err)
+	}
 	return s, nil
 }
 

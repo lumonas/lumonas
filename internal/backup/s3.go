@@ -23,7 +23,9 @@ func uploadS3(ctx context.Context, target string, credentials Credentials, sourc
 	}
 	defer file.Close()
 	request.Body = io.NopCloser(file)
-	if info, statErr := file.Stat(); statErr == nil { request.ContentLength = info.Size() }
+	if info, statErr := file.Stat(); statErr == nil {
+		request.ContentLength = info.Size()
+	}
 	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
 	if err != nil {
 		return fmt.Errorf("S3 upload failed: %w", err)
@@ -51,6 +53,30 @@ func deleteS3(ctx context.Context, target string, credentials Credentials, objec
 	return nil
 }
 
+func downloadS3(ctx context.Context, target string, credentials Credentials, object, destination string) error {
+	request, _, err := signedS3Request(ctx, http.MethodGet, target, credentials, object, "")
+	if err != nil {
+		return err
+	}
+	response, err := (&http.Client{Timeout: 30 * time.Second}).Do(request)
+	if err != nil {
+		return fmt.Errorf("S3 download failed: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return fmt.Errorf("S3 download returned HTTP %d", response.StatusCode)
+	}
+	output, err := os.OpenFile(destination, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(output, response.Body); err != nil {
+		_ = output.Close()
+		return err
+	}
+	return output.Close()
+}
+
 func signedS3Request(ctx context.Context, method, target string, credentials Credentials, object, source string) (*http.Request, *os.File, error) {
 	if credentials.AccessKey == "" || credentials.SecretKey == "" {
 		return nil, nil, errors.New("S3 credentials require access key and secret key")
@@ -58,6 +84,9 @@ func signedS3Request(ctx context.Context, method, target string, credentials Cre
 	base, err := url.Parse(target)
 	if err != nil || base.Scheme == "" || base.Host == "" {
 		return nil, nil, errors.New("invalid S3 target")
+	}
+	if err := validateRemoteObject(object); err != nil {
+		return nil, nil, err
 	}
 	base.Path = path.Join(base.Path, object)
 	payloadHash := sha256.Sum256(nil)

@@ -209,6 +209,24 @@ func (s *apiServer) ensureOnboardingRecoveryKey() (string, error) {
 	return key, nil
 }
 
+func (s *apiServer) createRecoveryKey(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	if completed, _ := s.store.Meta("onboarding_complete"); completed == "true" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "recovery key export is only available during onboarding"})
+		return
+	}
+	key, err := s.ensureOnboardingRecoveryKey()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recovery key setup failed: " + err.Error()})
+		return
+	}
+	s.recordIdentityAudit(actor, "recovery.key.export", "recovery", map[string]any{"length": len(key)})
+	writeJSON(w, http.StatusOK, map[string]any{"key": key, "generated": true})
+}
+
 func timeZone() string {
 	return "UTC"
 }

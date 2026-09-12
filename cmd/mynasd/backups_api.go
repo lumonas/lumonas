@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,17 +120,47 @@ func (s *apiServer) backupStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	status := backup.Readiness{RecoveryKey: s.recoveryKeyString() != "", DestinationCount: len(destinations), CheckedAt: time.Now().UTC()}
 	status.Configured = status.RecoveryKey && len(destinations) > 0
+	status.DestinationHealth = make([]backup.DestinationHealth, 0, len(destinations))
+	for _, destination := range destinations {
+		health := backup.DestinationHealth{DestinationID: destination.ID, State: "offline"}
+		if !destination.Enabled {
+			health.State = "disabled"
+		}
+		status.DestinationHealth = append(status.DestinationHealth, health)
+	}
 	if len(runs) > 0 {
 		status.LatestVerified = runs[0].State == "verified"
 		status.LatestGeneration = runs[0].Generation
 		if copies, copyErr := s.store.BackupCopies(runs[0].ID); copyErr == nil {
 			for _, copy := range copies {
+				for index := range status.DestinationHealth {
+					if status.DestinationHealth[index].DestinationID == copy.DestinationID {
+						if copy.Verified && copy.State == "verified" {
+							status.DestinationHealth[index].State = "healthy"
+							status.DestinationHealth[index].Verified++
+						} else {
+							status.DestinationHealth[index].State = "failed"
+							status.DestinationHealth[index].LastError = copy.Error
+						}
+						break
+					}
+				}
 				if copy.State == "verified" && copy.Verified {
 					status.HealthyCopies++
 				}
 			}
 		}
 	}
+	if verifications, verificationErr := s.store.BackupVerifications(500); verificationErr == nil {
+		for _, verification := range verifications {
+			if verification.VerifiedAt != nil && (status.LastVerification == nil || verification.VerifiedAt.After(*status.LastVerification)) {
+				status.LastVerification = verification.VerifiedAt
+			}
+		}
+	}
+	var dockerWarnings []string
+	status.DockerAppdataCovered, dockerWarnings = s.dockerAppdataCoverage()
+	status.Warnings = append(status.Warnings, dockerWarnings...)
 	if !status.RecoveryKey {
 		status.Warnings = append(status.Warnings, "recovery key is not configured")
 	}
@@ -140,6 +171,60 @@ func (s *apiServer) backupStatus(w http.ResponseWriter, r *http.Request) {
 		status.Warnings = append(status.Warnings, "no automated backup has completed")
 	}
 	writeJSON(w, http.StatusOK, status)
+}
+
+type backupScheduleRequest struct {
+	backup.Schedule
+	ExpectedGeneration *int64 `json:"expectedGeneration"`
+}
+
+func (s *apiServer) backupSchedule(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.backupActor(w, r, false); !ok {
+		return
+	}
+	schedule, err := s.store.BackupSchedule()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, schedule)
+}
+
+func (s *apiServer) updateBackupSchedule(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.backupActor(w, r, true)
+	if !ok {
+		return
+	}
+	var input backupScheduleRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
+		return
+	}
+	current, err := s.store.BackupSchedule()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if input.ID == "" {
+		input.ID = current.ID
+	}
+	if input.LastStartedAt == nil {
+		input.LastStartedAt = current.LastStartedAt
+	}
+	if input.NextDueAt == nil {
+		input.NextDueAt = current.NextDueAt
+	}
+	value, err := s.store.SaveBackupSchedule(input.Schedule)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordIdentityAudit(actor, "backup.schedule.update", value.ID, map[string]any{"enabled": value.Enabled, "intervalSeconds": value.IntervalSeconds})
+	s.advanceGeneration("backup.schedule.update")
+	writeJSON(w, http.StatusOK, value)
 }
 
 func (s *apiServer) listBackupRuns(w http.ResponseWriter, r *http.Request) {
@@ -246,15 +331,16 @@ func (s *apiServer) executeBackup(run backup.Run) {
 		return
 	}
 	object := backup.ObjectName(manifest.Generation, manifest.CreatedAt)
-	failed := 0
+	failed, enabled := 0, 0
 	for _, destination := range destinations {
 		if !destination.Enabled {
 			continue
 		}
+		enabled++
 		full, credentials, credentialErr := s.store.BackupDestination(destination.ID, []byte(key))
 		copy := backup.Copy{ID: newID("backup-copy"), RunID: run.ID, DestinationID: destination.ID, Object: object, Checksum: digest, Bytes: size, State: "running", CreatedAt: time.Now().UTC()}
 		if credentialErr == nil {
-			credentialErr = backup.UploadWithTimeout(full, credentials, bundlePath, object)
+			credentialErr = backup.UploadAndVerifyWithRetry(full, credentials, bundlePath, object, digest, size, 3)
 		}
 		if credentialErr != nil {
 			copy.State, copy.Error = "failed", credentialErr.Error()
@@ -265,6 +351,16 @@ func (s *apiServer) executeBackup(run backup.Run) {
 			copy.FinishedAt = &now
 		}
 		_ = s.store.SaveBackupCopy(copy)
+		verification := backup.Verification{ID: newID("backup-verification"), RunID: run.ID, DestinationID: destination.ID, State: copy.State, Error: copy.Error}
+		if copy.Verified {
+			now := time.Now().UTC()
+			verification.VerifiedAt = &now
+		}
+		_ = s.store.SaveBackupVerification(verification)
+	}
+	if enabled == 0 {
+		s.finishBackup(run, "failed", errors.New("no enabled backup destination is configured"))
+		return
 	}
 	if failed > 0 {
 		s.finishBackup(run, "failed", fmt.Errorf("%d backup destination(s) failed", failed))
@@ -343,9 +439,37 @@ func (s *apiServer) verifyBackupNow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) backupLoop() {
-	ticker := time.NewTicker(24 * time.Hour)
+	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
-		s.requestAutomaticBackup("daily")
+		schedule, err := s.store.BackupSchedule()
+		if err != nil || !schedule.Enabled {
+			continue
+		}
+		now := time.Now().UTC()
+		if schedule.NextDueAt == nil {
+			next := now.Add(time.Duration(schedule.IntervalSeconds) * time.Second)
+			schedule.NextDueAt = &next
+			_, _ = s.store.SaveBackupSchedule(schedule)
+			continue
+		}
+		if now.Before(*schedule.NextDueAt) {
+			continue
+		}
+		schedule.LastStartedAt = &now
+		next := now.Add(time.Duration(schedule.IntervalSeconds) * time.Second)
+		schedule.NextDueAt = &next
+		if _, err := s.store.SaveBackupSchedule(schedule); err == nil {
+			s.requestAutomaticBackup("daily")
+		}
 	}
+}
+
+func (s *apiServer) dockerAppdataCoverage() (bool, []string) {
+	stacks, err := s.dockerService.Stacks(context.Background())
+	if err != nil || len(stacks) == 0 {
+		return true, nil
+	}
+	warnings := []string{"Docker appdata is not included in configuration recovery bundles"}
+	return false, warnings
 }

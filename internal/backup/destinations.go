@@ -65,6 +65,96 @@ func Delete(ctx context.Context, destination Destination, credentials Credential
 	}
 }
 
+func UploadAndVerifyWithTimeout(destination Destination, credentials Credentials, source, object, expectedChecksum string, expectedBytes int64) error {
+	if err := UploadWithTimeout(destination, credentials, source, object); err != nil {
+		return err
+	}
+	verifyPath, err := os.CreateTemp("", ".mynas-backup-verify-*")
+	if err != nil {
+		return err
+	}
+	verifyPathName := verifyPath.Name()
+	if err := verifyPath.Close(); err != nil {
+		_ = os.Remove(verifyPathName)
+		return err
+	}
+	defer os.Remove(verifyPathName)
+	if err := DownloadWithTimeout(destination, credentials, object, verifyPathName); err != nil {
+		return fmt.Errorf("download backup copy for verification: %w", err)
+	}
+	digest, size, err := SHA256File(verifyPathName)
+	if err != nil {
+		return fmt.Errorf("hash downloaded backup copy: %w", err)
+	}
+	if size != expectedBytes || !strings.EqualFold(digest, expectedChecksum) {
+		return fmt.Errorf("backup copy verification mismatch: expected %s/%d, got %s/%d", expectedChecksum, expectedBytes, digest, size)
+	}
+	return nil
+}
+
+func UploadAndVerifyWithRetry(destination Destination, credentials Credentials, source, object, expectedChecksum string, expectedBytes int64, attempts int) error {
+	if attempts < 1 {
+		attempts = 1
+	}
+	var last error
+	for attempt := 0; attempt < attempts; attempt++ {
+		if err := UploadAndVerifyWithTimeout(destination, credentials, source, object, expectedChecksum, expectedBytes); err == nil {
+			return nil
+		} else {
+			last = err
+		}
+		if attempt+1 < attempts {
+			time.Sleep(time.Duration(1<<attempt) * 100 * time.Millisecond)
+		}
+	}
+	return last
+}
+
+func DownloadWithTimeout(destination Destination, credentials Credentials, object, target string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	return Download(ctx, destination, credentials, object, target)
+}
+
+func Download(ctx context.Context, destination Destination, credentials Credentials, object, target string) error {
+	if err := destination.Validate(); err != nil {
+		return err
+	}
+	if !filepath.IsAbs(target) || filepath.Clean(target) != target {
+		return errors.New("backup download target must be a clean absolute path")
+	}
+	if err := validateRemoteObject(object); err != nil {
+		return err
+	}
+	switch destination.Type {
+	case DestinationLocal:
+		source, err := safeJoin(destination.Target, object)
+		if err != nil {
+			return err
+		}
+		input, err := os.Open(source)
+		if err != nil {
+			return err
+		}
+		defer input.Close()
+		output, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+		if err != nil {
+			return err
+		}
+		if _, err := io.Copy(output, input); err != nil {
+			_ = output.Close()
+			return err
+		}
+		return output.Close()
+	case DestinationSFTP:
+		return downloadSFTP(ctx, destination.Target, credentials, object, target)
+	case DestinationS3:
+		return downloadS3(ctx, destination.Target, credentials, object, target)
+	default:
+		return fmt.Errorf("unsupported backup destination type %q", destination.Type)
+	}
+}
+
 func uploadLocal(root, source, object string) error {
 	target, err := safeJoin(root, object)
 	if err != nil {
@@ -116,6 +206,9 @@ func uploadSFTP(ctx context.Context, target string, credentials Credentials, sou
 	if user == "" || credentials.PrivateKeyPath == "" {
 		return errors.New("SFTP credentials require username and private key path")
 	}
+	if err := validateRemoteObject(object); err != nil {
+		return err
+	}
 	remote := path.Join(parsed.Path, object)
 	if !strings.HasPrefix(remote, "/") {
 		return errors.New("SFTP target path must be absolute")
@@ -138,6 +231,9 @@ func deleteSFTP(ctx context.Context, target string, credentials Credentials, obj
 	if err != nil || parsed.Host == "" || credentials.Username == "" || credentials.PrivateKeyPath == "" {
 		return errors.New("SFTP delete requires a valid target and credentials")
 	}
+	if err := validateRemoteObject(object); err != nil {
+		return err
+	}
 	remote := path.Join(parsed.Path, object)
 	args := []string{"-oBatchMode=yes", "-i", credentials.PrivateKeyPath, "-b", "-"}
 	if parsed.Port() != "" {
@@ -148,6 +244,47 @@ func deleteSFTP(ctx context.Context, target string, credentials Credentials, obj
 	command.Stdin = strings.NewReader("rm " + remote + "\n")
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("SFTP delete failed: %s", strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func downloadSFTP(ctx context.Context, target string, credentials Credentials, object, destination string) error {
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Host == "" || credentials.PrivateKeyPath == "" {
+		return errors.New("SFTP download requires a valid target and private key")
+	}
+	user := parsed.User.Username()
+	if user == "" {
+		user = credentials.Username
+	}
+	if user == "" {
+		return errors.New("SFTP credentials require username")
+	}
+	if err := validateRemoteObject(object); err != nil {
+		return err
+	}
+	remote := path.Join(parsed.Path, object)
+	args := []string{"-oBatchMode=yes", "-i", credentials.PrivateKeyPath, "-b", "-"}
+	if parsed.Port() != "" {
+		args = append(args[:3], append([]string{"-P", parsed.Port()}, args[3:]...)...)
+	}
+	args = append(args, user+"@"+parsed.Host)
+	command := exec.CommandContext(ctx, "sftp", args...)
+	command.Stdin = strings.NewReader("get " + remote + " " + destination + "\n")
+	if output, err := command.CombinedOutput(); err != nil {
+		return fmt.Errorf("SFTP download failed: %s", strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
+func validateRemoteObject(object string) error {
+	if object == "" || strings.ContainsAny(object, "\\\x00\r\n \t") {
+		return errors.New("backup object path is unsafe")
+	}
+	for _, segment := range strings.Split(object, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			return errors.New("backup object path is unsafe")
+		}
 	}
 	return nil
 }

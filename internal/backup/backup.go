@@ -80,15 +80,57 @@ type Copy struct {
 	Error         string     `json:"error,omitempty"`
 }
 
+type Schedule struct {
+	ID              string     `json:"id"`
+	Enabled         bool       `json:"enabled"`
+	IntervalSeconds int64      `json:"intervalSeconds"`
+	LastStartedAt   *time.Time `json:"lastStartedAt,omitempty"`
+	NextDueAt       *time.Time `json:"nextDueAt,omitempty"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
+}
+
+type Verification struct {
+	ID            string     `json:"id"`
+	RunID         string     `json:"runId"`
+	DestinationID string     `json:"destinationId"`
+	State         string     `json:"state"`
+	VerifiedAt    *time.Time `json:"verifiedAt,omitempty"`
+	Error         string     `json:"error,omitempty"`
+}
+
+type DestinationHealth struct {
+	DestinationID string `json:"destinationId"`
+	State         string `json:"state"`
+	Verified      int    `json:"verified"`
+	LastError     string `json:"lastError,omitempty"`
+}
+
 type Readiness struct {
-	Configured       bool      `json:"configured"`
-	RecoveryKey      bool      `json:"recoveryKey"`
-	LatestVerified   bool      `json:"latestVerified"`
-	LatestGeneration int64     `json:"latestGeneration"`
-	DestinationCount int       `json:"destinationCount"`
-	HealthyCopies    int       `json:"healthyCopies"`
-	Warnings         []string  `json:"warnings,omitempty"`
-	CheckedAt        time.Time `json:"checkedAt"`
+	Configured           bool                `json:"configured"`
+	RecoveryKey          bool                `json:"recoveryKey"`
+	LatestVerified       bool                `json:"latestVerified"`
+	LatestGeneration     int64               `json:"latestGeneration"`
+	DestinationCount     int                 `json:"destinationCount"`
+	HealthyCopies        int                 `json:"healthyCopies"`
+	LastVerification     *time.Time          `json:"lastVerification,omitempty"`
+	DockerAppdataCovered bool                `json:"dockerAppdataCovered"`
+	DestinationHealth    []DestinationHealth `json:"destinationHealth,omitempty"`
+	Warnings             []string            `json:"warnings,omitempty"`
+	CheckedAt            time.Time           `json:"checkedAt"`
+}
+
+func DefaultSchedule() Schedule {
+	return Schedule{ID: "default", Enabled: true, IntervalSeconds: 24 * 60 * 60}
+}
+
+func (s Schedule) Validate() error {
+	if strings.TrimSpace(s.ID) == "" {
+		return errors.New("backup schedule id is required")
+	}
+	if s.IntervalSeconds < 60*60 || s.IntervalSeconds > 365*24*60*60 {
+		return errors.New("backup schedule interval must be between one hour and one year")
+	}
+	return nil
 }
 
 func (d Destination) Validate() error {
