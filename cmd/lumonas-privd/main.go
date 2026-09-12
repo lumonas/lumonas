@@ -222,7 +222,7 @@ func operationWorker(operation string) string {
 	switch operation {
 	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.config.apply", "storage.mountpersist.apply":
 		return "storage"
-	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "firewall.apply":
+	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wol.set", "firewall.apply":
 		return "network"
 	case "power.action", "power.shutdown":
 		return "power"
@@ -364,6 +364,17 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return finishNetworkCheckpoint(req)
 	case "network.wifi.connect":
 		return connectWiFi(req, stdinCommandRunner)
+	case "network.wol.set":
+		if !req.Confirmed {
+			return response{Error: "operation plan is not confirmed"}
+		}
+		iface := requestedString(req.RequestedState, "interface")
+		if err := network.SetWOL(context.Background(), iface, requestedBool(req.RequestedState, "enabled"), func(_ context.Context, name string, args ...string) ([]byte, error) {
+			return run(name, args...)
+		}); err != nil {
+			return response{Error: err.Error()}
+		}
+		return response{OK: true, Data: map[string]any{"interface": iface, "enabled": requestedBool(req.RequestedState, "enabled")}}
 	case "power.action":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -398,7 +409,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 
 func requiresOperationID(operation string) bool {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "network.wol.set":
 		return true
 	default:
 		return false

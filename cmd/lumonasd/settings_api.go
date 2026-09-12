@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -11,7 +11,9 @@ import (
 
 	"github.com/lumonas/lumonas/internal/auth"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/power"
+	"github.com/lumonas/lumonas/internal/privileged"
 	"github.com/lumonas/lumonas/internal/updates"
 )
 
@@ -60,6 +62,12 @@ func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
+	if input.Section == "power" {
+		if err := s.applyWOLSettings(r, input.Patch); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 	value, err := s.loadSettings()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -84,6 +92,60 @@ func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 	s.recordRequestAudit(r, actor, "settings.update", input.Section, map[string]any{"keys": mapKeys(input.Patch)})
 	s.advanceGeneration("settings." + input.Section)
 	writeJSON(w, http.StatusOK, value)
+}
+
+// applyWOLSettings turns the settings-panel toggle into a typed privileged
+// operation. The full inventory is accepted because the UI sends the current
+// list; every entry is validated before the first command is issued.
+func (s *apiServer) applyWOLSettings(r *http.Request, patch map[string]any) error {
+	raw, ok := patch["wol"]
+	if !ok {
+		return nil
+	}
+	entries, ok := raw.([]any)
+	if !ok {
+		return &settingsError{"power.wol must be an array"}
+	}
+	type change struct {
+		iface   string
+		enabled bool
+	}
+	changes := make([]change, 0, len(entries))
+	for _, rawEntry := range entries {
+		entry, ok := rawEntry.(map[string]any)
+		if !ok {
+			return &settingsError{"power.wol entries must be objects"}
+		}
+		iface, _ := entry["interface"].(string)
+		supported, _ := entry["supported"].(bool)
+		enabled, enabledOK := entry["enabled"].(bool)
+		if strings.TrimSpace(iface) == "" || !enabledOK {
+			return &settingsError{"power.wol entries require interface and enabled"}
+		}
+		if enabled && !supported {
+			return &settingsError{"Wake-on-LAN is not supported on " + iface}
+		}
+		if !supported {
+			continue
+		}
+		changes = append(changes, change{iface: iface, enabled: enabled})
+	}
+	for _, item := range changes {
+		op := newID("wol")
+		request := privileged.Request{
+			Operation:      "network.wol.set",
+			CorrelationID:  requestCorrelationID(r),
+			OperationID:    op,
+			PlanHash:       op,
+			RequestedState: map[string]any{"interface": item.iface, "enabled": item.enabled},
+			ExpiresAt:      time.Now().UTC().Add(2 * time.Minute),
+			Confirmed:      true,
+		}
+		if err := s.brokerExecute(r.Context(), request); err != nil {
+			return fmt.Errorf("apply Wake-on-LAN for %s: %w", item.iface, err)
+		}
+	}
+	return nil
 }
 
 func (s *apiServer) loadSettings() (map[string]any, error) {
@@ -174,14 +236,11 @@ func defaultSettings(s *apiServer) map[string]any {
 		availableValue = available
 	}
 	wol := make([]any, 0)
-	if interfaces, err := net.Interfaces(); err == nil {
-		for _, iface := range interfaces {
-			if iface.Flags&net.FlagLoopback != 0 || iface.HardwareAddr.String() == "" {
-				continue
-			}
-			wol = append(wol, map[string]any{"interface": iface.Name, "mac": iface.HardwareAddr.String(), "supported": true, "enabled": false})
-		}
+	ctxWOL, cancelWOL := context.WithTimeout(context.Background(), 5*time.Second)
+	for _, iface := range network.DiscoverWOL(ctxWOL, nil) {
+		wol = append(wol, iface)
 	}
+	cancelWOL()
 	ups := make([]any, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	for _, unit := range power.Discover(ctx, settingsUPSNames(), nil) {

@@ -93,7 +93,7 @@ Management sessions can be reviewed and revoked by token digest, while Time Mach
 
 SMB and Time Machine share activation also updates the managed Avahi service announcement through the privileged broker; arbitrary Avahi content is rejected.
 
-Read-only host integrations include `lsblk`/SMART disk identity, mergerfs mount discovery, SnapRAID configuration inspection, NUT UPS telemetry (`LUMONAS_UPS_NAMES` or `upsc -l`), systemd status, and Docker Compose inspection. Notifications can be tested through the authenticated `/api/v1/notifications/test` endpoint after setting a webhook or ntfy URL.
+Read-only host integrations include `lsblk`/SMART disk identity, mergerfs mount discovery, SnapRAID configuration inspection, NUT UPS telemetry (`LUMONAS_UPS_NAMES` or `upsc -l`), systemd status, Docker Compose inspection, and `ethtool` Wake-on-LAN capability discovery. WOL changes use a typed privileged operation. Notifications can be tested through the authenticated `/api/v1/notifications/test` endpoint after setting a webhook or ntfy URL.
 
 Pool capacity is sampled once per UTC day into SQLite, retained for 180 days, and exposed through the read-only `/api/v1/capacity/forecast` endpoint. A forecast is withheld until at least three samples span a full day.
 

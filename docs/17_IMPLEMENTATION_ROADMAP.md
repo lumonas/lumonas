@@ -23,6 +23,8 @@ Deliver:
 - operation IDs are required at the privileged boundary for storage/protection mutations.
 - structured redacted journald request/result logging for the privileged broker.
 - QEMU smoke validation of the compiled frontend served by `lumonas-web`.
+- Wake-on-LAN capability discovery and typed `ethtool` mutation through the
+  network privileged worker.
 
 Exit criteria:
 

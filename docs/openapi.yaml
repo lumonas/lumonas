@@ -3276,5 +3276,32 @@ components:
           type: object
         power:
           type: object
+          properties:
+            wol:
+              type: array
+              items:
+                type: object
+                required: [interface, mac, supported, enabled]
+                properties:
+                  interface:
+                    type: string
+                  mac:
+                    type: string
+                  supported:
+                    type: boolean
+                  enabled:
+                    type: boolean
+            schedule:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                action:
+                  type: string
+                  enum: [shutdown, reboot]
+                time:
+                  type: string
+                days:
+                  type: string
         security:
           type: object

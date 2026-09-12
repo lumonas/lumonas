@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lumonas/lumonas/internal/privileged"
 )
 
 func TestSettingsAPIUsesPersistedAllowListedSections(t *testing.T) {
@@ -33,6 +36,23 @@ func TestSettingsAPIUsesPersistedAllowListedSections(t *testing.T) {
 	server.routes().ServeHTTP(persisted, httptest.NewRequest(http.MethodGet, "/api/v1/settings", nil))
 	if persisted.Code != http.StatusOK || !strings.Contains(persisted.Body.String(), `"writeProfile":"maximum"`) {
 		t.Fatalf("settings update did not persist: %d %s", persisted.Code, persisted.Body.String())
+	}
+}
+
+func TestSettingsAPIAppliesWOLThroughPrivilegedBroker(t *testing.T) {
+	server := testServer(t)
+	var got privileged.Request
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		got = request
+		return nil
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/v1/settings", strings.NewReader(`{"section":"power","patch":{"wol":[{"interface":"enp1s0","mac":"aa:bb:cc:dd:ee:ff","supported":true,"enabled":true}]}}`)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("WOL settings update failed: %d %s", response.Code, response.Body.String())
+	}
+	if got.Operation != "network.wol.set" || got.OperationID == "" || got.CorrelationID == "" || got.RequestedState["interface"] != "enp1s0" || got.RequestedState["enabled"] != true {
+		t.Fatalf("unexpected privileged WOL request: %#v", got)
 	}
 }
 

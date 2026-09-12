@@ -178,6 +178,10 @@ Per interface:
 - enable/disable;
 - show MAC.
 
+The settings toggle is backed by `ethtool` discovery and the typed
+`network.wol.set` privileged operation. Unsupported interfaces are shown as
+read-only, and interface names are validated before any command is started.
+
 Future: LAN device list + wake known hosts.
 
 ## mDNS

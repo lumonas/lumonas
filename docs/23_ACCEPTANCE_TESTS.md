@@ -376,3 +376,11 @@ the packaged web service.
 
 Pass if the response contains the compiled LumoNAS title and React root
 element, in addition to the API, SSE, service identity, and disk assertions.
+
+## AO. Wake-on-LAN command boundary
+
+Run the network WOL tests and settings API test.
+
+Pass if `ethtool` capability discovery distinguishes supported and enabled
+states, settings changes use the typed `network.wol.set` broker operation, and
+unsafe interface names are rejected before command execution.
