@@ -18,7 +18,8 @@ needed = {
     "package", "package-permissions", "qemu-smoke", "iso", "installer-scripts",
     "safety-recovery", "recovery-api", "storage-loopback",
     "privileged-storage-loopback", "share-integrations", "compose-validation",
-    "security-controls", "dependency-controls", "race-fuzz", "upgrade-debian",
+    "security-controls", "dependency-controls", "race-fuzz", "upgrade-compatibility",
+    "upgrade-debian",
 }
 actual = {item.strip() for item in match.group(1).split(",") if item.strip()}
 missing = sorted(needed - actual)

@@ -534,4 +534,5 @@ Run `scripts/release-gate-policy-smoke.sh`.
 
 Pass if tagged publication depends on the package, QEMU, ISO, recovery,
 storage-safety, integration, security, dependency, race/fuzz, and upgrade
-jobs, so a failed required gate cannot still publish release artifacts.
+schema-compatibility, and upgrade jobs, so a failed required gate cannot still
+publish release artifacts.

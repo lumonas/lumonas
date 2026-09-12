@@ -73,6 +73,7 @@ require_line "$ROOT/.github/workflows/ci.yml" 'LUMONAS_EXPECTED_SOURCE_COMMIT: $
 require_line "$ROOT/.github/workflows/ci.yml" 'git show -s --format=%ct'
 require_line "$ROOT/scripts/release-artifacts-smoke.sh" 'verify-release.sh'
 require_line "$ROOT/scripts/release-gate-policy-smoke.sh" 'race-fuzz'
+require_line "$ROOT/scripts/release-gate-policy-smoke.sh" 'upgrade-compatibility'
 require_line "$ROOT/scripts/installer-signature-policy-smoke.sh" 'LUMONAS_REPO_SIGN_KEY is required'
 require_line "$ROOT/scripts/permission-smoke.sh" '/etc/lumonas/runtime.env'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'lumonas-runtime.service'
@@ -146,6 +147,7 @@ require_line "$ROOT/Makefile" 'log-retention-smoke:'
 require_line "$ROOT/Makefile" 'check-api-contract:'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
 require_line "$ROOT/Makefile" 'race-fuzz:'
+require_line "$ROOT/Makefile" 'upgrade-compatibility:'
 require_line "$ROOT/Makefile" 'release-gate-policy:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/upgrade-service-order-smoke.sh" ] || { echo "upgrade service ordering smoke test must be executable" >&2; exit 1; }

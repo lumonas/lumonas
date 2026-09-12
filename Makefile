@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all dev dev-full test test-go test-web check-openapi check-api-contract build build-go build-web package recovery-fixture recovery-api-smoke api-smoke storage-loopback privileged-storage-loopback share-config-smoke iso-smoke qemu-recovery-smoke qemu-recovery-live security-smoke dependency-smoke container-scan race-fuzz release-gate-policy systemd-smoke systemd-security-smoke permission-smoke log-retention-smoke upgrade-smoke release-artifacts-smoke installer-signature-smoke qemu-image qemu-smoke verify-release
+.PHONY: all dev dev-full test test-go test-web check-openapi check-api-contract build build-go build-web package recovery-fixture recovery-api-smoke api-smoke storage-loopback privileged-storage-loopback share-config-smoke iso-smoke qemu-recovery-smoke qemu-recovery-live security-smoke dependency-smoke container-scan race-fuzz upgrade-compatibility release-gate-policy systemd-smoke systemd-security-smoke permission-smoke log-retention-smoke upgrade-smoke release-artifacts-smoke installer-signature-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -84,6 +84,9 @@ container-scan:
 race-fuzz:
 	$(GO_ENV) go test -race ./cmd/lumonasd ./cmd/lumonas-privd ./internal/backup ./internal/diagnostics ./internal/docker ./internal/network ./internal/recovery ./internal/storage
 	$(GO_ENV) go test ./cmd/lumonasd ./cmd/lumonas-privd ./internal/backup ./internal/diagnostics ./internal/docker ./internal/network ./internal/recovery ./internal/storage -run 'Fuzz'
+
+upgrade-compatibility:
+	$(GO_ENV) go test ./internal/store -run 'TestStoreReopenPreservesStateAcrossMigrations|TestOpenMigratesLegacyEventSchema|TestOpenMigratesLegacyRuntimeSchemaAsOneUpgrade'
 
 release-gate-policy:
 	bash scripts/release-gate-policy-smoke.sh

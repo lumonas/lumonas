@@ -135,7 +135,8 @@ inventories with the source commit, reproducible epoch, and exact installed
 versions.
 
 Tagged publication is blocked by the package, QEMU, ISO, recovery, storage
-safety, security, dependency, race/fuzz, and upgrade gates.
+safety, security, dependency, race/fuzz, schema-compatibility, and upgrade
+gates.
 
 Host integration commands are executed through bounded contexts, including
 privileged storage/network operations, disk and SMART discovery, Docker,
