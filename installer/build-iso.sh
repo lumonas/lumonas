@@ -5,16 +5,64 @@ VERSION="${1:-0.1.0-dev}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 WORK="${LUMONAS_ISO_WORKDIR:-$ROOT/build/iso-live}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${VERSION}_amd64.deb}"
+REPO_ORIGIN="LumoNAS"
+REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY:-}"
 
 command -v lb >/dev/null 2>&1 || { echo "live-build is required" >&2; exit 1; }
 command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required" >&2; exit 1; }
 command -v dpkg-scanpackages >/dev/null 2>&1 || { echo "dpkg-scanpackages (dpkg-dev) is required" >&2; exit 1; }
+command -v apt-ftparchive >/dev/null 2>&1 || { echo "apt-ftparchive (apt-utils) is required" >&2; exit 1; }
 [ -f "$DEB" ] || { echo "Build the Debian package first: $DEB" >&2; exit 1; }
 
 rm -rf "$WORK"
-mkdir -p "$WORK/config/package-lists" "$WORK/config/hooks/live" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas" "$WORK/config/includes.chroot/usr/share/doc/lumonas"
+mkdir -p "$WORK/config/package-lists" "$WORK/config/hooks/live" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas" "$WORK/config/includes.chroot/usr/share/doc/lumonas" "$WORK/config/includes.chroot/etc/apt/preferences.d"
 cp "$DEB" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb"
-(cd "$WORK/config/includes.chroot/opt/lumonas-repo" && dpkg-scanpackages pool /dev/null > Packages && gzip -9c Packages > Packages.gz)
+REPO_DIR="$WORK/config/includes.chroot/opt/lumonas-repo"
+(cd "$REPO_DIR" && dpkg-scanpackages --multiversion pool /dev/null > Packages && gzip -9c Packages > Packages.gz)
+cd "$REPO_DIR"
+printf 'Origin: %s\nLabel: %s\nSuite: stable\nCodename: stable\nDate: %s\nArchitectures: amd64\nComponents: main\nDescription: Embedded LumoNAS offline repository\n' \
+	"$REPO_ORIGIN" "$REPO_ORIGIN" "$(date -R)" > Release.tmp
+apt-ftparchive release -c /dev/null \
+	-o "APT::FTPArchive::Release::Origin=$REPO_ORIGIN" \
+	-o "APT::FTPArchive::Release::Label=$REPO_ORIGIN" \
+	-o "APT::FTPArchive::Release::Suite=stable" \
+	-o "APT::FTPArchive::Release::Codename=stable" \
+	-o "APT::FTPArchive::Release::Architectures=amd64" \
+	-o "APT::FTPArchive::Release::Components=main" \
+	Packages Packages.gz >> Release.tmp 2>/dev/null
+sort -u -o Release.tmp Release.tmp
+mv Release.tmp Release
+
+if [ -n "$REPO_SIGN_KEY" ]; then
+	command -v gpg >/dev/null 2>&1 || { echo "gpg is required when LUMONAS_REPO_SIGN_KEY is set" >&2; exit 1; }
+	GNUPGHOME="${LUMONAS_REPO_GNUPGHOME:-$ROOT/build/repo-gnupg}"
+	export GNUPGHOME
+	mkdir -p "$GNUPGHOME"
+	chmod 0700 "$GNUPGHOME"
+	gpg --batch --pinentry-mode loopback --yes --detach-sign --default-key "$REPO_SIGN_KEY" --output Release.gpg Release
+	gpg --batch --pinentry-mode loopback --yes --clearsign --default-key "$REPO_SIGN_KEY" --output InRelease Release
+	gpg --batch --yes --export "$REPO_SIGN_KEY" > "$WORK/config/includes.chroot/usr/share/keyrings/lumonas-archive-keyring.gpg"
+	chmod 0644 "$WORK/config/includes.chroot/usr/share/keyrings/lumonas-archive-keyring.gpg"
+	REPO_SOURCE="deb [signed-by=/usr/share/keyrings/lumonas-archive-keyring.gpg] file:/opt/lumonas-repo ./"
+	echo "Embedded APT repository signed with $REPO_SIGN_KEY"
+else
+	echo "WARNING: LUMONAS_REPO_SIGN_KEY is not set — embedding an UNSIGNED repository ([trusted=yes])." >&2
+	echo "WARNING: Set it to a GPG key fingerprint to ship a signed offline install." >&2
+	REPO_SOURCE="deb [trusted=yes] file:/opt/lumonas-repo ./"
+fi
+cd "$ROOT"
+
+# Pin the LumoNAS core package to the embedded repository so a stray mirror
+# copy can never shadow the ISO payload (same ISO = same installed core).
+cat > "$WORK/config/includes.chroot/etc/apt/preferences.d/lumonas" <<EOF
+Package: lumonas
+Pin: release o=$REPO_ORIGIN
+Pin-Priority: 1001
+
+Package: lumonas-privd
+Pin: release o=$REPO_ORIGIN
+Pin-Priority: 1001
+EOF
 cat > "$WORK/config/package-lists/lumonas.list.chroot" <<'EOF'
 network-manager
 avahi-daemon
@@ -35,13 +83,14 @@ snapraid
 docker.io
 docker-compose
 EOF
-cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<'EOF'
+cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<EOF
 #!/bin/sh
 set -eu
 cat >/etc/apt/sources.list.d/lumonas-local.list <<'APT'
-deb [trusted=yes] file:/opt/lumonas-repo ./
+$REPO_SOURCE
 APT
-dpkg -i /opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb
+apt-get update -o Dir::Etc::sourcelist="sources.list.d/lumonas-local.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" || true
+apt-get install -y --allow-downgrades lumonas || dpkg -i /opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb
 cat >/etc/lumonas/lumonas-web.env <<'ENV'
 LUMONAS_WEB_LISTEN=0.0.0.0:8081
 LUMONAS_WEB_ROOT=/usr/share/lumonas/web
@@ -155,6 +204,8 @@ cat > "$WORK/config/includes.chroot/usr/share/doc/lumonas/build-manifest.txt" <<
 LumoNAS release: $VERSION
 Baseline: Debian 13 (Trixie)
 Core package: lumonas.deb
+Embedded repository: /opt/lumonas-repo (origin $REPO_ORIGIN, pinned at priority 1001)
+Repository signature: $(if [ -n "$REPO_SIGN_KEY" ]; then echo "signed by $REPO_SIGN_KEY"; else echo "UNSIGNED (LUMONAS_REPO_SIGN_KEY not set)"; fi)
 EOF
 
 (cd "$WORK" && lb config --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer live --archive-areas "main contrib non-free-firmware" --apt-indices false)
