@@ -27,6 +27,7 @@ export interface Disk {
   health: HealthState
   temperatureC: number | null
   filesystem?: string
+  mounted?: boolean
   poolId?: string
   standby?: boolean
   lastSeen: string
