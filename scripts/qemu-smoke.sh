@@ -77,8 +77,20 @@ for attempt in $(seq 1 60); do
        grep -F 'lumonas-web.service' "$LOG.services" >/dev/null 2>&1; then
       EVENTS_LOG="$LOG.events"
       curl -fsS --max-time 5 -N http://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
-      if grep -F 'retry: 3000' "$EVENTS_LOG" >/dev/null 2>&1 && grep -F 'system.metrics' "$EVENTS_LOG" >/dev/null 2>&1; then
-        echo "QEMU appliance smoke test passed (disks=$disk_count)"
+      RECOVERY_KEY_LOG="$LOG.recovery-key"
+      RECOVERY_EXPORT_LOG="$LOG.recovery-export"
+      RECOVERY_STATUS_LOG="$LOG.recovery-status"
+      RECOVERY_PLAN_LOG="$LOG.recovery-plan"
+      if curl -fsS -X POST http://127.0.0.1:18080/api/v1/recovery/key >"$RECOVERY_KEY_LOG" 2>/dev/null && \
+         curl -fsS -X POST http://127.0.0.1:18080/api/v1/recovery/export >"$RECOVERY_EXPORT_LOG" 2>/dev/null && \
+         curl -fsS http://127.0.0.1:18080/api/v1/recovery/status >"$RECOVERY_STATUS_LOG" 2>/dev/null && \
+         curl -fsS http://127.0.0.1:18080/api/v1/recovery/plan >"$RECOVERY_PLAN_LOG" 2>/dev/null && \
+         grep -F 'retry: 3000' "$EVENTS_LOG" >/dev/null 2>&1 && \
+         grep -F 'system.metrics' "$EVENTS_LOG" >/dev/null 2>&1 && \
+         grep -F '"verified":true' "$RECOVERY_EXPORT_LOG" >/dev/null 2>&1 && \
+         grep -F '"verified":true' "$RECOVERY_STATUS_LOG" >/dev/null 2>&1 && \
+         grep -F '"verified":true' "$RECOVERY_PLAN_LOG" >/dev/null 2>&1; then
+        echo "QEMU appliance smoke test passed (disks=$disk_count, recovery=verified)"
         exit 0
       fi
     fi
