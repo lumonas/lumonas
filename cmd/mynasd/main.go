@@ -1266,12 +1266,14 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 		}
 		_ = s.store.SaveJob(job)
 		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		s.publish(job.Type+".failed", "critical", &model.ResourceRef{Type: "protection", ID: "protection"}, map[string]any{"jobId": job.ID, "error": job.Error})
 		return
 	}
 	progress = 100
 	job.State, job.Stage, job.FinishedAt, job.Progress = "successful", "SnapRAID operation completed", &now, &progress
 	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+	s.publish(job.Type+".completed", "info", &model.ResourceRef{Type: "protection", ID: "protection"}, map[string]any{"jobId": job.ID})
 }
 
 func (s *apiServer) ensureRestartedJobs() {
