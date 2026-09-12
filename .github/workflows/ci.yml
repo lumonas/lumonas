@@ -117,7 +117,7 @@ jobs:
           name: lumonas-qemu
           path: |
             build/qemu/lumonas-debian13.raw
-            build/qemu/qemu-smoke.log
+            build/qemu/qemu-smoke.log*
           if-no-files-found: error
 
   iso:
