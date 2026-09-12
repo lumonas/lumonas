@@ -157,7 +157,17 @@ export interface SystemMetrics {
   uptimeSeconds: number
   net: { interface: string; upMbps: number; downMbps: number }
   netInterfaces?: NetInterfaceMetrics[]
+  filesystems?: FilesystemUsage[]
   disk?: { readMbps: number; writeMbps: number }
+}
+
+export interface FilesystemUsage {
+  path: string
+  totalBytes: number
+  usedBytes: number
+  availableBytes: number
+  usedPercent: number
+  state: 'healthy' | 'warning' | 'critical' | 'unknown'
 }
 
 export interface NetInterfaceMetrics {

@@ -15,6 +15,13 @@ const SERVICE_STATE: Record<ServiceStatus['state'], 'healthy' | 'attention' | 'o
   unknown: 'attention',
 }
 
+const FILESYSTEM_STATE = {
+  healthy: 'healthy',
+  warning: 'warning',
+  critical: 'critical',
+  unknown: 'attention',
+} as const
+
 export function MonitoringOverviewTab() {
   const { metrics, cpuHistory, ramHistory, netHistory, diskHistory } = useMetricsStore()
   const { data: services } = useServices()
@@ -112,6 +119,22 @@ export function MonitoringOverviewTab() {
               </li>
             ))}
           </ul>
+          <div className="mt-4 border-t pt-4">
+            <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+              Filesystem headroom
+            </p>
+            <ul className="flex flex-col gap-2">
+              {(metrics.filesystems ?? []).map((filesystem) => (
+                <li key={filesystem.path} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate text-muted-foreground">{filesystem.path}</span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <span className="tnum">{filesystem.usedPercent.toFixed(1)}% used</span>
+                    <HealthBadge state={FILESYSTEM_STATE[filesystem.state]} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
           <p className="tnum mt-3 text-xs text-muted-foreground">
             Uptime {formatUptime(metrics.uptimeSeconds)}
           </p>

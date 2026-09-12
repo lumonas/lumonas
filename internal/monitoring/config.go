@@ -239,6 +239,7 @@ func DefaultAlertRules() []AlertRule {
 		{ID: "rule-sync", Name: "SnapRAID sync stale", Condition: "no successful sync in 48h", Severity: "attention", Routes: []string{"web"}, Enabled: true},
 		{ID: "rule-backup", Name: "Backup job failed", Condition: "backup job state = failed", Severity: "warning", Routes: []string{"web"}, Enabled: true},
 		{ID: "rule-container", Name: "Container unhealthy", Condition: "health check failing for 2 minutes", Severity: "warning", Routes: []string{"web"}, Enabled: true},
+		{ID: "rule-filesystem", Name: "Filesystem nearly full", Condition: "filesystem usage above 80%", Severity: "warning", Routes: []string{"web"}, Enabled: true},
 		{ID: "rule-login", Name: "New admin sign-in", Condition: "login from unseen device", Severity: "info", Routes: []string{"web"}, Enabled: false},
 	}
 }

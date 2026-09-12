@@ -34,3 +34,34 @@ func TestNetworkThroughputUsesCounterDelta(t *testing.T) {
 		t.Fatalf("expected zero throughput for unknown interface, got up=%v down=%v", up, down)
 	}
 }
+
+func TestClassifyFilesystemUsage(t *testing.T) {
+	tests := []struct {
+		name        string
+		used, total uint64
+		expected    string
+	}{
+		{"healthy", 79, 100, "healthy"},
+		{"warning", 80, 100, "warning"},
+		{"critical", 95, 100, "critical"},
+		{"invalid", 101, 100, "unknown"},
+		{"empty", 0, 0, "unknown"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := classifyFilesystemUsage(test.used, test.total); got != test.expected {
+				t.Fatalf("classifyFilesystemUsage(%d, %d) = %q, want %q", test.used, test.total, got, test.expected)
+			}
+		})
+	}
+}
+
+func TestFilesystemUsageReadsExistingPath(t *testing.T) {
+	value, err := filesystemUsage(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.TotalBytes == 0 || value.Path == "" || value.State == "unknown" {
+		t.Fatalf("unexpected filesystem usage: %#v", value)
+	}
+}

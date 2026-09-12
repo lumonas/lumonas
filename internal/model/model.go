@@ -152,6 +152,16 @@ type SystemMetrics struct {
 	UptimeSeconds uint64                `json:"uptimeSeconds"`
 	Net           NetMetrics            `json:"net"`
 	NetInterfaces []NetInterfaceMetrics `json:"netInterfaces,omitempty"`
+	Filesystems   []FilesystemUsage     `json:"filesystems,omitempty"`
+}
+
+type FilesystemUsage struct {
+	Path           string  `json:"path"`
+	TotalBytes     uint64  `json:"totalBytes"`
+	UsedBytes      uint64  `json:"usedBytes"`
+	AvailableBytes uint64  `json:"availableBytes"`
+	UsedPercent    float64 `json:"usedPercent"`
+	State          string  `json:"state"`
 }
 
 type NetMetrics struct {

@@ -96,6 +96,7 @@ func Metrics() model.SystemMetrics {
 	m.CPUTempC = cpuTemperature()
 	m.Net.UpMbps, m.Net.DownMbps = networkThroughput(m.Net.Interface, now)
 	m.NetInterfaces = netInterfaceMetrics(now)
+	m.Filesystems = Filesystems()
 	return m
 }
 

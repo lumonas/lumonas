@@ -3022,6 +3022,52 @@ components:
               type: number
             downMbps:
               type: number
+        netInterfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetInterfaceMetrics'
+        filesystems:
+          type: array
+          items:
+            $ref: '#/components/schemas/FilesystemUsage'
+
+    FilesystemUsage:
+      type: object
+      required: [path, totalBytes, usedBytes, availableBytes, usedPercent, state]
+      properties:
+        path:
+          type: string
+        totalBytes:
+          type: integer
+        usedBytes:
+          type: integer
+        availableBytes:
+          type: integer
+        usedPercent:
+          type: number
+        state:
+          type: string
+          enum: [healthy, warning, critical, unknown]
+
+    NetInterfaceMetrics:
+      type: object
+      properties:
+        interface:
+          type: string
+        upMbps:
+          type: number
+        downMbps:
+          type: number
+        errorsIn:
+          type: integer
+        errorsOut:
+          type: integer
+        droppedIn:
+          type: integer
+        droppedOut:
+          type: integer
+        up:
+          type: boolean
 
     SmartSummary:
       type: object

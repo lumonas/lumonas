@@ -26,6 +26,7 @@ export const useMetricsStore = create<MetricsState>((set) => ({
     cpuTempC: 0,
     uptimeSeconds: 0,
     net: { interface: 'eth0', upMbps: 0, downMbps: 0 },
+    filesystems: [],
     disk: { readMbps: 0, writeMbps: 0 },
   },
   cpuHistory: [],

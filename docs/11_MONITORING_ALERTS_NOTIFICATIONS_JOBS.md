@@ -197,6 +197,12 @@ Allow filtering by resource/severity/type.
 
 Use stored daily/weekly capacity history.
 
+The live system metrics contract also reports filesystem usage for `/`,
+LumoNAS state, application data, disk branches, and pools when those paths are
+available. Usage at 80% opens a warning alert and usage at 95% opens a critical
+alert; returning below the warning threshold resolves the generated alert.
+This keeps recovery state and logs visible before an `ENOSPC` failure.
+
 Only display prediction after enough history.
 
 Show range/uncertainty, e.g.:

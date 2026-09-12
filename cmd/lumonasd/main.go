@@ -2710,7 +2710,7 @@ func metricsData(metrics model.SystemMetrics) map[string]any {
 	return map[string]any{
 		"cpuPercent": metrics.CPUPercent, "load": metrics.Load, "ramUsedBytes": metrics.RAMUsedBytes,
 		"ramTotalBytes": metrics.RAMTotalBytes, "cpuTempC": metrics.CPUTempC, "uptimeSeconds": metrics.UptimeSeconds,
-		"net": metrics.Net,
+		"net": metrics.Net, "netInterfaces": metrics.NetInterfaces, "filesystems": metrics.Filesystems,
 	}
 }
 

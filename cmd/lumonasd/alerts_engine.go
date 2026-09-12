@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/collector"
 	"github.com/lumonas/lumonas/internal/model"
 )
 
@@ -88,11 +89,38 @@ func (s *apiServer) resolveAlertForRule(ruleID, resourceID string) {
 // tick (~10 minutes); sync staleness is a cheap meta lookup and runs every
 // tick.
 func (s *apiServer) evaluatePeriodicAlerts(tick int64) {
+	s.evaluateFilesystemCapacity()
 	if tick%10 == 0 {
 		s.evaluateDiskTemperatures()
 		s.evaluateSMARTAlerts()
 	}
 	s.evaluateSyncStaleness()
+}
+
+func (s *apiServer) evaluateFilesystemCapacity() {
+	metrics := collector.Metrics()
+	s.evaluateFilesystemUsage(metrics.Filesystems)
+}
+
+func (s *apiServer) evaluateFilesystemUsage(filesystems []model.FilesystemUsage) {
+	for _, filesystem := range filesystems {
+		resource := &model.ResourceRef{Type: "filesystem", ID: filesystem.Path}
+		if filesystem.State == "critical" || filesystem.State == "warning" {
+			severity := "warning"
+			if filesystem.State == "critical" {
+				severity = "critical"
+			}
+			s.fireAlertWithSeverity(
+				"rule-filesystem",
+				severity,
+				"Filesystem space is low",
+				fmt.Sprintf("%s is %.1f%% used with %d bytes available", filesystem.Path, filesystem.UsedPercent, filesystem.AvailableBytes),
+				resource,
+			)
+			continue
+		}
+		s.resolveAlertForRule("rule-filesystem", filesystem.Path)
+	}
 }
 
 // evaluateSMARTAlerts turns SMART attribute movement (reallocated/pending/

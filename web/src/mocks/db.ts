@@ -382,6 +382,10 @@ export const runtime = {
     ramTotalBytes: 32 * GB,
     cpuTempC: 47,
     net: { interface: 'eth0', upMbps: 2.1, downMbps: 18.4 },
+    filesystems: [
+      { path: '/var/lib/lumonas', totalBytes: 500 * GB, usedBytes: 214 * GB, availableBytes: 286 * GB, usedPercent: 42.8, state: 'healthy' as const },
+      { path: '/srv/pools', totalBytes: 24 * TB, usedBytes: 18.2 * TB, availableBytes: 5.8 * TB, usedPercent: 75.8, state: 'healthy' as const },
+    ],
     disk: { readMbps: 34, writeMbps: 12 },
   },
 }

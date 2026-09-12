@@ -107,6 +107,23 @@ func TestAlertEngineSyncStaleness(t *testing.T) {
 	}
 }
 
+func TestAlertEngineFilesystemCapacityLifecycle(t *testing.T) {
+	server := testServer(t)
+	if err := server.store.SaveAlertRule(monitoring.AlertRule{ID: "rule-filesystem", Name: "Filesystem nearly full", Condition: "filesystem usage above 80%", Severity: "warning", Routes: []string{"web"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	server.evaluateFilesystemUsage([]model.FilesystemUsage{{Path: "/var/lib/lumonas", UsedPercent: 96, AvailableBytes: 4, State: "critical"}})
+	alerts, _ := server.store.GeneratedAlerts()
+	if len(alerts) != 1 || alerts[0].Severity != "critical" || alerts[0].Resource == nil || alerts[0].Resource.Type != "filesystem" {
+		t.Fatalf("expected critical filesystem alert, got %#v", alerts)
+	}
+	server.evaluateFilesystemUsage([]model.FilesystemUsage{{Path: "/var/lib/lumonas", UsedPercent: 50, AvailableBytes: 50, State: "healthy"}})
+	alerts, _ = server.store.GeneratedAlerts()
+	if len(alerts) != 0 {
+		t.Fatalf("expected filesystem alert to resolve, got %#v", alerts)
+	}
+}
+
 func TestDisabledRuleDoesNotFire(t *testing.T) {
 	server := testServer(t)
 	if err := server.store.SaveAlertRule(monitoring.AlertRule{ID: "rule-backup", Name: "Backup job failed", Condition: "backup job state = failed", Severity: "warning", Routes: []string{"web"}, Enabled: false}); err != nil {
