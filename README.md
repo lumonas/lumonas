@@ -78,6 +78,9 @@ skip that check when systemd tooling is unavailable.
 QEMU smoke tests also verify all three LumoNAS services are running and that
 the web service is owned by the unprivileged `lumonas` user.
 
+Each Debian package includes a verified build manifest with source, toolchain,
+lockfile, catalog, and dependency metadata.
+
 Offline recovery includes the plan-first `lumonas-recover` utility. Restoration requires explicit `--apply` plus an absolute target root and writes verified configuration, Compose state, the SQLite database, and encrypted secrets atomically.
 
 Management sessions can be reviewed and revoked by token digest, while Time Machine shares render Samba fruit support only when explicitly enabled.

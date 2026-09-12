@@ -13,9 +13,11 @@ command -v dpkg-deb >/dev/null 2>&1 || {
 [ -f "$PACKAGE" ] || { echo "package not found: $PACKAGE" >&2; exit 1; }
 
 CONTROL_DIR=$(mktemp -d "${TMPDIR:-/tmp}/lumonas-deb-control.XXXXXX")
-cleanup() { rm -rf "$CONTROL_DIR"; }
+DATA_DIR=$(mktemp -d "${TMPDIR:-/tmp}/lumonas-deb-data.XXXXXX")
+cleanup() { rm -rf "$CONTROL_DIR" "$DATA_DIR"; }
 trap cleanup EXIT INT TERM
 dpkg-deb -e "$PACKAGE" "$CONTROL_DIR"
+dpkg-deb -x "$PACKAGE" "$DATA_DIR"
 
 field() {
 	dpkg-deb -f "$PACKAGE" "$1"
@@ -56,10 +58,33 @@ done
 for path in \
 	./usr/share/lumonas/web/index.html \
 	./usr/share/lumonas/catalog/apps.json \
+	./usr/share/lumonas/build-manifest.json \
 	./etc/lumonas/lumonasd.env.example \
 	./etc/lumonas/lumonas-web.env.example; do
 	require_path "$path"
 done
+
+python3 - "$DATA_DIR/usr/share/lumonas/build-manifest.json" "$(field Version)" "$(field Depends)" "$(field Recommends)" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    manifest = json.load(handle)
+
+if manifest.get("package") != "lumonas":
+    raise SystemExit("manifest package mismatch")
+if manifest.get("version") != sys.argv[2]:
+    raise SystemExit("manifest version mismatch")
+if manifest.get("architecture") != "amd64":
+    raise SystemExit("manifest architecture mismatch")
+if manifest.get("debianDepends") != sys.argv[3]:
+    raise SystemExit("manifest Depends mismatch")
+if manifest.get("debianRecommends") != sys.argv[4]:
+    raise SystemExit("manifest Recommends mismatch")
+for key in ("sourceCommit", "goVersion", "frontendLockSHA256", "catalogSHA256"):
+    if not manifest.get(key):
+        raise SystemExit(f"manifest field is empty: {key}")
+PY
 
 [ -x "$CONTROL_DIR/postinst" ] || { echo "package postinst is missing or not executable" >&2; exit 1; }
 

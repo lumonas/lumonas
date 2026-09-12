@@ -171,3 +171,6 @@ utility power lost
 - Balanced mode does not make important config dependent on RAM.
 - A clean shutdown flushes pending config/important events.
 - Noisy Docker logs cannot grow without a configured bound.
+
+Release packages embed a deterministic build manifest containing the source
+revision, toolchain, input hashes, and exact Debian dependency fields.

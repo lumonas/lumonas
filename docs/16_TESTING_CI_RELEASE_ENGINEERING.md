@@ -187,6 +187,11 @@ Packaging validation also runs `systemd-analyze verify` against every packaged
 service unit. The check is optional for macOS/local development, but CI fails
 if `systemd-analyze` is unavailable or any unit is invalid.
 
+Every Debian package embeds `usr/share/lumonas/build-manifest.json` with the
+source commit, Go toolchain, frontend lockfile hash, catalog hash, and exact
+`Depends`/`Recommends` values. `verify-deb.sh` validates the manifest against
+the package control metadata.
+
 HTTP requests receive a generated `X-Request-ID` and carry the same
 correlation ID in context. API-created jobs persist it, and privileged calls
 inherit it; daemon-created jobs use their stable job ID as the fallback

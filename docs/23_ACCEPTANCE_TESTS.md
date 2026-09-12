@@ -220,3 +220,11 @@ Boot the Debian appliance and query `/api/v1/services`.
 
 Pass if the three LumoNAS services are active/running and
 `lumonas-web.service` reports `user: lumonas`.
+
+## X. Package manifest
+
+Inspect the generated `.deb` with `verify-deb.sh`.
+
+Pass if the embedded build manifest matches the package version, architecture,
+and exact Debian dependency fields, and contains non-empty source/toolchain and
+input hashes.
