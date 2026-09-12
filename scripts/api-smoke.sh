@@ -172,8 +172,8 @@ if [ "$status" != 200 ] || ! head -c 1 "$TEMP_DIR/disks.json" | grep '\[' >/dev/
 	exit 1
 fi
 
-# Unsupported jobs must remain fail-closed at the public HTTP boundary.
-assert_authenticated_status_and_body POST /api/v1/jobs 501 'only read-only' '{"type":"snapraid.sync","resourceId":"smoke-test"}'
+# SnapRAID jobs are accepted and delegated to the privileged broker.
+assert_authenticated_status_and_body POST /api/v1/jobs 202 '"state":"queued"' '{"type":"snapraid.sync","resourceId":"smoke-test"}'
 
 assert_status_and_body POST /api/v1/auth/logout 200 '"status":"logged_out"'
 assert_status_and_body GET /api/v1/server 401 'authentication required'
