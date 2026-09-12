@@ -28,7 +28,7 @@ func TestBackupCompatibilityContract(t *testing.T) {
 		t.Fatalf("unexpected readiness response: %d %s", readiness.Code, readiness.Body.String())
 	}
 	destinations := read(http.MethodGet, "/api/v1/backup/destinations")
-	if destinations.Code != http.StatusOK || !strings.Contains(destinations.Body.String(), `"id":"compat"`) {
+	if destinations.Code != http.StatusOK || !strings.Contains(destinations.Body.String(), `"id":"compat"`) || !strings.Contains(destinations.Body.String(), `"type":"nas"`) || !strings.Contains(destinations.Body.String(), `"status":"attention"`) {
 		t.Fatalf("unexpected destinations response: %d %s", destinations.Code, destinations.Body.String())
 	}
 	jobs := read(http.MethodGet, "/api/v1/backup/jobs")

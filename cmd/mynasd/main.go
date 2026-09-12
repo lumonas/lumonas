@@ -25,6 +25,7 @@ import (
 	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/events"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/monitoring"
 	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/notify"
 	"github.com/lumonas/lumonas/internal/power"
@@ -216,7 +217,7 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/backup/jobs/") && strings.HasSuffix(endpoint, "/run"):
 		s.runBackupJob(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/backup/destinations":
-		s.listBackupDestinations(w, r)
+		s.backupDestinationSummaries(w, r)
 	case r.Method == http.MethodGet && endpoint == "/backup/generations":
 		s.backupGenerations(w, r)
 	case r.Method == http.MethodGet && endpoint == "/backup/restore/plan":
@@ -265,6 +266,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.alertRules(w)
 	case r.Method == http.MethodPost && endpoint == "/notification-rules":
 		s.saveNotificationRule(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/notification-rules/"):
+		s.updateAlertRule(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/schedules":
 		s.schedules(w)
 	case r.Method == http.MethodGet && endpoint == "/activity":
@@ -1938,12 +1941,12 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 	if notify.ShouldSend(envOr("MYNAS_NOTIFY_MIN_SEVERITY", "warning"), severity) {
 		body, _ := json.Marshal(map[string]any{"event": kind, "severity": severity, "resource": resource, "data": data})
 		message := notify.Message{Title: "LumoNAS " + kind, Body: string(body), Severity: severity}
-		go s.sendConfiguredNotifications(message)
+		go s.sendConfiguredNotifications(kind, severity, message)
 	}
 	s.hub.Publish(event)
 }
 
-func (s *apiServer) sendConfiguredNotifications(message notify.Message) {
+func (s *apiServer) sendConfiguredNotifications(eventType, severity string, message notify.Message) {
 	channels, err := s.store.ListNotificationChannels()
 	if err != nil {
 		if s.log != nil {
@@ -1952,8 +1955,9 @@ func (s *apiServer) sendConfiguredNotifications(message notify.Message) {
 		return
 	}
 	key := []byte(s.recoveryKeyString())
+	routes := s.notificationRoutes(eventType, severity)
 	for _, channel := range channels {
-		if !channel.Enabled {
+		if !channel.Enabled || channel.Type == "web" || (len(routes) > 0 && !routes[channel.ID] && !routes[channel.Type] && !routes["*"] && !routes["all"]) {
 			continue
 		}
 		_, credentials, credentialErr := s.store.NotificationChannel(channel.ID, key)
@@ -1978,6 +1982,67 @@ func (s *apiServer) sendConfiguredNotifications(message notify.Message) {
 			s.log.Warn("legacy notification delivery failed", "event", message.Title, "error", err)
 		}
 	}
+}
+
+func (s *apiServer) notificationRoutes(eventType, severity string) map[string]bool {
+	rules, err := s.store.AlertRules()
+	if err != nil {
+		return nil
+	}
+	routes := make(map[string]bool)
+	category := notificationCategory(eventType)
+	for _, rule := range rules {
+		if !rule.Enabled || !notify.ShouldSend(rule.Severity, severity) {
+			continue
+		}
+		if required := ruleCategory(rule); required != "" && required != category {
+			continue
+		}
+		for _, route := range rule.Routes {
+			routes[route] = true
+		}
+	}
+	return routes
+}
+
+func notificationCategory(eventType string) string {
+	switch {
+	case strings.HasPrefix(eventType, "docker."):
+		return "docker"
+	case strings.HasPrefix(eventType, "recovery."), strings.HasPrefix(eventType, "backup."):
+		return "backup"
+	case strings.HasPrefix(eventType, "disk."), strings.HasPrefix(eventType, "storage."), strings.HasPrefix(eventType, "snapraid."):
+		return "storage"
+	case strings.HasPrefix(eventType, "network."):
+		return "network"
+	case strings.HasPrefix(eventType, "auth."), strings.HasPrefix(eventType, "security."):
+		return "security"
+	case strings.HasPrefix(eventType, "ups."), strings.HasPrefix(eventType, "power."):
+		return "power"
+	default:
+		return "system"
+	}
+}
+
+func ruleCategory(rule monitoring.AlertRule) string {
+	text := strings.ToLower(rule.Name + " " + rule.Condition)
+	for _, category := range []string{"docker", "container", "backup", "recovery", "network", "security", "login", "ups", "power", "storage", "disk", "smart", "pool", "snapraid", "temperature"} {
+		if strings.Contains(text, category) {
+			switch category {
+			case "container":
+				return "docker"
+			case "recovery", "backup":
+				return "backup"
+			case "login", "security":
+				return "security"
+			case "ups", "power":
+				return "power"
+			default:
+				return "storage"
+			}
+		}
+	}
+	return ""
 }
 
 func auditableEvent(kind string) bool {

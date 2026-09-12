@@ -94,6 +94,60 @@ func (s *apiServer) backupJobs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, values)
 }
 
+func (s *apiServer) backupDestinationSummaries(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.backupActor(w, r, false); !ok {
+		return
+	}
+	destinations, err := s.store.ListBackupDestinations()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	verifications, _ := s.store.BackupVerifications(500)
+	values := make([]map[string]any, 0, len(destinations))
+	for _, destination := range destinations {
+		kind := "nas"
+		switch destination.Type {
+		case backup.DestinationS3:
+			kind = "s3"
+		case backup.DestinationSFTP:
+			kind = "sftp"
+		case backup.DestinationLocal:
+			if strings.HasPrefix(destination.Target, "/media/") || strings.HasPrefix(destination.Target, "/mnt/") {
+				kind = "usb"
+			}
+		}
+		status := "offline"
+		if destination.Enabled {
+			status = "attention"
+		}
+		var lastVerified *time.Time
+		for _, verification := range verifications {
+			if verification.DestinationID != destination.ID {
+				continue
+			}
+			if verification.State == "verified" && verification.VerifiedAt != nil {
+				status = "healthy"
+				if lastVerified == nil || verification.VerifiedAt.After(*lastVerified) {
+					lastVerified = verification.VerifiedAt
+				}
+			} else if status != "healthy" {
+				status = "critical"
+			}
+		}
+		value := map[string]any{
+			"id": destination.ID, "label": destination.Name, "type": kind,
+			"target": destination.Target, "encrypted": true, "status": status,
+			"detail": "Encrypted recovery bundle",
+		}
+		if lastVerified != nil {
+			value["lastVerifiedAt"] = lastVerified
+		}
+		values = append(values, value)
+	}
+	writeJSON(w, http.StatusOK, values)
+}
+
 func (s *apiServer) runBackupJob(w http.ResponseWriter, r *http.Request, id string) {
 	actor, ok := s.backupActor(w, r, true)
 	if !ok {
