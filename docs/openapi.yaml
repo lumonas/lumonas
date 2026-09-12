@@ -916,6 +916,22 @@ paths:
         '4XX':
           description: Client error
 
+  /settings/sessions/{id}:
+    delete:
+      tags: [Auth]
+      summary: Revoke an active management session
+      operationId: revoke-settings-session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '204':
+          description: Session revoked
+        '4XX':
+          description: Client error
+
   /acl/jobs/{id}/cancel:
     post:
       tags: [Monitoring]

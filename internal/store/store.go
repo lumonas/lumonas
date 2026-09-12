@@ -599,6 +599,44 @@ func (s *Store) SessionUser(token string) (string, bool) {
 	return username, true
 }
 
+// SessionInfo describes an active session; the token digest doubles as the
+// revocation id and never reveals the session token itself.
+type SessionInfo struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	CreatedAt time.Time `json:"createdAt"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+func (s *Store) Sessions() ([]SessionInfo, error) {
+	rows, err := s.db.Query(`SELECT sessions.token_digest,users.username,sessions.created_at,sessions.expires_at FROM sessions JOIN users ON users.id=sessions.user_id ORDER BY sessions.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	now := time.Now().UTC()
+	result := make([]SessionInfo, 0)
+	for rows.Next() {
+		var session SessionInfo
+		var created, expires string
+		if err := rows.Scan(&session.ID, &session.Username, &created, &expires); err != nil {
+			return nil, err
+		}
+		session.CreatedAt, _ = parseTime(created)
+		session.ExpiresAt, _ = parseTime(expires)
+		if session.ExpiresAt.Before(now) {
+			continue
+		}
+		result = append(result, session)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) DeleteSessionByID(id string) error {
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE token_digest = ?`, id)
+	return err
+}
+
 func (s *Store) DeleteSession(token string) error {
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE token_digest = ?`, auth.TokenDigest(token))
 	return err

@@ -40,6 +40,10 @@ UI should show:
 - last activity;
 - revoke.
 
+The settings API exposes active session metadata using token digests only and
+supports explicit revocation by session ID. Raw session cookies are never
+returned in the inventory response.
+
 Alert optionally on new admin login.
 
 ## Passkeys/2FA
