@@ -6,9 +6,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/lumonas/lumonas/internal/testhttp"
 )
 
 func TestCompareVersions(t *testing.T) {
@@ -55,10 +56,9 @@ func signedDocument(t *testing.T, version string) (FeedDocument, ed25519.PublicK
 
 func TestFetchAndVerifyFeedDocument(t *testing.T) {
 	document, public := signedDocument(t, "1.4.0")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := testhttp.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(document)
 	}))
-	defer server.Close()
 	fetched, err := FetchFeed(context.Background(), server.Client(), server.URL)
 	if err != nil {
 		t.Fatal(err)
@@ -73,10 +73,9 @@ func TestFetchAndVerifyFeedDocument(t *testing.T) {
 }
 
 func TestFetchFeedRejectsHTTPError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := testhttp.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
-	defer server.Close()
 	if _, err := FetchFeed(context.Background(), server.Client(), server.URL); err == nil {
 		t.Fatal("expected fetch failure for non-200 feed")
 	}

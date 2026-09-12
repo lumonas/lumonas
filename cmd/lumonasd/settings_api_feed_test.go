@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/testhttp"
 	"github.com/lumonas/lumonas/internal/updates"
 )
 
@@ -31,7 +32,7 @@ func serveFeed(t *testing.T, version string) (*httptest.Server, func()) {
 		t.Fatal(err)
 	}
 	signature := base64.StdEncoding.EncodeToString(ed25519.Sign(private, canonical))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	server := testhttp.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(updates.FeedDocument{Manifest: manifest, Signature: signature})
 	}))
 	publicHex := base64.StdEncoding.EncodeToString(public)
