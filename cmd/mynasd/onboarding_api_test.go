@@ -17,11 +17,12 @@ func TestOnboardingStateClassifiesDisksWithoutMutatingThem(t *testing.T) {
 		return []model.Disk{
 			{ID: "serial:system", Model: "System", Serial: "system", SizeBytes: 100, Role: "system", Filesystem: "ext4", Health: model.Healthy, LastSeen: time.Now().UTC()},
 			{ID: "serial:data", Model: "Data", Serial: "data", SizeBytes: 200, Health: model.Healthy, LastSeen: time.Now().UTC()},
+			{ID: "serial:parity", Model: "Parity", Serial: "parity", SizeBytes: 300, Role: "parity", Filesystem: "ext4", Health: model.Healthy, LastSeen: time.Now().UTC()},
 		}, nil
 	}
 	response := httptest.NewRecorder()
 	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/onboarding/state", nil))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"classification":"system"`) || !strings.Contains(response.Body.String(), `"classification":"blank"`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"classification":"system"`) || !strings.Contains(response.Body.String(), `"classification":"blank"`) || !strings.Contains(response.Body.String(), `"classification":"suspected-parity"`) {
 		t.Fatalf("unexpected onboarding state: %d %s", response.Code, response.Body.String())
 	}
 }

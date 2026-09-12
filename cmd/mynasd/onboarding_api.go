@@ -49,11 +49,12 @@ func (s *apiServer) onboardingState(w http.ResponseWriter, r *http.Request) {
 	items := make([]map[string]any, 0, len(disks))
 	for _, disk := range disks {
 		classification := classifyOnboardingDisk(disk)
+		dataFound := classification == "existing" || classification == "mynas" || classification == "suspected-parity"
 		label := disk.Name
 		if label == "" {
 			label = disk.Model
 		}
-		items = append(items, map[string]any{"id": disk.ID, "name": disk.Name, "model": disk.Model, "serialSuffix": serialSuffix(disk.Serial), "sizeBytes": disk.SizeBytes, "classification": classification, "filesystem": disk.Filesystem, "dataFound": classification == "existing", "recommendedRole": recommendedOnboardingRole(disk, classification), "recommendedLabel": label, "offline": false})
+		items = append(items, map[string]any{"id": disk.ID, "name": disk.Name, "model": disk.Model, "serialSuffix": serialSuffix(disk.Serial), "sizeBytes": disk.SizeBytes, "classification": classification, "filesystem": disk.Filesystem, "dataFound": dataFound, "recommendedRole": recommendedOnboardingRole(disk, classification), "recommendedLabel": label, "offline": false})
 	}
 	metrics := collector.Metrics()
 	parityAvailable := false
@@ -154,7 +155,11 @@ func classifyOnboardingDisk(disk model.Disk) string {
 	case disk.Role == "system":
 		return "system"
 	case disk.Role == "parity":
-		return "parity"
+		return "suspected-parity"
+	case disk.Role == "external":
+		return "removable"
+	case disk.Role == "mynas":
+		return "mynas"
 	case disk.Filesystem == "":
 		return "blank"
 	default:
@@ -182,7 +187,7 @@ func serialSuffix(serial string) string {
 
 func validOnboardingRole(role string) bool {
 	switch role {
-	case "system", "data", "parity", "apps", "unknown", "":
+	case "system", "data", "parity", "apps", "backup", "external", "unknown", "":
 		return true
 	default:
 		return false
