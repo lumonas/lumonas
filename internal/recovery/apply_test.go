@@ -9,11 +9,14 @@ import (
 
 func TestApplyRestoresValidatedStateAndSecrets(t *testing.T) {
 	bundle, err := Create(Input{
-		Manifest:      Manifest{LumoNASVersion: "test", NASUUID: "nas-1", Generation: 9},
-		DesiredState:  []byte(`{"hostname":"recovered"}`),
-		Database:      []byte("SQLite format 3\x00database"),
-		Compose:       map[string][]byte{"media/compose.yaml": []byte("services:\n  media:\n    image: example/media:latest\n")},
-		Files:         map[string][]byte{"storage/snapraid.conf": []byte("parity /srv/pools/parity\n")},
+		Manifest:     Manifest{LumoNASVersion: "test", NASUUID: "nas-1", Generation: 9},
+		DesiredState: []byte(`{"hostname":"recovered"}`),
+		Database:     []byte("SQLite format 3\x00database"),
+		Compose:      map[string][]byte{"media/compose.yaml": []byte("services:\n  media:\n    image: example/media:latest\n")},
+		Files: map[string][]byte{
+			"storage/snapraid.conf":           []byte("parity /srv/pools/parity\n"),
+			"config/network-connections.json": []byte(`[{"id":"lan","interface":"eth0"}]`),
+		},
 		EncryptedData: []byte("recovered-secret"),
 	}, []byte("key"))
 	if err != nil {
@@ -24,7 +27,7 @@ func TestApplyRestoresValidatedStateAndSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Verified || !result.DatabaseRestored || !result.SecretsRestored || len(result.AppliedFiles) != 5 {
+	if !result.Verified || !result.DatabaseRestored || !result.SecretsRestored || len(result.AppliedFiles) != 6 {
 		t.Fatalf("unexpected apply result %#v", result)
 	}
 	checks := map[string]string{
@@ -32,6 +35,7 @@ func TestApplyRestoresValidatedStateAndSecrets(t *testing.T) {
 		"var/lib/lumonas/recovery/restored/desired-state.json": `{"hostname":"recovered"}`,
 		"srv/lumonas/docker/stacks/media/compose.yaml":         "services:\n  media:\n    image: example/media:latest\n",
 		"etc/lumonas/snapraid.conf":                            "parity /srv/pools/parity\n",
+		"etc/lumonas/recovery/network-connections.json":        `[{"id":"lan","interface":"eth0"}]`,
 		"var/lib/lumonas/secrets/recovered-secrets.bin":        "recovered-secret",
 	}
 	for relative, expected := range checks {

@@ -43,6 +43,7 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	})
 
 	postRecoveryUser(t, server, `{"name":"operator","password":"operator-password-123","managementRole":"admin"}`, "/api/v1/users", http.StatusCreated)
+	postRecoveryUser(t, server, `{"id":"lan","uuid":"11111111-1111-1111-1111-111111111111","name":"LAN","interface":"eth0","enabled":true,"type":"ethernet","ipv4":{"method":"auto"},"ipv6":{"method":"disabled"},"reauthenticated":true}`, "/api/v1/network/connections", http.StatusCreated)
 	postRecoveryUser(t, server, `{"id":"share-media","name":"Media","path":"/srv/pools/media","enabled":true,"protocols":[{"protocol":"smb","enabled":true},{"protocol":"nfs","enabled":true}],"access":[]}`, "/api/v1/shares", http.StatusCreated)
 	postRecoveryUser(t, server, `{"name":"media","composeYaml":"services:\n  media:\n    image: example/media:latest\n    volumes:\n      - /srv/lumonas/docker/appdata/media:/config\n"}`, "/api/v1/docker/stacks", http.StatusCreated)
 
@@ -62,8 +63,17 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	if !plan.Verified || !plan.DatabaseValid || !plan.DesiredStateValid || !plan.ComposeValid || !plan.EncryptedSecrets {
 		t.Fatalf("production recovery export was not fully verified: %#v", plan)
 	}
-	if !containsRecoveryFile(plan.Files, "docker/stacks/media/compose.yaml") || !containsRecoveryFile(plan.Files, "config/shares.json") {
-		t.Fatalf("configured runtime files were not exported: %#v", plan.Files)
+	for _, file := range []string{
+		"docker/stacks/media/compose.yaml",
+		"config/shares.json",
+		"config/network-connections.json",
+		"config/network-bindings.json",
+		"config/firewall-policy.json",
+		"storage/mounts.json",
+	} {
+		if !containsRecoveryFile(plan.Files, file) {
+			t.Fatalf("configured runtime file was not exported: %s (%#v)", file, plan.Files)
+		}
 	}
 
 	restoredRoot := filepath.Join(root, "blank-replacement")
@@ -81,6 +91,10 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	if err != nil || !strings.Contains(string(compose), "example/media:latest") {
 		t.Fatalf("restored Compose file = %q, err=%v", compose, err)
 	}
+	networkConfig, err := os.ReadFile(filepath.Join(restoredRoot, "etc/lumonas/recovery/network-connections.json"))
+	if err != nil || !strings.Contains(string(networkConfig), `"interface":"eth0"`) {
+		t.Fatalf("restored network metadata = %q, err=%v", networkConfig, err)
+	}
 
 	restored, err := store.Open(filepath.Join(restoredRoot, "var/lib/lumonas/lumonas.db"))
 	if err != nil {
@@ -94,6 +108,10 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	shares, err := restored.ListManagedShares()
 	if err != nil || len(shares) != 1 || shares[0].ID != "share-media" {
 		t.Fatalf("restored shares = %#v, err=%v", shares, err)
+	}
+	connections, err := restored.ListNetworkConnections()
+	if err != nil || len(connections) != 1 || connections[0].ID != "lan" {
+		t.Fatalf("restored network connections = %#v, err=%v", connections, err)
 	}
 }
 

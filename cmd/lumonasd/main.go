@@ -1201,7 +1201,12 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context) {
 			return
 		}
 	}
-	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, LumoNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, Files: s.recoveryFiles(), Appdata: appdata.Payloads, EncryptedData: encrypted}, []byte(key))
+	recoveryFiles, err := s.recoveryFiles()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recovery state export failed: " + err.Error()})
+		return
+	}
+	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, LumoNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, Files: recoveryFiles, Appdata: appdata.Payloads, EncryptedData: encrypted}, []byte(key))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "bundle creation failed: " + err.Error()})
 		return
@@ -1263,27 +1268,62 @@ func (s *apiServer) pruneRecoveryBundles(directory string, keep int) {
 	}
 }
 
-func (s *apiServer) recoveryFiles() map[string][]byte {
+func (s *apiServer) recoveryFiles() (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	// Managed shares are stored in SQLite, while the legacy JSON file remains
 	// an import/compatibility surface. Always export the current store view so
 	// a new installation can restore shares even when that legacy file never
 	// existed.
-	if managed, err := s.store.ListManagedShares(); err == nil && len(managed) > 0 {
+	managed, err := s.store.ListManagedShares()
+	if err != nil {
+		return nil, fmt.Errorf("managed shares: %w", err)
+	}
+	if len(managed) > 0 {
 		legacy := make([]shares.Share, 0, len(managed))
 		for _, value := range managed {
 			legacy = append(legacy, value.Legacy())
 		}
-		if data, marshalErr := json.Marshal(legacy); marshalErr == nil {
-			files["config/shares.json"] = data
+		data, marshalErr := json.Marshal(legacy)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("managed shares: %w", marshalErr)
 		}
-	} else if data, err := os.ReadFile(envOr("LUMONAS_SHARES_FILE", "/var/lib/lumonas/shares.json")); err == nil {
+		files["config/shares.json"] = data
+	} else if data, readErr := os.ReadFile(envOr("LUMONAS_SHARES_FILE", "/var/lib/lumonas/shares.json")); readErr == nil {
 		files["config/shares.json"] = data
 	}
-	if data, err := os.ReadFile(envOr("LUMONAS_SNAPRAID_CONFIG", "/etc/lumonas/snapraid.conf")); err == nil {
+	if data, readErr := os.ReadFile(envOr("LUMONAS_SNAPRAID_CONFIG", "/etc/lumonas/snapraid.conf")); readErr == nil {
 		files["storage/snapraid.conf"] = data
 	}
-	return files
+
+	connections, err := s.store.ListNetworkConnections()
+	if err != nil {
+		return nil, fmt.Errorf("network connections: %w", err)
+	}
+	if files["config/network-connections.json"], err = json.Marshal(connections); err != nil {
+		return nil, fmt.Errorf("network connections: %w", err)
+	}
+	bindings, err := s.store.ListNetworkBindings()
+	if err != nil {
+		return nil, fmt.Errorf("network bindings: %w", err)
+	}
+	if files["config/network-bindings.json"], err = json.Marshal(bindings); err != nil {
+		return nil, fmt.Errorf("network bindings: %w", err)
+	}
+	firewall, err := s.store.NetworkFirewallPolicy()
+	if err != nil {
+		return nil, fmt.Errorf("firewall policy: %w", err)
+	}
+	if files["config/firewall-policy.json"], err = json.Marshal(firewall); err != nil {
+		return nil, fmt.Errorf("firewall policy: %w", err)
+	}
+	mounts, err := s.store.MountEntries()
+	if err != nil {
+		return nil, fmt.Errorf("mount entries: %w", err)
+	}
+	if files["storage/mounts.json"], err = json.Marshal(mounts); err != nil {
+		return nil, fmt.Errorf("mount entries: %w", err)
+	}
+	return files, nil
 }
 
 func (s *apiServer) recoveryPlan(w http.ResponseWriter) {

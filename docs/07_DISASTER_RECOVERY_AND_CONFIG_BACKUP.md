@@ -190,6 +190,12 @@ The same hook starts a second backend instance with paths rooted in the
 replacement filesystem and checks `/healthz`, `/readyz`, `/principals`, and
 `/shares` before shutdown.
 
+Production exports also include explicit, inspectable metadata for network
+connections, service bindings, firewall policy, and persisted disk/pool mount
+entries. These files are restored beneath the recovery configuration area;
+network profiles are reviewed and mapped to the replacement NIC before they
+are applied.
+
 Verify:
 
 - checksum;

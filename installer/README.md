@@ -18,8 +18,9 @@ and a read-only SnapRAID status probe before an appliance release is accepted.
 The recovery fixture is deliberately generated from the production SQLite migrations and store APIs, rather than a fake database header. Run `make recovery-fixture` to build it locally, or let `make qemu-recovery-smoke` build it automatically.
 
 Run `make recovery-api-smoke` to exercise the production API export path with a
-configured user, share, Compose stack, encrypted secret, and restored SQLite
-database before booting the ISO.
+configured user, network connection, share, Compose stack, encrypted secret,
+explicit network/firewall/mount metadata, and a restored SQLite database
+before booting the ISO.
 
 When a Debian appliance image is available, `make qemu-recovery-live
 LUMONAS_ISO=... LUMONAS_QEMU_IMAGE=...` runs the stronger live-source recovery

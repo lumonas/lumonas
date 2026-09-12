@@ -76,11 +76,13 @@ This is release-blocking and exercises the offline system-disk replacement path
 end to end.
 
 The separate `recovery-api` gate exercises the production export path before
-the ISO job: it creates a management user, managed SMB/NFS share, Compose
-stack, encrypted secret payload, and configuration generation through the real
-API handlers, exports the encrypted bundle, verifies its checksums, applies it
-to a blank filesystem, and reopens the restored SQLite database. This catches
-export omissions that a prebuilt recovery fixture cannot detect.
+the ISO job: it creates a management user, network connection, managed SMB/NFS
+share, Compose stack, encrypted secret payload, and configuration generation
+through the real API handlers, exports the encrypted bundle, verifies its
+checksums, applies it to a blank filesystem, and reopens the restored SQLite
+database. It also requires explicit network, firewall, binding, and mount
+metadata in the bundle. This catches export omissions that a prebuilt
+recovery fixture cannot detect.
 The recovery helper has a bounded startup timeout and powers the guest off on
 failure; the host harness also applies a deadline so a broken restore fails
 closed instead of hanging the release job.
