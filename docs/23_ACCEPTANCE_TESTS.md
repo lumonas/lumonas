@@ -44,6 +44,10 @@ Pass if:
 
 ## D. SnapRAID protection
 
+If the privileged configuration step fails or a disk identity is stale,
+onboarding must not queue the initial sync. It must report protection as
+unconfigured and leave the data disks untouched.
+
 Configure parity, sync, create new files.
 
 Pass if:

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -67,6 +68,13 @@ func TestOnboardingAppliesProtectionLayoutAndSchedules(t *testing.T) {
 	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/onboarding/complete", strings.NewReader(`{"serverName":"nas-lab","roles":{"serial:data":"data","serial:second":"data","serial:parity":"parity"},"protection":{"syncTime":"01:30","scrubDay":"friday"},"recovery":{"autoConfigBackup":false,"destination":"","keyAcknowledged":false}}`)))
 	if response.Code != http.StatusOK {
 		t.Fatalf("onboarding completion failed: %d %s", response.Code, response.Body.String())
+	}
+	var result map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result["protectionConfigured"] != false || result["initialSyncStarted"] != false {
+		t.Fatalf("onboarding must not start protection work after broker failure: %#v", result)
 	}
 	schedules, err := server.store.JobSchedules(time.Now())
 	if err != nil {

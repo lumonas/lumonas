@@ -193,6 +193,10 @@ When disk disappears:
 
 Do not silently run recovery.
 
+Likewise, onboarding may persist a requested parity/data layout as intent, but
+it must not queue the initial sync when configuration activation or identity
+validation fails.
+
 ## Import existing disks
 
 Scan read-only first.

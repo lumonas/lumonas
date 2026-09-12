@@ -154,15 +154,17 @@ func (s *apiServer) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	s.advanceGeneration("onboarding.complete")
 	s.publish("onboarding.completed", "info", &model.ResourceRef{Type: "server", ID: "server-1"}, nil)
 	initialSyncStarted := false
-	for diskID, role := range input.Roles {
-		if role == "parity" && known[diskID].SizeBytes > 0 {
-			job := model.Job{ID: newID("job"), Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
-			if err := s.store.SaveJob(job); err == nil {
-				initialSyncStarted = true
-				s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
-				go s.runProtectionJob(job)
+	if protectionConfigured {
+		for diskID, role := range input.Roles {
+			if role == "parity" && known[diskID].SizeBytes > 0 {
+				job := model.Job{ID: newID("job"), Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+				if err := s.store.SaveJob(job); err == nil {
+					initialSyncStarted = true
+					s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+					go s.runProtectionJob(job)
+				}
+				break
 			}
-			break
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "initialSyncStarted": initialSyncStarted, "protectionConfigured": protectionConfigured})

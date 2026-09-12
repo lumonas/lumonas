@@ -92,6 +92,12 @@ For mergerfs + SnapRAID:
 - show usable capacity;
 - show that SnapRAID is scheduled parity, not realtime RAID.
 
+The first sync is queued only after the generated SnapRAID configuration has
+been accepted by the privileged broker. If configuration or disk identity
+validation fails, onboarding remains completed but reports protection as
+unconfigured and does not start a background sync against an unverified
+layout.
+
 Example:
 
 ```text

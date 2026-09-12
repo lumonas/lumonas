@@ -83,6 +83,9 @@ Explicit cases:
 
 Expected result: fail closed.
 
+Onboarding also fails closed: an initial SnapRAID sync is not queued until
+the privileged configuration and stable-disk validation both succeed.
+
 ## Recovery test
 
 Release-blocking scenario:

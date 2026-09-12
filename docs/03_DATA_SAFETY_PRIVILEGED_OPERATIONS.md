@@ -213,6 +213,10 @@ While active, block:
 
 Reads may continue when safe.
 
+Onboarding uses the same boundary: the initial SnapRAID sync is withheld until
+the generated configuration is accepted by the privileged broker and every
+referenced stable disk identity has been revalidated.
+
 ## SnapRAID rules
 
 Never automatically use force options to “fix” failed automation.
