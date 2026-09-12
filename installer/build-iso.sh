@@ -107,6 +107,9 @@ cat >/etc/lumonas/lumonas-web.env <<'ENV'
 LUMONAS_WEB_LISTEN=0.0.0.0:8081
 LUMONAS_WEB_ROOT=/usr/share/lumonas/web
 LUMONAS_API_URL=http://127.0.0.1:8080
+LUMONAS_WEB_TLS_CERT=/etc/lumonas/tls/server.crt
+LUMONAS_WEB_TLS_KEY=/etc/lumonas/tls/server.key
+LUMONAS_COOKIE_SECURE=true
 ENV
 chown root:lumonas /etc/lumonas/lumonas-web.env
 chmod 0640 /etc/lumonas/lumonas-web.env

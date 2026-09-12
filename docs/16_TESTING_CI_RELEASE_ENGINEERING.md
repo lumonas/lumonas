@@ -60,7 +60,9 @@ Run:
 
 The generated offline ISO is also booted under QEMU with a blank replacement
 disk. The smoke test waits for the live image's health, readiness, and server
-API before the ISO artifact is considered valid.
+API over HTTPS before the ISO artifact is considered valid. The recovery ISO
+smoke uses the same HTTPS web path while keeping its internal recovery daemon
+on a separate loopback-only HTTP port.
 
 The release ISO job additionally attaches a disposable recovery media image
 containing a verified fixture bundle and a blank replacement disk. A

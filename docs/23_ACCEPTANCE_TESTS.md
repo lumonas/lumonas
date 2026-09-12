@@ -116,6 +116,14 @@ Apply unreachable static IP remotely.
 
 Pass if old config returns after checkpoint timeout.
 
+## K1. Offline ISO HTTPS
+
+Boot the generated offline ISO under QEMU and query the live web console.
+
+Pass if the live ISO web service exposes health, readiness, and server routes
+over HTTPS with the generated certificate, while the recovery daemon remains
+bound to its separate loopback-only API port.
+
 ## L. Config recovery
 
 Create backup, destroy system SSD, restore.

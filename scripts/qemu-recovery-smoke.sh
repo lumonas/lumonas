@@ -87,9 +87,9 @@ QEMU_PID=$!
 
 API_READY=false
 for attempt in $(seq 1 120); do
-	if curl -fsS http://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
-		curl -fsS http://127.0.0.1:18082/readyz >/dev/null 2>&1 && \
-		curl -fsS http://127.0.0.1:18082/api/v1/server >/dev/null 2>&1; then
+	if curl -kfsS https://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18082/readyz >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18082/api/v1/server >/dev/null 2>&1; then
 		API_READY=true
 	fi
 	if ! kill -0 "$QEMU_PID" 2>/dev/null; then

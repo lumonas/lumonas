@@ -54,9 +54,9 @@ qemu-system-x86_64 \
 QEMU_PID=$!
 
 for attempt in $(seq 1 90); do
-	if curl -fsS http://127.0.0.1:18081/healthz >/dev/null 2>&1 && \
-		curl -fsS http://127.0.0.1:18081/readyz >/dev/null 2>&1 && \
-		curl -fsS http://127.0.0.1:18081/api/v1/server >/dev/null 2>&1; then
+	if curl -kfsS https://127.0.0.1:18081/healthz >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18081/readyz >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18081/api/v1/server >/dev/null 2>&1; then
 		echo "LumoNAS ISO smoke test passed (blank replacement disk booted)"
 		exit 0
 	fi

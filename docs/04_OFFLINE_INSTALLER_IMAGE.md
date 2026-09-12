@@ -41,6 +41,11 @@ Pin package versions per LumoNAS release so:
 
 Online security updates may be applied after installation.
 
+The live ISO web console uses the same provisioned local TLS certificate as the
+installed appliance. Its health and QEMU smoke probes use HTTPS with explicit
+certificate pinning disabled only for the generated self-signed certificate;
+the recovery helper's internal loopback API remains separate and local.
+
 Release builds set `SOURCE_DATE_EPOCH` from the source commit. The package and
 ISO manifests record this value, and the embedded APT `Release` metadata uses
 it for its date, so release metadata is reproducible from the checked-out
