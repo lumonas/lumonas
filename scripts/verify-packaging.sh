@@ -77,6 +77,8 @@ require_line "$ROOT/scripts/storage-loopback-smoke.sh" 'MISMATCH_LOOP=$LAST_LOOP
 require_line "$ROOT/installer/build-iso.sh" 'xfsprogs'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'xfsprogs'
 require_line "$ROOT/installer/build-iso.sh" 'vsftpd'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'NetworkManager.service'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'qemu-ethernet.nmconnection'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'config-generation.json'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'fuse.mergerfs'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'databaseRestored'

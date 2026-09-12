@@ -48,14 +48,21 @@ apt-get install -y --no-install-recommends \
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
 systemd-analyze verify /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service
-mkdir -p /etc/systemd/network /etc/systemd/system/lumonas-web.service.d
-cat >/etc/systemd/network/20-ethernet.network <<'NETWORK'
-[Match]
-Name=en* eth*
+mkdir -p /etc/NetworkManager/system-connections /etc/systemd/system/lumonas-web.service.d
+cat >/etc/NetworkManager/system-connections/qemu-ethernet.nmconnection <<'NETWORK'
+[connection]
+id=qemu-ethernet
+type=ethernet
+autoconnect=true
+autoconnect-retries=0
 
-[Network]
-DHCP=yes
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto
 NETWORK
+chmod 600 /etc/NetworkManager/system-connections/qemu-ethernet.nmconnection
 cat >/etc/systemd/system/lumonas-web.service.d/qemu.conf <<'DROPIN'
 [Service]
 Environment=LUMONAS_WEB_LISTEN=0.0.0.0:8081
@@ -63,7 +70,8 @@ DROPIN
 cat >/etc/fstab <<'FSTAB'
 /dev/vda / ext4 defaults 0 1
 FSTAB
-systemctl enable systemd-networkd.service systemd-resolved.service docker.service smbd.service avahi-daemon.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+systemctl disable systemd-networkd.service systemd-networkd-wait-online.service || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 passwd -l root || true
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
