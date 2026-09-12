@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+
+getent group mynas >/dev/null 2>&1 || groupadd --system mynas
+id mynas >/dev/null 2>&1 || useradd --system --gid mynas --home-dir /var/lib/mynas --no-create-home --shell /usr/sbin/nologin mynas
+install -d -o mynas -g mynas -m 0750 /var/lib/mynas /var/lib/mynas/secrets /srv/mynas /srv/mynas/docker
+systemctl daemon-reload || true
+systemctl enable mynas-privd.service mynasd.service mynas-web.service || true
+systemctl try-restart mynas-privd.service mynasd.service mynas-web.service || true
+exit 0

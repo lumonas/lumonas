@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"io/fs"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -13,6 +13,7 @@ import (
 )
 
 func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	listen := flag.String("listen", envOr("MYNAS_WEB_LISTEN", "127.0.0.1:8081"), "HTTP listen address")
 	root := flag.String("root", envOr("MYNAS_WEB_ROOT", "/usr/share/mynas/web"), "compiled frontend root")
 	api := flag.String("api", envOr("MYNAS_API_URL", "http://127.0.0.1:8080"), "backend URL")
@@ -21,7 +22,8 @@ func main() {
 	flag.Parse()
 	target, err := url.Parse(*api)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error("invalid backend URL", "error", err)
+		os.Exit(1)
 	}
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	static := http.FileServer(http.Dir(*root))
@@ -35,14 +37,19 @@ func main() {
 		}
 		static.ServeHTTP(w, r)
 	})
-	log.Printf("mynas-web listening on %s, serving %s", *listen, *root)
 	if (*cert == "") != (*key == "") {
-		log.Fatal("both --tls-cert and --tls-key are required for HTTPS")
+		logger.Error("both TLS certificate and key are required for HTTPS")
+		os.Exit(1)
 	}
+	logger.Info("mynas-web listening", "listen", *listen, "root", *root, "https", *cert != "")
+	var serveErr error
 	if *cert != "" {
-		log.Fatal(http.ListenAndServeTLS(*listen, *cert, *key, handler))
+		serveErr = http.ListenAndServeTLS(*listen, *cert, *key, handler)
+	} else {
+		serveErr = http.ListenAndServe(*listen, handler)
 	}
-	log.Fatal(http.ListenAndServe(*listen, handler))
+	logger.Error("mynas-web stopped", "error", serveErr)
+	os.Exit(1)
 }
 
 func envOr(key, fallback string) string {

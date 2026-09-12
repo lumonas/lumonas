@@ -1,0 +1,10 @@
+Package: lumonas
+Version: 0.1.0
+Section: admin
+Priority: optional
+Architecture: amd64
+Maintainer: LumoNAS maintainers <maintainers@lumonas.local>
+Depends: libc6, systemd
+Recommends: network-manager, smartmontools, nut-client, mergerfs, snapraid, docker.io, docker-compose
+Description: LumoNAS appliance runtime
+ Safe, observable NAS management runtime with Docker and storage integration.

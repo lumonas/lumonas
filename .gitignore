@@ -1,0 +1,9 @@
+/bin/
+/build/
+/coverage/
+*.deb
+*.iso
+*.raw
+*.sbom.json
+*.sig
+build/qemu/work/

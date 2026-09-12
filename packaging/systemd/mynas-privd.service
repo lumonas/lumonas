@@ -1,0 +1,24 @@
+[Unit]
+Description=LumoNAS privileged operation broker
+After=local-fs.target
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/lumonas/mynas-privd --socket /run/mynas/privd.sock
+User=root
+Group=mynas
+RuntimeDirectory=mynas
+RuntimeDirectoryMode=0750
+UMask=007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/mynas
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
