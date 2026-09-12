@@ -527,3 +527,11 @@ manifest is rejected.
 The generated ISO and QEMU images must also expose their versioned Debian
 package inventories under `/usr/share/doc/lumonas/`, including the source
 commit, source epoch, and exact installed package versions.
+
+## AV. Release gate policy
+
+Run `scripts/release-gate-policy-smoke.sh`.
+
+Pass if tagged publication depends on the package, QEMU, ISO, recovery,
+storage-safety, integration, security, dependency, race/fuzz, and upgrade
+jobs, so a failed required gate cannot still publish release artifacts.

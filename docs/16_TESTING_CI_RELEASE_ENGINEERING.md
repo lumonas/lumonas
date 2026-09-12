@@ -444,6 +444,11 @@ identity. A signature file existing on disk is not sufficient.
 Dependency and container-image vulnerability scans are required before tagged
 release publication, in addition to the generated SBOM and signatures.
 
+The release job has an explicit gate-policy smoke test that checks its `needs`
+set includes package, QEMU, ISO, recovery, storage safety, integration,
+security, dependency, race/fuzz, and upgrade jobs. A successful individual job
+cannot be bypassed by accidentally omitting it from tagged publication.
+
 ## Reproducibility
 
 Pin external package inputs per release as much as practical.
