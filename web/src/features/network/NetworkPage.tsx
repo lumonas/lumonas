@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { NetworkMonitoring } from '@/features/network/network-monitoring'
+import { WireGuardSection } from '@/features/network/wireguard-section'
+import { TailscaleSection } from '@/features/network/tailscale-section'
 
 type Connection = { id: string; name: string; interface: string; type?: string; enabled: boolean; status: string; ipv4: { method: string }; ipv6: { method: string } }
 type Binding = { service: string; address: string; port: number; enabled: boolean; scopes?: string[] }
@@ -46,6 +49,9 @@ export function NetworkPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Network" description="Manage NetworkManager connections, service exposure, firewall policy, and diagnostics." />
+      <NetworkMonitoring />
+      <WireGuardSection />
+      <TailscaleSection />
       <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><NetworkIcon className="size-4 text-primary" />Connections</CardTitle><CardDescription>Changes use a checkpoint so an unreachable host can roll back safely.</CardDescription></CardHeader>
