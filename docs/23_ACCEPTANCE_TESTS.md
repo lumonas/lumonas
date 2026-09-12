@@ -380,14 +380,22 @@ Run the WireGuard and SFTP command-boundary tests.
 Pass if exact command arguments and stdin are captured through injectable
 bounded runners, and no integration path constructs a shell command.
 
-## AL. Mutation operation identity
+## AL. FTPS certificate integration
+
+Run the share configuration and packaging smoke tests.
+
+Pass if generated FTPS configuration uses the provisioned
+`/etc/lumonas/tls/server.crt` and `server.key` paths and rejects obsolete
+certificate locations.
+
+## AM. Mutation operation identity
 
 Submit a confirmed filesystem or SnapRAID mutation without an operation ID.
 
 Pass if `lumonas-privd` rejects it before disk discovery or command execution;
 normal API confirmations and scheduled jobs must include the operation ID.
 
-## AM. Privileged journal observability
+## AN. Privileged journal observability
 
 Inspect a broker request/result pair in the service journal using a test
 operation containing sensitive requested-state and identity values.
@@ -396,7 +404,7 @@ Pass if structured records include operation/correlation/plan/result metadata,
 while sensitive payload values are absent and the packaged units identify their
 logs as `lumonas-privd`, `lumonasd`, and `lumonas-web`.
 
-## AN. Real frontend appliance smoke
+## AO. Real frontend appliance smoke
 
 Boot the Debian appliance through the QEMU release smoke and fetch `/` from
 the packaged web service.
@@ -404,7 +412,7 @@ the packaged web service.
 Pass if the response contains the compiled LumoNAS title and React root
 element, in addition to the API, SSE, service identity, and disk assertions.
 
-## AO. Wake-on-LAN command boundary
+## AP. Wake-on-LAN command boundary
 
 Run the network WOL tests and settings API test.
 
@@ -412,7 +420,7 @@ Pass if `ethtool` capability discovery distinguishes supported and enabled
 states, settings changes use the typed `network.wol.set` broker operation, and
 unsafe interface names are rejected before command execution.
 
-## AP. Scheduled power safety
+## AQ. Scheduled power safety
 
 Run the power schedule and settings API tests.
 
@@ -420,7 +428,7 @@ Pass if invalid actions, clock formats, and day selections are rejected, a due
 schedule is matched only once per local minute, and execution uses the typed
 `power.shutdown` broker request with an operation ID.
 
-## AQ. Docker log retention
+## AR. Docker log retention
 
 Run the log-retention and packaging smoke tests.
 
@@ -428,7 +436,7 @@ Pass if the package ships a Docker `json-file` baseline capped at 10 MiB per
 file and three files, applies it only when `/etc/docker/daemon.json` is absent,
 and never overwrites an administrator-owned Docker configuration on upgrade.
 
-## AR. Docker mutation authorization
+## AS. Docker mutation authorization
 
 Attempt Docker stack, container, image, and offline-import mutations without a
 management session.
@@ -436,7 +444,7 @@ management session.
 Pass if every mutation is rejected before the Docker command runs, while a
 successful mutation produces a correlated audit record.
 
-## AS. Release signature verification
+## AT. Release signature verification
 
 Run tagged-release artifact verification with Cosign available.
 

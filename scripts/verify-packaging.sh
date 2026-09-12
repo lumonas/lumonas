@@ -48,6 +48,12 @@ require_line "$ROOT/packaging/debian/postinst" '/etc/docker/daemon.json'
 require_line "$ROOT/packaging/docker-daemon.json" '"max-size": "10m"'
 require_line "$ROOT/packaging/docker-daemon.json" '"max-file": "3"'
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
+require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.crt'
+require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.key'
+if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1 || grep -F '/etc/lumonas/tls/tls.key' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1; then
+	echo "share configuration still references obsolete FTPS certificate paths" >&2
+	exit 1
+fi
 require_line "$ROOT/packaging/debian/prerm" 'lumonas-web.service'
 require_line "$ROOT/packaging/build-deb.sh" 'DEBIAN/prerm'
 require_line "$ROOT/installer/build-iso.sh" 'dpkg-scanpackages'
@@ -60,11 +66,13 @@ for worker in storage network power general; do
   require_line "$ROOT/scripts/qemu-smoke.sh" "lumonas-privd-$worker.service"
 done
 [ -x "$ROOT/scripts/storage-loopback-smoke.sh" ] || { echo "storage loopback smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/share-config-smoke.sh" ] || { echo "share configuration smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/qemu-recovery-smoke.sh" ] || { echo "QEMU recovery smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/security-smoke.sh" ] || { echo "security smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
+require_line "$ROOT/Makefile" 'share-config-smoke:'
 require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'
 require_line "$ROOT/Makefile" 'recovery-fixture:'
 require_line "$ROOT/Makefile" 'security-smoke:'

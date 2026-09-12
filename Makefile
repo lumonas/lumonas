@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all test test-go test-web check-openapi check-api-contract build build-go build-web package recovery-fixture api-smoke storage-loopback iso-smoke qemu-recovery-smoke security-smoke dependency-smoke container-scan systemd-smoke permission-smoke log-retention-smoke upgrade-smoke qemu-image qemu-smoke verify-release
+.PHONY: all test test-go test-web check-openapi check-api-contract build build-go build-web package recovery-fixture api-smoke storage-loopback share-config-smoke iso-smoke qemu-recovery-smoke security-smoke dependency-smoke container-scan systemd-smoke permission-smoke log-retention-smoke upgrade-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -46,6 +46,9 @@ api-smoke:
 
 storage-loopback:
 	bash scripts/storage-loopback-smoke.sh
+
+share-config-smoke:
+	bash scripts/share-config-smoke.sh
 
 iso-smoke:
 	LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_ISO_ASSERT=true bash scripts/iso-smoke.sh

@@ -24,7 +24,7 @@ func TestProtocolRenderersAndValidatedAtomicWrite(t *testing.T) {
 	if err != nil || !strings.Contains(sftp, "ChrootDirectory /srv/media") {
 		t.Fatalf("unexpected SFTP config %q err=%v", sftp, err)
 	}
-	ftp, err := RenderFTPConfig(values, FTPOptions{UserConfigDir: "/var/lib/lumonas/generated/vsftpd-users", TLSCertFile: "/etc/lumonas/tls/tls.crt", TLSKeyFile: "/etc/lumonas/tls/tls.key"})
+	ftp, err := RenderFTPConfig(values, FTPOptions{UserConfigDir: "/var/lib/lumonas/generated/vsftpd-users", TLSCertFile: "/etc/lumonas/tls/server.crt", TLSKeyFile: "/etc/lumonas/tls/server.key"})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -202,8 +202,8 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 func ftpOptions() shares.FTPOptions {
 	return shares.FTPOptions{
 		UserConfigDir: envOr("LUMONAS_FTP_USER_DIR", "/var/lib/lumonas/generated/vsftpd-users"),
-		TLSCertFile:   envOr("LUMONAS_WEB_TLS_CERT", "/etc/lumonas/tls/tls.crt"),
-		TLSKeyFile:    envOr("LUMONAS_WEB_TLS_KEY", "/etc/lumonas/tls/tls.key"),
+		TLSCertFile:   envOr("LUMONAS_WEB_TLS_CERT", "/etc/lumonas/tls/server.crt"),
+		TLSKeyFile:    envOr("LUMONAS_WEB_TLS_KEY", "/etc/lumonas/tls/server.key"),
 	}
 }
 
