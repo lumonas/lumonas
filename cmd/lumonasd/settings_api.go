@@ -11,6 +11,7 @@ import (
 
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/power"
+	"github.com/lumonas/lumonas/internal/updates"
 )
 
 const settingsMetaKey = "app_settings"
@@ -104,7 +105,7 @@ func defaultSettings(s *apiServer) map[string]any {
 	cancel()
 	return map[string]any{
 		"updates": map[string]any{
-			"core":   map[string]any{"channel": "stable", "current": s.version, "available": availableValue, "lastCheckedAt": now, "autoUpdate": false},
+			"core":   map[string]any{"channel": "stable", "current": s.version, "available": availableValue, "lastCheckedAt": now, "autoUpdate": false, "channelUrl": strings.TrimSpace(os.Getenv("LUMONAS_UPDATE_FEED_URL"))},
 			"debian": map[string]any{"release": "Debian 13 (Trixie)", "pendingCount": 0, "lastCheckedAt": now, "autoUpdate": false},
 			"docker": map[string]any{"availableCount": 0, "autoUpdate": false},
 		},
@@ -201,24 +202,32 @@ func (s *apiServer) checkUpdates(w http.ResponseWriter, r *http.Request) {
 	}
 	s.recordIdentityAudit(actor, "updates.check.queued", job.ID, nil)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
-	go s.runUpdateCheck(job)
+	go func() { _ = s.runUpdateCheck(job) }()
 	writeJSON(w, http.StatusAccepted, job)
 }
 
-func (s *apiServer) runUpdateCheck(job model.Job) {
+func (s *apiServer) runUpdateCheck(job model.Job) model.Job {
 	started := time.Now().UTC()
 	progress := 25.0
 	job.State, job.StartedAt, job.Progress, job.Stage = "running", &started, &progress, "Checking configured update channels"
 	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
-	settings, err := s.loadSettings()
-	if err == nil {
+	stage := "Update channels checked"
+	if settings, err := s.loadSettings(); err == nil {
 		if updates, ok := settings["updates"].(map[string]any); ok {
 			now := time.Now().UTC().Format(time.RFC3339)
 			for _, key := range []string{"core", "debian"} {
 				if section, ok := updates[key].(map[string]any); ok {
 					section["lastCheckedAt"] = now
 				}
+			}
+			core, _ := updates["core"].(map[string]any)
+			if feedErr := s.checkUpdateFeed(core); feedErr != nil {
+				core["lastError"] = feedErr.Error()
+				stage = "Feed check failed — kept last known state"
+				s.publish("updates.check.failed", "warning", nil, map[string]any{"jobId": job.ID, "error": feedErr.Error()})
+			} else {
+				delete(core, "lastError")
 			}
 			if encoded, encodeErr := json.Marshal(settings); encodeErr == nil {
 				_ = s.store.SetMeta(settingsMetaKey, string(encoded))
@@ -227,7 +236,49 @@ func (s *apiServer) runUpdateCheck(job model.Job) {
 	}
 	finished := time.Now().UTC()
 	progress = 100
-	job.State, job.FinishedAt, job.Progress, job.Stage = "successful", &finished, &progress, "Update channels checked"
+	job.State, job.FinishedAt, job.Progress, job.Stage = "successful", &finished, &progress, stage
 	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+	return job
+}
+
+// checkUpdateFeed polls the configured signed update feed and refreshes the
+// advertised availability. A missing feed URL is a valid offline posture, not
+// an error; verification or fetch failures keep the last known state.
+func (s *apiServer) checkUpdateFeed(core map[string]any) error {
+	channelURL := ""
+	if value, ok := core["channelUrl"].(string); ok {
+		channelURL = strings.TrimSpace(value)
+	}
+	if channelURL == "" {
+		return nil
+	}
+	publicKey, keyErr := updates.ParsePublicKey(os.Getenv("LUMONAS_UPDATE_PUBLIC_KEY"))
+	if keyErr != nil {
+		return keyErr
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	document, err := updates.FetchFeed(ctx, s.updateHTTPClient, channelURL)
+	if err != nil {
+		return err
+	}
+	manifest, err := updates.VerifyFeedDocument(publicKey, document)
+	if err != nil {
+		return err
+	}
+	current := s.version
+	if value, ok := core["current"].(string); ok && value != "" {
+		current = value
+	}
+	if updates.CompareVersions(manifest.Version, current) > 0 {
+		core["available"] = manifest.Version
+		core["releaseNotes"] = manifest.Notes
+		core["publishedAt"] = manifest.PublishedAt.Format(time.RFC3339)
+	} else {
+		delete(core, "available")
+		delete(core, "releaseNotes")
+		delete(core, "publishedAt")
+	}
+	return nil
 }

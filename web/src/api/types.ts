@@ -340,6 +340,10 @@ export interface SettingsUpdatesCore {
   available: string | null
   lastCheckedAt: string
   autoUpdate: boolean
+  channelUrl?: string
+  releaseNotes?: string
+  publishedAt?: string
+  lastError?: string
 }
 
 export interface AppSettings {

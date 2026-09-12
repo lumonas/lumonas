@@ -109,6 +109,20 @@ export function UpdatesTab() {
               </div>
             </div>
           </div>
+          <div className="border-t pt-3 text-xs text-muted-foreground">
+            <p>
+              Signed feed:{' '}
+              <span className="break-all font-mono">
+                {updates.core.channelUrl || 'not configured — appliance remains offline-safe'}
+              </span>
+            </p>
+            {updates.core.lastError ? (
+              <p className="mt-1 text-destructive">Last feed check: {updates.core.lastError}</p>
+            ) : null}
+            {updates.core.releaseNotes ? (
+              <p className="mt-1">Release notes: {updates.core.releaseNotes}</p>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

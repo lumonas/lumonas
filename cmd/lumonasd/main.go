@@ -52,6 +52,7 @@ type apiServer struct {
 	notificationMu       sync.Mutex
 	notificationFailures map[string]notificationFailureState
 	notificationClient   *http.Client
+	updateHTTPClient     *http.Client
 	safetyMu             sync.Mutex
 	safetyUntil          time.Time
 }

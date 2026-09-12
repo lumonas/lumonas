@@ -12,6 +12,8 @@ export const settings: AppSettings = {
       available: '0.1.1',
       lastCheckedAt: minutesAgo(35),
       autoUpdate: false,
+      channelUrl: 'https://updates.example.invalid/lumonas/stable.json',
+      releaseNotes: 'Improved recovery verification and safer disk discovery.',
     },
     debian: {
       release: 'Debian 13 (Trixie)',
