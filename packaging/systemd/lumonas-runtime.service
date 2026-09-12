@@ -1,0 +1,29 @@
+[Unit]
+Description=LumoNAS runtime provisioning (zram swap, tmpfs transcode)
+After=local-fs.target systemd-modules-load.service
+Before=lumonasd.service docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/etc/lumonas/runtime.env
+ExecStart=/usr/lib/lumonas/lumonas-privd --runtime
+User=root
+Group=lumonas
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/etc/lumonas /var/tmp/lumonas-transcode
+RestrictAddressFamilies=AF_UNIX
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_MODULE CAP_SYS_RESOURCE
+LockPersonality=true
+MemoryDenyWriteExecute=true
+MemoryMax=128M
+CPUQuota=100%
+TasksMax=64
+TimeoutStopSec=15s
+UMask=027
+
+[Install]
+WantedBy=multi-user.target

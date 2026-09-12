@@ -27,7 +27,6 @@ if not units:
 
 common = {
     "NoNewPrivileges": "true",
-    "PrivateTmp": "true",
     "ProtectHome": "true",
     "ProtectSystem": "strict",
     "LockPersonality": "true",
@@ -57,6 +56,9 @@ for path in units:
     for key, expected in common.items():
         if values.get(key) != [expected]:
             raise SystemExit(f"{name}: {key} must be exactly {expected!r}")
+    expected_private_tmp = "false" if name == "lumonas-runtime.service" else "true"
+    if values.get("PrivateTmp") != [expected_private_tmp]:
+        raise SystemExit(f"{name}: PrivateTmp must be exactly {expected_private_tmp!r}")
     for key in resource_keys:
         if not values.get(key) or not values[key][0].strip():
             raise SystemExit(f"{name}: {key} must set a finite resource limit")
@@ -79,6 +81,13 @@ for path in units:
             raise SystemExit(f"{name}: privileged worker must be Unix-socket only")
         if "CapabilityBoundingSet" not in values:
             raise SystemExit(f"{name}: capability bounding set is missing")
+    elif name == "lumonas-runtime.service":
+        if values.get("User") != ["root"] or values.get("Group") != ["lumonas"]:
+            raise SystemExit(f"{name}: runtime provisioner must run root:lumonas")
+        if "AF_UNIX" not in " ".join(values.get("RestrictAddressFamilies", [])):
+            raise SystemExit(f"{name}: runtime provisioner must be Unix-socket only")
+        if "CapabilityBoundingSet" not in values:
+            raise SystemExit(f"{name}: runtime capability bounding set is missing")
 
 print(f"LumoNAS systemd sandbox policy verified ({len(units)} units)")
 PY

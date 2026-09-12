@@ -77,7 +77,15 @@ var workerDial = func(socket string) (net.Conn, error) {
 func main() {
 	socket := flag.String("socket", "/run/lumonas/privd.sock", "Unix socket path")
 	worker := flag.String("worker", "", "run as a restricted operation worker (storage, network, power, or general)")
+	runtimeMode := flag.Bool("runtime", false, "apply the persisted runtime provisioning and exit")
 	flag.Parse()
+	if *runtimeMode {
+		if err := runRuntimeFromEnv(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *worker != "" && !validWorker(*worker) {
 		panic("unsupported privileged worker")
 	}
@@ -220,7 +228,7 @@ func executeWorker(req request, worker string) response {
 
 func operationWorker(operation string) string {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply":
 		return "storage"
 	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wol.set", "firewall.apply":
 		return "network"
@@ -312,6 +320,18 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return applyMountPersistence(req, discover, run)
 	case "snapraid.config.apply":
 		return applySnapraidConfig(req, discover, run)
+	case "runtime.status":
+		return runtimeStatus(run)
+	case "runtime.zram.apply":
+		return applyZram(req, run)
+	case "runtime.zram.disable":
+		return disableZram(req, run)
+	case "runtime.tmpfs.apply":
+		return applyTmpfs(req, run)
+	case "runtime.tmpfs.disable":
+		return disableTmpfs(req, run)
+	case "runtime.config.apply":
+		return applyRuntimeConfig(req, run)
 	case "service.reload":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -417,7 +437,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 
 func requiresOperationID(operation string) bool {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.wol.set":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.wol.set", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply":
 		return true
 	default:
 		return false

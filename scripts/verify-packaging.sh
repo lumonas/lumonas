@@ -22,6 +22,11 @@ for unit in lumonas-web.service lumonasd.service lumonas-privd.service lumonas-p
 	require_line "$SYSTEMD/$unit" 'Group=lumonas'
 done
 
+for key in NoNewPrivileges=true ProtectSystem=strict MemoryMax= TasksMax= Group=lumonas; do
+	require_line "$SYSTEMD/lumonas-runtime.service" "$key"
+done
+require_line "$SYSTEMD/lumonas-runtime.service" 'PrivateTmp=false'
+
 require_line "$SYSTEMD/lumonas-web.service" 'User=lumonas'
 require_line "$SYSTEMD/lumonasd.service" 'User=lumonas'
 require_line "$SYSTEMD/lumonas-privd.service" 'User=root'
@@ -36,6 +41,9 @@ require_line "$SYSTEMD/lumonas-privd-network.service" 'CapabilityBoundingSet=CAP
 require_line "$SYSTEMD/lumonas-privd-power.service" 'CapabilityBoundingSet=CAP_SYS_BOOT'
 require_line "$SYSTEMD/lumonas-privd-general.service" 'CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID'
 require_line "$SYSTEMD/lumonas-privd-general.service" '/etc/exports.d /etc/ssh/sshd_config.d'
+require_line "$SYSTEMD/lumonas-runtime.service" 'EnvironmentFile=-/etc/lumonas/runtime.env'
+require_line "$SYSTEMD/lumonas-runtime.service" 'ExecStart=/usr/lib/lumonas/lumonas-privd --runtime'
+require_line "$SYSTEMD/lumonas-runtime.service" 'CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_MODULE CAP_SYS_RESOURCE'
 
 require_line "$ROOT/packaging/debian/postinst" 'useradd --system'
 require_line "$ROOT/packaging/debian/postinst" '/var/lib/lumonas/secrets'
@@ -48,6 +56,7 @@ require_line "$ROOT/packaging/debian/postinst" '/etc/docker/daemon.json'
 require_line "$ROOT/packaging/docker-daemon.json" '"max-size": "10m"'
 require_line "$ROOT/packaging/docker-daemon.json" '"max-file": "3"'
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
+require_line "$ROOT/packaging/debian/postinst" 'LUMONAS_ZRAM_ENABLED=false'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.crt'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.key'
 if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1 || grep -F '/etc/lumonas/tls/tls.key' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1; then

@@ -66,6 +66,7 @@ type apiServer struct {
 	csrfMu               sync.Mutex
 	fixStages            map[string]string
 	fixStageMu           sync.Mutex
+	runtimeStateFunc     func() map[string]any
 	rateMu               sync.Mutex
 	rateAttempts         map[string][]time.Time
 	clock                func() time.Time

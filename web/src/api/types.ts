@@ -367,6 +367,11 @@ export interface AppSettings {
       ratio: number
       pressure: 'low' | 'medium' | 'high'
     }
+    tmpfs: {
+      enabled: boolean
+      sizeBytes: number
+      mountPath: string
+    }
     dockerLogging: {
       driver: string
       maxSizeMb: number

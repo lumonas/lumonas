@@ -59,7 +59,8 @@ for unit in \
 	lumonas-privd-storage.service \
 	lumonas-privd-network.service \
 	lumonas-privd-power.service \
-	lumonas-privd-general.service; do
+	lumonas-privd-general.service \
+	lumonas-runtime.service; do
 	require_path "./lib/systemd/system/$unit"
 done
 

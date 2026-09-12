@@ -32,6 +32,11 @@ export const settings: AppSettings = {
       ratio: 3.1,
       pressure: 'low',
     },
+    tmpfs: {
+      enabled: true,
+      sizeBytes: 1_073_741_824,
+      mountPath: '/var/tmp/lumonas-transcode',
+    },
     dockerLogging: {
       driver: 'json-file',
       maxSizeMb: 10,

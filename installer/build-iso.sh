@@ -98,7 +98,7 @@ LUMONAS_API_URL=http://127.0.0.1:8080
 ENV
 chown root:lumonas /etc/lumonas/lumonas-web.env
 chmod 0640 /etc/lumonas/lumonas-web.env
-systemctl enable lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
+systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
 EOF
 chmod 0755 "$WORK/config/hooks/live/020-install-lumonas.hook.chroot"
 if [ "${LUMONAS_ENABLE_RECOVERY_SMOKE:-false}" = "true" ]; then

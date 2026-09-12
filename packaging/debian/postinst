@@ -38,6 +38,14 @@ ENV
 	chown root:lumonas /etc/lumonas/lumonas-web.env
 	chmod 0640 /etc/lumonas/lumonas-web.env
 fi
+if [ ! -f /etc/lumonas/runtime.env ]; then
+	cat >/etc/lumonas/runtime.env <<'ENV'
+LUMONAS_ZRAM_ENABLED=false
+LUMONAS_TMPFS_ENABLED=false
+ENV
+	chown root:lumonas /etc/lumonas/runtime.env
+	chmod 0640 /etc/lumonas/runtime.env
+fi
 
 # Provision an optional self-signed local certificate once, without replacing
 # administrator-managed certificates on upgrades. HTTPS is opt-in by clearing
@@ -66,8 +74,8 @@ fi
 # units; the || true behavior keeps dpkg usable in chroots without PID 1.
 systemctl daemon-reload || true
 systemctl try-reload-or-restart systemd-journald.service || true
-systemctl enable lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
-for unit in lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service; do
+systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+for unit in lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service; do
 	systemctl start "$unit" || true
 done
 exit 0

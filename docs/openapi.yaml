@@ -3628,6 +3628,52 @@ components:
           type: object
         runtime:
           type: object
+          properties:
+            writeProfile:
+              type: string
+              enum: [balanced, normal, maximum]
+            zram:
+              type: object
+              required: [enabled, sizeBytes, compressedBytes, ratio, pressure]
+              properties:
+                enabled:
+                  type: boolean
+                sizeBytes:
+                  type: integer
+                  format: int64
+                compressedBytes:
+                  type: integer
+                  format: int64
+                ratio:
+                  type: number
+                  format: double
+                pressure:
+                  type: string
+                  enum: [low, medium, high]
+            tmpfs:
+              type: object
+              required: [enabled, sizeBytes, mountPath]
+              properties:
+                enabled:
+                  type: boolean
+                sizeBytes:
+                  type: integer
+                  format: int64
+                mountPath:
+                  type: string
+            dockerLogging:
+              type: object
+              properties:
+                driver:
+                  type: string
+                maxSizeMb:
+                  type: integer
+                maxFiles:
+                  type: integer
+                topConsumers:
+                  type: array
+                  items:
+                    type: object
         power:
           type: object
           properties:

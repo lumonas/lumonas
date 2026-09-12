@@ -70,7 +70,7 @@ DROPIN
 cat >/etc/fstab <<'FSTAB'
 /dev/vda / ext4 defaults 0 1
 FSTAB
-systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
 systemctl disable systemd-networkd.service systemd-networkd-wait-online.service || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 passwd -l root || true

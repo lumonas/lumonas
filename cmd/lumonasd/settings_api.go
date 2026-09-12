@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,6 +81,16 @@ func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := s.applyWOLSettings(r, input.Patch); err != nil {
+			status := http.StatusServiceUnavailable
+			if _, ok := err.(*settingsError); ok {
+				status = http.StatusUnprocessableEntity
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	if input.Section == "runtime" {
+		if err := s.applyRuntimePatch(r, input.Patch, section); err != nil {
 			status := http.StatusServiceUnavailable
 			if _, ok := err.(*settingsError); ok {
 				status = http.StatusUnprocessableEntity
@@ -210,6 +221,148 @@ func (s *apiServer) refreshDynamicSettings(value map[string]any) {
 		}
 		security["sessions"] = s.sessionViews("")
 	}
+	// Runtime provisioning state is live system state: prefer what the
+	// privileged broker reports over persisted settings.
+	if runtime, ok := value["runtime"].(map[string]any); ok {
+		if state := s.runtimeState(); state != nil {
+			if zram, ok := state["zram"]; ok {
+				runtime["zram"] = zram
+			}
+			if tmpfs, ok := state["tmpfs"]; ok {
+				runtime["tmpfs"] = tmpfs
+			}
+		}
+	}
+}
+
+// runtimeState queries the privileged worker for live zram/tmpfs status.
+// The seam field keeps tests hermetic; production leaves it nil.
+func (s *apiServer) runtimeState() map[string]any {
+	if s.runtimeStateFunc != nil {
+		return s.runtimeStateFunc()
+	}
+	request := privileged.Request{Operation: "runtime.status", PlanHash: "runtime-status", ExpiresAt: time.Now().UTC().Add(10 * time.Second), Confirmed: true}
+	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(context.Background(), request)
+	if err != nil || !result.OK {
+		return nil
+	}
+	data, _ := result.Data.(map[string]any)
+	return data
+}
+
+// applyRuntimePatch provisions zram/tmpfs through the privileged broker and
+// persists the desired boot-time configuration. Sizes come from the patch so
+// the settings store stays authoritative for what the admin asked for.
+func (s *apiServer) applyRuntimePatch(r *http.Request, patch, desired map[string]any) error {
+	apply := func(enabled bool, sizeBytes int64, applyOp, disableOp string) error {
+		operation := disableOp
+		requested := map[string]any{}
+		if enabled {
+			operation = applyOp
+			requested["sizeBytes"] = sizeBytes
+		}
+		request := privileged.Request{Operation: operation, OperationID: newID("runtime"), PlanHash: "runtime-" + newID("state"), RequestedState: requested, ExpiresAt: time.Now().UTC().Add(5 * time.Minute), Confirmed: true}
+		return s.brokerExecute(r.Context(), request)
+	}
+	zramEnabled, zramSize, zramPresent, err := runtimePatchComponent(patch, "zram")
+	if err != nil {
+		return &settingsError{err.Error()}
+	}
+	tmpfsEnabled, tmpfsSize, tmpfsPresent, err := runtimePatchComponent(patch, "tmpfs")
+	if err != nil {
+		return &settingsError{err.Error()}
+	}
+	if zramPresent {
+		if err := apply(zramEnabled, zramSize, "runtime.zram.apply", "runtime.zram.disable"); err != nil {
+			return &settingsError{"zram provisioning failed: " + err.Error()}
+		}
+	}
+	if tmpfsPresent {
+		if err := apply(tmpfsEnabled, tmpfsSize, "runtime.tmpfs.apply", "runtime.tmpfs.disable"); err != nil {
+			return &settingsError{"tmpfs provisioning failed: " + err.Error()}
+		}
+	}
+	if zramPresent || tmpfsPresent {
+		desiredZram, desiredZramSize := runtimeDesiredComponent(desired, "zram")
+		desiredTmpfs, desiredTmpfsSize := runtimeDesiredComponent(desired, "tmpfs")
+		configRequest := privileged.Request{Operation: "runtime.config.apply", OperationID: newID("runtime"), PlanHash: "runtime-config-" + newID("state"), RequestedState: map[string]any{
+			"zramEnabled": desiredZram, "zramSizeBytes": strconv.FormatInt(desiredZramSize, 10),
+			"tmpfsEnabled": desiredTmpfs, "tmpfsSizeBytes": strconv.FormatInt(desiredTmpfsSize, 10),
+		}, ExpiresAt: time.Now().UTC().Add(5 * time.Minute), Confirmed: true}
+		if err := s.brokerExecute(r.Context(), configRequest); err != nil {
+			return &settingsError{"runtime boot configuration failed: " + err.Error()}
+		}
+		s.publish("runtime.provisioned", "info", nil, map[string]any{"zram": zramPresent && zramEnabled, "tmpfs": tmpfsPresent && tmpfsEnabled})
+	}
+	return nil
+}
+
+func runtimeDesiredComponent(settings map[string]any, key string) (bool, int64) {
+	raw, ok := settings[key].(map[string]any)
+	if !ok {
+		return false, 0
+	}
+	enabled, _ := raw["enabled"].(bool)
+	size, _, _ := runtimeSizeValue(raw["sizeBytes"])
+	return enabled, size
+}
+
+// runtimePatchComponent extracts {enabled, sizeBytes} for zram/tmpfs patches.
+// The boolean reports whether the component was present in the patch.
+func runtimePatchComponent(patch map[string]any, key string) (enabled bool, sizeBytes int64, present bool, err error) {
+	raw, ok := patch[key]
+	if !ok {
+		return false, 0, false, nil
+	}
+	component, ok := raw.(map[string]any)
+	if !ok {
+		return false, 0, true, fmt.Errorf("%s must be an object", key)
+	}
+	if value, ok := component["enabled"].(bool); ok {
+		enabled = value
+	}
+	present = true
+	if enabled {
+		rawSize, hasSize := component["sizeBytes"]
+		if !hasSize || rawSize == nil {
+			return false, 0, true, fmt.Errorf("%s.sizeBytes is required to enable", key)
+		}
+		var parseErr error
+		sizeBytes, _, parseErr = runtimeSizeValue(rawSize)
+		if parseErr != nil {
+			return false, 0, true, fmt.Errorf("%s.sizeBytes must be an integer", key)
+		}
+		if sizeBytes == 0 {
+			return false, 0, true, fmt.Errorf("%s.sizeBytes is required to enable", key)
+		}
+		maximum := int64(64 * 1024 * 1024 * 1024)
+		if key == "zram" {
+			maximum = 32 * 1024 * 1024 * 1024
+		}
+		if sizeBytes < 64*1024*1024 || sizeBytes > maximum {
+			return false, 0, true, fmt.Errorf("%s.sizeBytes must be between 64MiB and %dGiB", key, maximum/(1024*1024*1024))
+		}
+	}
+	return enabled, sizeBytes, true, nil
+}
+
+func runtimeSizeValue(raw any) (int64, bool, error) {
+	switch size := raw.(type) {
+	case float64:
+		if size != float64(int64(size)) {
+			return 0, true, fmt.Errorf("size is not an integer")
+		}
+		return int64(size), true, nil
+	case int64:
+		return size, true, nil
+	case int:
+		return int64(size), true, nil
+	case string:
+		parsed, err := strconv.ParseInt(size, 10, 64)
+		return parsed, true, err
+	default:
+		return 0, false, fmt.Errorf("size is not an integer")
+	}
 }
 
 // sessionViews renders active sessions for the settings security panel. The
@@ -289,6 +442,7 @@ func defaultSettings(s *apiServer) map[string]any {
 		"runtime": map[string]any{
 			"writeProfile":  "balanced",
 			"zram":          map[string]any{"enabled": false, "sizeBytes": 0, "compressedBytes": 0, "ratio": 0, "pressure": "low"},
+			"tmpfs":         map[string]any{"enabled": false, "sizeBytes": 0, "mountPath": "/var/tmp/lumonas-transcode"},
 			"dockerLogging": map[string]any{"driver": "json-file", "maxSizeMb": 10, "maxFiles": 3, "topConsumers": []any{}},
 		},
 		"power":    map[string]any{"maintenanceMode": false, "wol": wol, "ups": ups, "schedule": map[string]any{"enabled": false, "action": "shutdown", "time": "01:00", "days": "Daily"}},
@@ -345,7 +499,7 @@ func validateSettingsPatch(section string, patch map[string]any) error {
 	}
 	allowed := map[string]map[string]bool{
 		"updates":  {"core": true, "debian": true, "docker": true},
-		"runtime":  {"writeProfile": true, "zram": true, "dockerLogging": true},
+		"runtime":  {"writeProfile": true, "zram": true, "tmpfs": true, "dockerLogging": true},
 		"power":    {"maintenanceMode": true, "wol": true, "schedule": true},
 		"security": {"https": true, "ssh": true, "sessions": true},
 	}

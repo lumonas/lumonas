@@ -3,6 +3,7 @@ import { AlertBanner } from '@/components/core/alert-banner'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -28,6 +29,14 @@ const PROFILES = [
     label: 'Maximum write reduction',
     hint: 'Aggressively batches writes to protect disks. Recent writes (logs, databases) can be lost after a power failure.',
   },
+] as const
+
+const TMPFS_SIZES = [
+  { value: 536_870_912, label: '512 MiB' },
+  { value: 1_073_741_824, label: '1 GiB' },
+  { value: 2_147_483_648, label: '2 GiB' },
+  { value: 4_294_967_296, label: '4 GiB' },
+  { value: 8_589_934_592, label: '8 GiB' },
 ] as const
 
 export function RuntimeTab() {
@@ -119,6 +128,69 @@ export function RuntimeTab() {
               zram keeps frequently written temporary data in compressed RAM instead of hammering
               the system SSD.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              RAM transcode cache
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm">Temporary files in tmpfs</p>
+                <p className="text-xs text-muted-foreground">
+                  Uses volatile RAM for transcoding. Contents are lost after reboot.
+                </p>
+              </div>
+              <Switch
+                checked={runtime.tmpfs.enabled}
+                onCheckedChange={(enabled) =>
+                  updateSettings.mutate({
+                    section: 'runtime',
+                    patch: {
+                      tmpfs: {
+                        ...runtime.tmpfs,
+                        enabled,
+                        sizeBytes: runtime.tmpfs.sizeBytes || TMPFS_SIZES[1].value,
+                      },
+                    },
+                  })
+                }
+                aria-label="Toggle RAM transcode cache"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t pt-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Capacity</p>
+                <p className="font-medium">{formatBytes(runtime.tmpfs.sizeBytes)}</p>
+              </div>
+              <Select
+                value={String(runtime.tmpfs.sizeBytes || TMPFS_SIZES[1].value)}
+                onValueChange={(value) =>
+                  updateSettings.mutate({
+                    section: 'runtime',
+                    patch: {
+                      tmpfs: { ...runtime.tmpfs, sizeBytes: Number(value) },
+                    },
+                  })
+                }
+              >
+                <SelectTrigger className="h-8 w-28 text-xs" aria-label="RAM transcode capacity">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TMPFS_SIZES.map((size) => (
+                    <SelectItem key={size.value} value={String(size.value)}>
+                      {size.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="font-mono text-[11px] text-muted-foreground">{runtime.tmpfs.mountPath}</p>
           </CardContent>
         </Card>
 
