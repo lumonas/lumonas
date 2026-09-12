@@ -2265,7 +2265,7 @@ func (s *apiServer) stream(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, data map[string]any) {
-	event := model.Event{ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Resource: resource, Data: data}
+	event := model.Event{SchemaVersion: events.SchemaVersion, ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Resource: resource, Data: data}
 	if err := s.store.SaveEvent(event); err != nil {
 		if s.log != nil {
 			s.log.Warn("persist event failed", "error", err)

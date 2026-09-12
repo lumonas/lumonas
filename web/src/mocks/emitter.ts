@@ -12,6 +12,7 @@ export function emit(
   data: Record<string, unknown>,
 ) {
   const envelope: LumoEvent = {
+    schemaVersion: 1,
     id: `evt-${++runtime.eventCounter}`,
     type,
     timestamp: new Date().toISOString(),

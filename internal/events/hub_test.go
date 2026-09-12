@@ -1,6 +1,7 @@
 package events
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -19,5 +20,27 @@ func TestHubPublishesToSubscribers(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for event")
+	}
+}
+
+func TestHubDefaultsSchemaVersion(t *testing.T) {
+	hub := NewHub()
+	channel, unsubscribe := hub.Subscribe()
+	defer unsubscribe()
+	hub.Publish(model.Event{Type: "test", Timestamp: time.Now().UTC(), Data: map[string]any{}})
+
+	event := <-channel
+	if event.SchemaVersion != SchemaVersion {
+		t.Fatalf("schema version = %d, want %d", event.SchemaVersion, SchemaVersion)
+	}
+}
+
+func TestEncodeDefaultsSchemaVersion(t *testing.T) {
+	encoded, err := Encode(model.Event{Type: "test", Timestamp: time.Now().UTC(), Data: map[string]any{}})
+	if err != nil {
+		t.Fatalf("encode event: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"schemaVersion":1`) {
+		t.Fatalf("encoded event missing schema version: %s", encoded)
 	}
 }

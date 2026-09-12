@@ -112,12 +112,13 @@ type Job struct {
 }
 
 type Event struct {
-	ID        string         `json:"id"`
-	Type      string         `json:"type"`
-	Timestamp time.Time      `json:"timestamp"`
-	Severity  string         `json:"severity"`
-	Resource  *ResourceRef   `json:"resource,omitempty"`
-	Data      map[string]any `json:"data"`
+	SchemaVersion int            `json:"schemaVersion"`
+	ID            string         `json:"id"`
+	Type          string         `json:"type"`
+	Timestamp     time.Time      `json:"timestamp"`
+	Severity      string         `json:"severity"`
+	Resource      *ResourceRef   `json:"resource,omitempty"`
+	Data          map[string]any `json:"data"`
 }
 
 type ResourceRef struct {

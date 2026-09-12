@@ -591,6 +591,7 @@ export interface LogLine {
 }
 
 export interface LumoEvent<T = Record<string, unknown>> {
+  schemaVersion: number
   id: string
   type: string
   timestamp: string

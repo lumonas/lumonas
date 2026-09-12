@@ -14,6 +14,8 @@ type Hub struct {
 	clients map[chan model.Event]struct{}
 }
 
+const SchemaVersion = 1
+
 func NewHub() *Hub { return &Hub{clients: make(map[chan model.Event]struct{})} }
 
 func (h *Hub) Subscribe() (<-chan model.Event, func()) {
@@ -34,6 +36,9 @@ func (h *Hub) Subscribe() (<-chan model.Event, func()) {
 func (h *Hub) Publish(event model.Event) {
 	h.mu.Lock()
 	h.nextID++
+	if event.SchemaVersion == 0 {
+		event.SchemaVersion = SchemaVersion
+	}
 	if event.ID == "" {
 		event.ID = fmt.Sprintf("evt-%d", h.nextID)
 	}
@@ -46,4 +51,9 @@ func (h *Hub) Publish(event model.Event) {
 	h.mu.Unlock()
 }
 
-func Encode(event model.Event) ([]byte, error) { return json.Marshal(event) }
+func Encode(event model.Event) ([]byte, error) {
+	if event.SchemaVersion == 0 {
+		event.SchemaVersion = SchemaVersion
+	}
+	return json.Marshal(event)
+}

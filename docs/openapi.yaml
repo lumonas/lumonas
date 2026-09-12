@@ -874,7 +874,11 @@ paths:
       operationId: eventStream
       responses:
         '200':
-          description: Event stream
+          description: Event stream. Each SSE data frame is a JSON Event with schemaVersion 1.
+          content:
+            text/event-stream:
+              schema:
+                type: string
 
   /jobs:
     get:
@@ -2574,6 +2578,40 @@ paths:
 
 components:
   schemas:
+    Event:
+      type: object
+      required: [schemaVersion, id, type, timestamp, severity, data]
+      properties:
+        schemaVersion:
+          type: integer
+          minimum: 1
+          description: Version of the event envelope contract.
+          example: 1
+        id:
+          type: string
+        type:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        resource:
+          $ref: '#/components/schemas/ResourceRef'
+        data:
+          type: object
+          additionalProperties: true
+
+    ResourceRef:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+        id:
+          type: string
+
     HealthState:
       type: string
       enum: [healthy, attention, warning, critical, offline]
