@@ -1,0 +1,155 @@
+package model
+
+import "time"
+
+type HealthState string
+
+const (
+	Healthy   HealthState = "healthy"
+	Attention HealthState = "attention"
+	Warning   HealthState = "warning"
+	Critical  HealthState = "critical"
+	Offline   HealthState = "offline"
+)
+
+type SmartSummary struct {
+	Overall              HealthState `json:"overall"`
+	ReallocatedSectors   int64       `json:"reallocatedSectors"`
+	PendingSectors       int64       `json:"pendingSectors"`
+	UncorrectableSectors int64       `json:"uncorrectableSectors"`
+	CRCErrors            int64       `json:"crcErrors"`
+	PowerOnHours         int64       `json:"powerOnHours"`
+	WearPercent          *float64    `json:"wearPercent,omitempty"`
+	LastTest             *LastTest   `json:"lastTest,omitempty"`
+}
+
+type LastTest struct {
+	Type   string    `json:"type"`
+	Result string    `json:"result"`
+	At     time.Time `json:"at"`
+}
+
+type Disk struct {
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Model       string       `json:"model"`
+	Serial      string       `json:"serial"`
+	WWN         string       `json:"wwn,omitempty"`
+	SizeBytes   uint64       `json:"sizeBytes"`
+	UsedBytes   *uint64      `json:"usedBytes,omitempty"`
+	Role        string       `json:"role"`
+	Rotational  bool         `json:"rotational"`
+	Interface   string       `json:"interface"`
+	Health      HealthState  `json:"health"`
+	Temperature *float64     `json:"temperatureC"`
+	Filesystem  string       `json:"filesystem,omitempty"`
+	PoolID      string       `json:"poolId,omitempty"`
+	Standby     bool         `json:"standby,omitempty"`
+	LastSeen    time.Time    `json:"lastSeen"`
+	SMART       SmartSummary `json:"smart"`
+}
+
+type PoolMember struct {
+	DiskID  string `json:"diskId"`
+	Enabled bool   `json:"enabled"`
+}
+
+type Pool struct {
+	ID        string       `json:"id"`
+	Name      string       `json:"name"`
+	Type      string       `json:"type"`
+	MountPath string       `json:"mountPath"`
+	Status    HealthState  `json:"status"`
+	SizeBytes uint64       `json:"sizeBytes"`
+	UsedBytes uint64       `json:"usedBytes"`
+	Members   []PoolMember `json:"members"`
+}
+
+type Protection struct {
+	Status           HealthState `json:"status"`
+	ParityDisks      []DiskRef   `json:"parityDisks"`
+	ProtectedDiskIDs []string    `json:"protectedDiskIds"`
+	LastSyncAt       *time.Time  `json:"lastSyncAt"`
+	LastSyncResult   *string     `json:"lastSyncResult"`
+	LastScrubAt      *time.Time  `json:"lastScrubAt"`
+	ChangesSinceSync uint64      `json:"changesSinceSyncBytes"`
+	SyncSchedule     string      `json:"syncSchedule"`
+	ScrubSchedule    string      `json:"scrubSchedule"`
+	SyncRunning      bool        `json:"syncRunning"`
+}
+
+type DiskRef struct {
+	DiskID    string `json:"diskId"`
+	SizeBytes uint64 `json:"sizeBytes"`
+	UsedBytes uint64 `json:"usedBytes"`
+}
+
+type Job struct {
+	ID         string     `json:"id"`
+	Type       string     `json:"type"`
+	Title      string     `json:"title"`
+	ResourceID string     `json:"resourceId,omitempty"`
+	State      string     `json:"state"`
+	Progress   *float64   `json:"progress"`
+	Stage      string     `json:"stage,omitempty"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	StartedAt  *time.Time `json:"startedAt,omitempty"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	Error      string     `json:"error,omitempty"`
+}
+
+type Event struct {
+	ID        string         `json:"id"`
+	Type      string         `json:"type"`
+	Timestamp time.Time      `json:"timestamp"`
+	Severity  string         `json:"severity"`
+	Resource  *ResourceRef   `json:"resource,omitempty"`
+	Data      map[string]any `json:"data"`
+}
+
+type ResourceRef struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+type ServerInfo struct {
+	ID       string      `json:"id"`
+	Name     string      `json:"name"`
+	Hostname string      `json:"hostname"`
+	Version  string      `json:"version"`
+	NASUUID  string      `json:"nasUuid"`
+	Timezone string      `json:"timezone"`
+	Health   HealthState `json:"health"`
+	IP       string      `json:"ip"`
+}
+
+type SystemMetrics struct {
+	CPUPercent    float64    `json:"cpuPercent"`
+	Load          [3]float64 `json:"load"`
+	RAMUsedBytes  uint64     `json:"ramUsedBytes"`
+	RAMTotalBytes uint64     `json:"ramTotalBytes"`
+	CPUTempC      float64    `json:"cpuTempC"`
+	UptimeSeconds uint64     `json:"uptimeSeconds"`
+	Net           NetMetrics `json:"net"`
+}
+
+type NetMetrics struct {
+	Interface string  `json:"interface"`
+	UpMbps    float64 `json:"upMbps"`
+	DownMbps  float64 `json:"downMbps"`
+}
+
+type DockerSummary struct {
+	Stacks           int `json:"stacks"`
+	AppsRunning      int `json:"appsRunning"`
+	UpdatesAvailable int `json:"updatesAvailable"`
+}
+
+type ActivityEvent struct {
+	ID          string       `json:"id"`
+	Timestamp   time.Time    `json:"timestamp"`
+	Category    string       `json:"category"`
+	Title       string       `json:"title"`
+	Description string       `json:"description,omitempty"`
+	Resource    *ResourceRef `json:"resource,omitempty"`
+}
