@@ -27,6 +27,7 @@ import (
 
 type request struct {
 	Operation        string            `json:"operation"`
+	CorrelationID    string            `json:"correlationId,omitempty"`
 	OperationID      string            `json:"operationId,omitempty"`
 	PlanHash         string            `json:"planHash"`
 	TargetDiskID     string            `json:"targetDiskId,omitempty"`

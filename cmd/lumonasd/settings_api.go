@@ -308,7 +308,7 @@ func (s *apiServer) checkUpdates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	job := model.Job{ID: newID("job"), Type: "updates.check", Title: "Check for updates", State: "queued", CreatedAt: now}
+	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: "updates.check", Title: "Check for updates", State: "queued", CreatedAt: now}
 	if err := s.store.SaveJob(job); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

@@ -98,17 +98,18 @@ type DiskRef struct {
 }
 
 type Job struct {
-	ID         string     `json:"id"`
-	Type       string     `json:"type"`
-	Title      string     `json:"title"`
-	ResourceID string     `json:"resourceId,omitempty"`
-	State      string     `json:"state"`
-	Progress   *float64   `json:"progress"`
-	Stage      string     `json:"stage,omitempty"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	StartedAt  *time.Time `json:"startedAt,omitempty"`
-	FinishedAt *time.Time `json:"finishedAt,omitempty"`
-	Error      string     `json:"error,omitempty"`
+	ID            string     `json:"id"`
+	CorrelationID string     `json:"correlationId,omitempty"`
+	Type          string     `json:"type"`
+	Title         string     `json:"title"`
+	ResourceID    string     `json:"resourceId,omitempty"`
+	State         string     `json:"state"`
+	Progress      *float64   `json:"progress"`
+	Stage         string     `json:"stage,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	FinishedAt    *time.Time `json:"finishedAt,omitempty"`
+	Error         string     `json:"error,omitempty"`
 }
 
 type Event struct {

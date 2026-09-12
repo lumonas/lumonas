@@ -19,6 +19,7 @@ import (
 	"github.com/lumonas/lumonas/internal/recovery"
 	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
+	"github.com/lumonas/lumonas/internal/trace"
 )
 
 func testServer(t *testing.T) *apiServer {
@@ -41,6 +42,22 @@ func testServer(t *testing.T) *apiServer {
 	return &apiServer{store: db, hub: events.NewHub(), version: "test", diskFunc: func() ([]model.Disk, error) {
 		return []model.Disk{{ID: "wwn:test", Name: "sda", Role: "unknown", Health: model.Healthy, LastSeen: time.Now().UTC()}}, nil
 	}, brokerExec: func(context.Context, privileged.Request) error { return nil }}
+}
+
+func TestRequestMiddlewarePropagatesCorrelationID(t *testing.T) {
+	var got string
+	handler := requestMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = trace.CorrelationID(r.Context())
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if response.Code != http.StatusNoContent || got == "" {
+		t.Fatalf("request correlation was not propagated: status=%d id=%q", response.Code, got)
+	}
+	if response.Header().Get("X-Request-ID") != got {
+		t.Fatalf("response correlation header %q does not match context %q", response.Header().Get("X-Request-ID"), got)
+	}
 }
 
 func TestAPIHealthAndDiskIdentity(t *testing.T) {

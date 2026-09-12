@@ -183,6 +183,12 @@ Packaging validation also runs `systemd-analyze verify` against every packaged
 service unit. The check is optional for macOS/local development, but CI fails
 if `systemd-analyze` is unavailable or any unit is invalid.
 
+HTTP requests receive a generated `X-Request-ID` and carry the same
+correlation ID in context. API-created jobs persist it, and privileged calls
+inherit it; daemon-created jobs use their stable job ID as the fallback
+correlation key. Audit-record fields are still a separate follow-up because
+existing audit callers need a compatibility-preserving migration.
+
 ## Release artifacts
 
 CI should produce:

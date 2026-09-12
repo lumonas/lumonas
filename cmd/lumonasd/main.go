@@ -35,6 +35,7 @@ import (
 	"github.com/lumonas/lumonas/internal/shares"
 	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
+	"github.com/lumonas/lumonas/internal/trace"
 	"github.com/lumonas/lumonas/internal/updates"
 )
 
@@ -2049,7 +2050,7 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Type == "snapraid.sync" || input.Type == "snapraid.scrub" {
-		job := model.Job{ID: newID("job"), Type: input.Type, Title: strings.ReplaceAll(input.Type, ".", " "), ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+		job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: input.Type, Title: strings.ReplaceAll(input.Type, ".", " "), ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
 		if err := s.store.SaveJob(job); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
@@ -2081,7 +2082,7 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "resourceId does not match a currently discovered stable disk identity"})
 		return
 	}
-	job := model.Job{ID: newID("job"), Type: input.Type, Title: "SMART " + strings.TrimPrefix(input.Type, "smart.") + " validation", ResourceID: input.ResourceID, State: "queued", CreatedAt: time.Now().UTC()}
+	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: input.Type, Title: "SMART " + strings.TrimPrefix(input.Type, "smart.") + " validation", ResourceID: input.ResourceID, State: "queued", CreatedAt: time.Now().UTC()}
 	if err := s.store.SaveJob(job); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -2442,7 +2443,9 @@ func auditableEvent(kind string) bool {
 func requestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Request-ID", newID("req"))
+		correlationID := trace.NewCorrelationID()
+		w.Header().Set("X-Request-ID", correlationID)
+		r = r.WithContext(trace.WithCorrelationID(r.Context(), correlationID))
 		if r.Method == http.MethodOptions {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
@@ -2452,6 +2455,13 @@ func requestMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		next.ServeHTTP(w, r)
 	})
+}
+
+func requestCorrelationID(r *http.Request) string {
+	if id := trace.CorrelationID(r.Context()); id != "" {
+		return id
+	}
+	return trace.NewCorrelationID()
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

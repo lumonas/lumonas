@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"net"
 	"time"
+
+	"github.com/lumonas/lumonas/internal/trace"
 )
 
 type Request struct {
 	Operation        string            `json:"operation"`
+	CorrelationID    string            `json:"correlationId,omitempty"`
 	OperationID      string            `json:"operationId,omitempty"`
 	PlanHash         string            `json:"planHash"`
 	TargetDiskID     string            `json:"targetDiskId,omitempty"`
@@ -47,6 +50,15 @@ type Client struct {
 }
 
 func (c Client) Execute(ctx context.Context, request Request) (Response, error) {
+	if request.CorrelationID == "" {
+		request.CorrelationID = trace.CorrelationID(ctx)
+	}
+	if request.CorrelationID == "" {
+		request.CorrelationID = request.OperationID
+	}
+	if request.CorrelationID == "" {
+		request.CorrelationID = trace.NewCorrelationID()
+	}
 	if c.Socket == "" {
 		c.Socket = "/run/lumonas/privd.sock"
 	}
