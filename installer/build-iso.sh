@@ -130,6 +130,8 @@ Type=oneshot
 ExecStart=/usr/local/sbin/lumonas-recovery-iso-smoke
 User=root
 RemainAfterExit=yes
+TimeoutStartSec=90s
+FailureAction=poweroff
 
 [Install]
 WantedBy=multi-user.target

@@ -66,6 +66,9 @@ shuts the guest down. CI mounts the resulting target image and verifies the
 restored desired state, Compose data, encrypted payload, and completion marker.
 This is release-blocking and exercises the offline system-disk replacement path
 end to end.
+The recovery helper has a bounded startup timeout and powers the guest off on
+failure; the host harness also applies a deadline so a broken restore fails
+closed instead of hanging the release job.
 
 The Debian appliance smoke test also requires `lumonas-privd`, `lumonasd`, and
 `lumonas-web` to report active/running through the services API, and requires

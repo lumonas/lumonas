@@ -83,6 +83,19 @@ for attempt in $(seq 1 120); do
 done
 [ "$API_READY" = true ] || { echo "recovery ISO API never became ready" >&2; cat "$LOG" >&2 || true; exit 1; }
 
+guest_exited=false
+for attempt in $(seq 1 90); do
+	if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+		guest_exited=true
+		break
+	fi
+	sleep 2
+done
+[ "$guest_exited" = true ] || {
+	echo "recovery guest did not power off before timeout" >&2
+	cat "$LOG" >&2 || true
+	exit 1
+}
 wait "$QEMU_PID" || true
 QEMU_PID=""
 qemu-img convert -O raw "$TARGET_IMAGE" "$TARGET_RAW" >/dev/null
