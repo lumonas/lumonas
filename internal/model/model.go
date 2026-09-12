@@ -30,23 +30,28 @@ type LastTest struct {
 }
 
 type Disk struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	Model       string       `json:"model"`
-	Serial      string       `json:"serial"`
-	WWN         string       `json:"wwn,omitempty"`
-	SizeBytes   uint64       `json:"sizeBytes"`
-	UsedBytes   *uint64      `json:"usedBytes,omitempty"`
-	Role        string       `json:"role"`
-	Rotational  bool         `json:"rotational"`
-	Interface   string       `json:"interface"`
-	Health      HealthState  `json:"health"`
-	Temperature *float64     `json:"temperatureC"`
-	Filesystem  string       `json:"filesystem,omitempty"`
-	PoolID      string       `json:"poolId,omitempty"`
-	Standby     bool         `json:"standby,omitempty"`
-	LastSeen    time.Time    `json:"lastSeen"`
-	SMART       SmartSummary `json:"smart"`
+	ID             string       `json:"id"`
+	Name           string       `json:"name"`
+	CurrentPath    string       `json:"currentPath,omitempty"`
+	Model          string       `json:"model"`
+	Serial         string       `json:"serial"`
+	WWN            string       `json:"wwn,omitempty"`
+	GPTDiskGUID    string       `json:"gptDiskGuid,omitempty"`
+	PartitionUUID  string       `json:"partitionUuid,omitempty"`
+	FilesystemUUID string       `json:"filesystemUuid,omitempty"`
+	SizeBytes      uint64       `json:"sizeBytes"`
+	UsedBytes      *uint64      `json:"usedBytes,omitempty"`
+	Role           string       `json:"role"`
+	Rotational     bool         `json:"rotational"`
+	Interface      string       `json:"interface"`
+	Health         HealthState  `json:"health"`
+	Temperature    *float64     `json:"temperatureC"`
+	Filesystem     string       `json:"filesystem,omitempty"`
+	Mounted        bool         `json:"mounted"`
+	PoolID         string       `json:"poolId,omitempty"`
+	Standby        bool         `json:"standby,omitempty"`
+	LastSeen       time.Time    `json:"lastSeen"`
+	SMART          SmartSummary `json:"smart"`
 }
 
 type PoolMember struct {
@@ -152,4 +157,14 @@ type ActivityEvent struct {
 	Title       string       `json:"title"`
 	Description string       `json:"description,omitempty"`
 	Resource    *ResourceRef `json:"resource,omitempty"`
+}
+
+type Alert struct {
+	ID          string       `json:"id"`
+	Severity    string       `json:"severity"`
+	Title       string       `json:"title"`
+	Description string       `json:"description"`
+	Resource    *ResourceRef `json:"resource,omitempty"`
+	State       string       `json:"state"`
+	StartedAt   time.Time    `json:"startedAt"`
 }

@@ -9,13 +9,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/auth"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/storage"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 type Store struct {
-	db *sql.DB
-	mu sync.Mutex
+	db   *sql.DB
+	mu   sync.Mutex
+	path string
 }
 
 func Open(path string) (*Store, error) {
@@ -29,7 +32,7 @@ func Open(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	s := &Store{db: db}
+	s := &Store{db: db, path: path}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -38,6 +41,20 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) Close() error { return s.db.Close() }
+
+func (s *Store) BackupBytes() ([]byte, error) {
+	temporary, err := os.CreateTemp(filepath.Dir(s.path), ".mynas-db-backup-*.db")
+	if err != nil {
+		return nil, err
+	}
+	temporaryPath := temporary.Name()
+	_ = temporary.Close()
+	defer os.Remove(temporaryPath)
+	if _, err := s.db.Exec(`VACUUM INTO ?`, temporaryPath); err != nil {
+		return nil, err
+	}
+	return os.ReadFile(temporaryPath)
+}
 
 func (s *Store) migrate() error {
 	_, err := s.db.Exec(`
@@ -55,6 +72,17 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE TABLE IF NOT EXISTS config_generations (
   generation INTEGER PRIMARY KEY, state TEXT NOT NULL, plan_hash TEXT NOT NULL,
   created_at TEXT NOT NULL, committed_at TEXT
+);
+CREATE TABLE IF NOT EXISTS storage_operations (
+  operation_id TEXT PRIMARY KEY, plan_hash TEXT NOT NULL, status TEXT NOT NULL,
+  expires_at TEXT NOT NULL, plan_json TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_digest TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );`)
 	if err != nil {
 		return fmt.Errorf("migrate sqlite: %w", err)
@@ -127,6 +155,115 @@ func (s *Store) SaveEvent(e model.Event) error {
 	_, err = s.db.Exec(`INSERT OR REPLACE INTO events(id,type,timestamp,severity,resource_type,resource_id,data_json) VALUES(?,?,?,?,?,?,?)`, e.ID, e.Type, e.Timestamp.Format(timeFormat), e.Severity, rt, ri, string(data))
 	return err
 }
+
+func (s *Store) Events(limit int) ([]model.Event, error) {
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`SELECT id,type,timestamp,severity,resource_type,resource_id,data_json FROM events ORDER BY timestamp DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]model.Event, 0)
+	for rows.Next() {
+		var event model.Event
+		var timestamp, data string
+		var resourceType, resourceID sql.NullString
+		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data); err != nil {
+			return nil, err
+		}
+		event.Timestamp, _ = parseTime(timestamp)
+		if resourceType.Valid && resourceID.Valid {
+			event.Resource = &model.ResourceRef{Type: resourceType.String, ID: resourceID.String}
+		}
+		if err := json.Unmarshal([]byte(data), &event.Data); err != nil {
+			event.Data = map[string]any{}
+		}
+		result = append(result, event)
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) SavePlan(plan storage.Plan) error {
+	payload, err := json.Marshal(plan)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO storage_operations(operation_id,plan_hash,status,expires_at,plan_json,created_at) VALUES(?,?,?,?,?,?) ON CONFLICT(operation_id) DO UPDATE SET status=excluded.status,plan_json=excluded.plan_json`, plan.OperationID, plan.PlanHash, plan.Status, plan.ExpiresAt.Format(timeFormat), string(payload), time.Now().UTC().Format(timeFormat))
+	return err
+}
+
+func (s *Store) Plan(operationID string) (storage.Plan, error) {
+	var payload string
+	if err := s.db.QueryRow(`SELECT plan_json FROM storage_operations WHERE operation_id = ?`, operationID).Scan(&payload); err != nil {
+		return storage.Plan{}, err
+	}
+	var plan storage.Plan
+	if err := json.Unmarshal([]byte(payload), &plan); err != nil {
+		return storage.Plan{}, err
+	}
+	return plan, nil
+}
+
+func (s *Store) EnsureAdmin(username, password string) error {
+	var existing string
+	err := s.db.QueryRow(`SELECT id FROM users WHERE username = ?`, username).Scan(&existing)
+	if err == nil {
+		return nil
+	}
+	if err != sql.ErrNoRows {
+		return err
+	}
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO users(id,username,password_hash,created_at) VALUES(?,?,?,?)`, newStoreID("user"), username, hash, time.Now().UTC().Format(timeFormat))
+	return err
+}
+
+func (s *Store) HasUsers() bool {
+	var count int
+	return s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count) == nil && count > 0
+}
+
+func (s *Store) CreateSession(username, password string, duration time.Duration) (string, time.Time, error) {
+	var userID, hash string
+	if err := s.db.QueryRow(`SELECT id,password_hash FROM users WHERE username = ?`, username).Scan(&userID, &hash); err != nil {
+		return "", time.Time{}, fmt.Errorf("invalid credentials")
+	}
+	if !auth.VerifyPassword(password, hash) {
+		return "", time.Time{}, fmt.Errorf("invalid credentials")
+	}
+	token, err := auth.NewToken()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	expires := time.Now().UTC().Add(duration)
+	_, err = s.db.Exec(`INSERT INTO sessions(token_digest,user_id,expires_at,created_at) VALUES(?,?,?,?)`, auth.TokenDigest(token), userID, expires.Format(timeFormat), time.Now().UTC().Format(timeFormat))
+	return token, expires, err
+}
+
+func (s *Store) SessionUser(token string) (string, bool) {
+	var username, expires string
+	if err := s.db.QueryRow(`SELECT users.username,sessions.expires_at FROM sessions JOIN users ON users.id=sessions.user_id WHERE sessions.token_digest = ?`, auth.TokenDigest(token)).Scan(&username, &expires); err != nil {
+		return "", false
+	}
+	when, err := parseTime(expires)
+	if err != nil || !time.Now().UTC().Before(when) {
+		_, _ = s.db.Exec(`DELETE FROM sessions WHERE token_digest = ?`, auth.TokenDigest(token))
+		return "", false
+	}
+	return username, true
+}
+
+func (s *Store) DeleteSession(token string) error {
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE token_digest = ?`, auth.TokenDigest(token))
+	return err
+}
+
+func newStoreID(prefix string) string { return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()) }
 
 func nullable(value string) any {
 	if value == "" {

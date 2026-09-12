@@ -23,3 +23,20 @@ func TestPrivilegedProtocolRejectsUnknownOperation(t *testing.T) {
 		t.Fatalf("expected rejected operation, got %#v", response)
 	}
 }
+
+func TestPrivilegedProtocolRequiresConfirmationForTypedOperation(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+	go serve(server)
+	if _, err := client.Write([]byte(`{"operation":"filesystem.create","planHash":"confirmed","targetDiskId":"wwn:test"}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	var result response
+	if err := json.NewDecoder(bufio.NewReader(client)).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if result.OK || result.Error != "operation plan is not confirmed" {
+		t.Fatalf("unexpected response %#v", result)
+	}
+}

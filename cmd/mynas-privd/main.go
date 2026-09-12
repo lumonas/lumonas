@@ -12,9 +12,12 @@ import (
 )
 
 type request struct {
-	Operation string `json:"operation"`
-	PlanHash  string `json:"planHash"`
-	DiskID    string `json:"diskId,omitempty"`
+	Operation     string            `json:"operation"`
+	PlanHash      string            `json:"planHash"`
+	TargetDiskID  string            `json:"targetDiskId,omitempty"`
+	ExpectedState map[string]string `json:"expectedState,omitempty"`
+	ExpiresAt     string            `json:"expiresAt,omitempty"`
+	Confirmed     bool              `json:"confirmed"`
 }
 type response struct {
 	OK    bool   `json:"ok"`
@@ -63,6 +66,16 @@ func serve(conn net.Conn) {
 			_ = encoder.Encode(response{OK: true, Data: map[string]string{"service": "mynas-privd"}})
 		case "disk.read-identities":
 			_ = encoder.Encode(response{OK: true, Data: map[string]string{"status": "read-only collector delegated to mynasd"}})
+		case "filesystem.mount", "filesystem.unmount", "filesystem.create", "acl.apply", "network.apply", "service.reload", "power.action":
+			if req.TargetDiskID == "" && strings.HasPrefix(req.Operation, "filesystem.") {
+				_ = encoder.Encode(response{Error: "targetDiskId is required for filesystem operations"})
+				continue
+			}
+			if !req.Confirmed {
+				_ = encoder.Encode(response{Error: "operation plan is not confirmed"})
+				continue
+			}
+			_ = encoder.Encode(response{Error: fmt.Sprintf("typed operation %q is not enabled until its worker-specific revalidation is connected", req.Operation)})
 		default:
 			_ = encoder.Encode(response{Error: fmt.Sprintf("operation %q is not allow-listed", strings.TrimSpace(req.Operation))})
 		}

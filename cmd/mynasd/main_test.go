@@ -55,3 +55,41 @@ func TestUnsupportedJobFailsClosed(t *testing.T) {
 		t.Fatalf("expected 501, got %d", response.Code)
 	}
 }
+
+func TestStoragePlanRequiresStableIdentityAndSafetyUnlock(t *testing.T) {
+	server := testServer(t)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test"}`))
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, request)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("expected plan creation, got %d: %s", response.Code, response.Body.String())
+	}
+	var plan struct {
+		OperationID string `json:"operationId"`
+		PlanHash    string `json:"planHash"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&plan); err != nil {
+		t.Fatal(err)
+	}
+	confirm := httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/"+plan.OperationID+"/confirm", strings.NewReader(`{"planHash":"`+plan.PlanHash+`"}`))
+	confirmed := httptest.NewRecorder()
+	server.routes().ServeHTTP(confirmed, confirm)
+	if confirmed.Code != http.StatusLocked {
+		t.Fatalf("expected safety lock, got %d", confirmed.Code)
+	}
+}
+
+func TestAuthRequiredProtectsAPIButNotHealth(t *testing.T) {
+	server := testServer(t)
+	server.authRequired = true
+	apiResponse := httptest.NewRecorder()
+	server.routes().ServeHTTP(apiResponse, httptest.NewRequest(http.MethodGet, "/api/v1/server", nil))
+	if apiResponse.Code != http.StatusUnauthorized {
+		t.Fatalf("expected API auth, got %d", apiResponse.Code)
+	}
+	healthResponse := httptest.NewRecorder()
+	server.routes().ServeHTTP(healthResponse, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+	if healthResponse.Code != http.StatusOK {
+		t.Fatalf("expected health endpoint, got %d", healthResponse.Code)
+	}
+}

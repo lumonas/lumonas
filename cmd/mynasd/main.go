@@ -13,24 +13,31 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/collector"
+	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/events"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/network"
+	"github.com/lumonas/lumonas/internal/recovery"
+	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
 )
 
 type apiServer struct {
-	store    *store.Store
-	hub      *events.Hub
-	log      *slog.Logger
-	jobsMu   sync.Mutex
-	version  string
-	diskFunc func() ([]model.Disk, error)
+	store         *store.Store
+	hub           *events.Hub
+	log           *slog.Logger
+	jobsMu        sync.Mutex
+	version       string
+	diskFunc      func() ([]model.Disk, error)
+	authRequired  bool
+	dockerService dockerruntime.Service
 }
 
 var version = "0.1.0-dev"
@@ -49,7 +56,14 @@ func main() {
 	}
 	defer db.Close()
 	nasUUID := ensureNASUUID(db)
-	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }}
+	if password := os.Getenv("MYNAS_ADMIN_PASSWORD"); password != "" {
+		if err := db.EnsureAdmin("admin", password); err != nil {
+			logger.Error("admin bootstrap failed", "error", err)
+			os.Exit(1)
+		}
+	}
+	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("MYNAS_AUTH_REQUIRED") == "true"}
+	server.dockerService = dockerruntime.New(envOr("MYNAS_STACK_ROOT", "/srv/mynas/docker/stacks"), nil)
 	server.ensureRestartedJobs()
 	go server.metricsLoop()
 
@@ -74,7 +88,7 @@ func (s *apiServer) routes() http.Handler {
 	mux.HandleFunc("/healthz", s.healthz)
 	mux.HandleFunc("/readyz", s.readyz)
 	mux.HandleFunc("/api/v1/", s.api)
-	return requestMiddleware(mux)
+	return requestMiddleware(s.authMiddleware(mux))
 }
 
 func (s *apiServer) healthz(w http.ResponseWriter, _ *http.Request) {
@@ -91,6 +105,12 @@ func (s *apiServer) readyz(w http.ResponseWriter, _ *http.Request) {
 func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	endpoint := strings.TrimPrefix(r.URL.Path, "/api/v1")
 	switch {
+	case r.Method == http.MethodGet && endpoint == "/auth/status":
+		s.authStatus(w, r)
+	case r.Method == http.MethodPost && endpoint == "/auth/login":
+		s.authLogin(w, r)
+	case r.Method == http.MethodPost && endpoint == "/auth/logout":
+		s.authLogout(w, r)
 	case r.Method == http.MethodGet && endpoint == "/server":
 		s.serverInfo(w)
 	case r.Method == http.MethodGet && endpoint == "/disks":
@@ -101,39 +121,106 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, []model.Pool{})
 	case r.Method == http.MethodGet && endpoint == "/storage/protection":
 		s.protection(w)
+	case r.Method == http.MethodGet && endpoint == "/storage/safety":
+		writeJSON(w, http.StatusOK, map[string]any{"state": "locked", "unlockedUntil": nil})
+	case r.Method == http.MethodPost && endpoint == "/storage/operations/plan":
+		s.planStorageOperation(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/operations/") && strings.HasSuffix(endpoint, "/confirm"):
+		s.confirmStorageOperation(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodGet && endpoint == "/recovery/status":
+		s.recoveryStatus(w)
+	case r.Method == http.MethodPost && endpoint == "/recovery/export":
+		s.recoveryExport(w)
 	case r.Method == http.MethodGet && endpoint == "/jobs":
 		s.listJobs(w)
 	case r.Method == http.MethodPost && endpoint == "/jobs":
 		s.createJob(w, r)
 	case r.Method == http.MethodGet && endpoint == "/alerts":
-		writeJSON(w, http.StatusOK, []any{})
+		s.alerts(w)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alerts/"):
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "alert not found"})
 	case r.Method == http.MethodGet && endpoint == "/activity":
-		writeJSON(w, http.StatusOK, []any{})
+		s.activity(w)
 	case r.Method == http.MethodGet && endpoint == "/system/metrics":
 		s.metrics(w)
+	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
+		s.networkInterfaces(w)
 	case r.Method == http.MethodGet && endpoint == "/events/stream":
 		s.stream(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/summary":
-		writeJSON(w, http.StatusOK, collector.DockerSummary())
+		s.dockerSummary(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/apps":
 		writeJSON(w, http.StatusOK, []any{})
 	case r.Method == http.MethodGet && endpoint == "/docker/stacks":
-		writeJSON(w, http.StatusOK, []any{})
+		s.dockerStacks(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/stacks/"):
+		s.dockerStackAction(w, r, endpoint)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/docker/stacks/"):
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "stack not found"})
+		s.dockerStack(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/docker/containers":
-		writeJSON(w, http.StatusOK, []any{})
+		s.dockerContainers(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/images":
-		writeJSON(w, http.StatusOK, []any{})
+		s.dockerImages(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/volumes":
-		writeJSON(w, http.StatusOK, []any{})
+		s.dockerVolumes(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/docker/logs/"):
-		writeJSON(w, http.StatusOK, []any{})
+		s.dockerLogs(w, r, path.Base(endpoint))
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
 	}
+}
+
+func (s *apiServer) authStatus(w http.ResponseWriter, r *http.Request) {
+	authenticated := false
+	if cookie, err := r.Cookie("mynas_session"); err == nil {
+		_, authenticated = s.store.SessionUser(cookie.Value)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"required": s.authRequired, "configured": s.store.HasUsers(), "authenticated": authenticated})
+}
+
+func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	token, expires, err := s.store.CreateSession(input.Username, input.Password, 12*time.Hour)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: "mynas_session", Value: token, Path: "/", Expires: expires, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: os.Getenv("MYNAS_COOKIE_SECURE") == "true"})
+	writeJSON(w, http.StatusOK, map[string]any{"username": input.Username, "expiresAt": expires})
+}
+
+func (s *apiServer) authLogout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie("mynas_session"); err == nil {
+		_ = s.store.DeleteSession(cookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{Name: "mynas_session", Value: "", Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteStrictMode})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
+}
+
+func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.authRequired || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/logout" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		cookie, err := r.Cookie("mynas_session")
+		if err != nil {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "authentication required"})
+			return
+		}
+		if _, ok := s.store.SessionUser(cookie.Value); !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired session"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *apiServer) serverInfo(w http.ResponseWriter) {
@@ -169,7 +256,346 @@ func (s *apiServer) protection(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, model.Protection{Status: model.Attention, SyncSchedule: "Not configured", ScrubSchedule: "Not configured", LastSyncResult: nil})
 }
 
+func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Action storage.Action `json:"action"`
+		DiskID string         `json:"diskId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity discovery unavailable"})
+		return
+	}
+	var target *model.Disk
+	for index := range disks {
+		if disks[index].ID == input.DiskID {
+			target = &disks[index]
+			break
+		}
+	}
+	if target == nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "diskId must match a currently discovered stable disk identity"})
+		return
+	}
+	plan, err := storage.NewPlan(newID("op"), input.Action, *target, s.currentGeneration(), time.Now().UTC())
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.store.SavePlan(plan); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.publish("storage.operation.planned", "warning", &model.ResourceRef{Type: "disk", ID: target.ID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
+	writeJSON(w, http.StatusCreated, plan)
+}
+
+func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Request, operationID string) {
+	plan, err := s.store.Plan(operationID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "operation plan not found"})
+		return
+	}
+	var input struct {
+		PlanHash              string `json:"planHash"`
+		Reauthenticated       bool   `json:"reauthenticated"`
+		StorageSafetyUnlocked bool   `json:"storageSafetyUnlocked"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if input.PlanHash == "" || input.PlanHash != plan.PlanHash {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "plan hash mismatch"})
+		return
+	}
+	if !input.Reauthenticated || !input.StorageSafetyUnlocked {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication and the storage safety unlock are required"})
+		return
+	}
+	writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "execution is intentionally disabled until the privileged worker is connected; the immutable plan was accepted for review"})
+}
+
+func (s *apiServer) currentGeneration() int64 {
+	value, ok := s.store.Meta("config_generation")
+	if !ok {
+		return 0
+	}
+	var generation int64
+	_, _ = fmt.Sscan(value, &generation)
+	return generation
+}
+
+func (s *apiServer) recoveryStatus(w http.ResponseWriter) {
+	key := os.Getenv("MYNAS_RECOVERY_KEY")
+	directory := envOr("MYNAS_RECOVERY_DIR", "/var/lib/mynas/recovery")
+	bundlePath := filepath.Join(directory, "latest.mrb")
+	status := map[string]any{"configured": key != "", "latestPath": bundlePath, "verified": false}
+	if key != "" {
+		if bundle, err := os.ReadFile(bundlePath); err == nil {
+			if manifest, verifyErr := recovery.Verify(bundle, []byte(key)); verifyErr == nil {
+				status["verified"] = true
+				status["manifest"] = manifest
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, status)
+}
+
+func (s *apiServer) recoveryExport(w http.ResponseWriter) {
+	key := os.Getenv("MYNAS_RECOVERY_KEY")
+	if key == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "MYNAS_RECOVERY_KEY is not configured"})
+		return
+	}
+	database, err := s.store.BackupBytes()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database backup failed: " + err.Error()})
+		return
+	}
+	disks, _ := s.diskFunc()
+	diskIDs := make([]string, 0, len(disks))
+	for _, disk := range disks {
+		diskIDs = append(diskIDs, disk.ID)
+	}
+	nasUUID, _ := s.store.Meta("nas_uuid")
+	desired, _ := json.Marshal(map[string]any{"nasUuid": nasUUID, "configGeneration": s.currentGeneration(), "createdAt": time.Now().UTC()})
+	compose := map[string][]byte{}
+	stacks, _ := s.dockerService.Stacks(context.Background())
+	for _, stack := range stacks {
+		compose[stack.Name+"/compose.yaml"] = []byte(stack.ComposeYAML)
+	}
+	var encrypted []byte
+	if secretPath := os.Getenv("MYNAS_RECOVERY_SECRETS_FILE"); secretPath != "" {
+		encrypted, err = os.ReadFile(secretPath)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recovery secret input failed: " + err.Error()})
+			return
+		}
+	}
+	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, MyNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, EncryptedData: encrypted}, []byte(key))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "bundle creation failed: " + err.Error()})
+		return
+	}
+	directory := envOr("MYNAS_RECOVERY_DIR", "/var/lib/mynas/recovery")
+	if err := os.MkdirAll(directory, 0o750); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	temporary, err := os.CreateTemp(directory, ".latest-*.mrb")
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	temporaryPath := temporary.Name()
+	cleanup := func() { temporary.Close(); _ = os.Remove(temporaryPath) }
+	if _, err := temporary.Write(bundle); err != nil {
+		cleanup()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := temporary.Chmod(0o600); err != nil {
+		cleanup()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := temporary.Close(); err != nil {
+		_ = os.Remove(temporaryPath)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := os.Rename(temporaryPath, filepath.Join(directory, "latest.mrb")); err != nil {
+		_ = os.Remove(temporaryPath)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	manifest, _ := recovery.Verify(bundle, []byte(key))
+	s.publish("recovery.bundle.created", "info", nil, map[string]any{"generation": manifest.Generation})
+	writeJSON(w, http.StatusCreated, map[string]any{"path": filepath.Join(directory, "latest.mrb"), "manifest": manifest, "verified": true})
+}
+
 func (s *apiServer) metrics(w http.ResponseWriter) { writeJSON(w, http.StatusOK, collector.Metrics()) }
+
+func (s *apiServer) networkInterfaces(w http.ResponseWriter) {
+	interfaces, err := network.Interfaces()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, interfaces)
+}
+
+func (s *apiServer) alerts(w http.ResponseWriter) {
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusOK, []model.Alert{})
+		return
+	}
+	alerts := make([]model.Alert, 0)
+	now := time.Now().UTC()
+	for _, disk := range disks {
+		if disk.Health != model.Warning && disk.Health != model.Critical {
+			continue
+		}
+		severity := "warning"
+		if disk.Health == model.Critical {
+			severity = "critical"
+		}
+		alerts = append(alerts, model.Alert{ID: "disk-health-" + disk.ID, Severity: severity, Title: "Disk health requires attention", Description: fmt.Sprintf("%s (%s) reported %s health", disk.Name, disk.Model, disk.Health), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "firing", StartedAt: now})
+	}
+	writeJSON(w, http.StatusOK, alerts)
+}
+
+func (s *apiServer) activity(w http.ResponseWriter) {
+	events, err := s.store.Events(100)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	activity := make([]model.ActivityEvent, 0, len(events))
+	for _, event := range events {
+		activity = append(activity, model.ActivityEvent{ID: event.ID, Timestamp: event.Timestamp, Category: activityCategory(event.Type), Title: activityTitle(event.Type), Description: event.Severity, Resource: event.Resource})
+	}
+	writeJSON(w, http.StatusOK, activity)
+}
+
+func activityCategory(eventType string) string {
+	switch {
+	case strings.HasPrefix(eventType, "docker."):
+		return "docker"
+	case strings.HasPrefix(eventType, "storage."), strings.HasPrefix(eventType, "disk."):
+		return "storage"
+	case strings.HasPrefix(eventType, "recovery."):
+		return "backup"
+	case strings.HasPrefix(eventType, "job."):
+		return "config"
+	default:
+		return "config"
+	}
+}
+func activityTitle(eventType string) string { return strings.ReplaceAll(eventType, ".", " ") }
+
+func (s *apiServer) dockerSummary(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	stacks, _ := s.dockerService.Stacks(ctx)
+	containers, _ := s.dockerService.Containers(ctx)
+	images, _ := s.dockerService.Images(ctx)
+	running := 0
+	for _, container := range containers {
+		if container.State == "running" || container.State == "restarting" {
+			running++
+		}
+	}
+	_ = images
+	writeJSON(w, http.StatusOK, map[string]int{"stacks": len(stacks), "appsRunning": running, "updatesAvailable": 0})
+}
+
+func (s *apiServer) dockerStacks(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	stacks, err := s.dockerService.Stacks(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, stacks)
+}
+
+func (s *apiServer) dockerStack(w http.ResponseWriter, r *http.Request, id string) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	stacks, err := s.dockerService.Stacks(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	for _, stack := range stacks {
+		if stack.ID == id {
+			writeJSON(w, http.StatusOK, stack)
+			return
+		}
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "stack not found"})
+}
+
+func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, endpoint string) {
+	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
+	if len(parts) != 4 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "stack action not found"})
+		return
+	}
+	stackID, action := parts[2], parts[3]
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	stacks, err := s.dockerService.Stacks(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	for _, stack := range stacks {
+		if stack.ID != stackID {
+			continue
+		}
+		if err := s.dockerService.Action(ctx, stack, action); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		s.publish("docker.stack.action", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "action": action})
+		writeJSON(w, http.StatusAccepted, stack)
+		return
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "stack not found"})
+}
+
+func (s *apiServer) dockerContainers(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	containers, err := s.dockerService.Containers(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, containers)
+}
+
+func (s *apiServer) dockerImages(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	images, err := s.dockerService.Images(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, images)
+}
+
+func (s *apiServer) dockerVolumes(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	volumes, err := s.dockerService.Volumes(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, volumes)
+}
+
+func (s *apiServer) dockerLogs(w http.ResponseWriter, r *http.Request, container string) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	lines, err := s.dockerService.Logs(ctx, container, 200)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, lines)
+}
 
 func (s *apiServer) listJobs(w http.ResponseWriter) {
 	jobs, err := s.store.Jobs()
@@ -202,9 +628,11 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity verification unavailable"})
 		return
 	}
+	var target model.Disk
 	found := false
 	for _, disk := range disks {
 		if disk.ID == input.ResourceID {
+			target = disk
 			found = true
 			break
 		}
@@ -219,11 +647,11 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
-	go s.runReadOnlyJob(job)
+	go s.runReadOnlyJob(job, target)
 	writeJSON(w, http.StatusAccepted, job)
 }
 
-func (s *apiServer) runReadOnlyJob(job model.Job) {
+func (s *apiServer) runReadOnlyJob(job model.Job, target model.Disk) {
 	time.Sleep(50 * time.Millisecond)
 	now := time.Now().UTC()
 	progress := 10.0
@@ -231,10 +659,17 @@ func (s *apiServer) runReadOnlyJob(job model.Job) {
 	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 	time.Sleep(100 * time.Millisecond)
+	smart, err := collector.SMART(nil, target.CurrentPath)
+	if err != nil {
+		job.State, job.Error, job.Stage, job.FinishedAt = "failed", err.Error(), "SMART read failed", &now
+		_ = s.store.SaveJob(job)
+		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		return
+	}
 	progress = 100
-	job.State, job.Stage, job.FinishedAt, job.Progress = "successful", "Read-only SMART integration is available", &now, &progress
+	job.State, job.Stage, job.FinishedAt, job.Progress = "successful", "SMART data collected", &now, &progress
 	_ = s.store.SaveJob(job)
-	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "smart": smart})
 }
 
 func (s *apiServer) ensureRestartedJobs() {
