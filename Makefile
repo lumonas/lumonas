@@ -3,14 +3,17 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all test test-go test-web build build-go build-web package api-smoke qemu-image qemu-smoke verify-release
+.PHONY: all test test-go test-web check-openapi build build-go build-web package api-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
-test: test-go test-web
+test: test-go test-web check-openapi
 
 test-go:
 	$(GO_ENV) go test ./...
+
+check-openapi:
+	python3 scripts/check-openapi.py
 
 test-web:
 	cd web && pnpm lint && pnpm typecheck && pnpm test -- --run && pnpm build

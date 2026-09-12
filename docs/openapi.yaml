@@ -159,6 +159,15 @@ paths:
                 items:
                   $ref: '#/components/schemas/Pool'
 
+  /storage/mounts:
+    get:
+      tags: [Storage]
+      summary: List currently mounted filesystems
+      operationId: listStorageMounts
+      responses:
+        '200':
+          description: Mounted filesystems
+
   /storage/protection:
     get:
       tags: [Storage]
@@ -171,6 +180,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Protection'
+
+  /storage/mounts:
+    get:
+      tags: [Storage]
+      summary: List persisted declarative mount entries
+      operationId: storageMounts
+      responses:
+        '200':
+          description: Persisted disk and pool mount state
 
   /storage/safety:
     get:
@@ -830,6 +848,1687 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Job'
+
+  # --- Auto-documented coverage (generated against the router; see scripts/check-openapi.py) ---
+
+  /acl/jobs:
+    post:
+      tags: [Monitoring]
+      summary: Queue an ACL application job
+      operationId: post-acl-jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /acl/jobs/{id}/cancel:
+    post:
+      tags: [Monitoring]
+      summary: Cancel a queued ACL job
+      operationId: post-acl-jobs-id-cancel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /activity:
+    get:
+      tags: [Monitoring]
+      summary: Recent activity events
+      operationId: get-activity
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /alert-rules:
+    get:
+      tags: [Monitoring]
+      summary: Get alert rule
+      operationId: get-alert-rules
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /alert-rules/{id}:
+    patch:
+      tags: [Monitoring]
+      summary: Update alert rule
+      operationId: patch-alert-rules-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /alerts/{id}:
+    patch:
+      tags: [Monitoring]
+      summary: Update alert
+      operationId: patch-alerts-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /audit:
+    get:
+      tags: [Monitoring]
+      summary: Audit log entries
+      operationId: get-audit
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backup/destinations:
+    get:
+      tags: [Backups]
+      summary: Get backup resource
+      operationId: get-backup-destinations
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backup/jobs:
+    get:
+      tags: [Backups]
+      summary: Get backup resource
+      operationId: get-backup-jobs
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backup/jobs/{id}/run:
+    post:
+      tags: [Backups]
+      summary: Run a configured backup job now
+      operationId: post-backup-jobs-id-run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backup/restore/plan:
+    get:
+      tags: [Backups]
+      summary: Preview the restore plan
+      operationId: get-backup-restore-plan
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backups/destinations:
+    post:
+      tags: [Backups]
+      summary: Create or run backup resource
+      operationId: post-backups-destinations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backups/destinations/{id}:
+    delete:
+      tags: [Backups]
+      summary: Delete backup resource
+      operationId: delete-backups-destinations-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backups/schedule:
+    get:
+      tags: [Backups]
+      summary: Get backup resource
+      operationId: get-backups-schedule
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backups/schedule:
+    patch:
+      tags: [Backups]
+      summary: Update backup resource
+      operationId: patch-backups-schedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backups/status:
+    get:
+      tags: [Backups]
+      summary: Backup subsystem status
+      operationId: get-backups-status
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backups/verify:
+    post:
+      tags: [Backups]
+      summary: Create or run backup resource
+      operationId: post-backups-verify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /capacity/forecast:
+    get:
+      tags: [Settings]
+      summary: Capacity forecast from daily snapshots
+      operationId: get-capacity-forecast
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /diagnostics/support-bundle:
+    get:
+      tags: [Settings]
+      summary: Download the support bundle (zip)
+      operationId: get-diagnostics-support-bundle
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /docker/apps:
+    get:
+      tags: [Docker]
+      summary: Get Docker resource
+      operationId: get-docker-apps
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /docker/containers/{id}/{action}:
+    post:
+      tags: [Docker]
+      summary: Run a container action (start|stop|restart)
+      operationId: post-docker-containers-id-action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /docker/images/{id}/update:
+    post:
+      tags: [Docker]
+      summary: Pull a newer image for the container
+      operationId: post-docker-images-id-update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /docker/logs/{container}:
+    get:
+      tags: [Docker]
+      summary: Fetch recent container logs
+      operationId: get-docker-logs-container
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /docker/stacks/{id}:
+    get:
+      tags: [Docker]
+      summary: Get Docker resource
+      operationId: get-docker-stacks-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /docker/stacks/{id}/{action}:
+    post:
+      tags: [Docker]
+      summary: Run a stack action (start|stop|restart|deploy|update)
+      operationId: post-docker-stacks-id-action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/delete:
+    post:
+      tags: [Files]
+      summary: Create or run file
+      operationId: post-files-delete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/download:
+    get:
+      tags: [Files]
+      summary: Download a file
+      operationId: get-files-download
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/mkdir:
+    post:
+      tags: [Files]
+      summary: Create or run file
+      operationId: post-files-mkdir
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/properties:
+    get:
+      tags: [Files]
+      summary: Get file
+      operationId: get-files-properties
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/recycle:
+    get:
+      tags: [Files]
+      summary: Get file
+      operationId: get-files-recycle
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/recycle/purge:
+    post:
+      tags: [Files]
+      summary: Create or run file
+      operationId: post-files-recycle-purge
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/recycle/restore:
+    post:
+      tags: [Files]
+      summary: Create or run file
+      operationId: post-files-recycle-restore
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/rename:
+    post:
+      tags: [Files]
+      summary: Create or run file
+      operationId: post-files-rename
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/search:
+    get:
+      tags: [Files]
+      summary: Search files across shares
+      operationId: get-files-search
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/transfer:
+    post:
+      tags: [Files]
+      summary: Copy or move files (conflict-aware)
+      operationId: post-files-transfer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/upload:
+    post:
+      tags: [Files]
+      summary: Upload a file (multipart or JSON)
+      operationId: post-files-upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /groups:
+    get:
+      tags: [Users]
+      summary: Get group
+      operationId: get-groups
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /groups:
+    post:
+      tags: [Users]
+      summary: Create or run group
+      operationId: post-groups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /groups/{id}:
+    delete:
+      tags: [Users]
+      summary: Delete group
+      operationId: delete-groups-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /groups/{id}:
+    patch:
+      tags: [Users]
+      summary: Update group
+      operationId: patch-groups-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /groups/{id}/members:
+    put:
+      tags: [Users]
+      summary: Replace group
+      operationId: put-groups-id-members
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /jobs:
+    post:
+      tags: [Monitoring]
+      summary: Queue a maintenance job (SMART or SnapRAID)
+      operationId: post-jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /jobs/{id}:
+    get:
+      tags: [Monitoring]
+      summary: Get job
+      operationId: get-jobs-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/bindings:
+    patch:
+      tags: [Network]
+      summary: Update network resource
+      operationId: patch-network-bindings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/checkpoints:
+    post:
+      tags: [Network]
+      summary: Begin a network checkpoint
+      operationId: post-network-checkpoints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/checkpoints/{id}/{action}:
+    post:
+      tags: [Network]
+      summary: Commit or roll back a network checkpoint
+      operationId: post-network-checkpoints-id-action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/connections:
+    post:
+      tags: [Network]
+      summary: Create or run network resource
+      operationId: post-network-connections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/connections/{id}:
+    patch:
+      tags: [Network]
+      summary: Update network resource
+      operationId: patch-network-connections-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/connections/{id}/apply:
+    post:
+      tags: [Network]
+      summary: Create or run network resource
+      operationId: post-network-connections-id-apply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/diagnostics:
+    post:
+      tags: [Network]
+      summary: Run a network diagnostic job
+      operationId: post-network-diagnostics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/diagnostics/{id}:
+    get:
+      tags: [Network]
+      summary: Get network resource
+      operationId: get-network-diagnostics-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/firewall/policy:
+    patch:
+      tags: [Network]
+      summary: Update network resource
+      operationId: patch-network-firewall-policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/interfaces/metrics:
+    get:
+      tags: [Network]
+      summary: Get network resource
+      operationId: get-network-interfaces-metrics
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /network/wifi/scan:
+    get:
+      tags: [Network]
+      summary: Get network resource
+      operationId: get-network-wifi-scan
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notification-channels:
+    post:
+      tags: [Monitoring]
+      summary: Create or run notification channel
+      operationId: post-notification-channels
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notification-channels/{id}:
+    delete:
+      tags: [Monitoring]
+      summary: Delete notification channel
+      operationId: delete-notification-channels-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notification-channels/{id}:
+    patch:
+      tags: [Monitoring]
+      summary: Update notification channel
+      operationId: patch-notification-channels-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notification-channels/{id}/test:
+    post:
+      tags: [Monitoring]
+      summary: Create or run notification channel
+      operationId: post-notification-channels-id-test
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notification-deliveries:
+    get:
+      tags: [Monitoring]
+      summary: Get notification deliveries
+      operationId: get-notification-deliveries
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notification-rules:
+    get:
+      tags: [Monitoring]
+      summary: Get notification rule
+      operationId: get-notification-rules
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notification-rules:
+    post:
+      tags: [Monitoring]
+      summary: Create or run notification rule
+      operationId: post-notification-rules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notification-rules/{id}:
+    patch:
+      tags: [Monitoring]
+      summary: Update notification rule
+      operationId: patch-notification-rules-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /notifications/test:
+    post:
+      tags: [Monitoring]
+      summary: Send a test notification via legacy env channels
+      operationId: post-notifications-test
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /onboarding/complete:
+    post:
+      tags: [Settings]
+      summary: Complete first-boot onboarding
+      operationId: post-onboarding-complete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /onboarding/state:
+    get:
+      tags: [Settings]
+      summary: Get onboarding state and hardware classification
+      operationId: get-onboarding-state
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /power/action:
+    post:
+      tags: [Settings]
+      summary: Create or run power action
+      operationId: post-power-action
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /power/shutdown:
+    post:
+      tags: [Settings]
+      summary: Run the ordered shutdown plan (reauth required)
+      operationId: post-power-shutdown
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /power/shutdown/plan:
+    get:
+      tags: [Settings]
+      summary: Preview the ordered shutdown plan
+      operationId: get-power-shutdown-plan
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /power/ups:
+    get:
+      tags: [Settings]
+      summary: Get power action
+      operationId: get-power-ups
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /recovery/export:
+    post:
+      tags: [Backups]
+      summary: Export an encrypted recovery bundle
+      operationId: post-recovery-export
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /recovery/key:
+    post:
+      tags: [Backups]
+      summary: Generate or export the recovery key (onboarding only)
+      operationId: post-recovery-key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /recovery/plan:
+    get:
+      tags: [Backups]
+      summary: Get recovery resource
+      operationId: get-recovery-plan
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /recovery/restore/stage:
+    post:
+      tags: [Backups]
+      summary: Create or run recovery resource
+      operationId: post-recovery-restore-stage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /recovery/status:
+    get:
+      tags: [Backups]
+      summary: Get recovery resource
+      operationId: get-recovery-status
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /schedules:
+    get:
+      tags: [Monitoring]
+      summary: List maintenance schedules
+      operationId: get-schedules
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /schedules/{id}:
+    patch:
+      tags: [Monitoring]
+      summary: Update a maintenance schedule (enable, time, weekday)
+      operationId: patch-schedules-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /services:
+    get:
+      tags: [Monitoring]
+      summary: Get services
+      operationId: get-services
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /settings:
+    patch:
+      tags: [Settings]
+      summary: Update settings
+      operationId: patch-settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /shares/{id}:
+    delete:
+      tags: [Shares]
+      summary: Delete share
+      operationId: delete-shares-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /shares/{id}:
+    get:
+      tags: [Shares]
+      summary: Get share
+      operationId: get-shares-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /shares/{id}:
+    patch:
+      tags: [Shares]
+      summary: Update share
+      operationId: patch-shares-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /shares/{id}/access:
+    patch:
+      tags: [Shares]
+      summary: Update share
+      operationId: patch-shares-id-access
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /shares/{id}/protocols/{protocol}:
+    patch:
+      tags: [Shares]
+      summary: Toggle a share protocol (smb, nfs, sftp, ...)
+      operationId: patch-shares-id-protocols-protocol
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /ssh/keys:
+    get:
+      tags: [Network]
+      summary: Get SSH key
+      operationId: get-ssh-keys
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /ssh/keys:
+    post:
+      tags: [Network]
+      summary: Create or run SSH key
+      operationId: post-ssh-keys
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /ssh/keys/remove:
+    post:
+      tags: [Network]
+      summary: Create or run SSH key
+      operationId: post-ssh-keys-remove
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /storage/operations/{id}/confirm:
+    post:
+      tags: [Storage]
+      summary: Create or run storage resource
+      operationId: post-storage-operations-id-confirm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /storage/pools/plan:
+    post:
+      tags: [Storage]
+      summary: Create or run storage resource
+      operationId: post-storage-pools-plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /storage/pools/unmount/plan:
+    post:
+      tags: [Storage]
+      summary: Create or run storage resource
+      operationId: post-storage-pools-unmount-plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /storage/pools/unmount/{id}/confirm:
+    post:
+      tags: [Storage]
+      summary: Create or run storage resource
+      operationId: post-storage-pools-unmount-id-confirm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /storage/pools/{id}/confirm:
+    post:
+      tags: [Storage]
+      summary: Create or run storage resource
+      operationId: post-storage-pools-id-confirm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /updates/apply:
+    post:
+      tags: [Settings]
+      summary: Create or run update
+      operationId: post-updates-apply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /updates/check:
+    post:
+      tags: [Settings]
+      summary: Check the signed update feed for a newer release
+      operationId: post-updates-check
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /updates/rollback:
+    post:
+      tags: [Settings]
+      summary: Create or run update
+      operationId: post-updates-rollback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /ups/policy:
+    get:
+      tags: [Settings]
+      summary: Get UPS
+      operationId: get-ups-policy
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /ups/policy:
+    patch:
+      tags: [Settings]
+      summary: Update UPS
+      operationId: patch-ups-policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /ups/status:
+    get:
+      tags: [Settings]
+      summary: Get UPS
+      operationId: get-ups-status
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /users:
+    post:
+      tags: [Users]
+      summary: Create or run user
+      operationId: post-users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /users/{id}:
+    delete:
+      tags: [Users]
+      summary: Delete user
+      operationId: delete-users-id
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /users/{id}:
+    patch:
+      tags: [Users]
+      summary: Update user
+      operationId: patch-users-id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /users/{id}/password:
+    post:
+      tags: [Users]
+      summary: Create or run user
+      operationId: post-users-id-password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
 
 components:
   schemas:

@@ -87,6 +87,7 @@ func main() {
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
 	server.reconcileUpdateBoot()
 	server.ensureRestartedJobs()
+	go server.persistMountState("startup")
 	go server.metricsLoop()
 	go server.capacityLoop()
 	go server.backupLoop()
@@ -205,6 +206,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.confirmStoragePool(w, r, poolOperationID(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/storage/protection":
 		s.protection(w)
+	case r.Method == http.MethodGet && endpoint == "/storage/mounts":
+		s.storageMounts(w)
 	case r.Method == http.MethodGet && endpoint == "/storage/safety":
 		s.storageSafety(w)
 	case r.Method == http.MethodPost && endpoint == "/storage/safety/unlock":
@@ -867,6 +870,7 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 	_ = s.store.SavePlan(plan)
 	s.advanceGeneration("storage." + string(plan.Action))
 	s.publish("storage.operation.completed", "warning", &model.ResourceRef{Type: "disk", ID: plan.Target.DiskID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
+	s.persistMountState("storage." + string(plan.Action))
 	writeJSON(w, http.StatusOK, result)
 }
 
