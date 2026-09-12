@@ -120,6 +120,41 @@ func (s *apiServer) confirmStoragePoolSetup(w http.ResponseWriter, r *http.Reque
 	for _, disk := range disks {
 		byID[disk.ID] = disk
 	}
+	for _, id := range plan.MountDiskIDs {
+		disk, ok := byID[id]
+		if !ok {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "mount disk " + id + " disappeared during setup"})
+			return
+		}
+		if disk.Filesystem != "ext4" && disk.Filesystem != "xfs" {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "mount disk " + id + " has no supported filesystem"})
+			return
+		}
+		single, planErr := storage.NewPlan(newID("disk-mount"), storage.ActionMount, disk, s.currentGeneration(), time.Now().UTC())
+		if planErr != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "mount plan for " + id + " failed: " + planErr.Error()})
+			return
+		}
+		single.RequestedState = map[string]any{"filesystem": disk.Filesystem, "mountPath": storage.DiskBranchPath(id)}
+		single.Status = "confirmed"
+		single.PlanHash = storage.Hash(single)
+		request := privileged.Request{Operation: string(single.Action), OperationID: single.OperationID, CorrelationID: requestCorrelationID(r), PlanHash: single.PlanHash, TargetDiskID: single.Target.DiskID, ExpectedIdentity: expectedIdentityMap(single.Target), ExpectedState: expectedStateMap(single.ExpectedState), RequestedState: single.RequestedState, ExpiresAt: single.ExpiresAt, Confirmed: true}
+		if execErr := broker(request); execErr != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "mounting " + id + " failed: " + execErr.Error()})
+			return
+		}
+	}
+	if len(plan.MountDiskIDs) > 0 {
+		disks, err = s.diskFunc()
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity re-scan after mounting unavailable"})
+			return
+		}
+		byID = make(map[string]model.Disk, len(disks))
+		for _, disk := range disks {
+			byID[disk.ID] = disk
+		}
+	}
 	members := make([]model.Disk, 0, len(plan.DataDiskIDs))
 	for _, id := range plan.DataDiskIDs {
 		disk, ok := byID[id]

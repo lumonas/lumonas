@@ -37,6 +37,7 @@ func TestPoolSetupPlanListsFormatStepsAndSurvivesValidation(t *testing.T) {
 		PlanHash      string   `json:"planHash"`
 		MountPath     string   `json:"mountPath"`
 		FormatDiskIDs []string `json:"formatDiskIds"`
+		MountDiskIDs  []string `json:"mountDiskIds"`
 		DestroysData  bool     `json:"destroysData"`
 		Steps         []struct {
 			Action string `json:"action"`
@@ -48,9 +49,12 @@ func TestPoolSetupPlanListsFormatStepsAndSurvivesValidation(t *testing.T) {
 	if plan.MountPath != "/srv/pools/media" {
 		t.Fatalf("unexpected mount path %q", plan.MountPath)
 	}
-	// Disk "a" is blank, "b" already carries ext4 — only "a" is wiped.
-	if len(plan.FormatDiskIDs) != 1 || plan.FormatDiskIDs[0] != "a" {
+	// Disk "a" and blank parity "p" are formatted; existing "b" is mounted.
+	if len(plan.FormatDiskIDs) != 2 || plan.FormatDiskIDs[0] != "a" || plan.FormatDiskIDs[1] != "p" {
 		t.Fatalf("unexpected format list: %#v", plan.FormatDiskIDs)
+	}
+	if len(plan.MountDiskIDs) != 1 || plan.MountDiskIDs[0] != "b" {
+		t.Fatalf("unexpected mount list: %#v", plan.MountDiskIDs)
 	}
 	if !plan.DestroysData {
 		t.Fatal("plan with formatting must flag destroysData")
@@ -191,5 +195,37 @@ func TestPoolSetupConfirmExecutesChain(t *testing.T) {
 	}
 	if !result.OK || result.MountPath != "/srv/pools/media" {
 		t.Fatalf("unexpected result: %#v", result)
+	}
+}
+
+func TestPoolSetupConfirmMountsExistingFilesystemBeforePool(t *testing.T) {
+	server := testServer(t)
+	disk := setupDisk("a", "ext4", "data")
+	server.diskFunc = func() ([]model.Disk, error) { return []model.Disk{disk}, nil }
+	executed := make([]string, 0, 2)
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		executed = append(executed, request.Operation)
+		return nil
+	}
+	plan := httptest.NewRecorder()
+	server.routes().ServeHTTP(plan, httptest.NewRequest(http.MethodPost, "/api/v1/storage/pools/setup/plan", strings.NewReader(`{"name":"media","dataDiskIds":["a"]}`)))
+	if plan.Code != http.StatusCreated {
+		t.Fatalf("setup plan failed: %d %s", plan.Code, plan.Body.String())
+	}
+	var parsed struct {
+		OperationID string `json:"operationId"`
+		PlanHash    string `json:"planHash"`
+	}
+	if err := json.NewDecoder(plan.Body).Decode(&parsed); err != nil {
+		t.Fatal(err)
+	}
+	server.safetyUntil = time.Now().UTC().Add(time.Minute)
+	confirm := httptest.NewRecorder()
+	server.routes().ServeHTTP(confirm, httptest.NewRequest(http.MethodPost, "/api/v1/storage/pools/setup/confirm", strings.NewReader(`{"operationId":"`+parsed.OperationID+`","planHash":"`+parsed.PlanHash+`","reauthenticated":true,"storageSafetyUnlocked":true}`)))
+	if confirm.Code != http.StatusAccepted {
+		t.Fatalf("setup confirm failed: %d %s", confirm.Code, confirm.Body.String())
+	}
+	if len(executed) != 2 || executed[0] != "filesystem.mount" || executed[1] != "pool.mount" {
+		t.Fatalf("existing filesystem was not mounted before pool: %#v", executed)
 	}
 }
