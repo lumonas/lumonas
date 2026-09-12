@@ -187,6 +187,8 @@ by default, the QEMU image installs `openssl` before `postinst` runs and the
 smoke uses `curl -k` only for the generated self-signed certificate.
 `openssl` is a hard Debian dependency, so `--no-install-recommends` installs
 cannot leave the active TLS configuration without its certificate generator.
+Maintainer-script certificate failures are fatal before service startup, so a
+package transaction cannot leave a partially configured HTTPS appliance.
 
 The frontend job and Debian builder also run `frontend-runtime-smoke.sh`. It
 requires the production title/root markers and rejects MSW bootstrap code in

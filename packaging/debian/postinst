@@ -50,18 +50,24 @@ fi
 # Provision an optional self-signed local certificate once, without replacing
 # administrator-managed certificates on upgrades. HTTPS is opt-in by clearing
 # the default listener and setting these paths in lumonas-web.env.
-if command -v openssl >/dev/null 2>&1 && [ ! -e /etc/lumonas/tls/server.key ]; then
+command -v openssl >/dev/null 2>&1 || { echo "openssl is required to provision the web certificate" >&2; exit 1; }
+if [ ! -e /etc/lumonas/tls/server.key ]; then
 	install -d -o root -g lumonas -m 0750 /etc/lumonas/tls
-	openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
+	if ! openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
 		-subj '/CN=lumonas.local' \
 		-addext 'subjectAltName=DNS:lumonas.local,DNS:localhost,IP:127.0.0.1' \
-		-keyout /etc/lumonas/tls/server.key -out /etc/lumonas/tls/server.crt >/dev/null 2>&1 || true
-	if [ -f /etc/lumonas/tls/server.key ] && [ -f /etc/lumonas/tls/server.crt ]; then
-		chown root:lumonas /etc/lumonas/tls/server.key /etc/lumonas/tls/server.crt
-		chmod 0640 /etc/lumonas/tls/server.key
-		chmod 0644 /etc/lumonas/tls/server.crt
+		-keyout /etc/lumonas/tls/server.key -out /etc/lumonas/tls/server.crt >/dev/null 2>&1; then
+		echo "failed to provision the web TLS certificate" >&2
+		exit 1
 	fi
 fi
+[ -s /etc/lumonas/tls/server.key ] && [ -s /etc/lumonas/tls/server.crt ] || {
+	echo "web TLS certificate pair is incomplete" >&2
+	exit 1
+}
+chown root:lumonas /etc/lumonas/tls/server.key /etc/lumonas/tls/server.crt
+chmod 0640 /etc/lumonas/tls/server.key
+chmod 0644 /etc/lumonas/tls/server.crt
 
 # Apply bounded Docker JSON-file logging only when Docker has no administrator
 # configuration yet. Existing daemon.json is never overwritten during install
