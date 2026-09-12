@@ -37,4 +37,6 @@ require_line "$ROOT/packaging/debian/postinst" '/etc/mynas/mynasd.env'
 require_line "$ROOT/packaging/debian/postinst" 'MYNAS_WEB_ROOT=/usr/share/lumonas/web'
 require_line "$ROOT/packaging/debian/postinst" '/etc/mynas/tls/server.key'
 require_line "$ROOT/packaging/debian/postinst" 'mynas-privd.service'
+require_line "$ROOT/installer/build-iso.sh" 'dpkg-scanpackages'
+require_line "$ROOT/installer/build-iso.sh" 'lumonas-local.list'
 echo "LumoNAS packaging policy checks passed"

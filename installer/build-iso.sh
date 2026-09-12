@@ -8,11 +8,13 @@ DEB="${MYNAS_DEB:-$ROOT/lumonas_${VERSION}_amd64.deb}"
 
 command -v lb >/dev/null 2>&1 || { echo "live-build is required" >&2; exit 1; }
 command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required" >&2; exit 1; }
+command -v dpkg-scanpackages >/dev/null 2>&1 || { echo "dpkg-scanpackages (dpkg-dev) is required" >&2; exit 1; }
 [ -f "$DEB" ] || { echo "Build the Debian package first: $DEB" >&2; exit 1; }
 
 rm -rf "$WORK"
-mkdir -p "$WORK/config/package-lists" "$WORK/config/hooks/live" "$WORK/config/includes.chroot/opt/lumonas-repo" "$WORK/config/includes.chroot/usr/share/doc/lumonas"
-cp "$DEB" "$WORK/config/includes.chroot/opt/lumonas-repo/lumonas.deb"
+mkdir -p "$WORK/config/package-lists" "$WORK/config/hooks/live" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas" "$WORK/config/includes.chroot/usr/share/doc/lumonas"
+cp "$DEB" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb"
+(cd "$WORK/config/includes.chroot/opt/lumonas-repo" && dpkg-scanpackages pool /dev/null > Packages && gzip -9c Packages > Packages.gz)
 cat > "$WORK/config/package-lists/lumonas.list.chroot" <<'EOF'
 network-manager
 avahi-daemon
@@ -32,7 +34,10 @@ EOF
 cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<'EOF'
 #!/bin/sh
 set -eu
-dpkg -i /opt/lumonas-repo/lumonas.deb
+cat >/etc/apt/sources.list.d/lumonas-local.list <<'APT'
+deb [trusted=yes] file:/opt/lumonas-repo ./
+APT
+dpkg -i /opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb
 systemctl enable mynas-privd.service mynas-privd-storage.service mynas-privd-network.service mynas-privd-power.service mynas-privd-general.service mynasd.service mynas-web.service
 EOF
 chmod 0755 "$WORK/config/hooks/live/020-install-lumonas.hook.chroot"

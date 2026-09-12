@@ -96,7 +96,7 @@ jobs:
         with:
           name: lumonas-deb
           path: .
-      - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso
+      - run: sudo apt-get update && sudo apt-get install -y live-build debootstrap squashfs-tools xorriso dpkg-dev
       - run: sudo MYNAS_DEB="$PWD/$(ls *.deb | head -n1)" bash installer/build-iso.sh "${GITHUB_SHA::12}"
       - uses: actions/upload-artifact@v4
         with:
