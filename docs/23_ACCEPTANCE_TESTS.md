@@ -443,7 +443,16 @@ Pass if generated FTPS configuration uses the provisioned
 `/etc/lumonas/tls/server.crt` and `server.key` paths and rejects obsolete
 certificate locations.
 
-## AM. Mutation operation identity
+## AM. Bounded integration command policy
+
+Run `scripts/command-boundary-smoke.sh`.
+
+Pass if ordinary production integrations construct external commands only
+through the shared bounded runner, the interactive NetworkManager checkpoint
+remains process-group bounded with a finite deadline, and service code has no
+shell command escape hatch.
+
+## AN. Mutation operation identity
 
 Submit a confirmed filesystem or SnapRAID mutation without an operation ID.
 

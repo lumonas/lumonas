@@ -142,6 +142,12 @@ privileged request, job, or release smoke test alive indefinitely. The
 interactive NetworkManager checkpoint path is covered separately because it
 keeps a confirmation pipe open while the checkpoint is pending.
 
+The command-boundary policy smoke scans production Go code for raw command
+construction. Ordinary integrations must use the shared bounded runner; the
+only permitted interactive exception is the allow-listed NetworkManager
+checkpoint, which is required to use a process group and a finite confirmation
+deadline. The same check rejects shell entrypoints in service code.
+
 ## Destructive safety tests
 
 Explicit cases:

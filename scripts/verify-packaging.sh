@@ -132,6 +132,7 @@ done
 [ -x "$ROOT/scripts/qemu-live-recovery-source.sh" ] || { echo "live recovery source helper must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/recovery-api-smoke.sh" ] || { echo "recovery API smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/security-smoke.sh" ] || { echo "security smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/command-boundary-smoke.sh" ] || { echo "command-boundary smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-security-smoke.sh" ] || { echo "systemd security smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
@@ -209,6 +210,7 @@ require_line "$ROOT/installer/build-iso.sh" 'serial_LUMONAS-DATA1'
 require_line "$ROOT/installer/build-iso.sh" 'FailureAction=poweroff'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'recovery guest did not power off before timeout'
 require_line "$ROOT/docs/16_TESTING_CI_RELEASE_ENGINEERING.md" 'shared bounded runner'
+require_line "$ROOT/docs/16_TESTING_CI_RELEASE_ENGINEERING.md" 'command-boundary policy smoke'
 require_line "$ROOT/docs/16_TESTING_CI_RELEASE_ENGINEERING.md" 'privileged Unix-socket client'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'vsftpd'
 for dropin in smbd.service.d/lumonas.conf rsync.service.d/lumonas.conf vsftpd.service.d/lumonas.conf; do
