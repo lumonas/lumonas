@@ -421,6 +421,10 @@ func executePoolMount(req request, discover func(collector.CommandRunner) ([]mod
 		if branches[index] != storage.DiskBranchPath(expected.ID) {
 			return response{Error: "pool branch identity mismatch"}
 		}
+		mounted, err := run("findmnt", "-rn", "-T", branches[index])
+		if err != nil || strings.TrimSpace(string(mounted)) == "" {
+			return response{Error: "pool branch is not mounted: " + branches[index]}
+		}
 	}
 	if mounted, err := run("findmnt", "-rn", "-T", path); err == nil && strings.TrimSpace(string(mounted)) != "" {
 		return response{Error: "pool mount path is already mounted"}

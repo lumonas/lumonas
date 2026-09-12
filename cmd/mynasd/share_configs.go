@@ -16,6 +16,7 @@ type preparedShareConfig struct {
 	previous  []byte
 	mode      os.FileMode
 	existed   bool
+	remove    bool
 }
 
 func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]preparedShareConfig, error) {
@@ -130,12 +131,39 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 		}
 		prepared = append(prepared, item)
 	}
+	for protocol, path := range managedConfigPaths() {
+		if protocols[protocol] || (protocol == "ftp" || protocol == "ftps") && (protocols["ftp"] || protocols["ftps"]) {
+			continue
+		}
+		previous, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			cleanupShareConfigs(prepared)
+			return nil, err
+		}
+		item := preparedShareConfig{path: path, previous: previous, mode: 0o640, existed: true, remove: true}
+		if info, statErr := os.Stat(path); statErr == nil {
+			item.mode = info.Mode().Perm()
+		}
+		prepared = append(prepared, item)
+	}
 	return prepared, nil
 }
 
 func activateShareConfigs(values []preparedShareConfig) error {
 	for index := range values {
-		if err := os.Rename(values[index].temporary, values[index].path); err != nil {
+		var err error
+		if values[index].remove {
+			err = os.Remove(values[index].path)
+			if os.IsNotExist(err) {
+				err = nil
+			}
+		} else {
+			err = os.Rename(values[index].temporary, values[index].path)
+		}
+		if err != nil {
 			for rollback := index - 1; rollback >= 0; rollback-- {
 				restoreShareConfig(values[rollback])
 			}
@@ -144,6 +172,17 @@ func activateShareConfigs(values []preparedShareConfig) error {
 		}
 	}
 	return nil
+}
+
+func managedConfigPaths() map[string]string {
+	return map[string]string{
+		"smb":   envOr("MYNAS_SAMBA_CONFIG", "/var/lib/mynas/generated/smb.conf"),
+		"nfs":   envOr("MYNAS_NFS_EXPORTS", "/var/lib/mynas/generated/exports"),
+		"sftp":  envOr("MYNAS_SFTP_CONFIG", "/var/lib/mynas/generated/sshd-sftp.conf"),
+		"ftp":   envOr("MYNAS_FTP_CONFIG", "/var/lib/mynas/generated/ftp.conf"),
+		"ftps":  envOr("MYNAS_FTP_CONFIG", "/var/lib/mynas/generated/ftp.conf"),
+		"rsync": envOr("MYNAS_RSYNC_CONFIG", "/var/lib/mynas/generated/rsync.conf"),
+	}
 }
 
 func restoreShareConfig(value preparedShareConfig) {

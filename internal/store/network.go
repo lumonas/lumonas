@@ -144,6 +144,9 @@ func (s *Store) UpsertNetworkConnection(value network.Connection) (network.Conne
 	if err := value.Validate(); err != nil {
 		return network.Connection{}, err
 	}
+	if value.Status == "" {
+		value.Status = "configured"
+	}
 	if err := s.ensureNetworkSchema(); err != nil {
 		return network.Connection{}, err
 	}

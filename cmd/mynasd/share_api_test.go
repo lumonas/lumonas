@@ -12,7 +12,8 @@ import (
 func TestManagedShareAPICreateUpdateDelete(t *testing.T) {
 	server := testServer(t)
 	t.Setenv("MYNAS_SHARES_FILE", t.TempDir()+"/legacy-shares.json")
-	t.Setenv("MYNAS_SAMBA_CONFIG", t.TempDir()+"/generated/smb.conf")
+	sambaConfig := t.TempDir() + "/generated/smb.conf"
+	t.Setenv("MYNAS_SAMBA_CONFIG", sambaConfig)
 
 	create := httptest.NewRequest(http.MethodPost, "/api/v1/shares", strings.NewReader(`{"name":"Documents","path":"/srv/Documents","enabled":true,"protocols":["smb"],"access":{}}`))
 	createdResponse := httptest.NewRecorder()
@@ -39,6 +40,9 @@ func TestManagedShareAPICreateUpdateDelete(t *testing.T) {
 	server.routes().ServeHTTP(removedResponse, remove)
 	if removedResponse.Code != http.StatusNoContent {
 		t.Fatalf("delete status %d: %s", removedResponse.Code, removedResponse.Body.String())
+	}
+	if _, err := os.Stat(sambaConfig); !os.IsNotExist(err) {
+		t.Fatalf("stale Samba configuration remains: %v", err)
 	}
 }
 
