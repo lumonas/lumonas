@@ -111,6 +111,7 @@ for worker in storage network power general; do
   require_line "$ROOT/scripts/qemu-smoke.sh" "lumonas-privd-$worker.service"
 done
 [ -x "$ROOT/scripts/storage-loopback-smoke.sh" ] || { echo "storage loopback smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/privileged-storage-loopback-smoke.sh" ] || { echo "privileged storage loopback smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/frontend-runtime-smoke.sh" ] || { echo "frontend runtime smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/share-config-smoke.sh" ] || { echo "share configuration smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
@@ -152,6 +153,13 @@ require_line "$ROOT/scripts/storage-loopback-smoke.sh" 'MISMATCH_LOOP=$LAST_LOOP
 require_line "$ROOT/scripts/storage-loopback-smoke.sh" 'wipefs --all --force'
 require_line "$ROOT/scripts/storage-loopback-smoke.sh" 'snapraid -c "$SNAPRAID_CONFIG" sync'
 require_line "$ROOT/scripts/storage-loopback-smoke.sh" 'missing-snapraid.conf'
+require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'filesystem.format'
+require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'loop-mounted-erase'
+require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'loop-stale'
+require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'loop-expired'
+require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'operationId is required'
+require_line "$ROOT/.github/workflows/ci.yml" 'privileged-storage-loopback:'
+require_line "$ROOT/Makefile" 'privileged-storage-loopback:'
 require_line "$ROOT/installer/build-iso.sh" 'xfsprogs'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'xfsprogs'
 require_line "$ROOT/installer/build-iso.sh" 'vsftpd'

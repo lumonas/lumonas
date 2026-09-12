@@ -105,6 +105,8 @@ Storage mutations now use immutable plans, stable disk identity revalidation, ex
 
 The CI storage gate also exercises disposable loopback media: ext4 UUID stability, read-only import, mismatch rejection, format/erase behavior, and optional XFS import are verified before release artifacts can be promoted.
 
+Release CI also starts the real root-owned storage worker against a disposable loop device and verifies typed format, read-only mount, stale-plan, expiry, operation-ID, unmount, and erase behavior. No production device is used by this test.
+
 Event, audit, capacity, and job history retention are bounded so long-running appliances do not grow SQLite state without limit.
 
 Tagged releases run a Debian 13 previous-to-current package upgrade smoke test and verify that administrator configuration survives the upgrade.

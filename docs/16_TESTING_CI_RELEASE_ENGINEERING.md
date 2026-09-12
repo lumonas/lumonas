@@ -341,6 +341,13 @@ independent disk identity, and exercises XFS when the runner provides
 proving the real filesystem lifecycle tools work without ever targeting
 protected media.
 
+The privileged storage loopback job additionally starts the actual
+`lumonas-privd` storage worker as root and sends typed Unix-socket requests
+against a temporary loop device. It verifies format, read-only mount, mounted
+disk rejection, stale identity rejection, missing operation ID rejection,
+expired-plan rejection, unmount, and erase. This job is release-blocking and
+never uses a production device path.
+
 ## Fuzz/property tests
 
 Good candidates:

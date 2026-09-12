@@ -399,6 +399,11 @@ verifying filesystem UUID creation and signature removal.
 The same gate injects failed SnapRAID sync and scrub commands and requires
 both operations to finish failed without updating protection success metadata.
 
+The privileged storage loopback harness must also exercise the real
+`lumonas-privd` storage worker against a disposable loop device, including
+read-only mounting and rejection of mounted, stale, expired, and operation-ID
+missing requests before erase.
+
 ## AI. Network diagnostic command boundary
 
 Run the network diagnostic command-module tests.
