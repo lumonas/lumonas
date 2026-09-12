@@ -12,7 +12,7 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 0
 fi
 
-for command in blkid losetup mount umount mkfs.ext4 mkfs.xfs truncate findmnt; do
+for command in blkid losetup mount umount mkfs.ext4 mkfs.xfs truncate findmnt mergerfs snapraid; do
 	command -v "$command" >/dev/null 2>&1 || {
 		echo "$command is required for loopback storage assertions" >&2
 		exit 1
@@ -23,7 +23,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-storage.XXXXXX")"
 LOOPS=""
 cleanup() {
 	set +e
-	for mountpoint in "$WORK/ext4-mount" "$WORK/xfs-mount"; do
+	for mountpoint in "$WORK/pool" "$WORK/branch-a" "$WORK/branch-b" "$WORK/ext4-mount" "$WORK/xfs-mount"; do
 		umount "$mountpoint" 2>/dev/null || true
 	done
 	for loop in $LOOPS; do
@@ -33,7 +33,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-mkdir -p "$WORK/ext4-mount" "$WORK/xfs-mount"
+mkdir -p "$WORK/ext4-mount" "$WORK/xfs-mount" "$WORK/branch-a" "$WORK/branch-b" "$WORK/pool"
 
 make_disk() {
 	image=$1
@@ -103,4 +103,20 @@ mount -o ro "$XFS_LOOP" "$WORK/xfs-mount"
 findmnt -rn -o FSTYPE "$WORK/xfs-mount" | grep -Fx xfs >/dev/null
 umount "$WORK/xfs-mount"
 
-echo "loopback storage smoke test passed (ext4 UUID stable, read-only import verified, mismatch rejected)"
+mount "$EXT4_LOOP" "$WORK/branch-a"
+mount "$MISMATCH_LOOP" "$WORK/branch-b"
+mergerfs -o category.create=mfs,use_ino "$WORK/branch-a:$WORK/branch-b" "$WORK/pool"
+printf '%s\n' 'mergerfs integration smoke test' >"$WORK/pool/created.txt"
+find "$WORK/branch-a" "$WORK/branch-b" -name created.txt -type f -print -quit | grep -F created.txt >/dev/null
+umount "$WORK/pool"
+
+SNAPRAID_CONFIG="$WORK/snapraid.conf"
+cat >"$SNAPRAID_CONFIG" <<EOF
+parity $WORK/branch-a/snapraid.parity
+content $WORK/branch-a/snapraid.content
+data d1 $WORK/branch-a
+data d2 $WORK/branch-b
+EOF
+snapraid -c "$SNAPRAID_CONFIG" status >/dev/null
+
+echo "loopback storage smoke test passed (ext4/xfs identity, read-only import, mergerfs pool, SnapRAID status, mismatch rejected)"

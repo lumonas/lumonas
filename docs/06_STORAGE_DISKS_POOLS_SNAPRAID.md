@@ -257,3 +257,8 @@ letters, and it must never mutate storage while rendering the protection view.
 The Debian package, offline ISO, QEMU image, and release loopback smoke test
 install `e2fsprogs` and `xfsprogs`; both ext4 and XFS read-only import paths are
 therefore required deployment coverage rather than optional host capabilities.
+
+The privileged Linux smoke test also mounts two disposable branches into a
+real mergerfs pool, verifies a file created through the pool, tears the pool
+down, and runs a read-only SnapRAID status probe against the disposable
+configuration.

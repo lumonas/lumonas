@@ -261,6 +261,14 @@ Pass if both ext4 and XFS images are created, reattached by stable filesystem
 identity, mounted read-only, and checked with `findmnt`; missing `xfsprogs`
 must fail the release gate instead of silently skipping XFS coverage.
 
+## AC. Real pool and protection integration
+
+Run the privileged loopback smoke test with mergerfs and SnapRAID installed.
+
+Pass if two disposable filesystem branches form a real mergerfs pool, a file
+created through the pool is found on a backing branch, the pool unmounts
+cleanly, and `snapraid status` completes against the disposable configuration.
+
 ## AB. Privileged IPC timeout
 
 Run the privileged client cancellation test with a worker that reads a request
