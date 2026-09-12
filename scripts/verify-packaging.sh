@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+SYSTEMD="$ROOT/packaging/systemd"
+
+require_line() {
+	file=$1
+	pattern=$2
+	if ! grep -F "$pattern" "$file" >/dev/null 2>&1; then
+		echo "missing '$pattern' in $file" >&2
+		exit 1
+	fi
+}
+
+for unit in mynas-web.service mynasd.service mynas-privd.service; do
+	[ -f "$SYSTEMD/$unit" ] || { echo "missing systemd unit: $unit" >&2; exit 1; }
+	require_line "$SYSTEMD/$unit" 'NoNewPrivileges=true'
+	require_line "$SYSTEMD/$unit" 'ProtectSystem=strict'
+	require_line "$SYSTEMD/$unit" 'MemoryMax='
+	require_line "$SYSTEMD/$unit" 'TasksMax='
+done
+
+require_line "$SYSTEMD/mynas-web.service" 'User=mynas'
+require_line "$SYSTEMD/mynasd.service" 'User=mynas'
+require_line "$SYSTEMD/mynas-privd.service" 'User=root'
+require_line "$SYSTEMD/mynas-privd.service" 'CapabilityBoundingSet='
+require_line "$SYSTEMD/mynasd.service" 'ReadWritePaths=/var/lib/mynas /srv/mynas'
+
+require_line "$ROOT/packaging/debian/postinst" 'useradd --system'
+require_line "$ROOT/packaging/debian/postinst" '/var/lib/mynas/secrets'
+require_line "$ROOT/packaging/debian/postinst" 'mynas-privd.service'
+echo "LumoNAS packaging policy checks passed"
