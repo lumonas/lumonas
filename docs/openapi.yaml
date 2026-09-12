@@ -996,17 +996,11 @@ paths:
         '4XX':
           description: Client error
 
-  /alerts/{id}:
+  /alerts/{id}/ack:
     patch:
       tags: [Monitoring]
-      summary: Update alert
-      operationId: patch-alerts-id
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
+      summary: Acknowledge alert
+      operationId: acknowledge-alert
       responses:
         '200':
           description: OK

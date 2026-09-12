@@ -82,11 +82,15 @@ func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id st
 }
 
 // scheduleLoop drives persisted schedules; it mirrors backupLoop's one-minute tick.
+// The tick counter also paces periodic alert-rule evaluation.
 func (s *apiServer) scheduleLoop() {
+	var tick int64
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for range ticker.C {
+		tick++
 		s.runDueSchedules()
+		s.evaluatePeriodicAlerts(tick)
 	}
 }
 

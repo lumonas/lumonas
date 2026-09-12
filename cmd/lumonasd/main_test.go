@@ -38,7 +38,7 @@ func testServer(t *testing.T) *apiServer {
 	if err := db.SetMeta("nas_uuid", "nas-test"); err != nil {
 		t.Fatal(err)
 	}
-	return &apiServer{store: db, hub: events.NewHub(), version: "test", acknowledged: make(map[string]bool), diskFunc: func() ([]model.Disk, error) {
+	return &apiServer{store: db, hub: events.NewHub(), version: "test", diskFunc: func() ([]model.Disk, error) {
 		return []model.Disk{{ID: "wwn:test", Name: "sda", Role: "unknown", Health: model.Healthy, LastSeen: time.Now().UTC()}}, nil
 	}, brokerExec: func(context.Context, privileged.Request) error { return nil }}
 }

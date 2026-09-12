@@ -85,6 +85,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate schedule schema: %w", err)
 	}
+	if err := s.ensureAlertsSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate alerts schema: %w", err)
+	}
 	if err := s.ensureNotificationSchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate notification schema: %w", err)

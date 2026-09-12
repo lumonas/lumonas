@@ -411,6 +411,8 @@ func (s *apiServer) finishBackup(run backup.Run, state string, failure error) {
 	if failure != nil {
 		run.Error = failure.Error()
 		s.publish("recovery.backup.failed", "warning", nil, map[string]any{"runId": run.ID, "error": run.Error})
+	} else if state == "verified" {
+		s.publish("recovery.backup.completed", "info", nil, map[string]any{"runId": run.ID})
 	}
 	_ = s.store.SaveBackupRun(run)
 }

@@ -33,6 +33,7 @@ SPECIAL_PREFIX = {
     ("post", "/docker/images/"): "/docker/images/{id}/update",
     ("post", "/network/checkpoints/"): "/network/checkpoints/{id}/{action}",
     ("get", "/docker/logs/"): "/docker/logs/{container}",
+    ("patch", "/alerts/"): "/alerts/{id}/ack",
 }
 
 # Routes registered outside the /api/v1 switch (health endpoints).

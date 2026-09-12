@@ -48,8 +48,6 @@ type apiServer struct {
 	authRequired         bool
 	dockerService        dockerruntime.Service
 	catalogFile          string
-	alertMu              sync.Mutex
-	acknowledged         map[string]bool
 	notificationMu       sync.Mutex
 	notificationFailures map[string]notificationFailureState
 	notificationClient   *http.Client
@@ -83,7 +81,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", acknowledged: make(map[string]bool)}
+	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true"}
 	server.dockerService = dockerruntime.New(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"), nil)
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
 	server.reconcileUpdateBoot()
@@ -298,7 +296,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet && endpoint == "/alerts":
 		s.alerts(w)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alerts/"):
-		s.ackAlert(w, path.Base(endpoint))
+		// Accept both /alerts/{id}/ack (web client) and /alerts/{id}.
+		s.ackAlert(w, strings.TrimSuffix(strings.TrimPrefix(endpoint, "/alerts/"), "/ack"))
 	case r.Method == http.MethodGet && endpoint == "/alert-rules":
 		s.alertRules(w)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alert-rules/"):
@@ -1580,6 +1579,7 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 	_ = s.store.SaveDiskInventory(disks)
 	alerts := make([]model.Alert, 0)
 	now := time.Now().UTC()
+	acknowledged, _ := s.store.AcknowledgedAlerts()
 	for _, disk := range disks {
 		if disk.Health != model.Warning && disk.Health != model.Critical {
 			continue
@@ -1589,11 +1589,9 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 			severity = "critical"
 		}
 		alert := model.Alert{ID: "disk-health-" + disk.ID, Severity: severity, Title: "Disk health requires attention", Description: fmt.Sprintf("%s (%s) reported %s health", disk.Name, disk.Model, disk.Health), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "firing", StartedAt: now}
-		s.alertMu.Lock()
-		if s.acknowledged[alert.ID] {
+		if acknowledged[alert.ID] {
 			alert.State = "acknowledged"
 		}
-		s.alertMu.Unlock()
 		alerts = append(alerts, alert)
 	}
 	known, _ := s.store.KnownDisks()
@@ -1606,11 +1604,9 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 			continue
 		}
 		alert := model.Alert{ID: "disk-missing-" + disk.ID, Severity: "critical", Title: "Disk is missing", Description: fmt.Sprintf("%s (%s) with stable identity %s was not discovered", disk.Model, disk.Serial, disk.ID), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "firing", StartedAt: disk.LastSeen}
-		s.alertMu.Lock()
-		if s.acknowledged[alert.ID] {
+		if acknowledged[alert.ID] {
 			alert.State = "acknowledged"
 		}
-		s.alertMu.Unlock()
 		alerts = append(alerts, alert)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -1620,17 +1616,34 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 			continue
 		}
 		alert := model.Alert{ID: "ups-on-battery-" + unit.Name, Severity: "critical", Title: "UPS is on battery", Description: fmt.Sprintf("UPS %s reports status %s", unit.Name, unit.Status), Resource: &model.ResourceRef{Type: "ups", ID: unit.Name}, State: "firing", StartedAt: now}
-		s.alertMu.Lock()
-		if s.acknowledged[alert.ID] {
+		if acknowledged[alert.ID] {
 			alert.State = "acknowledged"
 		}
-		s.alertMu.Unlock()
 		alerts = append(alerts, alert)
+	}
+	generated, err := s.store.GeneratedAlerts()
+	if err == nil {
+		alerts = append(alerts, generated...)
 	}
 	writeJSON(w, http.StatusOK, alerts)
 }
 
 func (s *apiServer) ackAlert(w http.ResponseWriter, id string) {
+	// Persist the acknowledgement for every alert kind first.
+	if err := s.store.AckAlert(id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	// Generated (rule-fired) alerts are persisted wholesale: return them.
+	if generated, err := s.store.GeneratedAlerts(); err == nil {
+		for _, alert := range generated {
+			if alert.ID == id {
+				alert.State = "acknowledged"
+				writeJSON(w, http.StatusOK, alert)
+				return
+			}
+		}
+	}
 	disks, _ := s.diskFunc()
 	for _, disk := range disks {
 		if "disk-health-"+disk.ID != id {
@@ -1639,9 +1652,6 @@ func (s *apiServer) ackAlert(w http.ResponseWriter, id string) {
 		if disk.Health != model.Warning && disk.Health != model.Critical {
 			break
 		}
-		s.alertMu.Lock()
-		s.acknowledged[id] = true
-		s.alertMu.Unlock()
 		severity := "warning"
 		if disk.Health == model.Critical {
 			severity = "critical"
@@ -1655,9 +1665,6 @@ func (s *apiServer) ackAlert(w http.ResponseWriter, id string) {
 			if id != "disk-missing-"+disk.ID {
 				continue
 			}
-			s.alertMu.Lock()
-			s.acknowledged[id] = true
-			s.alertMu.Unlock()
 			writeJSON(w, http.StatusOK, model.Alert{ID: id, Severity: "critical", Title: "Disk is missing", Description: fmt.Sprintf("%s (%s) with stable identity %s was not discovered", disk.Model, disk.Serial, disk.ID), Resource: &model.ResourceRef{Type: "disk", ID: disk.ID}, State: "acknowledged", StartedAt: disk.LastSeen})
 			return
 		}
@@ -2302,6 +2309,7 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 		go s.sendConfiguredNotifications(kind, severity, message)
 	}
 	s.hub.Publish(event)
+	s.evaluateEventAlert(kind, data)
 }
 
 func (s *apiServer) sendConfiguredNotifications(eventType, severity string, message notify.Message) {
