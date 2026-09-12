@@ -152,6 +152,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.disk(w, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/pools":
 		s.pools(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/pools/plan":
+		s.planStoragePool(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/pools/") && strings.HasSuffix(endpoint, "/confirm"):
+		s.confirmStoragePool(w, r, poolOperationID(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/storage/protection":
 		s.protection(w)
 	case r.Method == http.MethodGet && endpoint == "/storage/safety":
