@@ -109,11 +109,14 @@ for attempt in $(seq 1 60); do
      curl -fsS http://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
      curl -fsS http://127.0.0.1:18080/api/v1/system/metrics >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1 && \
+     curl -fsS http://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
      curl -fsS http://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
      curl -fsS http://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
     disk_count=$(grep -o '"id"' "$LOG.disks" | wc -l | tr -d ' ')
     if [ "$disk_count" -ge 5 ] && \
        grep -F 'serial:LUMONAS-DATA1' "$LOG.disks" >/dev/null 2>&1 && \
+       grep -F '"runtime"' "$LOG.settings" >/dev/null 2>&1 && \
+       grep -F '"tmpfs"' "$LOG.settings" >/dev/null 2>&1 && \
        grep -F '<title>LumoNAS</title>' "$INDEX_LOG" >/dev/null 2>&1 && \
        grep -F '<div id="root"></div>' "$INDEX_LOG" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-privd.service","name":"lumonas-privd.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \

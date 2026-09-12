@@ -90,7 +90,8 @@ closed instead of hanging the release job.
 The Debian appliance smoke test also requires `lumonas-privd`, all four typed
 privileged workers, `lumonasd`, and `lumonas-web` to report active/running
 through the services API, and requires the web service identity to be `lumonas`
-rather than root.
+rather than root. It also fetches the live runtime settings contract and fails
+if the appliance does not expose both the runtime and tmpfs state.
 
 The package-permissions job installs the generated `.deb` in a disposable
 Debian 13 container and verifies the resulting ownership and modes. It proves
