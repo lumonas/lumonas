@@ -216,6 +216,11 @@ At minimum:
 Tagged CI downloads the previous release `.deb`, installs it in Debian 13,
 adds an administrator-owned configuration marker, upgrades to the current
 package, and verifies that the marker and runtime layout survive.
+The upgrade-compatibility gate also opens a single legacy SQLite fixture that
+contains the old users, jobs, events, audit, and network table layouts in one
+database, then verifies that all records remain readable after the complete
+migration chain. This catches ordering problems that isolated migration tests
+can miss.
 
 The Debian maintainer scripts stop services in dependent-to-provider order
 (web, daemon, workers, broker) before an upgrade and start them in the reverse
