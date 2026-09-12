@@ -16,6 +16,7 @@ import (
 	"github.com/lumonas/lumonas/internal/events"
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/recovery"
+	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
 )
 
@@ -117,6 +118,24 @@ func TestStorageCreatePlanValidatesRequestedStateAndSafety(t *testing.T) {
 	server.routes().ServeHTTP(confirmed, confirm)
 	if confirmed.Code != http.StatusLocked {
 		t.Fatalf("expected safety lock on confirm, got %d", confirmed.Code)
+	}
+}
+
+func TestStorageMountsEndpointReturnsPersistedState(t *testing.T) {
+	server := testServer(t)
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/storage/mounts", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"entries":[]`) {
+		t.Fatalf("expected empty mount state, got %d: %s", response.Code, response.Body.String())
+	}
+	entries := []storage.MountEntry{{Kind: "disk", TargetID: "wwn:test", MountPath: "/srv/disks/wwn_test", FSType: "ext4", Source: "UUID=abc", Options: storage.DiskMountOptions, Enabled: true}}
+	if err := server.store.SaveMountEntries(entries); err != nil {
+		t.Fatal(err)
+	}
+	response = httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/storage/mounts", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"mountPath":"/srv/disks/wwn_test"`) {
+		t.Fatalf("expected persisted entry, got %d: %s", response.Code, response.Body.String())
 	}
 }
 
