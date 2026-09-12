@@ -3,7 +3,8 @@ set -eu
 
 getent group mynas >/dev/null 2>&1 || groupadd --system mynas
 id mynas >/dev/null 2>&1 || useradd --system --gid mynas --home-dir /var/lib/mynas --no-create-home --shell /usr/sbin/nologin mynas
-install -d -o mynas -g mynas -m 0750 /var/lib/mynas /var/lib/mynas/secrets /srv/mynas /srv/mynas/docker
+install -d -o root -g mynas -m 0750 /etc/mynas
+install -d -o mynas -g mynas -m 0750 /var/lib/mynas /var/lib/mynas/secrets /var/lib/mynas/generated /var/lib/mynas/recovery /srv/mynas /srv/mynas/docker /srv/disks /srv/pools
 if getent group docker >/dev/null 2>&1; then usermod -aG docker mynas || true; fi
 systemctl daemon-reload || true
 systemctl try-reload-or-restart systemd-journald.service || true
