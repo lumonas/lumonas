@@ -28,6 +28,8 @@ Deliver:
 - validated scheduled power execution through the existing ordered shutdown
   and privileged broker path.
 - Debian Docker JSON-file log rotation baseline and retention verification.
+- catalog recovery contracts are applied to runtime Docker stack responses;
+  unknown Compose stacks remain conservative by default.
 
 Exit criteria:
 

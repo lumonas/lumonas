@@ -1823,7 +1823,7 @@ func (s *apiServer) dockerApps(w http.ResponseWriter) {
 func (s *apiServer) dockerStacks(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	stacks, err := s.dockerService.Stacks(ctx)
+	stacks, err := s.decoratedDockerStacks(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -1861,6 +1861,21 @@ func (s *apiServer) dockerStacks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, stacks)
+}
+
+func (s *apiServer) decoratedDockerStacks(ctx context.Context) ([]dockerruntime.Stack, error) {
+	stacks, err := s.dockerService.Stacks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	catalog, catalogErr := dockerruntime.LoadCatalog(s.catalogFile)
+	if catalogErr != nil {
+		return nil, catalogErr
+	}
+	for index := range stacks {
+		stacks[index] = dockerruntime.EnrichStack(stacks[index], catalog)
+	}
+	return stacks, nil
 }
 
 func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {

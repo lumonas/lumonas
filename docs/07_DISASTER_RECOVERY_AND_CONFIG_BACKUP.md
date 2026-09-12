@@ -277,6 +277,12 @@ Recovery key: configured
 
 Never claim an app is fully recoverable if its mutable state is not protected.
 
+Runtime stack discovery applies catalog recovery contracts to matching image
+references and exposes `catalogId`, `recovery`, and `recoveryCoverage` through
+the API. Imported or unknown Compose stacks receive a conservative default
+contract. Appdata content is still reported as incomplete until a verified
+content backup is included in the recovery bundle.
+
 ## Partial restore
 
 Design format to allow future selective restore:

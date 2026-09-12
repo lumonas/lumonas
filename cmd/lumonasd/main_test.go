@@ -237,6 +237,36 @@ func TestDockerStacksReflectContainerHealth(t *testing.T) {
 	}
 }
 
+func TestDockerStacksExposeCatalogRecoveryMetadata(t *testing.T) {
+	root := t.TempDir()
+	stackDir := filepath.Join(root, "jellyfin")
+	if err := os.MkdirAll(stackDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stackDir, "compose.yaml"), []byte("services:\n  jellyfin:\n    image: jellyfin/jellyfin:10.10.6\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	catalogPath := filepath.Join(t.TempDir(), "apps.json")
+	if err := os.WriteFile(catalogPath, []byte(`[{"id":"jellyfin","category":"Media","image":"jellyfin/jellyfin:10.10.6","appdataPaths":["/config"],"recovery":{"strategy":"stop-backup","appdataPaths":["/config"]}}]`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	server := testServer(t)
+	server.catalogFile = catalogPath
+	server.dockerService = dockerruntime.New(root, func(_ context.Context, _ string, _ ...string) ([]byte, error) { return nil, nil })
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/docker/stacks", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var stacks []dockerruntime.Stack
+	if err := json.NewDecoder(response.Body).Decode(&stacks); err != nil {
+		t.Fatal(err)
+	}
+	if len(stacks) != 1 || stacks[0].CatalogID != "jellyfin" || stacks[0].Recovery == nil || stacks[0].RecoveryCoverage <= 0 {
+		t.Fatalf("unexpected catalog recovery metadata: %#v", stacks)
+	}
+}
+
 func TestRecoveryPlanWarnsOnNASAndDiskMismatch(t *testing.T) {
 	server := testServer(t)
 	directory := t.TempDir()

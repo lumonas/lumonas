@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lumonas/lumonas/internal/backup"
+	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/recovery"
 )
 
@@ -468,13 +469,20 @@ func (s *apiServer) backupLoop() {
 }
 
 func (s *apiServer) dockerAppdataCoverage() (bool, []string) {
-	stacks, err := s.dockerService.Stacks(context.Background())
+	stacks, err := s.decoratedDockerStacks(context.Background())
 	if err != nil {
 		return false, []string{"Docker appdata coverage could not be determined"}
 	}
 	if len(stacks) == 0 {
 		return true, nil
 	}
-	warnings := []string{"Docker appdata is not included in configuration recovery bundles"}
+	warnings := []string{"Docker appdata content is not included in configuration recovery bundles"}
+	for _, stack := range stacks {
+		if stack.Recovery == nil || len(stack.Recovery.AppdataPaths) == 0 || stack.Recovery.Strategy == dockerruntime.StrategyNone {
+			warnings = append(warnings, stack.Name+" has no configured appdata recovery contract")
+			continue
+		}
+		warnings = append(warnings, stack.Name+" appdata requires a content backup before restore")
+	}
 	return false, warnings
 }

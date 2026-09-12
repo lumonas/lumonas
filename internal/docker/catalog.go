@@ -102,3 +102,38 @@ func LoadCatalog(path string) ([]CatalogApp, error) {
 	}
 	return apps, nil
 }
+
+// EnrichStack applies catalog-owned recovery metadata without changing the
+// Compose source of truth. Unknown/imported stacks get the conservative
+// default recovery contract so the API never implies that their mutable state
+// is fully protected.
+func EnrichStack(stack Stack, catalog []CatalogApp) Stack {
+	for index := range catalog {
+		app := &catalog[index]
+		if !catalogImageMatches(app.Image, stack.Images) {
+			continue
+		}
+		stack.CatalogID = app.ID
+		stack.Category = app.Category
+		contract := ContractFromCatalog(app.AppdataPaths, app.DBDumpContainer)
+		stack.Recovery = MergeRecoveryContracts(contract, app.Recovery)
+		stack.RecoveryCoverage = StackRecoveryCoverage(stack.Recovery)
+		return stack
+	}
+	stack.Recovery = DefaultRecoveryContract()
+	stack.RecoveryCoverage = StackRecoveryCoverage(stack.Recovery)
+	return stack
+}
+
+func catalogImageMatches(catalogImage string, images []string) bool {
+	catalogImage = strings.TrimSpace(catalogImage)
+	if catalogImage == "" {
+		return false
+	}
+	for _, image := range images {
+		if strings.TrimSpace(image) == catalogImage {
+			return true
+		}
+	}
+	return false
+}

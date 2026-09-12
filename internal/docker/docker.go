@@ -27,6 +27,7 @@ type Service struct {
 type Stack struct {
 	ID               string            `json:"id"`
 	Name             string            `json:"name"`
+	CatalogID        string            `json:"catalogId,omitempty"`
 	Category         string            `json:"category"`
 	Status           string            `json:"status"`
 	State            string            `json:"state"`

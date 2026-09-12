@@ -142,6 +142,10 @@ One app has no appdata protection.
 
 Pass if Disaster Recovery UI explicitly reports it as not fully recoverable.
 
+The API also exposes the matched catalog recovery contract for known images and
+uses a conservative default for imported stacks; this metadata must not be
+interpreted as appdata content backup.
+
 ## N. UPS shutdown
 
 Simulate UPS on-battery threshold.
