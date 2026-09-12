@@ -243,6 +243,9 @@ At minimum:
 Tagged CI downloads the previous release `.deb`, installs it in Debian 13,
 adds an administrator-owned configuration marker, upgrades to the current
 package, and verifies that the marker and runtime layout survive.
+For the first tagged release, the upgrade job records that no previous
+baseline exists and passes; every later tagged release keeps the upgrade test
+release-blocking.
 The upgrade-compatibility gate also opens a single legacy SQLite fixture that
 contains the old users, jobs, events, audit, and network table layouts in one
 database, then verifies that all records remain readable after the complete
