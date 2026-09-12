@@ -37,6 +37,11 @@ export function NetworkPage() {
     onSuccess: (job) => setMessage(`Diagnostic queued: ${job.id}`),
     onError: (error) => setMessage(error instanceof Error ? error.message : 'Unable to start diagnostic.'),
   })
+  const applyConnection = useMutation({
+    mutationFn: (connection: Connection) => apiPost(`/network/connections/${connection.id}/apply`, { reauthenticated: true, timeoutSeconds: 60 }),
+    onSuccess: () => { setMessage('Network checkpoint started. Confirm it from the pending operation before timeout.'); void queryClient.invalidateQueries({ queryKey: ['admin', 'network', 'connections'] }) },
+    onError: (error) => setMessage(error instanceof Error ? error.message : 'Unable to start network checkpoint.'),
+  })
 
   return (
     <div className="flex flex-col gap-6">
@@ -45,7 +50,7 @@ export function NetworkPage() {
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><NetworkIcon className="size-4 text-primary" />Connections</CardTitle><CardDescription>Changes use a checkpoint so an unreachable host can roll back safely.</CardDescription></CardHeader>
           <CardContent>
-            {connections.isLoading ? <p className="text-sm text-muted-foreground">Loading connections…</p> : connections.isError ? <p className="text-sm text-critical">Unable to load network connections.</p> : <Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Interface</TableHead><TableHead>Addressing</TableHead><TableHead>Status</TableHead></TableRow></TableHeader><TableBody>{connections.data?.map((connection) => <TableRow key={connection.id}><TableCell className="font-medium">{connection.name}<div className="text-xs capitalize text-muted-foreground">{connection.type || 'ethernet'}</div></TableCell><TableCell className="font-mono">{connection.interface}</TableCell><TableCell>IPv4 {connection.ipv4.method} · IPv6 {connection.ipv6.method}</TableCell><TableCell><Badge variant={connection.status.includes('pending') ? 'warning' : 'success'}>{connection.status}</Badge></TableCell></TableRow>)}</TableBody></Table>}
+            {connections.isLoading ? <p className="text-sm text-muted-foreground">Loading connections…</p> : connections.isError ? <p className="text-sm text-critical">Unable to load network connections.</p> : <Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Interface</TableHead><TableHead>Addressing</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader><TableBody>{connections.data?.map((connection) => <TableRow key={connection.id}><TableCell className="font-medium">{connection.name}<div className="text-xs capitalize text-muted-foreground">{connection.type || 'ethernet'}</div></TableCell><TableCell className="font-mono">{connection.interface}</TableCell><TableCell>IPv4 {connection.ipv4.method} · IPv6 {connection.ipv6.method}</TableCell><TableCell><Badge variant={connection.status.includes('pending') ? 'warning' : 'success'}>{connection.status}</Badge></TableCell><TableCell>{connection.status.includes('pending') ? <Button size="sm" variant="outline" onClick={() => applyConnection.mutate(connection)}><CheckCircle2 />Apply</Button> : null}</TableCell></TableRow>)}</TableBody></Table>}
           </CardContent>
         </Card>
         <Card>

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, Plus, ShieldCheck, UserRound, UsersRound } from 'lucide-react'
-import { apiGet, apiPatch, apiPost } from '@/api/client'
+import { apiGet, apiPatch, apiPost, apiPut } from '@/api/client'
 import { PageHeader } from '@/components/core/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,10 @@ export function UsersPage() {
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<Principal['managementRole']>('none')
   const [groupName, setGroupName] = useState('')
+  const [passwordTarget, setPasswordTarget] = useState<Principal | null>(null)
+  const [rotationPassword, setRotationPassword] = useState('')
+  const [selectedGroup, setSelectedGroup] = useState('')
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const [message, setMessage] = useState('')
 
   const refresh = () => {
@@ -51,6 +55,16 @@ export function UsersPage() {
     mutationFn: (user: Principal) => apiPatch<Principal>(`/users/${user.id}`, { enabled: !user.enabled }),
     onSuccess: () => { setMessage('Account status updated.'); refresh() },
     onError: (error) => setMessage(error instanceof Error ? error.message : 'Unable to update account.'),
+  })
+  const rotatePassword = useMutation({
+    mutationFn: () => apiPost(`/users/${passwordTarget?.id}/password`, { password: rotationPassword }),
+    onSuccess: () => { setRotationPassword(''); setPasswordTarget(null); setMessage('Password rotated.'); refresh() },
+    onError: (error) => setMessage(error instanceof Error ? error.message : 'Unable to rotate password.'),
+  })
+  const updateMembers = useMutation({
+    mutationFn: () => apiPut(`/groups/${selectedGroup}/members`, { memberIds: selectedMembers }),
+    onSuccess: () => { setMessage('Group membership updated.'); refresh() },
+    onError: (error) => setMessage(error instanceof Error ? error.message : 'Unable to update group membership.'),
   })
 
   return (
@@ -72,7 +86,7 @@ export function UsersPage() {
                     <TableCell className="capitalize">{user.kind}</TableCell>
                     <TableCell>{roleLabels[user.managementRole]}</TableCell>
                     <TableCell><Badge variant={user.enabled ? 'success' : 'offline'}>{user.enabled ? 'Enabled' : 'Disabled'}</Badge></TableCell>
-                    <TableCell><Button size="sm" variant="outline" onClick={() => toggleUser.mutate(user)}>{user.enabled ? 'Disable' : 'Enable'}</Button></TableCell>
+                    <TableCell><div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => toggleUser.mutate(user)}>{user.enabled ? 'Disable' : 'Enable'}</Button>{user.kind === 'user' ? <Button size="sm" variant="ghost" onClick={() => setPasswordTarget(user)}>Rotate</Button> : null}</div></TableCell>
                   </TableRow>)}
                 </TableBody>
               </Table>
@@ -90,11 +104,13 @@ export function UsersPage() {
               <Button className="w-full" disabled={!name || createUser.isPending} onClick={() => createUser.mutate()}><ShieldCheck />Create user</Button>
             </CardContent>
           </Card>
+          {passwordTarget ? <Card><CardHeader><CardTitle>Rotate password</CardTitle><CardDescription>New password for {passwordTarget.name}; the API never returns secret material.</CardDescription></CardHeader><CardContent className="space-y-3"><Input type="password" value={rotationPassword} onChange={(event) => setRotationPassword(event.target.value)} placeholder="At least 12 characters" /><div className="flex gap-2"><Button variant="outline" onClick={() => setPasswordTarget(null)}>Cancel</Button><Button disabled={rotationPassword.length < 12 || rotatePassword.isPending} onClick={() => rotatePassword.mutate()}>Rotate password</Button></div></CardContent></Card> : null}
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><UsersRound className="size-4 text-primary" />Groups</CardTitle><CardDescription>Groups are the stable unit for share permissions.</CardDescription></CardHeader>
             <CardContent className="space-y-3">
               <div className="flex gap-2"><Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="family" /><Button disabled={!groupName || createGroup.isPending} onClick={() => createGroup.mutate()}>Add</Button></div>
-              <div className="flex flex-wrap gap-2">{groups.data?.map((group) => <Badge key={group.id} variant="secondary">{group.name} · {group.groups?.length ?? 0} members</Badge>)}</div>
+              <div className="flex flex-wrap gap-2">{groups.data?.map((group) => <Button key={group.id} size="sm" variant={selectedGroup === group.id ? 'default' : 'secondary'} onClick={() => { setSelectedGroup(group.id); setSelectedMembers([]) }}>{group.name}</Button>)}</div>
+              {selectedGroup ? <div className="space-y-2 rounded-md border p-3"><p className="text-xs text-muted-foreground">Select enabled users for this group. Saving replaces the membership set.</p>{users.data?.filter((user) => user.enabled).map((user) => <label key={user.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedMembers.includes(user.id)} onChange={() => setSelectedMembers((current) => current.includes(user.id) ? current.filter((id) => id !== user.id) : [...current, user.id])} />{user.name}</label>)}<Button size="sm" disabled={updateMembers.isPending} onClick={() => updateMembers.mutate()}>Save membership</Button></div> : null}
             </CardContent>
           </Card>
         </div>

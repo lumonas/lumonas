@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, ArrowRight, FolderOpen, Plus, Share2 } from 'lucide-react'
-import { apiGet, apiPost } from '@/api/client'
+import { apiDelete, apiGet, apiPost } from '@/api/client'
 import { PageHeader } from '@/components/core/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +26,11 @@ export function SharesPage() {
   const [guest, setGuest] = useState(false)
   const [access, setAccess] = useState('')
   const [message, setMessage] = useState('')
+  const deleteShare = useMutation({
+    mutationFn: (share: Share) => apiDelete(`/shares/${share.id}`),
+    onSuccess: () => { setMessage('Share deleted and services reloaded.'); void queryClient.invalidateQueries({ queryKey: ['admin', 'shares'] }) },
+    onError: (error) => setMessage(error instanceof Error ? error.message : 'Unable to delete share.'),
+  })
   const createShare = useMutation({
     mutationFn: () => apiPost<Share>('/shares', {
       name, path, description, enabled: true, guest,
@@ -44,7 +49,7 @@ export function SharesPage() {
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><Share2 className="size-4 text-primary" />Published shares</CardTitle><CardDescription>Every change is validated and activated atomically.</CardDescription></CardHeader>
           <CardContent>
-            {shares.isLoading ? <p className="text-sm text-muted-foreground">Loading shares…</p> : shares.isError ? <p className="text-sm text-critical">Unable to load shares. Check the API connection.</p> : <Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Path</TableHead><TableHead>Protocols</TableHead><TableHead>Access</TableHead></TableRow></TableHeader><TableBody>{shares.data?.map((share) => <TableRow key={share.id}><TableCell className="font-medium">{share.name}<div className="text-xs text-muted-foreground">{share.guest ? 'Guest enabled' : 'Authenticated access'}</div></TableCell><TableCell className="font-mono text-xs">{share.path}</TableCell><TableCell><div className="flex flex-wrap gap-1">{share.protocols.map((protocol) => <Badge key={protocol.name} variant="secondary">{protocol.name}</Badge>)}</div></TableCell><TableCell>{share.access.length ? `${share.access.length} rule${share.access.length === 1 ? '' : 's'}` : 'No explicit rules'}</TableCell></TableRow>)}</TableBody></Table>}
+            {shares.isLoading ? <p className="text-sm text-muted-foreground">Loading shares…</p> : shares.isError ? <p className="text-sm text-critical">Unable to load shares. Check the API connection.</p> : <Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Path</TableHead><TableHead>Protocols</TableHead><TableHead>Access</TableHead><TableHead /></TableRow></TableHeader><TableBody>{shares.data?.map((share) => <TableRow key={share.id}><TableCell className="font-medium">{share.name}<div className="text-xs text-muted-foreground">{share.guest ? 'Guest enabled' : 'Authenticated access'}</div></TableCell><TableCell className="font-mono text-xs">{share.path}</TableCell><TableCell><div className="flex flex-wrap gap-1">{share.protocols.map((protocol) => <Badge key={protocol.name} variant="secondary">{protocol.name}</Badge>)}</div></TableCell><TableCell>{share.access.length ? `${share.access.length} rule${share.access.length === 1 ? '' : 's'}` : 'No explicit rules'}</TableCell><TableCell><Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Delete share ${share.name}?`)) deleteShare.mutate(share) }}>Delete</Button></TableCell></TableRow>)}</TableBody></Table>}
           </CardContent>
         </Card>
         <Card>
