@@ -221,13 +221,17 @@ func (s *apiServer) backupRestorePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apps := make([]map[string]any, 0)
+	appdata := make(map[string]bool)
+	for _, record := range plan.Appdata {
+		appdata[record.Stack] = true
+	}
 	for _, name := range plan.Files {
 		if !strings.HasPrefix(name, "docker/stacks/") || !strings.HasSuffix(name, "/compose.yaml") {
 			continue
 		}
 		parts := strings.Split(name, "/")
 		if len(parts) == 4 {
-			apps = append(apps, map[string]any{"name": parts[2], "appdataAvailable": true})
+			apps = append(apps, map[string]any{"name": parts[2], "appdataAvailable": appdata[parts[2]]})
 		}
 	}
 	result["generationId"] = plan.Manifest.Generation

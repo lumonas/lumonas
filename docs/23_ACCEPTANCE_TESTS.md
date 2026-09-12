@@ -150,6 +150,10 @@ The recovery bundle format additionally accepts verified appdata archives and
 restores them only to approved data roots after traversal, symlink, special-file,
 and size-limit checks.
 
+For a configured stack, the exporter must resolve every declared appdata path,
+stop and restart the stack for the default contract, and mark the recovery
+status incomplete if any source or lifecycle step fails.
+
 ## N. UPS shutdown
 
 Simulate UPS on-battery threshold.

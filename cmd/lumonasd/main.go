@@ -238,7 +238,7 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && endpoint == "/recovery/restore/stage":
 		s.recoveryStage(w, r)
 	case r.Method == http.MethodPost && endpoint == "/recovery/export":
-		s.recoveryExport(w)
+		s.recoveryExport(w, r.Context())
 	case r.Method == http.MethodGet && endpoint == "/backups/status":
 		s.backupStatus(w, r)
 	case r.Method == http.MethodGet && endpoint == "/backups/schedule":
@@ -1035,7 +1035,7 @@ func (s *apiServer) recoveryStatus(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, status)
 }
 
-func (s *apiServer) recoveryExport(w http.ResponseWriter) {
+func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context) {
 	key := s.recoveryKeyString()
 	if key == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "LUMONAS_RECOVERY_KEY is not configured"})
@@ -1054,10 +1054,14 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter) {
 	nasUUID, _ := s.store.Meta("nas_uuid")
 	desired, _ := json.Marshal(map[string]any{"nasUuid": nasUUID, "configGeneration": s.currentGeneration(), "createdAt": time.Now().UTC()})
 	compose := map[string][]byte{}
-	stacks, _ := s.dockerService.Stacks(context.Background())
+	stacks, stackErr := s.decoratedDockerStacks(ctx)
+	if stackErr != nil {
+		stacks, _ = s.dockerService.Stacks(ctx)
+	}
 	for _, stack := range stacks {
 		compose[stack.Name+"/compose.yaml"] = []byte(stack.ComposeYAML)
 	}
+	appdata := s.collectDockerAppdata(ctx, stacks)
 	var encrypted []byte
 	if secretPath := os.Getenv("LUMONAS_RECOVERY_SECRETS_FILE"); secretPath != "" {
 		encrypted, err = os.ReadFile(secretPath)
@@ -1066,7 +1070,7 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter) {
 			return
 		}
 	}
-	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, LumoNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, Files: s.recoveryFiles(), EncryptedData: encrypted}, []byte(key))
+	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, LumoNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, Files: s.recoveryFiles(), Appdata: appdata.Payloads, EncryptedData: encrypted}, []byte(key))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "bundle creation failed: " + err.Error()})
 		return
@@ -1112,7 +1116,7 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter) {
 	}
 	s.pruneRecoveryBundles(directory, 20)
 	s.publish("recovery.bundle.created", "info", nil, map[string]any{"generation": manifest.Generation})
-	writeJSON(w, http.StatusCreated, map[string]any{"path": filepath.Join(directory, "latest.mrb"), "manifest": manifest, "verified": true})
+	writeJSON(w, http.StatusCreated, map[string]any{"path": filepath.Join(directory, "latest.mrb"), "manifest": manifest, "verified": true, "appdataArchives": len(appdata.Payloads), "warnings": appdata.Warnings})
 }
 
 func (s *apiServer) pruneRecoveryBundles(directory string, keep int) {

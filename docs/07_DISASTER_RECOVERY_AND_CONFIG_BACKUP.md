@@ -289,6 +289,11 @@ members before extracting only into approved appliance data roots; appdata
 archives are never allowed to write into `/etc`, `/usr`, or another system
 root.
 
+The live exporter resolves Compose bind and named-volume mounts, stops stacks
+using the default stop-backup contract, archives each declared appdata path,
+and restarts the stack before publishing the verified bundle. Missing mounts or
+failed restart/backup steps remain visible as recovery warnings.
+
 ## Partial restore
 
 Design format to allow future selective restore:

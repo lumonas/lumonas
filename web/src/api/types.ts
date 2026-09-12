@@ -508,6 +508,7 @@ export interface RecoveryPlan {
   desiredStateValid: boolean
   composeValid: boolean
   encryptedSecrets: boolean
+  appdata?: { stack: string; containerPath: string; hostPath: string; archivePath: string; archiveBytes: number }[]
   warnings?: string[]
 }
 

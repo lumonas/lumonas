@@ -301,7 +301,7 @@ func (s *apiServer) executeBackup(run backup.Run) {
 		return
 	}
 	recorder := httptest.NewRecorder()
-	s.recoveryExport(recorder)
+	s.recoveryExport(recorder, context.Background())
 	if recorder.Code < 200 || recorder.Code >= 300 {
 		s.finishBackup(run, "failed", fmt.Errorf("recovery export failed: %s", strings.TrimSpace(recorder.Body.String())))
 		return
@@ -476,13 +476,37 @@ func (s *apiServer) dockerAppdataCoverage() (bool, []string) {
 	if len(stacks) == 0 {
 		return true, nil
 	}
-	warnings := []string{"Docker appdata content is not included in configuration recovery bundles"}
+	covered := make(map[string]map[string]bool)
+	bundlePath := filepath.Join(envOr("LUMONAS_RECOVERY_DIR", "/var/lib/lumonas/recovery"), "latest.mrb")
+	if key := s.recoveryKeyString(); key != "" {
+		if bundle, readErr := os.ReadFile(bundlePath); readErr == nil {
+			if plan, planErr := recovery.Plan(bundle, []byte(key)); planErr == nil {
+				for _, record := range plan.Appdata {
+					if covered[record.Stack] == nil {
+						covered[record.Stack] = make(map[string]bool)
+					}
+					covered[record.Stack][record.ContainerPath] = true
+				}
+			}
+		}
+	}
+	warnings := make([]string, 0, len(stacks)+1)
+	fullyCovered := true
 	for _, stack := range stacks {
 		if stack.Recovery == nil || len(stack.Recovery.AppdataPaths) == 0 || stack.Recovery.Strategy == dockerruntime.StrategyNone {
 			warnings = append(warnings, stack.Name+" has no configured appdata recovery contract")
+			fullyCovered = false
 			continue
 		}
-		warnings = append(warnings, stack.Name+" appdata requires a content backup before restore")
+		for _, path := range stack.Recovery.AppdataPaths {
+			if !covered[stack.Name][path] {
+				warnings = append(warnings, stack.Name+" appdata requires a verified content backup for "+path)
+				fullyCovered = false
+			}
+		}
 	}
-	return false, warnings
+	if !fullyCovered && len(warnings) == 0 {
+		warnings = append(warnings, "Docker appdata is not covered by the latest verified recovery bundle")
+	}
+	return fullyCovered, warnings
 }

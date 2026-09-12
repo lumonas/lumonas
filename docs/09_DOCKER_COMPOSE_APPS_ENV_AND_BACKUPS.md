@@ -211,6 +211,10 @@ host path separately from the container path. The restore path rejects unsafe
 host roots, symlinks, traversal, special files, and archives over the configured
 limit before writing anything.
 
+Named volumes are resolved through Docker volume inspection; the exporter does
+not infer paths from stack names. Unknown or custom contracts that cannot be
+executed are reported as incomplete instead of being marked recoverable.
+
 When stack image is unavailable and no Internet:
 
 ```text

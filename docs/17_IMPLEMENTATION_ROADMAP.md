@@ -37,6 +37,8 @@ Deliver:
   not only signature-file presence.
 - recovery bundles carry bounded, validated Docker appdata archives with
   fail-closed extraction targets.
+- Docker Compose bind and named-volume appdata sources are resolved and
+  exported through the declared stop-backup contract.
 
 Exit criteria:
 
