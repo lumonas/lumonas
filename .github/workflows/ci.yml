@@ -157,6 +157,17 @@ jobs:
       - run: sh -n scripts/verify-release.sh
       - run: git diff --check
 
+  upgrade-compatibility:
+    runs-on: ubuntu-latest
+    needs: [backend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+      - run: go test ./internal/store -run TestStoreReopenPreservesStateAcrossMigrations
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest

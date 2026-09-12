@@ -40,4 +40,7 @@ require_line "$ROOT/packaging/debian/postinst" '/etc/lumonas/tls/server.key'
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
 require_line "$ROOT/installer/build-iso.sh" 'dpkg-scanpackages'
 require_line "$ROOT/installer/build-iso.sh" 'lumonas-local.list'
+if command -v systemd-analyze >/dev/null 2>&1; then
+	systemd-analyze verify "$SYSTEMD"/*.service
+fi
 echo "LumoNAS packaging policy checks passed"
