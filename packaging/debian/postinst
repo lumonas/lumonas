@@ -6,6 +6,7 @@ id mynas >/dev/null 2>&1 || useradd --system --gid mynas --home-dir /var/lib/myn
 install -d -o mynas -g mynas -m 0750 /var/lib/mynas /var/lib/mynas/secrets /srv/mynas /srv/mynas/docker
 if getent group docker >/dev/null 2>&1; then usermod -aG docker mynas || true; fi
 systemctl daemon-reload || true
+systemctl try-reload-or-restart systemd-journald.service || true
 systemctl enable mynas-privd.service mynasd.service mynas-web.service || true
 systemctl try-restart mynas-privd.service mynasd.service mynas-web.service || true
 exit 0

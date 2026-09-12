@@ -20,6 +20,10 @@ ProtectSystem=strict
 RestrictAddressFamilies=AF_INET AF_INET6
 LockPersonality=true
 MemoryDenyWriteExecute=true
+MemoryMax=256M
+CPUQuota=100%
+TasksMax=128
+TimeoutStopSec=15s
 
 [Install]
 WantedBy=multi-user.target

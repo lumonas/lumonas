@@ -19,6 +19,10 @@ RestrictAddressFamilies=AF_UNIX
 CapabilityBoundingSet=
 LockPersonality=true
 MemoryDenyWriteExecute=true
+MemoryMax=128M
+CPUQuota=100%
+TasksMax=64
+TimeoutStopSec=10s
 
 [Install]
 WantedBy=multi-user.target

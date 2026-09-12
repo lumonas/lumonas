@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -519,8 +520,28 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter) {
 		return
 	}
 	manifest, _ := recovery.Verify(bundle, []byte(key))
+	versioned := filepath.Join(directory, fmt.Sprintf("generation-%d-%s.mrb", manifest.Generation, time.Now().UTC().Format("20060102T150405Z")))
+	if err := os.WriteFile(versioned, bundle, 0o600); err != nil {
+		if s.log != nil {
+			s.log.Warn("versioned recovery copy failed", "error", err)
+		}
+	}
+	s.pruneRecoveryBundles(directory, 20)
 	s.publish("recovery.bundle.created", "info", nil, map[string]any{"generation": manifest.Generation})
 	writeJSON(w, http.StatusCreated, map[string]any{"path": filepath.Join(directory, "latest.mrb"), "manifest": manifest, "verified": true})
+}
+
+func (s *apiServer) pruneRecoveryBundles(directory string, keep int) {
+	paths, err := filepath.Glob(filepath.Join(directory, "generation-*.mrb"))
+	if err != nil || len(paths) <= keep {
+		return
+	}
+	sort.Strings(paths)
+	for _, item := range paths[:len(paths)-keep] {
+		if err := os.Remove(item); err != nil && s.log != nil {
+			s.log.Warn("old recovery bundle removal failed", "path", item, "error", err)
+		}
+	}
 }
 
 func (s *apiServer) recoveryFiles() map[string][]byte {
