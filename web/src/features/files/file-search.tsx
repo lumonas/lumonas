@@ -14,9 +14,9 @@ import { Input } from '@/components/ui/input'
 import { formatBytes, timeAgo } from '@/lib/format'
 import type { FileEntry } from '@/api/types'
 
-export function FileSearchDialog() {
+export function FileSearchDialog({ shareId }: { shareId: string | null }) {
   const [query, setQuery] = useState('')
-  const { data: results, isFetching } = useFileSearch(query)
+  const { data: results, isFetching } = useFileSearch(shareId, query)
 
   return (
     <Dialog>

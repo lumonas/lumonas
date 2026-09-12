@@ -344,6 +344,14 @@ func (s *apiServer) updateManagedShare(w http.ResponseWriter, r *http.Request, i
 		if err == nil && payload.Description != "" {
 			share.Description = payload.Description
 		}
+		// Partial patches carry only the fields being changed; detect an
+		// explicit enabled flag without breaking the full-update contract.
+		var partial struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if err == nil && json.Unmarshal(raw, &partial) == nil && partial.Enabled != nil {
+			share.Enabled = *partial.Enabled
+		}
 		expectedGeneration = payload.ExpectedGeneration
 	} else {
 		share, expectedGeneration, err = decodeManagedShareBytes(raw)

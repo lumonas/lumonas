@@ -424,7 +424,7 @@ export interface ProtectionConfig {
   configPath: string
   configured: boolean
   parityDiskIds: string[]
-  dataDiskIds: string[]
+  dataDiskIds: string[] | null
 }
 
 export interface PoolMemberPlan {

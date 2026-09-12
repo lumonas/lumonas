@@ -55,6 +55,14 @@ function requestedState(action: DiskAction, disk: Disk, filesystem: string, labe
   }
 }
 
+function errorMessage(error: unknown): string | null {
+  if (error instanceof Error && 'body' in error) {
+    const body = (error as { body?: { error?: string } }).body
+    if (body?.error) return body.error
+  }
+  return error instanceof Error ? error.message : null
+}
+
 export function DiskOperationsDialog({
   disk,
   action,
@@ -174,7 +182,7 @@ export function DiskOperationsDialog({
           ) : null}
           {plan.isError ? (
             <AlertBanner tone="critical" title="Plan rejected">
-              {plan.error instanceof Error ? plan.error.message : null}
+              {errorMessage(plan.error)}
             </AlertBanner>
           ) : null}
         </div>
@@ -192,7 +200,7 @@ export function DiskOperationsDialog({
           ) : null}
           {confirm.isError ? (
             <AlertBanner tone="critical" title="Operation rejected">
-              {confirm.error instanceof Error ? confirm.error.message : null}
+              {errorMessage(confirm.error)}
             </AlertBanner>
           ) : null}
         </div>

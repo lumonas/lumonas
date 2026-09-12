@@ -129,3 +129,53 @@ func TestModernShareAPIContract(t *testing.T) {
 		t.Fatalf("modern settings update failed: %d %s", settings.Code, settings.Body.String())
 	}
 }
+
+func TestSharePartialPatchAppliesEnabledFlag(t *testing.T) {
+	server := testServer(t)
+	t.Setenv("LUMONAS_SHARES_FILE", t.TempDir()+"/legacy-shares.json")
+	t.Setenv("LUMONAS_SAMBA_CONFIG", t.TempDir()+"/generated/smb.conf")
+
+	create := httptest.NewRecorder()
+	server.routes().ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/v1/shares", strings.NewReader(`{"name":"Media","resourceId":"share-media","relativePath":"/","access":[],"protocols":[{"protocol":"smb","enabled":true}]}`)))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create failed: %d %s", create.Code, create.Body.String())
+	}
+	var share struct {
+		ID      string `json:"id"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&share); err != nil {
+		t.Fatal(err)
+	}
+	if share.Enabled {
+		t.Fatal("shares should start disabled")
+	}
+	patch := httptest.NewRecorder()
+	server.routes().ServeHTTP(patch, httptest.NewRequest(http.MethodPatch, "/api/v1/shares/"+share.ID, strings.NewReader(`{"enabled":true}`)))
+	if patch.Code != http.StatusOK {
+		t.Fatalf("enable patch failed: %d %s", patch.Code, patch.Body.String())
+	}
+	var updated struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(patch.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if !updated.Enabled {
+		t.Fatal("partial enabled patch was ignored")
+	}
+	// Protocols must survive the partial patch.
+	var detail struct {
+		Protocols []struct {
+			Protocol string `json:"protocol"`
+		} `json:"protocols"`
+	}
+	detailResponse := httptest.NewRecorder()
+	server.routes().ServeHTTP(detailResponse, httptest.NewRequest(http.MethodGet, "/api/v1/shares/"+share.ID, nil))
+	if err := json.NewDecoder(detailResponse.Body).Decode(&detail); err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Protocols) != 1 || detail.Protocols[0].Protocol != "smb" {
+		t.Fatalf("protocols were lost in the partial patch: %#v", detail.Protocols)
+	}
+}

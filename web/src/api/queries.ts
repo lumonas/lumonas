@@ -1249,7 +1249,16 @@ export function useCapacityForecast(days = 30) {
 export function useGroups() {
   return useQuery({
     queryKey: queryKeys.groups,
-    queryFn: () => apiGet<Principal[]>('/groups'),
+    // The backend serialises identity.Principal with `kind`; normalise it to
+    // the frontend Principal shape.
+    queryFn: async () => {
+      const raw = await apiGet<{ id: string; name: string; kind: string; enabled: boolean }[]>(
+        '/groups',
+      )
+      return raw.map(
+        (group): Principal => ({ id: group.id, name: group.name, type: 'group' }),
+      )
+    },
     throwOnError: false,
   })
 }
@@ -1310,11 +1319,16 @@ export function useDeleteUser() {
   })
 }
 
-export function useFileSearch(query: string) {
+export function useFileSearch(shareId: string | null, query: string) {
   return useQuery({
-    queryKey: [...queryKeys.files(null, ''), 'search', query],
-    queryFn: () => apiGet<FileEntry[]>(`/files/search?q=${encodeURIComponent(query)}`),
-    enabled: query.trim().length >= 2,
+    queryKey: [...queryKeys.files(shareId, ''), 'search', query],
+    queryFn: async () => {
+      const value = await apiGet<{ shareId: string; entries: FileEntry[] }>(
+        `/files/search?share=${encodeURIComponent(shareId ?? '')}&q=${encodeURIComponent(query)}`,
+      )
+      return value.entries
+    },
+    enabled: Boolean(shareId) && query.trim().length >= 2,
     throwOnError: false,
   })
 }
@@ -1327,7 +1341,8 @@ export interface Checkpoint {
 
 export function useBeginCheckpoint() {
   return useMutation({
-    mutationFn: () => apiPost<Checkpoint>('/network/checkpoints', { timeoutSeconds: 120 }),
+    mutationFn: () =>
+      apiPost<Checkpoint>('/network/checkpoints', { reauthenticated: true, timeoutSeconds: 120 }),
     onSuccess: () => toast.success('Network checkpoint opened'),
   })
 }

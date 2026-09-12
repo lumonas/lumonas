@@ -28,7 +28,7 @@ export function ProtectionConfigCard() {
   if (config && config !== syncedConfig) {
     setSyncedConfig(config)
     setParity(config.parityDiskIds[0] ?? '')
-    setDataDisks(new Set(config.dataDiskIds))
+    setDataDisks(new Set(config.dataDiskIds ?? []))
   }
 
   if (!config) return null

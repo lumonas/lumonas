@@ -247,7 +247,7 @@ export function FilesPage() {
       <PageHeader
         title="Files"
         description="Administrative file management inside your shares — large transfers run as background jobs."
-        actions={<FileSearchDialog />}
+        actions={<FileSearchDialog shareId={shareId} />}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">

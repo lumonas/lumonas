@@ -225,6 +225,9 @@ func (s *apiServer) saveNotificationRule(w http.ResponseWriter, r *http.Request)
 	if len(rule.Routes) == 0 {
 		rule.Routes = []string{"web"}
 	}
+	// Creation always starts enabled — bool zero-value would otherwise
+	// create silently inactive rules; disable via PATCH after creation.
+	rule.Enabled = true
 	if strings.TrimSpace(rule.Name) == "" || strings.TrimSpace(rule.Condition) == "" {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "rule name and condition are required"})
 		return

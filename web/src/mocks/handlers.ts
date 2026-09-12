@@ -257,6 +257,47 @@ export const handlers = [
 
   http.get(`${BASE}/storage/protection`, () => HttpResponse.json(protection)),
 
+  http.get(`${BASE}/storage/safety`, () =>
+    HttpResponse.json({ state: 'locked', unlockedUntil: null }),
+  ),
+
+  http.post(`${BASE}/storage/safety/unlock`, () =>
+    HttpResponse.json({ state: 'unlocked', unlockedUntil: new Date(Date.now() + 15 * 60_000).toISOString() }),
+  ),
+
+  http.post(`${BASE}/storage/operations/plan`, async ({ request }) => {
+    const body = (await request.json()) as {
+      action?: string
+      diskId?: string
+      requestedState?: Record<string, unknown>
+    }
+    const disk = body.diskId ? findDisk(body.diskId) : undefined
+    if (!disk || !body.action) return new HttpResponse(null, { status: 422 })
+    return HttpResponse.json(
+      {
+        operationId: `op-${Date.now()}`,
+        action: body.action,
+        target: { diskId: disk.id, wwn: disk.wwn, serial: disk.serial, model: disk.model, sizeBytes: disk.sizeBytes },
+        requestedState: body.requestedState ?? {},
+        dependencySnapshot: [],
+        configGeneration: 1,
+        expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
+        planHash: `mock-${Math.random().toString(16).slice(2)}`,
+        status: 'planned',
+      },
+      { status: 201 },
+    )
+  }),
+
+  http.post(`${BASE}/storage/operations/:id/confirm`, async ({ request }) => {
+    const body = (await request.json()) as { planHash?: string; storageSafetyUnlocked?: boolean }
+    if (!body.planHash) return HttpResponse.json({ error: 'plan hash mismatch' }, { status: 409 })
+    if (!body.storageSafetyUnlocked) {
+      return HttpResponse.json({ error: 'reauthentication and the storage safety unlock are required' }, { status: 423 })
+    }
+    return HttpResponse.json({ ok: true })
+  }),
+
   http.get(`${BASE}/jobs`, () => HttpResponse.json(jobs)),
 
   http.post(`${BASE}/jobs`, async ({ request }) => {
@@ -1055,5 +1096,5 @@ export const handlers = [
       recovery: { autoConfigBackup: boolean; destination: string; keyAcknowledged: boolean }
     }
     return HttpResponse.json(completeOnboarding(body))
-  }),
+  })
 ]
