@@ -453,6 +453,12 @@ func validateExpectedDisk(actual model.Disk, expected expectedDisk) error {
 	if actual.PoolID != "" {
 		return fmt.Errorf("pool disk %q is already assigned to pool %q", expected.ID, actual.PoolID)
 	}
+	if actual.Health == model.Critical {
+		return fmt.Errorf("pool disk %q is critically unhealthy", expected.ID)
+	}
+	if actual.Filesystem != "" && actual.Filesystem != "ext4" && actual.Filesystem != "xfs" {
+		return fmt.Errorf("pool disk %q uses unsupported filesystem %q", expected.ID, actual.Filesystem)
+	}
 	return nil
 }
 
@@ -527,7 +533,7 @@ func requestedChanges(values map[string]any) (map[string]string, error) {
 
 func allowedNetworkKey(value string) bool {
 	switch value {
-	case "ipv4.method", "ipv4.addresses", "ipv4.gateway", "ipv4.dns", "ipv4.dns-search", "ipv6.method", "ipv6.addresses", "ipv6.gateway", "ipv6.dns", "connection.autoconnect", "connection.metered", "802-3-ethernet.mtu":
+	case "ipv4.method", "ipv4.addresses", "ipv4.gateway", "ipv4.dns", "ipv4.dns-search", "ipv4.route-metric", "ipv4.routes", "ipv6.method", "ipv6.addresses", "ipv6.gateway", "ipv6.dns", "ipv6.dns-search", "ipv6.route-metric", "ipv6.routes", "connection.autoconnect", "connection.metered", "802-3-ethernet.mtu":
 		return true
 	default:
 		return false

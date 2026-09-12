@@ -131,6 +131,14 @@ func TestExecutePoolMountRevalidatesEveryDisk(t *testing.T) {
 	}
 }
 
+func TestExecutePoolMountRejectsNewCriticalDisk(t *testing.T) {
+	disk := model.Disk{ID: "wwn:a", WWN: "a", SizeBytes: 100, Health: model.Critical}
+	result := execute(request{Operation: "pool.mount", PlanHash: "pool-1", ExpectedDisks: []expectedDisk{{ID: "wwn:a", WWN: "a", SizeBytes: 100}}, RequestedState: map[string]any{"mountPath": "/srv/pools/media", "branches": []any{"/srv/disks/wwn_a"}}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(string, ...string) ([]byte, error) { return nil, nil })
+	if result.OK || !strings.Contains(result.Error, "critically unhealthy") {
+		t.Fatalf("expected critical disk rejection: %#v", result)
+	}
+}
+
 func TestNetworkCheckpointRejectsUnapprovedSetting(t *testing.T) {
 	_, err := requestedChanges(map[string]any{"changes": map[string]any{"connection.secondaries": "bad"}})
 	if err == nil || !strings.Contains(err.Error(), "not allow-listed") {
