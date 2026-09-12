@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/lumonas/lumonas/internal/identity"
+	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/recovery"
 	"github.com/lumonas/lumonas/internal/shares"
 	"github.com/lumonas/lumonas/internal/storage"
@@ -125,6 +126,12 @@ func buildFixtureDatabase() ([]byte, error) {
 		return nil, fmt.Errorf("unexpected fixture generation %d", generation)
 	}
 	if err := database.CommitGeneration(generation); err != nil {
+		return nil, err
+	}
+	if _, err := database.UpsertNetworkConnection(network.Connection{
+		ID: "lan", UUID: "11111111-1111-1111-1111-111111111111", Name: "LAN", Interface: "eth0", Enabled: true,
+		Type: "ethernet", IPv4: network.IPConfig{Method: "auto"}, IPv6: network.IPConfig{Method: "disabled"},
+	}); err != nil {
 		return nil, err
 	}
 	dataOne := storage.DiskBranchPath("serial:DATA1")

@@ -53,6 +53,13 @@ func TestFixtureDatabaseContainsRecoverableNASState(t *testing.T) {
 	if pool.TargetID != "media" || pool.Source == "" {
 		t.Fatalf("expected restored mergerfs pool, got %#v", pool)
 	}
+	connections, err := database.ListNetworkConnections()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(connections) != 1 || connections[0].ID != "lan" || connections[0].Interface != "eth0" {
+		t.Fatalf("expected restored LAN connection mapping, got %#v", connections)
+	}
 }
 
 func TestFixtureBundlePassesFullRecoveryPlan(t *testing.T) {

@@ -121,4 +121,6 @@ grep -F 'operator' "$TARGET_MOUNT/restored-principals.json" >/dev/null
 grep -F 'share-media' "$TARGET_MOUNT/restored-shares.json" >/dev/null
 grep -F 'fuse.mergerfs' "$TARGET_MOUNT/restored-mounts.json" >/dev/null
 grep -F 'serial_DATA1' "$TARGET_MOUNT/restored-mounts.json" >/dev/null
-echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, users/shares/mounts/Compose/appdata/SnapRAID restored, API ready)"
+grep -F '"id":"lan"' "$TARGET_MOUNT/restored-network.json" >/dev/null
+grep -F '"interface":"eth0"' "$TARGET_MOUNT/restored-network.json" >/dev/null
+echo "QEMU recovery smoke test passed (offline ISO, blank replacement disk, users/shares/network/mounts/Compose/appdata/SnapRAID restored, API ready)"

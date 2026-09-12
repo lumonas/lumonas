@@ -135,7 +135,8 @@ identity metadata, encrypted secrets, and the recovery result after shutdown.
 The hook also starts the backend against the restored filesystem and checks the
 principals and shares API before powering off, so API readiness is not supplied
 only by the live ISO runtime. It also queries the restored storage-mounts API and
-checks the mergerfs pool plus stable disk branch identities.
+network-connections API, and storage-mounts API; these checks cover the LAN
+mapping, mergerfs pool, and stable disk branch identities.
 
 ## M. Incomplete Docker backup
 
