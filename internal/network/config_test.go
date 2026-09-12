@@ -7,6 +7,10 @@ func TestConnectionValidationRejectsUnsafeValues(t *testing.T) {
 	if err := valid.Validate(); err != nil {
 		t.Fatal(err)
 	}
+	changes, err := valid.NetworkManagerChanges()
+	if err != nil || changes["ipv4.method"] != "auto" || changes["ipv6.method"] != "disabled" {
+		t.Fatalf("unexpected NetworkManager changes: %#v err=%v", changes, err)
+	}
 	invalid := valid
 	invalid.Interface = "../../etc"
 	if err := invalid.Validate(); err == nil {
