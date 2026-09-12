@@ -62,12 +62,6 @@ func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	if input.Section == "power" {
-		if err := s.applyWOLSettings(r, input.Patch); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
-			return
-		}
-	}
 	value, err := s.loadSettings()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -80,6 +74,20 @@ func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	mergeSettings(section, input.Patch)
 	value[input.Section] = section
+	if input.Section == "power" {
+		if err := validateScheduledPowerSettings(section); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		if err := s.applyWOLSettings(r, input.Patch); err != nil {
+			status := http.StatusServiceUnavailable
+			if _, ok := err.(*settingsError); ok {
+				status = http.StatusUnprocessableEntity
+			}
+			writeJSON(w, status, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "encode settings failed"})
@@ -92,6 +100,27 @@ func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 	s.recordRequestAudit(r, actor, "settings.update", input.Section, map[string]any{"keys": mapKeys(input.Patch)})
 	s.advanceGeneration("settings." + input.Section)
 	writeJSON(w, http.StatusOK, value)
+}
+
+func validateScheduledPowerSettings(section map[string]any) error {
+	raw, ok := section["schedule"].(map[string]any)
+	if !ok {
+		return &settingsError{"power.schedule must be an object"}
+	}
+	value := power.Schedule{Action: "shutdown", Time: "01:00", Days: "Daily"}
+	if enabled, ok := raw["enabled"].(bool); ok {
+		value.Enabled = enabled
+	}
+	if action, ok := raw["action"].(string); ok {
+		value.Action = action
+	}
+	if clock, ok := raw["time"].(string); ok {
+		value.Time = clock
+	}
+	if days, ok := raw["days"].(string); ok {
+		value.Days = days
+	}
+	return value.Validate()
 }
 
 // applyWOLSettings turns the settings-panel toggle into a typed privileged

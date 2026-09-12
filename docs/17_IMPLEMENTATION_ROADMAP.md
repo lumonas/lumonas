@@ -25,6 +25,8 @@ Deliver:
 - QEMU smoke validation of the compiled frontend served by `lumonas-web`.
 - Wake-on-LAN capability discovery and typed `ethtool` mutation through the
   network privileged worker.
+- validated scheduled power execution through the existing ordered shutdown
+  and privileged broker path.
 
 Exit criteria:
 

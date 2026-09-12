@@ -384,3 +384,11 @@ Run the network WOL tests and settings API test.
 Pass if `ethtool` capability discovery distinguishes supported and enabled
 states, settings changes use the typed `network.wol.set` broker operation, and
 unsafe interface names are rejected before command execution.
+
+## AP. Scheduled power safety
+
+Run the power schedule and settings API tests.
+
+Pass if invalid actions, clock formats, and day selections are rejected, a due
+schedule is matched only once per local minute, and execution uses the typed
+`power.shutdown` broker request with an operation ID.

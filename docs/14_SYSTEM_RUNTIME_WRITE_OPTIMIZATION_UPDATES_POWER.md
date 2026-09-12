@@ -132,6 +132,11 @@ UI support:
 - reboot;
 - scheduled shutdown/reboot;
 - Wake-on-LAN config;
+
+Scheduled power settings are validated as an explicit action, `HH:MM` clock,
+and daily/weekday/weekend or named-day selection. The daemon records the last
+attempted minute before sending the typed privileged shutdown request, so a
+slow or failing broker cannot be triggered repeatedly by scheduler ticks.
 - maintenance mode.
 
 Before clean shutdown:

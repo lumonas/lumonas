@@ -63,6 +63,7 @@ type apiServer struct {
 	csrfMu               sync.Mutex
 	rateMu               sync.Mutex
 	rateAttempts         map[string][]time.Time
+	clock                func() time.Time
 }
 
 var version = "0.1.0-dev"

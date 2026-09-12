@@ -56,6 +56,15 @@ func TestSettingsAPIAppliesWOLThroughPrivilegedBroker(t *testing.T) {
 	}
 }
 
+func TestSettingsAPIRejectsInvalidPowerSchedule(t *testing.T) {
+	server := testServer(t)
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPatch, "/api/v1/settings", strings.NewReader(`{"section":"power","patch":{"schedule":{"enabled":true,"action":"poweroff","time":"03:15","days":"daily"}}}`)))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected invalid power schedule rejection, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestUpdateCheckQueuesAndCompletesJob(t *testing.T) {
 	server := testServer(t)
 	response := httptest.NewRecorder()

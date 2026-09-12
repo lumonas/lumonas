@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"path"
@@ -9,6 +10,9 @@ import (
 
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/monitoring"
+	"github.com/lumonas/lumonas/internal/power"
+	"github.com/lumonas/lumonas/internal/privileged"
+	"github.com/lumonas/lumonas/internal/store"
 )
 
 func (s *apiServer) schedules(w http.ResponseWriter, r *http.Request) {
@@ -90,9 +94,65 @@ func (s *apiServer) scheduleLoop() {
 	for range ticker.C {
 		tick++
 		s.runDueSchedules()
+		s.runScheduledPower()
 		s.evaluatePeriodicAlerts(tick)
 		s.cleanupExpiredCSRFTokens()
 	}
+}
+
+func (s *apiServer) runScheduledPower() {
+	now := time.Now()
+	if s.clock != nil {
+		now = s.clock()
+	}
+	settings, err := s.loadSettings()
+	if err != nil {
+		return
+	}
+	powerSettings, ok := settings["power"].(map[string]any)
+	if !ok {
+		return
+	}
+	if maintenance, _ := powerSettings["maintenanceMode"].(bool); maintenance {
+		return
+	}
+	raw, ok := powerSettings["schedule"].(map[string]any)
+	if !ok {
+		return
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return
+	}
+	var schedule power.Schedule
+	if json.Unmarshal(encoded, &schedule) != nil || !schedule.Due(now) {
+		return
+	}
+	minute := now.In(time.Local).Format("2006-01-02T15:04")
+	if previous, ok := s.store.Meta("power_schedule_last_attempt"); ok && previous == minute {
+		return
+	}
+	// Record the attempt before invoking the broker so a slow or failing
+	// shutdown cannot be duplicated by the next scheduler tick.
+	if err := s.store.SetMeta("power_schedule_last_attempt", minute); err != nil {
+		return
+	}
+	operationID := newID("scheduled-power")
+	resultErr := s.brokerExecute(context.Background(), privileged.Request{
+		Operation:      "power.shutdown",
+		CorrelationID:  "schedule-power-" + minute,
+		OperationID:    operationID,
+		PlanHash:       operationID,
+		RequestedState: map[string]any{"action": schedule.Action},
+		ExpiresAt:      now.UTC().Add(2 * time.Minute),
+		Confirmed:      true,
+	})
+	if resultErr != nil {
+		s.publish("power.schedule.failed", "warning", nil, map[string]any{"operationId": operationID, "action": schedule.Action, "error": resultErr.Error()})
+		return
+	}
+	_ = s.store.SaveAudit(store.AuditEntry{Actor: "system", Action: "power.schedule", Outcome: "committed", Generation: s.currentGeneration(), ResourceType: "power", ResourceID: operationID, Metadata: map[string]any{"action": schedule.Action, "minute": minute, "correlationId": "schedule-power-" + minute}})
+	s.publish("power.schedule.started", "critical", nil, map[string]any{"operationId": operationID, "action": schedule.Action})
 }
 
 func (s *apiServer) runDueSchedules() {
@@ -195,6 +255,18 @@ func (s *apiServer) scheduleLaunchFailed(schedule monitoring.Schedule, err error
 		s.log.Warn("scheduled job launch failed", "schedule", schedule.ID, "error", err)
 	}
 	s.publish("schedule.failed", "warning", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "error": err.Error()})
+}
+
+func (s *apiServer) recordSystemAudit(action, id string, metadata map[string]any) {
+	_ = s.store.SaveAudit(store.AuditEntry{
+		Actor:        "system",
+		Action:       action,
+		Outcome:      "committed",
+		ResourceType: "system",
+		ResourceID:   id,
+		Generation:   s.currentGeneration(),
+		Metadata:     metadata,
+	})
 }
 
 func scheduleID(endpoint string) string {

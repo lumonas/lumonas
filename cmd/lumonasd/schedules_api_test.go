@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/privileged"
 )
 
 func TestSchedulesEndpointsRoundTrip(t *testing.T) {
@@ -117,5 +119,25 @@ func TestRunDueSchedulesSkipsWhenJobActive(t *testing.T) {
 	}
 	if rearmed.LastStartedAt != nil {
 		t.Fatal("expected skipped schedule to not record a start")
+	}
+}
+
+func TestScheduledPowerRunsOnlyOncePerMinute(t *testing.T) {
+	server := testServer(t)
+	fixed := time.Date(2026, time.January, 5, 3, 15, 0, 0, time.Local)
+	server.clock = func() time.Time { return fixed }
+	var requests []privileged.Request
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		requests = append(requests, request)
+		return nil
+	}
+	settings := `{"updates":{},"runtime":{},"power":{"maintenanceMode":false,"wol":[],"ups":[],"schedule":{"enabled":true,"action":"shutdown","time":"03:15","days":"Daily"}},"security":{}}`
+	if err := server.store.SetMeta(settingsMetaKey, settings); err != nil {
+		t.Fatal(err)
+	}
+	server.runScheduledPower()
+	server.runScheduledPower()
+	if len(requests) != 1 || requests[0].Operation != "power.shutdown" || requests[0].OperationID == "" {
+		t.Fatalf("unexpected scheduled power requests: %#v", requests)
 	}
 }
