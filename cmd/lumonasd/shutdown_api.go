@@ -47,7 +47,7 @@ func (s *apiServer) updateUPSPolicy(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "ups.policy.update", "ups", map[string]any{"enabled": input.Enabled, "minimumRuntimeSec": input.MinimumRuntimeSec, "minimumCharge": input.MinimumCharge})
+	s.recordRequestAudit(r, actor, "ups.policy.update", "ups", map[string]any{"enabled": input.Enabled, "minimumRuntimeSec": input.MinimumRuntimeSec, "minimumCharge": input.MinimumCharge})
 	s.advanceGeneration("ups.policy.update")
 	writeJSON(w, http.StatusOK, upsPolicyJSON(power.ShutdownPolicy{Enabled: input.Enabled, MinimumRuntimeSec: input.MinimumRuntimeSec, MinimumCharge: input.MinimumCharge}))
 }
@@ -153,7 +153,7 @@ func (s *apiServer) shutdownPower(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
 		return
 	}
-	s.recordIdentityAudit(actor, "power.shutdown", operationID, map[string]any{"action": input.Action})
+	s.recordRequestAudit(r, actor, "power.shutdown", operationID, map[string]any{"operationId": operationID, "action": input.Action})
 	s.publish("power.shutdown", "critical", nil, map[string]any{"operationId": operationID, "action": input.Action})
 	writeJSON(w, http.StatusAccepted, map[string]any{"operationId": operationID, "action": input.Action})
 }

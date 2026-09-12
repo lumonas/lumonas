@@ -186,8 +186,9 @@ if `systemd-analyze` is unavailable or any unit is invalid.
 HTTP requests receive a generated `X-Request-ID` and carry the same
 correlation ID in context. API-created jobs persist it, and privileged calls
 inherit it; daemon-created jobs use their stable job ID as the fallback
-correlation key. Audit-record fields are still a separate follow-up because
-existing audit callers need a compatibility-preserving migration.
+correlation key. Events and audit rows persist first-class correlation,
+operation, plan-hash, actor, resource, and generation fields while preserving
+the original metadata payload for compatibility.
 
 ## Release artifacts
 

@@ -47,7 +47,7 @@ func (s *apiServer) saveNotificationChannel(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "notification.channel.save", value.ID, map[string]any{"type": value.Type})
+	s.recordRequestAudit(r, actor, "notification.channel.save", value.ID, map[string]any{"type": value.Type})
 	s.advanceGeneration("notification.channel.save")
 	writeJSON(w, http.StatusOK, value)
 }
@@ -94,7 +94,7 @@ func (s *apiServer) updateNotificationChannel(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "notification.channel.update", id, map[string]any{"type": value.Type})
+	s.recordRequestAudit(r, actor, "notification.channel.update", id, map[string]any{"type": value.Type})
 	s.advanceGeneration("notification.channel.update")
 	writeJSON(w, http.StatusOK, value)
 }
@@ -112,7 +112,7 @@ func (s *apiServer) deleteNotificationChannel(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "notification.channel.delete", id, nil)
+	s.recordRequestAudit(r, actor, "notification.channel.delete", id, nil)
 	s.advanceGeneration("notification.channel.delete")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -145,11 +145,11 @@ func (s *apiServer) testNotificationChannel(w http.ResponseWriter, r *http.Reque
 	if err := notify.SendWithRetry(ctx, 3, func(ctx context.Context) error {
 		return notify.SendChannel(ctx, s.notificationClient, channel, credentials, message)
 	}); err != nil {
-		s.recordIdentityAudit(actor, "notification.channel.test", id, map[string]any{"outcome": "failed"})
+		s.recordRequestAudit(r, actor, "notification.channel.test", id, map[string]any{"outcome": "failed"})
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "notification test delivery failed"})
 		return
 	}
-	s.recordIdentityAudit(actor, "notification.channel.test", id, map[string]any{"outcome": "sent"})
+	s.recordRequestAudit(r, actor, "notification.channel.test", id, map[string]any{"outcome": "sent"})
 	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "channelId": id})
 }
 
@@ -233,7 +233,7 @@ func (s *apiServer) saveNotificationRule(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "notification.rule.save", rule.ID, nil)
+	s.recordRequestAudit(r, actor, "notification.rule.save", rule.ID, nil)
 	s.advanceGeneration("notification.rule.save")
 	writeJSON(w, http.StatusOK, rule)
 }

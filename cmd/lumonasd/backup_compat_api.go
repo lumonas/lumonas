@@ -174,7 +174,7 @@ func (s *apiServer) runBackupJob(w http.ResponseWriter, r *http.Request, id stri
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "backup.run.request", run.ID, map[string]any{"destinationId": id})
+	s.recordRequestAudit(r, actor, "backup.run.request", run.ID, map[string]any{"operationId": run.ID, "destinationId": id})
 	go s.executeBackup(run)
 	writeJSON(w, http.StatusAccepted, map[string]any{"id": run.ID, "type": "backup", "title": "Configuration backup", "resourceId": id, "state": "queued", "progress": 0, "createdAt": run.StartedAt})
 }

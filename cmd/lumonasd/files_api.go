@@ -133,7 +133,7 @@ func (s *apiServer) makeDirectory(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	s.recordIdentityAudit(actor, "file.mkdir", share.ID, map[string]any{"path": input.Path, "name": input.Name})
+	s.recordRequestAudit(r, actor, "file.mkdir", share.ID, map[string]any{"path": input.Path, "name": input.Name})
 	s.publish("file.changed", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"operation": "mkdir", "path": input.Path, "name": input.Name})
 	writeJSON(w, http.StatusCreated, map[string]bool{"ok": true})
 }
@@ -162,7 +162,7 @@ func (s *apiServer) renameFile(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	s.recordIdentityAudit(actor, "file.rename", share.ID, map[string]any{"path": input.Path, "oldName": input.OldName, "newName": input.NewName})
+	s.recordRequestAudit(r, actor, "file.rename", share.ID, map[string]any{"path": input.Path, "oldName": input.OldName, "newName": input.NewName})
 	s.publish("file.changed", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"operation": "rename", "path": input.Path, "oldName": input.OldName, "newName": input.NewName})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
@@ -203,7 +203,7 @@ func (s *apiServer) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		}
 		return map[string]any{"deleted": deleted}, err
 	})
-	s.recordIdentityAudit(actor, "file.delete.queued", share.ID, map[string]any{"jobId": job.ID, "path": input.Path, "count": len(input.Names)})
+	s.recordRequestAudit(r, actor, "file.delete.queued", share.ID, map[string]any{"jobId": job.ID, "path": input.Path, "count": len(input.Names)})
 	s.rememberFileJob("file.delete", idempotencyKey, job.ID)
 	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "deleted": 0})
 }
@@ -268,7 +268,7 @@ func (s *apiServer) transferFiles(w http.ResponseWriter, r *http.Request) {
 		count, err := fileops.Transfer(taskInput)
 		return map[string]any{"transferred": count, "strategy": strategy}, err
 	})
-	s.recordIdentityAudit(actor, "file.transfer.queued", target.ID, map[string]any{"jobId": job.ID, "operation": input.Operation, "strategy": strategy, "count": len(input.Names)})
+	s.recordRequestAudit(r, actor, "file.transfer.queued", target.ID, map[string]any{"jobId": job.ID, "operation": input.Operation, "strategy": strategy, "count": len(input.Names)})
 	s.rememberFileJob("file.transfer", idempotencyKey, job.ID)
 	writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID, "transferred": 0, "strategy": strategy})
 }
@@ -314,7 +314,7 @@ func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		job := s.queueFileJob("upload file", share.ID, func() (map[string]any, error) { return map[string]any{"name": name, "sizeBytes": input.SizeBytes}, nil })
-		s.recordIdentityAudit(actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
+		s.recordRequestAudit(r, actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
 		s.rememberFileJob("file.upload", idempotencyKey, job.ID)
 		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "name": name})
 		return
@@ -338,7 +338,7 @@ func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 	job := s.queueFileJob("upload file", share.ID, func() (map[string]any, error) {
 		return map[string]any{"name": name, "sizeBytes": input.SizeBytes}, nil
 	})
-	s.recordIdentityAudit(actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
+	s.recordRequestAudit(r, actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
 	s.rememberFileJob("file.upload", idempotencyKey, job.ID)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "name": name})
 }
@@ -386,7 +386,7 @@ func (s *apiServer) restoreRecycleBin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recycle-bin entry not found"})
 		return
 	}
-	s.recordIdentityAudit(actor, "file.recycle.restore", share.ID, map[string]any{"id": input.ID})
+	s.recordRequestAudit(r, actor, "file.recycle.restore", share.ID, map[string]any{"id": input.ID})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -417,7 +417,7 @@ func (s *apiServer) purgeRecycleBin(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "recycle-bin entry not found"})
 			return
 		}
-		s.recordIdentityAudit(actor, "file.recycle.purge", share.ID, map[string]any{"id": input.ID})
+		s.recordRequestAudit(r, actor, "file.recycle.purge", share.ID, map[string]any{"id": input.ID})
 		writeJSON(w, http.StatusOK, map[string]int{"purged": 1})
 		return
 	}
@@ -431,7 +431,7 @@ func (s *apiServer) purgeRecycleBin(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	s.recordIdentityAudit(actor, "file.recycle.purge", share.ID, map[string]any{"purged": purged})
+	s.recordRequestAudit(r, actor, "file.recycle.purge", share.ID, map[string]any{"purged": purged})
 	writeJSON(w, http.StatusOK, map[string]int{"purged": purged})
 }
 

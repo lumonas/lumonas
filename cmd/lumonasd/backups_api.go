@@ -81,7 +81,7 @@ func (s *apiServer) saveBackupDestination(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "backup.destination.save", value.ID, map[string]any{"type": value.Type})
+	s.recordRequestAudit(r, actor, "backup.destination.save", value.ID, map[string]any{"type": value.Type})
 	s.advanceGeneration("backup.destination.save")
 	writeJSON(w, http.StatusOK, value)
 }
@@ -99,7 +99,7 @@ func (s *apiServer) deleteBackupDestination(w http.ResponseWriter, r *http.Reque
 		}
 		return
 	}
-	s.recordIdentityAudit(actor, "backup.destination.delete", id, nil)
+	s.recordRequestAudit(r, actor, "backup.destination.delete", id, nil)
 	s.advanceGeneration("backup.destination.delete")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -222,7 +222,7 @@ func (s *apiServer) updateBackupSchedule(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "backup.schedule.update", value.ID, map[string]any{"enabled": value.Enabled, "intervalSeconds": value.IntervalSeconds})
+	s.recordRequestAudit(r, actor, "backup.schedule.update", value.ID, map[string]any{"enabled": value.Enabled, "intervalSeconds": value.IntervalSeconds})
 	s.advanceGeneration("backup.schedule.update")
 	writeJSON(w, http.StatusOK, value)
 }
@@ -262,7 +262,7 @@ func (s *apiServer) runBackupNow(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "backup.run.request", run.ID, nil)
+	s.recordRequestAudit(r, actor, "backup.run.request", run.ID, nil)
 	go s.executeBackup(run)
 	writeJSON(w, http.StatusAccepted, run)
 }

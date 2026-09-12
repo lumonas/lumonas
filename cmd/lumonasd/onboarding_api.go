@@ -145,7 +145,7 @@ func (s *apiServer) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	_ = s.store.SetMeta("onboarding_protection", string(protection))
 	recovery, _ := json.Marshal(input.Recovery)
 	_ = s.store.SetMeta("onboarding_recovery", string(recovery))
-	s.recordIdentityAudit(actor, "onboarding.complete", "setup", map[string]any{"roles": len(input.Roles), "autoConfigBackup": input.Recovery.AutoConfigBackup})
+	s.recordRequestAudit(r, actor, "onboarding.complete", "setup", map[string]any{"roles": len(input.Roles), "autoConfigBackup": input.Recovery.AutoConfigBackup})
 	protectionConfigured := false
 	if parityID, dataIDs := onboardingProtectionDisks(input.Roles); parityID != "" && len(dataIDs) > 0 {
 		protectionConfigured = s.applySnapraidConfiguration(parityID, dataIDs)
@@ -266,7 +266,7 @@ func (s *apiServer) createRecoveryKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recovery key setup failed: " + err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "recovery.key.export", "recovery", map[string]any{"length": len(key)})
+	s.recordRequestAudit(r, actor, "recovery.key.export", "recovery", map[string]any{"length": len(key)})
 	writeJSON(w, http.StatusOK, map[string]any{"key": key, "generated": true})
 }
 

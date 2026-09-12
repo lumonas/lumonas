@@ -1452,7 +1452,7 @@ func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
 		return
 	}
-	s.recordIdentityAudit(actor, "power.action", operationID, map[string]any{"action": input.Action})
+	s.recordRequestAudit(r, actor, "power.action", operationID, map[string]any{"operationId": operationID, "action": input.Action})
 	s.publish("power.action", "critical", nil, map[string]any{"operationId": operationID, "action": input.Action})
 	writeJSON(w, http.StatusAccepted, result)
 }
@@ -1716,7 +1716,7 @@ func (s *apiServer) notificationTest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	_ = s.store.SaveAudit(store.AuditEntry{Actor: actor, Action: "notification.test", Outcome: "sent", Metadata: map[string]any{"severity": input.Severity}})
+	_ = s.store.SaveAudit(store.AuditEntry{Actor: actor, Action: "notification.test", Outcome: "sent", CorrelationID: requestCorrelationID(r), Generation: s.currentGeneration(), Metadata: map[string]any{"severity": input.Severity}})
 	writeJSON(w, http.StatusNoContent, nil)
 }
 
@@ -2279,7 +2279,13 @@ func (s *apiServer) writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, e
 }
 
 func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, data map[string]any) {
-	event := model.Event{SchemaVersion: events.SchemaVersion, ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Resource: resource, Data: data}
+	event := model.Event{SchemaVersion: events.SchemaVersion, ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Actor: "system", Generation: s.currentGeneration(), Resource: resource, Data: data}
+	event.CorrelationID = eventDataString(data, "correlationId")
+	event.OperationID = eventDataString(data, "operationId")
+	if event.OperationID == "" {
+		event.OperationID = eventDataString(data, "jobId")
+	}
+	event.PlanHash = eventDataString(data, "planHash")
 	if err := s.store.SaveEvent(event); err != nil {
 		if s.log != nil {
 			s.log.Warn("persist event failed", "error", err)
@@ -2291,7 +2297,7 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 		}
 	}
 	if auditableEvent(kind) {
-		entry := store.AuditEntry{Actor: "system", Action: kind, Outcome: "recorded", Metadata: data}
+		entry := store.AuditEntry{Actor: event.Actor, Action: kind, Outcome: "recorded", CorrelationID: event.CorrelationID, OperationID: event.OperationID, PlanHash: event.PlanHash, Generation: event.Generation, Metadata: data}
 		if resource != nil {
 			entry.ResourceType, entry.ResourceID = resource.Type, resource.ID
 		}
@@ -2311,6 +2317,14 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 	}
 	s.hub.Publish(event)
 	s.evaluateEventAlert(kind, data)
+}
+
+func eventDataString(data map[string]any, key string) string {
+	if data == nil {
+		return ""
+	}
+	value, _ := data[key].(string)
+	return value
 }
 
 func (s *apiServer) sendConfiguredNotifications(eventType, severity string, message notify.Message) {

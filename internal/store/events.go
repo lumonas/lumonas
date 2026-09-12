@@ -2,14 +2,21 @@ package store
 
 import "time"
 
-const eventSchemaVersion = 4
+const eventSchemaVersion = 6
 
 func (s *Store) ensureEventSchema() error {
 	rows, err := s.db.Query(`PRAGMA table_info(events)`)
 	if err != nil {
 		return err
 	}
-	hasSchemaVersion := false
+	columns := map[string]string{
+		"schema_version": "INTEGER NOT NULL DEFAULT 1",
+		"correlation_id": "TEXT",
+		"operation_id":   "TEXT",
+		"plan_hash":      "TEXT",
+		"actor":          "TEXT",
+		"generation":     "INTEGER NOT NULL DEFAULT 0",
+	}
 	for rows.Next() {
 		var cid, notNull, primaryKey int
 		var name, dataType string
@@ -18,17 +25,15 @@ func (s *Store) ensureEventSchema() error {
 			rows.Close()
 			return err
 		}
-		if name == "schema_version" {
-			hasSchemaVersion = true
-		}
+		delete(columns, name)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return err
 	}
 	rows.Close()
-	if !hasSchemaVersion {
-		if _, err := s.db.Exec(`ALTER TABLE events ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1`); err != nil {
+	for name, definition := range columns {
+		if _, err := s.db.Exec(`ALTER TABLE events ADD COLUMN ` + name + ` ` + definition); err != nil {
 			return err
 		}
 	}

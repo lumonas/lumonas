@@ -118,6 +118,11 @@ type Event struct {
 	Type          string         `json:"type"`
 	Timestamp     time.Time      `json:"timestamp"`
 	Severity      string         `json:"severity"`
+	CorrelationID string         `json:"correlationId,omitempty"`
+	OperationID   string         `json:"operationId,omitempty"`
+	PlanHash      string         `json:"planHash,omitempty"`
+	Actor         string         `json:"actor,omitempty"`
+	Generation    int64          `json:"generation,omitempty"`
 	Resource      *ResourceRef   `json:"resource,omitempty"`
 	Data          map[string]any `json:"data"`
 }

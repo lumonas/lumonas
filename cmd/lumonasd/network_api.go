@@ -77,7 +77,7 @@ func (s *apiServer) createNetworkConnection(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "network.connection.create", value.ID, map[string]any{"interface": value.Interface})
+	s.recordRequestAudit(r, actor, "network.connection.create", value.ID, map[string]any{"interface": value.Interface})
 	if idempotencyKey != "" {
 		_ = s.store.SetMeta(idempotencyMetaKey("network.connection.create", idempotencyKey), value.ID)
 	}
@@ -118,7 +118,7 @@ func (s *apiServer) updateNetworkConnection(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "network.connection.update", id, map[string]any{"interface": value.Interface})
+	s.recordRequestAudit(r, actor, "network.connection.update", id, map[string]any{"interface": value.Interface})
 	s.advanceGeneration("network.connection.update")
 	s.publish("network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"requiresCheckpoint": true})
 	writeJSON(w, http.StatusOK, value)
@@ -184,7 +184,7 @@ func (s *apiServer) applyNetworkConnection(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "network.connection.apply", id, map[string]any{"operationId": operationID})
+	s.recordRequestAudit(r, actor, "network.connection.apply", id, map[string]any{"operationId": operationID})
 	s.publish("network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
 	writeJSON(w, http.StatusAccepted, result)
 }
@@ -225,7 +225,7 @@ func (s *apiServer) applyWiFiConnection(w http.ResponseWriter, r *http.Request, 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "network.connection.apply", id, map[string]any{"operationId": operationID, "type": "wifi"})
+	s.recordRequestAudit(r, actor, "network.connection.apply", id, map[string]any{"operationId": operationID, "type": "wifi"})
 	s.publish("network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"operationId": operationID, "state": "activating"})
 	writeJSON(w, http.StatusAccepted, result)
 }
@@ -290,7 +290,7 @@ func (s *apiServer) updateNetworkBindings(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "network.binding.update", "bindings", nil)
+	s.recordRequestAudit(r, actor, "network.binding.update", "bindings", nil)
 	s.advanceGeneration("network.binding.update")
 	s.publish("network.binding.updated", "warning", nil, map[string]any{"requiresFirewallRegeneration": true})
 	writeJSON(w, http.StatusOK, values)
@@ -351,7 +351,7 @@ func (s *apiServer) updateNetworkFirewall(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "network.firewall.update", "firewall", nil)
+	s.recordRequestAudit(r, actor, "network.firewall.update", "firewall", nil)
 	s.advanceGeneration("network.firewall.update")
 	s.publish("network.firewall.updated", "warning", nil, nil)
 	writeJSON(w, http.StatusOK, value)

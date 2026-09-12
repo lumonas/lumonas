@@ -195,7 +195,7 @@ func (s *apiServer) createUser(w http.ResponseWriter, r *http.Request) {
 			_ = s.store.SetGroupMembers(group.ID, []string{principal.ID})
 		}
 	}
-	s.recordIdentityAudit(actor, "identity.create", principal.ID, map[string]any{"kind": principal.Kind})
+	s.recordRequestAudit(r, actor, "identity.create", principal.ID, map[string]any{"kind": principal.Kind})
 	s.advanceGeneration("identity.create")
 	writeJSON(w, http.StatusCreated, principal)
 }
@@ -221,7 +221,7 @@ func (s *apiServer) createGroup(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "identity.group.create", principal.ID, nil)
+	s.recordRequestAudit(r, actor, "identity.group.create", principal.ID, nil)
 	s.advanceGeneration("identity.group.create")
 	writeJSON(w, http.StatusCreated, principal)
 }
@@ -255,7 +255,7 @@ func (s *apiServer) updateUser(w http.ResponseWriter, r *http.Request, id string
 			return
 		}
 	}
-	s.recordIdentityAudit(actor, "identity.update", id, map[string]any{"enabled": principal.Enabled, "managementRole": principal.ManagementRole})
+	s.recordRequestAudit(r, actor, "identity.update", id, map[string]any{"enabled": principal.Enabled, "managementRole": principal.ManagementRole})
 	s.advanceGeneration("identity.update")
 	writeJSON(w, http.StatusOK, principal)
 }
@@ -295,7 +295,7 @@ func (s *apiServer) setUserPassword(w http.ResponseWriter, r *http.Request, id s
 			return
 		}
 	}
-	s.recordIdentityAudit(actor, "identity.password.rotate", id, nil)
+	s.recordRequestAudit(r, actor, "identity.password.rotate", id, nil)
 	s.advanceGeneration("identity.password.rotate")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -329,7 +329,7 @@ func (s *apiServer) deletePrincipal(w http.ResponseWriter, r *http.Request, id s
 	if principal.ID != "" && needsOSProvisioning(principal) {
 		s.disableFileIdentityAccounts(principal)
 	}
-	s.recordIdentityAudit(actor, "identity.delete", id, nil)
+	s.recordRequestAudit(r, actor, "identity.delete", id, nil)
 	s.advanceGeneration("identity.delete")
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -354,7 +354,7 @@ func (s *apiServer) setGroupMembers(w http.ResponseWriter, r *http.Request, id s
 		writeJSON(w, statusForIdentityError(err), map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "identity.group.members.update", id, map[string]any{"memberCount": len(input.MemberIDs)})
+	s.recordRequestAudit(r, actor, "identity.group.members.update", id, map[string]any{"memberCount": len(input.MemberIDs)})
 	s.advanceGeneration("identity.group.members.update")
 	members, err := s.store.GroupMembers(id)
 	if err != nil {
@@ -365,7 +365,21 @@ func (s *apiServer) setGroupMembers(w http.ResponseWriter, r *http.Request, id s
 }
 
 func (s *apiServer) recordIdentityAudit(actor, action, id string, metadata map[string]any) {
-	_ = s.store.SaveAudit(store.AuditEntry{Actor: actor, Action: action, Outcome: "committed", ResourceType: "principal", ResourceID: id, Metadata: metadata})
+	_ = s.store.SaveAudit(store.AuditEntry{Actor: actor, Action: action, Outcome: "committed", Generation: s.currentGeneration(), ResourceType: "principal", ResourceID: id, Metadata: metadata})
+}
+
+func (s *apiServer) recordRequestAudit(r *http.Request, actor, action, id string, metadata map[string]any) {
+	if metadata == nil {
+		metadata = make(map[string]any)
+	} else {
+		copy := make(map[string]any, len(metadata)+1)
+		for key, value := range metadata {
+			copy[key] = value
+		}
+		metadata = copy
+	}
+	metadata["correlationId"] = requestCorrelationID(r)
+	s.recordIdentityAudit(actor, action, id, metadata)
 }
 
 func statusForIdentityError(err error) int {

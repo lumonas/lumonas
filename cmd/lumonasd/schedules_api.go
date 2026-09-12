@@ -70,7 +70,7 @@ func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id st
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "schedule.update", schedule.ID, map[string]any{"enabled": schedule.Enabled, "timeOfDay": schedule.TimeOfDay, "weekday": schedule.Weekday})
+	s.recordRequestAudit(r, actor, "schedule.update", schedule.ID, map[string]any{"enabled": schedule.Enabled, "timeOfDay": schedule.TimeOfDay, "weekday": schedule.Weekday})
 	s.advanceGeneration("schedule.update")
 	s.publish("schedule.updated", "info", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "enabled": schedule.Enabled, "timeOfDay": schedule.TimeOfDay, "weekday": schedule.Weekday})
 	saved, err := s.store.JobSchedule(schedule.ID, time.Now())

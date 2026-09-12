@@ -23,14 +23,18 @@ type Store struct {
 }
 
 type AuditEntry struct {
-	ID           string         `json:"id"`
-	Timestamp    time.Time      `json:"timestamp"`
-	Actor        string         `json:"actor"`
-	Action       string         `json:"action"`
-	Outcome      string         `json:"outcome"`
-	ResourceType string         `json:"resourceType,omitempty"`
-	ResourceID   string         `json:"resourceId,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
+	ID            string         `json:"id"`
+	Timestamp     time.Time      `json:"timestamp"`
+	Actor         string         `json:"actor"`
+	Action        string         `json:"action"`
+	Outcome       string         `json:"outcome"`
+	CorrelationID string         `json:"correlationId,omitempty"`
+	OperationID   string         `json:"operationId,omitempty"`
+	PlanHash      string         `json:"planHash,omitempty"`
+	Generation    int64          `json:"generation,omitempty"`
+	ResourceType  string         `json:"resourceType,omitempty"`
+	ResourceID    string         `json:"resourceId,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
 }
 
 type ConfigGeneration struct {
@@ -64,6 +68,10 @@ func Open(path string) (*Store, error) {
 	if err := s.ensureJobSchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate job schema: %w", err)
+	}
+	if err := s.ensureAuditSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate audit schema: %w", err)
 	}
 	if err := s.ensureIdentitySchema(); err != nil {
 		db.Close()
@@ -137,7 +145,8 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY, type TEXT NOT NULL, timestamp TEXT NOT NULL,
   severity TEXT NOT NULL, resource_type TEXT, resource_id TEXT, data_json TEXT NOT NULL,
-  schema_version INTEGER NOT NULL DEFAULT 1
+  schema_version INTEGER NOT NULL DEFAULT 1, correlation_id TEXT,
+  operation_id TEXT, plan_hash TEXT, actor TEXT, generation INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS config_generations (
   generation INTEGER PRIMARY KEY, state TEXT NOT NULL, plan_hash TEXT NOT NULL,
@@ -162,7 +171,8 @@ CREATE TABLE IF NOT EXISTS disk_inventory (
 CREATE TABLE IF NOT EXISTS audit_log (
   id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, actor TEXT NOT NULL,
   action TEXT NOT NULL, outcome TEXT NOT NULL, resource_type TEXT,
-  resource_id TEXT, metadata_json TEXT NOT NULL
+  resource_id TEXT, correlation_id TEXT, operation_id TEXT, plan_hash TEXT,
+  generation INTEGER NOT NULL DEFAULT 0, metadata_json TEXT NOT NULL
 );`)
 	if err != nil {
 		return fmt.Errorf("migrate sqlite: %w", err)
@@ -272,6 +282,7 @@ func (s *Store) CommitGeneration(generation int64) error {
 }
 
 func (s *Store) SaveAudit(entry AuditEntry) error {
+	fillAuditFields(&entry)
 	if entry.ID == "" {
 		entry.ID = newStoreID("audit")
 	}
@@ -282,7 +293,7 @@ func (s *Store) SaveAudit(entry AuditEntry) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`INSERT INTO audit_log(id,timestamp,actor,action,outcome,resource_type,resource_id,metadata_json) VALUES(?,?,?,?,?,?,?,?)`, entry.ID, entry.Timestamp.Format(timeFormat), entry.Actor, entry.Action, entry.Outcome, nullable(entry.ResourceType), nullable(entry.ResourceID), string(metadata))
+	_, err = s.db.Exec(`INSERT INTO audit_log(id,timestamp,actor,action,outcome,resource_type,resource_id,correlation_id,operation_id,plan_hash,generation,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, entry.ID, entry.Timestamp.Format(timeFormat), entry.Actor, entry.Action, entry.Outcome, nullable(entry.ResourceType), nullable(entry.ResourceID), nullable(entry.CorrelationID), nullable(entry.OperationID), nullable(entry.PlanHash), entry.Generation, string(metadata))
 	return err
 }
 
@@ -290,7 +301,7 @@ func (s *Store) Audit(limit int) ([]AuditEntry, error) {
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT id,timestamp,actor,action,outcome,COALESCE(resource_type,''),COALESCE(resource_id,''),metadata_json FROM audit_log ORDER BY timestamp DESC LIMIT ?`, limit)
+	rows, err := s.db.Query(`SELECT id,timestamp,actor,action,outcome,COALESCE(correlation_id,''),COALESCE(operation_id,''),COALESCE(plan_hash,''),COALESCE(generation,0),COALESCE(resource_type,''),COALESCE(resource_id,''),metadata_json FROM audit_log ORDER BY timestamp DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +310,7 @@ func (s *Store) Audit(limit int) ([]AuditEntry, error) {
 	for rows.Next() {
 		var entry AuditEntry
 		var timestamp, metadata string
-		if err := rows.Scan(&entry.ID, &timestamp, &entry.Actor, &entry.Action, &entry.Outcome, &entry.ResourceType, &entry.ResourceID, &metadata); err != nil {
+		if err := rows.Scan(&entry.ID, &timestamp, &entry.Actor, &entry.Action, &entry.Outcome, &entry.CorrelationID, &entry.OperationID, &entry.PlanHash, &entry.Generation, &entry.ResourceType, &entry.ResourceID, &metadata); err != nil {
 			return nil, err
 		}
 		entry.Timestamp, _ = parseTime(timestamp)
@@ -428,6 +439,21 @@ func (s *Store) SaveEvent(e model.Event) error {
 	if e.SchemaVersion < 1 {
 		e.SchemaVersion = 1
 	}
+	if e.CorrelationID == "" {
+		e.CorrelationID = metadataText(e.Data, "correlationId")
+	}
+	if e.OperationID == "" {
+		e.OperationID = metadataText(e.Data, "operationId")
+		if e.OperationID == "" {
+			e.OperationID = metadataText(e.Data, "jobId")
+		}
+	}
+	if e.PlanHash == "" {
+		e.PlanHash = metadataText(e.Data, "planHash")
+	}
+	if e.Generation == 0 {
+		e.Generation = metadataInt64(e.Data, "generation")
+	}
 	data, err := json.Marshal(e.Data)
 	if err != nil {
 		return err
@@ -436,7 +462,7 @@ func (s *Store) SaveEvent(e model.Event) error {
 	if e.Resource != nil {
 		rt, ri = e.Resource.Type, e.Resource.ID
 	}
-	_, err = s.db.Exec(`INSERT OR REPLACE INTO events(id,type,timestamp,severity,resource_type,resource_id,data_json,schema_version) VALUES(?,?,?,?,?,?,?,?)`, e.ID, e.Type, e.Timestamp.Format(timeFormat), e.Severity, rt, ri, string(data), e.SchemaVersion)
+	_, err = s.db.Exec(`INSERT OR REPLACE INTO events(id,type,timestamp,severity,resource_type,resource_id,data_json,schema_version,correlation_id,operation_id,plan_hash,actor,generation) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, e.ID, e.Type, e.Timestamp.Format(timeFormat), e.Severity, rt, ri, string(data), e.SchemaVersion, nullable(e.CorrelationID), nullable(e.OperationID), nullable(e.PlanHash), nullable(e.Actor), e.Generation)
 	return err
 }
 
@@ -444,7 +470,7 @@ func (s *Store) Events(limit int) ([]model.Event, error) {
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT id,type,timestamp,severity,resource_type,resource_id,data_json,schema_version FROM events ORDER BY timestamp DESC LIMIT ?`, limit)
+	rows, err := s.db.Query(`SELECT id,type,timestamp,severity,resource_type,resource_id,data_json,schema_version,COALESCE(correlation_id,''),COALESCE(operation_id,''),COALESCE(plan_hash,''),COALESCE(actor,''),COALESCE(generation,0) FROM events ORDER BY timestamp DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -454,7 +480,7 @@ func (s *Store) Events(limit int) ([]model.Event, error) {
 		var event model.Event
 		var timestamp, data string
 		var resourceType, resourceID sql.NullString
-		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data, &event.SchemaVersion); err != nil {
+		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data, &event.SchemaVersion, &event.CorrelationID, &event.OperationID, &event.PlanHash, &event.Actor, &event.Generation); err != nil {
 			return nil, err
 		}
 		event.Timestamp, _ = parseTime(timestamp)
@@ -479,7 +505,7 @@ func (s *Store) EventsAfter(lastID string, limit int) ([]model.Event, error) {
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
-	rows, err := s.db.Query(`SELECT e.id,e.type,e.timestamp,e.severity,e.resource_type,e.resource_id,e.data_json,e.schema_version
+	rows, err := s.db.Query(`SELECT e.id,e.type,e.timestamp,e.severity,e.resource_type,e.resource_id,e.data_json,e.schema_version,COALESCE(e.correlation_id,''),COALESCE(e.operation_id,''),COALESCE(e.plan_hash,''),COALESCE(e.actor,''),COALESCE(e.generation,0)
 FROM events e WHERE e.rowid > (SELECT rowid FROM events WHERE id = ?) ORDER BY e.rowid ASC LIMIT ?`, lastID, limit)
 	if err != nil {
 		return nil, err
@@ -490,7 +516,7 @@ FROM events e WHERE e.rowid > (SELECT rowid FROM events WHERE id = ?) ORDER BY e
 		var event model.Event
 		var timestamp, data string
 		var resourceType, resourceID sql.NullString
-		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data, &event.SchemaVersion); err != nil {
+		if err := rows.Scan(&event.ID, &event.Type, &timestamp, &event.Severity, &resourceType, &resourceID, &data, &event.SchemaVersion, &event.CorrelationID, &event.OperationID, &event.PlanHash, &event.Actor, &event.Generation); err != nil {
 			return nil, err
 		}
 		event.Timestamp, _ = parseTime(timestamp)

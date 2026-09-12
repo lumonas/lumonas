@@ -1017,6 +1017,12 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEntry'
         '202':
           description: Accepted (async job queued)
         '4XX':
@@ -2607,6 +2613,17 @@ components:
         severity:
           type: string
           enum: [info, warning, critical]
+        correlationId:
+          type: string
+          description: Correlation key shared by the originating request and asynchronous work.
+        operationId:
+          type: string
+        planHash:
+          type: string
+        actor:
+          type: string
+        generation:
+          type: integer
         resource:
           $ref: '#/components/schemas/ResourceRef'
         data:
@@ -3129,6 +3146,8 @@ components:
       properties:
         id:
           type: string
+        correlationId:
+          type: string
         type:
           type: string
         title:
@@ -3142,6 +3161,37 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    AuditEntry:
+      type: object
+      required: [id, timestamp, actor, action, outcome]
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        action:
+          type: string
+        outcome:
+          type: string
+        correlationId:
+          type: string
+        operationId:
+          type: string
+        planHash:
+          type: string
+        generation:
+          type: integer
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
 
     AppSettings:
       type: object

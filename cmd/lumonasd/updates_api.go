@@ -91,7 +91,7 @@ func (s *apiServer) applyUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "update was not staged: " + err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "update.stage", input.Manifest.Version, map[string]any{"slot": state.PendingSlot})
+	s.recordRequestAudit(r, actor, "update.stage", input.Manifest.Version, map[string]any{"slot": state.PendingSlot})
 	s.publish("update.staged", "warning", nil, map[string]any{"version": input.Manifest.Version, "slot": state.PendingSlot})
 	writeJSON(w, http.StatusAccepted, state)
 }
@@ -119,7 +119,7 @@ func (s *apiServer) rollbackUpdate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "update.rollback", state.ActiveSlot, map[string]any{"reason": reason})
+	s.recordRequestAudit(r, actor, "update.rollback", state.ActiveSlot, map[string]any{"reason": reason})
 	s.publish("update.rolled_back", "critical", nil, map[string]any{"slot": state.ActiveSlot, "reason": reason})
 	writeJSON(w, http.StatusOK, state)
 }
@@ -141,7 +141,7 @@ func (s *apiServer) updateHealth(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 			return
 		}
-		s.recordIdentityAudit(actor, "update.health.rollback", state.ActiveSlot, map[string]any{"reason": input.Reason})
+		s.recordRequestAudit(r, actor, "update.health.rollback", state.ActiveSlot, map[string]any{"reason": input.Reason})
 		s.publish("update.health_failed", "critical", nil, map[string]any{"slot": state.ActiveSlot, "reason": input.Reason})
 		writeJSON(w, http.StatusOK, state)
 		return
@@ -151,7 +151,7 @@ func (s *apiServer) updateHealth(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "update.health.confirm", state.ActiveSlot, map[string]any{"version": state.ActiveVersion})
+	s.recordRequestAudit(r, actor, "update.health.confirm", state.ActiveSlot, map[string]any{"version": state.ActiveVersion})
 	s.publish("update.healthy", "info", nil, map[string]any{"version": state.ActiveVersion, "slot": state.ActiveSlot})
 	writeJSON(w, http.StatusOK, state)
 }

@@ -314,7 +314,7 @@ func (s *apiServer) createManagedShare(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "activate share services: " + err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "share.create", created.ID, map[string]any{"name": created.Name})
+	s.recordRequestAudit(r, actor, "share.create", created.ID, map[string]any{"name": created.Name})
 	if idempotencyKey != "" {
 		_ = s.store.SetMeta(idempotencyMetaKey("share.create", idempotencyKey), created.ID)
 	}
@@ -403,7 +403,7 @@ func (s *apiServer) commitManagedShareUpdate(w http.ResponseWriter, r *http.Requ
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "activate share services: " + err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "share.update", updated.ID, map[string]any{"name": updated.Name})
+	s.recordRequestAudit(r, actor, "share.update", updated.ID, map[string]any{"name": updated.Name})
 	s.advanceGeneration("share.update")
 	writeShare(w, http.StatusOK, updated)
 }
@@ -548,7 +548,7 @@ func (s *apiServer) deleteManagedShare(w http.ResponseWriter, r *http.Request, i
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "activate share services: " + err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "share.delete", id, nil)
+	s.recordRequestAudit(r, actor, "share.delete", id, nil)
 	s.advanceGeneration("share.delete")
 	w.WriteHeader(http.StatusNoContent)
 }

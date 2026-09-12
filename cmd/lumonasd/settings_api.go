@@ -39,7 +39,7 @@ func (s *apiServer) revokeSession(w http.ResponseWriter, r *http.Request, id str
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "settings.session.revoke", id, nil)
+	s.recordRequestAudit(r, actor, "settings.session.revoke", id, nil)
 	writeJSON(w, http.StatusNoContent, nil)
 }
 
@@ -81,7 +81,7 @@ func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "settings.update", input.Section, map[string]any{"keys": mapKeys(input.Patch)})
+	s.recordRequestAudit(r, actor, "settings.update", input.Section, map[string]any{"keys": mapKeys(input.Patch)})
 	s.advanceGeneration("settings." + input.Section)
 	writeJSON(w, http.StatusOK, value)
 }
@@ -313,7 +313,7 @@ func (s *apiServer) checkUpdates(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "updates.check.queued", job.ID, nil)
+	s.recordRequestAudit(r, actor, "updates.check.queued", job.ID, map[string]any{"jobId": job.ID})
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 	go func() { _ = s.runUpdateCheck(job) }()
 	writeJSON(w, http.StatusAccepted, job)

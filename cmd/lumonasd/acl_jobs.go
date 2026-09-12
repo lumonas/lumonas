@@ -53,7 +53,7 @@ func (s *apiServer) createACLJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "acl.apply.queued", input.Path, map[string]any{"jobId": job.ID, "recursive": input.Recursive, "entryCount": len(input.Entries)})
+	s.recordRequestAudit(r, actor, "acl.apply.queued", input.Path, map[string]any{"jobId": job.ID, "recursive": input.Recursive, "entryCount": len(input.Entries)})
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 	go s.runACLJob(job, input, actor)
 	writeJSON(w, http.StatusAccepted, job)
@@ -91,7 +91,7 @@ func (s *apiServer) cancelACLJob(w http.ResponseWriter, r *http.Request, id stri
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.recordIdentityAudit(actor, "acl.apply.cancel", id, nil)
+	s.recordRequestAudit(r, actor, "acl.apply.cancel", id, map[string]any{"operationId": id})
 	s.advanceGeneration("acl.apply.cancel")
 	writeJSON(w, http.StatusOK, job)
 }
@@ -121,7 +121,7 @@ func (s *apiServer) runACLJob(job model.Job, input aclJobRequest, actor string) 
 		job.State, job.Stage, job.Error = "failed", "ACL application failed", result.Error
 	} else {
 		job.State, job.Stage = "successful", "ACL changes applied"
-		s.recordIdentityAudit(actor, "acl.apply", input.Path, map[string]any{"jobId": job.ID, "recursive": input.Recursive})
+		s.recordIdentityAudit(actor, "acl.apply", input.Path, map[string]any{"jobId": job.ID, "correlationId": job.CorrelationID, "recursive": input.Recursive})
 		s.advanceGeneration("acl.apply")
 	}
 	_ = s.store.SaveJob(job)

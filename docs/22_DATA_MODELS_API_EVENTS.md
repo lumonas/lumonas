@@ -2,6 +2,11 @@
 
 This is a starting model, not a frozen database schema.
 
+Events and audit entries expose first-class `correlationId`, `operationId`,
+`planHash`, `actor`, and `generation` fields. Resource type and ID remain
+explicit fields; the original metadata/data payloads are retained for backward
+compatibility.
+
 ## Core entities
 
 ### Server
