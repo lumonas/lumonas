@@ -181,7 +181,7 @@ func operationWorker(operation string) string {
 		return "network"
 	case "power.action", "power.shutdown":
 		return "power"
-	case "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply":
+	case "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "avahi.config.apply":
 		return "general"
 	default:
 		return ""
@@ -337,6 +337,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return response{OK: true, Data: map[string]string{"action": action}}
 	case "acl.apply":
 		return applyACL(req, run)
+	case "avahi.config.apply":
+		return applyAvahiConfig(req, run)
 	default:
 		return response{Error: fmt.Sprintf("operation %q is not allow-listed", strings.TrimSpace(req.Operation))}
 	}

@@ -187,6 +187,11 @@ Use Avahi to advertise:
 - LumoNAS management hostname;
 - SMB/Time Machine where appropriate.
 
+Share activation renders a bounded, deterministic Avahi service group and
+publishes it through the typed privileged broker. SMB is announced through
+`_smb._tcp`; enabled Time Machine shares additionally receive `_adisk._tcp`
+disk records. Empty SMB state removes the LumoNAS-managed announcement.
+
 ## HTTPS
 
 Support local HTTPS even offline using a LumoNAS local certificate/CA.

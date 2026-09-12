@@ -306,6 +306,9 @@ func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.Man
 		// validated files remain canonical and will be picked up on startup.
 		return nil
 	}
+	if err := s.publishAvahiAnnouncement(ctx, socket, values); err != nil {
+		return err
+	}
 	for service := range services {
 		result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
 			Operation: "service.reload", OperationID: newID("reload"), PlanHash: newID("reload-plan"),
@@ -317,6 +320,38 @@ func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.Man
 		if !result.OK {
 			return fmt.Errorf("reload %s: %s", service, result.Error)
 		}
+	}
+	return nil
+}
+
+// publishAvahiAnnouncement updates the mDNS SMB/Time Machine announcement
+// through the privileged broker. An empty render removes the announcement.
+func (s *apiServer) publishAvahiAnnouncement(ctx context.Context, socket string, values []shares.ManagedShare) error {
+	publishSMB := false
+	for _, value := range values {
+		for _, protocol := range value.Protocols {
+			if protocol.Name == "smb" || protocol.Name == "timemachine" {
+				publishSMB = true
+			}
+		}
+	}
+	content := ""
+	if publishSMB {
+		rendered, err := shares.RenderAvahi(values)
+		if err != nil {
+			return err
+		}
+		content = rendered
+	}
+	result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
+		Operation: "avahi.config.apply", OperationID: newID("avahi"), PlanHash: newID("avahi-plan"),
+		RequestedState: map[string]any{"content": content}, Confirmed: true,
+	})
+	if err != nil {
+		return err
+	}
+	if !result.OK {
+		return fmt.Errorf("avahi announcement: %s", result.Error)
 	}
 	return nil
 }
