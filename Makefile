@@ -28,6 +28,7 @@ build-web:
 
 package:
 	bash packaging/build-deb.sh $(VERSION)
+	bash scripts/verify-deb.sh lumonas_$(VERSION)_amd64.deb
 
 api-smoke:
 	bash scripts/api-smoke.sh
