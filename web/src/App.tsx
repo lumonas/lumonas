@@ -5,6 +5,9 @@ import { AppShell } from '@/components/layout/AppShell'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { PlaceholderPage } from '@/features/placeholder/PlaceholderPage'
 import { StoragePage } from '@/features/storage/StoragePage'
+import { NetworkPage } from '@/features/network/NetworkPage'
+import { SharesPage } from '@/features/shares/SharesPage'
+import { UsersPage } from '@/features/users/UsersPage'
 import { ThemeProvider } from '@/theme/ThemeProvider'
 
 const queryClient = new QueryClient({
@@ -26,6 +29,9 @@ export default function App() {
               <Route element={<AppShell />}>
                 <Route index element={<DashboardPage />} />
                 <Route path="storage" element={<StoragePage />} />
+                <Route path="network" element={<NetworkPage />} />
+                <Route path="shares" element={<SharesPage />} />
+                <Route path="users" element={<UsersPage />} />
                 <Route path="*" element={<PlaceholderPage />} />
               </Route>
             </Routes>
