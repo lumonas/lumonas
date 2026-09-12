@@ -287,6 +287,13 @@ GnuPG home, selects it by the configured fingerprint, and checks for
 `Release.gpg`, `InRelease`, and the exported keyring; unsigned `[trusted=yes]`
 media is limited to non-release development builds.
 
+Package and ISO builders derive `SOURCE_DATE_EPOCH` from the source commit when
+the caller does not provide it. The Debian build records that epoch in
+`build-manifest.json`, while the ISO records it in its release manifest and
+uses it for embedded APT metadata dates. This gives release verification a
+stable provenance value and prevents wall-clock time from changing those
+metadata files.
+
 ## Installer matrix
 
 - UEFI;

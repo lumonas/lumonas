@@ -6,6 +6,11 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/build/package"
 GIT_COMMIT="${LUMONAS_GIT_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf '%s' unknown)}"
 GO_VERSION="$(go version)"
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"
+case "$SOURCE_DATE_EPOCH" in
+	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
+esac
+export SOURCE_DATE_EPOCH
 LOCK_SHA256="$(sha256sum "$ROOT/web/pnpm-lock.yaml" | awk '{print $1}')"
 CATALOG_SHA256="$(sha256sum "$ROOT/catalog/apps.json" | awk '{print $1}')"
 DEB_DEPENDS="$(awk -F': ' '/^Depends:/{print $2; exit}' "$ROOT/packaging/debian/control")"
@@ -38,6 +43,7 @@ printf '%s\n' \
 	'  "package": "lumonas",' \
 	"  \"version\": \"$VERSION\", " \
 	'  "architecture": "amd64",' \
+	"  \"sourceDateEpoch\": $SOURCE_DATE_EPOCH, " \
 	"  \"sourceCommit\": \"$GIT_COMMIT\", " \
 	"  \"goVersion\": \"$GO_VERSION\", " \
 	"  \"frontendLockSHA256\": \"$LOCK_SHA256\", " \

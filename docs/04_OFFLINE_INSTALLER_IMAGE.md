@@ -41,6 +41,11 @@ Pin package versions per LumoNAS release so:
 
 Online security updates may be applied after installation.
 
+Release builds set `SOURCE_DATE_EPOCH` from the source commit. The package and
+ISO manifests record this value, and the embedded APT `Release` metadata uses
+it for its date, so release metadata is reproducible from the checked-out
+source rather than the build machine clock.
+
 ## Image build approach
 
 Recommended evolution:

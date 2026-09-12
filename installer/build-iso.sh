@@ -7,6 +7,11 @@ WORK="${LUMONAS_ISO_WORKDIR:-$ROOT/build/iso-live}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${VERSION}_amd64.deb}"
 REPO_ORIGIN="LumoNAS"
 REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY:-}"
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"
+case "$SOURCE_DATE_EPOCH" in
+	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
+esac
+export SOURCE_DATE_EPOCH
 if [ "${LUMONAS_REQUIRE_REPO_SIGNATURE:-false}" = "true" ] && [ -z "$REPO_SIGN_KEY" ]; then
 	echo "LUMONAS_REPO_SIGN_KEY is required for a signed offline repository" >&2
 	exit 1
@@ -25,7 +30,7 @@ REPO_DIR="$WORK/config/includes.chroot/opt/lumonas-repo"
 (cd "$REPO_DIR" && dpkg-scanpackages --multiversion pool /dev/null > Packages && gzip -9c Packages > Packages.gz)
 cd "$REPO_DIR"
 printf 'Origin: %s\nLabel: %s\nSuite: stable\nCodename: stable\nDate: %s\nArchitectures: amd64\nComponents: main\nDescription: Embedded LumoNAS offline repository\n' \
-	"$REPO_ORIGIN" "$REPO_ORIGIN" "$(date -R)" > Release.tmp
+	"$REPO_ORIGIN" "$REPO_ORIGIN" "$(date -u -R -d "@$SOURCE_DATE_EPOCH")" > Release.tmp
 apt-ftparchive release -c /dev/null \
 	-o "APT::FTPArchive::Release::Origin=$REPO_ORIGIN" \
 	-o "APT::FTPArchive::Release::Label=$REPO_ORIGIN" \
@@ -218,6 +223,7 @@ Baseline: Debian 13 (Trixie)
 Core package: lumonas.deb
 Embedded repository: /opt/lumonas-repo (origin $REPO_ORIGIN, pinned at priority 1001)
 Repository signature: $(if [ -n "$REPO_SIGN_KEY" ]; then echo "signed by $REPO_SIGN_KEY"; else echo "UNSIGNED (LUMONAS_REPO_SIGN_KEY not set)"; fi)
+Source date epoch: $SOURCE_DATE_EPOCH
 EOF
 
 (cd "$WORK" && lb config --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer live --archive-areas "main contrib non-free-firmware" --apt-indices false)

@@ -112,6 +112,8 @@ if manifest.get("debianRecommends") != sys.argv[4]:
 for key in ("sourceCommit", "goVersion", "frontendLockSHA256", "catalogSHA256"):
     if not manifest.get(key):
         raise SystemExit(f"manifest field is empty: {key}")
+if not isinstance(manifest.get("sourceDateEpoch"), int) or manifest["sourceDateEpoch"] < 0:
+    raise SystemExit("manifest sourceDateEpoch must be a non-negative integer")
 PY
 
 [ -x "$CONTROL_DIR/postinst" ] || { echo "package postinst is missing or not executable" >&2; exit 1; }
