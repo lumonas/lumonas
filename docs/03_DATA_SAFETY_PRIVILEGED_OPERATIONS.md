@@ -217,6 +217,11 @@ Onboarding uses the same boundary: the initial SnapRAID sync is withheld until
 the generated configuration is accepted by the privileged broker and every
 referenced stable disk identity has been revalidated.
 
+The Unix-socket client also applies a finite default deadline and interrupts
+both request writes and response reads when its context is cancelled. A
+connected but wedged privileged worker therefore fails closed instead of
+holding an API or background job indefinitely.
+
 ## SnapRAID rules
 
 Never automatically use force options to “fix” failed automation.

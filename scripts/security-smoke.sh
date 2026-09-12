@@ -14,6 +14,6 @@ if git -C "$ROOT" grep -nE -- \
 fi
 
 cd "$ROOT"
-go test -count=1 ./internal/diagnostics ./cmd/lumonas-privd \
-	-run 'TestRedactionRemovesSecretCanaries|TestBundleRejectsUnsafeNamesAndRedactsText|TestPrivilegedProtocolRejectsUnknownOperation|TestWorkerRejectsOperationsOutsideItsCapabilityDomain|TestExecuteRejectsStaleIdentity'
+go test -count=1 ./internal/diagnostics ./internal/privileged ./cmd/lumonas-privd \
+	-run 'TestRedactionRemovesSecretCanaries|TestBundleRejectsUnsafeNamesAndRedactsText|TestPrivilegedProtocolRejectsUnknownOperation|TestWorkerRejectsOperationsOutsideItsCapabilityDomain|TestExecuteRejectsStaleIdentity|TestClientDeadlineInterruptsPendingResponse'
 echo "LumoNAS security smoke checks passed"

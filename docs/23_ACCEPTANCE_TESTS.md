@@ -260,3 +260,11 @@ Run the loopback storage smoke test from the packaged/QEMU dependency set.
 Pass if both ext4 and XFS images are created, reattached by stable filesystem
 identity, mounted read-only, and checked with `findmnt`; missing `xfsprogs`
 must fail the release gate instead of silently skipping XFS coverage.
+
+## AB. Privileged IPC timeout
+
+Run the privileged client cancellation test with a worker that reads a request
+but never responds.
+
+Pass if the client returns on the caller deadline and does not leave the API
+job blocked on a connected Unix socket.

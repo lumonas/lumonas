@@ -213,6 +213,8 @@ disk/SMART discovery, Docker, Samba validation, NetworkManager/WireGuard,
 Tailscale, NUT, systemd status, mergerfs/SnapRAID discovery, and SFTP backup
 transfers inherit a finite deadline; NetworkManager checkpoints additionally
 remain bounded by their requested confirmation timeout.
+The privileged Unix-socket client applies the same fail-closed deadline to
+connected request/response streams.
 
 The protection-config API test uses a generated configuration and stable disk
 identities, so the endpoint’s read-only discovery path is exercised separately

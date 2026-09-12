@@ -73,6 +73,7 @@ require_line "$ROOT/installer/build-iso.sh" 'restored-shares.json'
 require_line "$ROOT/installer/build-iso.sh" 'FailureAction=poweroff'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'recovery guest did not power off before timeout'
 require_line "$ROOT/docs/16_TESTING_CI_RELEASE_ENGINEERING.md" 'shared bounded runner'
+require_line "$ROOT/docs/16_TESTING_CI_RELEASE_ENGINEERING.md" 'privileged Unix-socket client'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'vsftpd'
 for dropin in smbd.service.d/lumonas.conf rsync.service.d/lumonas.conf vsftpd.service.d/lumonas.conf; do
 	[ -f "$ROOT/packaging/systemd/$dropin" ] || { echo "missing service drop-in: $dropin" >&2; exit 1; }

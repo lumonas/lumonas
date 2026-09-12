@@ -49,7 +49,17 @@ type Client struct {
 	Dialer Dialer
 }
 
+const DefaultTimeout = 30 * time.Second
+
 func (c Client) Execute(ctx context.Context, request Request) (Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultTimeout)
+		defer cancel()
+	}
 	if request.CorrelationID == "" {
 		request.CorrelationID = trace.CorrelationID(ctx)
 	}
@@ -71,6 +81,15 @@ func (c Client) Execute(ctx context.Context, request Request) (Response, error) 
 		return Response{}, fmt.Errorf("connect privileged broker: %w", err)
 	}
 	defer connection.Close()
+	if deadline, ok := ctx.Deadline(); ok {
+		if err := connection.SetDeadline(deadline); err != nil {
+			return Response{}, fmt.Errorf("set privileged request deadline: %w", err)
+		}
+	}
+	stopCancellation := context.AfterFunc(ctx, func() {
+		_ = connection.SetDeadline(time.Now())
+	})
+	defer stopCancellation()
 	if err := json.NewEncoder(connection).Encode(request); err != nil {
 		return Response{}, fmt.Errorf("send privileged request: %w", err)
 	}
