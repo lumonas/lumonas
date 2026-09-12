@@ -186,6 +186,9 @@ operator, file user, group membership, share, protocol access rule, and
 committed configuration generation. It also restores and checks the Compose
 stack, stable disk identities, mergerfs and SnapRAID configuration, ACL
 metadata, and encrypted secret payload.
+The same hook starts a second backend instance with paths rooted in the
+replacement filesystem and checks `/healthz`, `/readyz`, `/principals`, and
+`/shares` before shutdown.
 
 Verify:
 

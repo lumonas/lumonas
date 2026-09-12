@@ -28,6 +28,7 @@ smartmontools
 e2fsprogs
 lm-sensors
 nut
+curl
 mergerfs
 snapraid
 docker.io
@@ -80,6 +81,39 @@ mount "$target_device" /mnt/lumonas-target
 	--key-file /mnt/lumonas-recovery/recovery.key \
 	--root /mnt/lumonas-target --apply \
 	> /mnt/lumonas-target/recovery-result.json
+backend_pid=""
+cleanup_backend() {
+	if [ -n "$backend_pid" ]; then
+		kill "$backend_pid" 2>/dev/null || true
+		wait "$backend_pid" 2>/dev/null || true
+	fi
+}
+trap cleanup_backend EXIT INT TERM
+LUMONASD_LISTEN=127.0.0.1:18083 \
+LUMONAS_DB_PATH=/mnt/lumonas-target/var/lib/lumonas/lumonas.db \
+LUMONAS_SHARES_FILE=/mnt/lumonas-target/var/lib/lumonas/shares.json \
+LUMONAS_SNAPRAID_CONFIG=/mnt/lumonas-target/etc/lumonas/snapraid.conf \
+LUMONAS_STACK_ROOT=/mnt/lumonas-target/srv/lumonas/docker/stacks \
+LUMONAS_RECOVERY_DIR=/mnt/lumonas-target/var/lib/lumonas/recovery \
+LUMONAS_AUTH_REQUIRED=false \
+	/usr/lib/lumonas/lumonasd > /mnt/lumonas-target/restored-lumonasd.log 2>&1 &
+backend_pid=$!
+backend_ready=false
+for attempt in $(seq 1 30); do
+	if curl -fsS http://127.0.0.1:18083/healthz >/dev/null 2>&1 && \
+		curl -fsS http://127.0.0.1:18083/readyz >/dev/null 2>&1 && \
+		curl -fsS http://127.0.0.1:18083/api/v1/principals > /mnt/lumonas-target/restored-principals.json 2>/dev/null && \
+		curl -fsS http://127.0.0.1:18083/api/v1/shares > /mnt/lumonas-target/restored-shares.json 2>/dev/null; then
+		backend_ready=true
+		break
+	fi
+	sleep 1
+done
+[ "$backend_ready" = true ]
+grep -F 'operator' /mnt/lumonas-target/restored-principals.json >/dev/null
+grep -F 'share-media' /mnt/lumonas-target/restored-shares.json >/dev/null
+cleanup_backend
+backend_pid=""
 printf '%s\n' recovery-applied > /mnt/lumonas-target/recovery-success
 sync
 systemctl poweroff
