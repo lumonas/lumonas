@@ -512,6 +512,14 @@ export interface RecoveryPlan {
   warnings?: string[]
 }
 
+export interface RecoveryExportResponse {
+  path: string
+  manifest: RecoveryManifest
+  verified: boolean
+  appdataArchives: number
+  warnings: string[]
+}
+
 export interface NotificationDelivery {
   id: string
   channelId: string

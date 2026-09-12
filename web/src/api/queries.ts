@@ -38,6 +38,7 @@ import type {
   AppSettings,
   RecycleEntry,
   RecoveryPlan,
+  RecoveryExportResponse,
   RecoveryReadiness,
   RecoveryStatus,
   RestorePlan,
@@ -1140,7 +1141,7 @@ export function useRecoveryPlan() {
 export function useExportRecovery() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => apiPost<{ path: string; verified: boolean }>('/recovery/export', {}),
+    mutationFn: () => apiPost<RecoveryExportResponse>('/recovery/export', {}),
     onSuccess: () => {
       toast.success('Recovery bundle exported and verified')
       void qc.invalidateQueries({ queryKey: queryKeys.recoveryStatus })

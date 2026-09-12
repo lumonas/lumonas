@@ -2112,7 +2112,11 @@ paths:
               type: object
       responses:
         '200':
-          description: OK
+          description: Recovery bundle created and verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryExport'
         '202':
           description: Accepted (async job queued)
         '4XX':
@@ -2144,7 +2148,11 @@ paths:
       operationId: get-recovery-plan
       responses:
         '200':
-          description: OK
+          description: Verified recovery restore plan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryPlan'
         '202':
           description: Accepted (async job queued)
         '4XX':
@@ -3004,6 +3012,92 @@ components:
           type: string
         timeout:
           type: integer
+
+    RecoveryManifest:
+      type: object
+      properties:
+        formatVersion:
+          type: integer
+        configSchema:
+          type: integer
+        lumonasVersion:
+          type: string
+        nasUuid:
+          type: string
+        generation:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        diskIds:
+          type: array
+          items:
+            type: string
+        checksums:
+          type: object
+          additionalProperties:
+            type: string
+
+    RecoveryAppdataRecord:
+      type: object
+      required: [stack, containerPath, hostPath, archivePath, archiveBytes]
+      properties:
+        stack:
+          type: string
+        containerPath:
+          type: string
+        hostPath:
+          type: string
+        archivePath:
+          type: string
+        archiveBytes:
+          type: integer
+
+    RecoveryPlan:
+      type: object
+      required: [manifest, files, verified, databaseValid, desiredStateValid, composeValid, encryptedSecrets]
+      properties:
+        manifest:
+          $ref: '#/components/schemas/RecoveryManifest'
+        files:
+          type: array
+          items:
+            type: string
+        verified:
+          type: boolean
+        databaseValid:
+          type: boolean
+        desiredStateValid:
+          type: boolean
+        composeValid:
+          type: boolean
+        encryptedSecrets:
+          type: boolean
+        appdata:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecoveryAppdataRecord'
+        warnings:
+          type: array
+          items:
+            type: string
+
+    RecoveryExport:
+      type: object
+      required: [path, manifest, verified, appdataArchives, warnings]
+      properties:
+        path:
+          type: string
+        manifest:
+          $ref: '#/components/schemas/RecoveryManifest'
+        verified:
+          type: boolean
+        appdataArchives:
+          type: integer
+        warnings:
+          type: array
+          items:
+            type: string
 
     Share:
       type: object
