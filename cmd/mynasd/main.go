@@ -771,13 +771,46 @@ func (s *apiServer) recoveryStage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recovery bundle not found"})
 		return
 	}
-	result, err := recovery.Stage(bundle, []byte(key), envOr("MYNAS_RECOVERY_STAGING_DIR", "/var/lib/mynas/recovery/staged"))
+	stagingDirectory := envOr("MYNAS_RECOVERY_STAGING_DIR", "/var/lib/mynas/recovery/staged")
+	result, err := recovery.Stage(bundle, []byte(key), stagingDirectory)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "recovery staging failed: " + err.Error()})
 		return
 	}
+	s.pruneRecoveryStages(stagingDirectory, 3, result.Directory)
 	s.publish("recovery.restore.staged", "warning", nil, map[string]any{"directory": result.Directory, "files": len(result.Files), "generation": result.Manifest.Generation})
 	writeJSON(w, http.StatusAccepted, result)
+}
+
+func (s *apiServer) pruneRecoveryStages(directory string, keep int, current string) {
+	paths, err := filepath.Glob(filepath.Join(directory, ".restore-*"))
+	if err != nil || len(paths) <= keep {
+		return
+	}
+	type stagedPath struct {
+		path string
+		when time.Time
+	}
+	items := make([]stagedPath, 0, len(paths))
+	for _, path := range paths {
+		if path == current {
+			continue
+		}
+		info, statErr := os.Stat(path)
+		if statErr == nil && info.IsDir() {
+			items = append(items, stagedPath{path: path, when: info.ModTime()})
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].when.Before(items[j].when) })
+	remove := len(paths) - keep
+	if remove > len(items) {
+		remove = len(items)
+	}
+	for _, item := range items[:remove] {
+		if err := os.RemoveAll(item.path); err != nil && s.log != nil {
+			s.log.Warn("old recovery staging removal failed", "path", item.path, "error", err)
+		}
+	}
 }
 
 func (s *apiServer) metrics(w http.ResponseWriter) { writeJSON(w, http.StatusOK, collector.Metrics()) }
