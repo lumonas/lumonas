@@ -15,6 +15,7 @@ import (
 	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/events"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/recovery"
 	"github.com/lumonas/lumonas/internal/store"
 )
 
@@ -159,5 +160,34 @@ func TestDockerStacksReflectContainerHealth(t *testing.T) {
 	}
 	if len(stacks) != 1 || stacks[0].State != "unhealthy" || stacks[0].Status != "critical" {
 		t.Fatalf("unexpected stack state %#v", stacks)
+	}
+}
+
+func TestRecoveryPlanWarnsOnNASAndDiskMismatch(t *testing.T) {
+	server := testServer(t)
+	directory := t.TempDir()
+	t.Setenv("MYNAS_RECOVERY_KEY", "test-key")
+	t.Setenv("MYNAS_RECOVERY_DIR", directory)
+	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{NASUUID: "other-nas", DiskIDs: []string{"wwn:missing"}}, DesiredState: []byte("{}"), Database: []byte("sqlite")}, []byte("test-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "latest.mrb"), bundle, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/recovery/plan", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var plan struct {
+		Warnings []string `json:"warnings"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&plan); err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Join(plan.Warnings, "\n")
+	if !strings.Contains(body, "different NAS identity") || !strings.Contains(body, "wwn:missing") {
+		t.Fatalf("expected identity warnings, got %#v", plan.Warnings)
 	}
 }

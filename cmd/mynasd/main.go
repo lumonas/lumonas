@@ -711,6 +711,22 @@ func (s *apiServer) recoveryPlan(w http.ResponseWriter) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "recovery verification failed: " + err.Error()})
 		return
 	}
+	if currentUUID, ok := s.store.Meta("nas_uuid"); ok && plan.Manifest.NASUUID != "" && currentUUID != plan.Manifest.NASUUID {
+		plan.Warnings = append(plan.Warnings, "bundle belongs to a different NAS identity")
+	}
+	if disks, diskErr := s.diskFunc(); diskErr == nil {
+		present := make(map[string]bool, len(disks))
+		for _, disk := range disks {
+			present[disk.ID] = true
+		}
+		for _, diskID := range plan.Manifest.DiskIDs {
+			if !present[diskID] {
+				plan.Warnings = append(plan.Warnings, "protected disk is missing: "+diskID)
+			}
+		}
+	} else {
+		plan.Warnings = append(plan.Warnings, "live disk inventory is unavailable; hardware identity is not verified")
+	}
 	writeJSON(w, http.StatusOK, plan)
 }
 
