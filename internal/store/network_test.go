@@ -36,4 +36,11 @@ func TestNetworkConfigurationPersistsAndDefaultsSafely(t *testing.T) {
 	if _, err := database.SaveNetworkFirewallPolicy(policy); err != nil {
 		t.Fatal(err)
 	}
+	if err := database.RecordNetworkCheckpoint("net-1", "lan", "pending"); err != nil {
+		t.Fatal(err)
+	}
+	connectionID, err := database.CompleteNetworkCheckpoint("net-1", "commit")
+	if err != nil || connectionID != "lan" {
+		t.Fatalf("checkpoint mapping failed: %q err=%v", connectionID, err)
+	}
 }

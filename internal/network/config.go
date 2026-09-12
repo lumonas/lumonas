@@ -85,6 +85,49 @@ func (c Connection) Validate() error {
 	return nil
 }
 
+func (c Connection) NetworkManagerChanges() (map[string]string, error) {
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	changes := map[string]string{"connection.autoconnect": strconv.FormatBool(c.Enabled)}
+	if c.MTU != 0 {
+		changes["802-3-ethernet.mtu"] = strconv.Itoa(c.MTU)
+	}
+	addIPChanges(changes, "ipv4", c.IPv4)
+	addIPChanges(changes, "ipv6", c.IPv6)
+	return changes, nil
+}
+
+func addIPChanges(changes map[string]string, prefix string, config IPConfig) {
+	changes[prefix+".method"] = config.Method
+	if len(config.Addresses) > 0 {
+		changes[prefix+".addresses"] = strings.Join(config.Addresses, ",")
+	}
+	if config.Gateway != "" {
+		changes[prefix+".gateway"] = config.Gateway
+	}
+	if len(config.DNS) > 0 {
+		changes[prefix+".dns"] = strings.Join(config.DNS, ",")
+	}
+	if config.Metric > 0 {
+		changes[prefix+".route-metric"] = strconv.Itoa(config.Metric)
+	}
+	if len(config.Routes) > 0 {
+		routes := make([]string, 0, len(config.Routes))
+		for _, route := range config.Routes {
+			value := route.Destination
+			if route.Via != "" {
+				value += " " + route.Via
+			}
+			if route.Metric > 0 {
+				value += " " + strconv.Itoa(route.Metric)
+			}
+			routes = append(routes, value)
+		}
+		changes[prefix+".routes"] = strings.Join(routes, ",")
+	}
+}
+
 func (c IPConfig) validate(version int) error {
 	switch c.Method {
 	case "auto", "manual", "disabled":

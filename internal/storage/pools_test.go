@@ -56,3 +56,11 @@ func TestPoolPlanRejectsParityAndDuplicateMembers(t *testing.T) {
 		t.Fatal("expected duplicate disk rejection")
 	}
 }
+
+func TestPoolPlanRejectsBranchPathCollision(t *testing.T) {
+	first := poolDisk("wwn:a", "/dev/sda", 100)
+	second := poolDisk("wwn/a", "/dev/sdb", 100)
+	if _, err := NewPoolPlan("pool-1", "media", "/srv/pools/media", []model.Disk{first, second}, 1, time.Now().UTC()); err == nil {
+		t.Fatal("expected branch collision rejection")
+	}
+}

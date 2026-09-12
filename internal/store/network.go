@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS network_diagnostic_results (
   job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
   result_json TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS network_checkpoints (
+  operation_id TEXT PRIMARY KEY,
+  connection_id TEXT NOT NULL,
+  state TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );`
 
 func (s *Store) ensureNetworkSchema() error {
@@ -272,4 +279,25 @@ func (s *Store) NetworkDiagnosticResult(jobID string) (any, error) {
 		return nil, err
 	}
 	return result, nil
+}
+
+func (s *Store) RecordNetworkCheckpoint(operationID, connectionID, state string) error {
+	if err := s.ensureNetworkSchema(); err != nil {
+		return err
+	}
+	now := time.Now().UTC().Format(timeFormat)
+	_, err := s.db.Exec(`INSERT INTO network_checkpoints(operation_id,connection_id,state,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(operation_id) DO UPDATE SET connection_id=excluded.connection_id,state=excluded.state,updated_at=excluded.updated_at`, operationID, connectionID, state, now, now)
+	return err
+}
+
+func (s *Store) CompleteNetworkCheckpoint(operationID, state string) (string, error) {
+	if err := s.ensureNetworkSchema(); err != nil {
+		return "", err
+	}
+	var connectionID string
+	if err := s.db.QueryRow(`SELECT connection_id FROM network_checkpoints WHERE operation_id=?`, operationID).Scan(&connectionID); err != nil {
+		return "", err
+	}
+	_, err := s.db.Exec(`UPDATE network_checkpoints SET state=?,updated_at=? WHERE operation_id=?`, state, time.Now().UTC().Format(timeFormat), operationID)
+	return connectionID, err
 }

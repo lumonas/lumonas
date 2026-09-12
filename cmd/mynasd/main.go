@@ -202,6 +202,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.createNetworkConnection(w, r)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/network/connections/"):
 		s.updateNetworkConnection(w, r, path.Base(endpoint))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/network/connections/") && strings.HasSuffix(endpoint, "/apply"):
+		s.applyNetworkConnection(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/network/bindings":
 		s.listNetworkBindings(w, r)
 	case r.Method == http.MethodPatch && endpoint == "/network/bindings":
@@ -835,6 +837,7 @@ func (s *apiServer) networkInterfaces(w http.ResponseWriter) {
 func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		ConnectionUUID  string            `json:"connectionUuid"`
+		ConnectionID    string            `json:"connectionId"`
 		Devices         []string          `json:"devices"`
 		Changes         map[string]string `json:"changes"`
 		TimeoutSeconds  int               `json:"timeoutSeconds"`
@@ -867,6 +870,9 @@ func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.publish("network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
+	if input.ConnectionID != "" {
+		_ = s.store.RecordNetworkCheckpoint(operationID, input.ConnectionID, "pending")
+	}
 	writeJSON(w, http.StatusAccepted, result)
 }
 
@@ -898,6 +904,16 @@ func (s *apiServer) networkCheckpointAction(w http.ResponseWriter, r *http.Reque
 	if !result.OK {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
 		return
+	}
+	if connectionID, err := s.store.CompleteNetworkCheckpoint(operationID, parts[3]); err == nil {
+		if connection, getErr := s.store.NetworkConnection(connectionID); getErr == nil {
+			if parts[3] == "commit" {
+				connection.Status = "committed"
+			} else {
+				connection.Status = "rolled-back"
+			}
+			_, _ = s.store.UpsertNetworkConnection(connection)
+		}
 	}
 	if parts[3] == "commit" {
 		s.advanceGeneration("network.checkpoint.commit")

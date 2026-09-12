@@ -108,6 +108,66 @@ func (s *apiServer) updateNetworkConnection(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, value)
 }
 
+func (s *apiServer) applyNetworkConnection(w http.ResponseWriter, r *http.Request, id string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	var input struct {
+		Devices            []string `json:"devices"`
+		TimeoutSeconds     int      `json:"timeoutSeconds"`
+		ExpectedGeneration *int64   `json:"expectedGeneration"`
+		Reauthenticated    bool     `json:"reauthenticated"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if !s.expectedIdentityGeneration(w, input.ExpectedGeneration) {
+		return
+	}
+	if !input.Reauthenticated {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "reauthentication is required for network changes"})
+		return
+	}
+	connection, err := s.store.NetworkConnection(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "network connection not found"})
+		return
+	}
+	changes, err := connection.NetworkManagerChanges()
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if input.TimeoutSeconds == 0 {
+		input.TimeoutSeconds = 60
+	}
+	operationID := newID("net")
+	requested := map[string]any{"connectionUuid": connection.UUID, "connectionId": id, "devices": input.Devices, "changes": changes, "timeoutSeconds": input.TimeoutSeconds}
+	result, err := (privileged.Client{Socket: envOr("MYNAS_PRIVD_SOCKET", "/run/mynas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "network.checkpoint.begin", OperationID: operationID, PlanHash: operationID, RequestedState: requested, ExpiresAt: time.Now().UTC().Add(time.Duration(input.TimeoutSeconds+60) * time.Second), Confirmed: true})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": result.Error})
+		return
+	}
+	connection.Status = "checkpoint-pending"
+	if _, err := s.store.UpsertNetworkConnection(connection); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := s.store.RecordNetworkCheckpoint(operationID, id, "pending"); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordIdentityAudit(actor, "network.connection.apply", id, map[string]any{"operationId": operationID})
+	s.publish("network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
+	writeJSON(w, http.StatusAccepted, result)
+}
+
 func (s *apiServer) listNetworkBindings(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.identityActor(w, r, false); !ok {
 		return

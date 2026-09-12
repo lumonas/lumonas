@@ -53,6 +53,7 @@ func NewPoolPlan(id, name, mountPath string, disks []model.Disk, generation int6
 	}
 	plan := PoolPlan{OperationID: id, Name: name, MountPath: mountPath, Policy: "mfs", ConfigGeneration: generation, ExpiresAt: now.Add(15 * time.Minute), Status: "planned", Members: make([]PoolMemberPlan, 0, len(disks))}
 	seen := make(map[string]bool, len(disks))
+	branches := make(map[string]bool, len(disks))
 	for _, disk := range disks {
 		if disk.ID == "" || disk.CurrentPath == "" {
 			return PoolPlan{}, errors.New("every pool disk requires a stable identity and current path")
@@ -70,7 +71,12 @@ func NewPoolPlan(id, name, mountPath string, disks []model.Disk, generation int6
 			return PoolPlan{}, fmt.Errorf("disk %q uses unsupported filesystem %q", disk.ID, disk.Filesystem)
 		}
 		seen[disk.ID] = true
-		plan.Members = append(plan.Members, PoolMemberPlan{DiskID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, FilesystemUUID: disk.FilesystemUUID, BranchPath: DiskBranchPath(disk.ID)})
+		branch := DiskBranchPath(disk.ID)
+		if branches[branch] {
+			return PoolPlan{}, fmt.Errorf("disk identity %q collides with another pool branch", disk.ID)
+		}
+		branches[branch] = true
+		plan.Members = append(plan.Members, PoolMemberPlan{DiskID: disk.ID, WWN: disk.WWN, Serial: disk.Serial, Model: disk.Model, SizeBytes: disk.SizeBytes, FilesystemUUID: disk.FilesystemUUID, BranchPath: branch})
 	}
 	plan.PlanHash = HashPoolPlan(plan)
 	return plan, nil
@@ -110,6 +116,7 @@ func ValidatePoolPlan(plan PoolPlan, actual []model.Disk, now time.Time, generat
 		return errors.New("pool plan has no members")
 	}
 	seen := make(map[string]bool, len(plan.Members))
+	branches := make(map[string]bool, len(plan.Members))
 	for _, member := range plan.Members {
 		if seen[member.DiskID] {
 			return fmt.Errorf("pool plan contains duplicate disk %q", member.DiskID)
@@ -143,6 +150,10 @@ func ValidatePoolPlan(plan PoolPlan, actual []model.Disk, now time.Time, generat
 		if member.BranchPath != DiskBranchPath(member.DiskID) {
 			return fmt.Errorf("pool disk %q branch path mismatch", member.DiskID)
 		}
+		if branches[member.BranchPath] {
+			return fmt.Errorf("pool branch path %q is duplicated", member.BranchPath)
+		}
+		branches[member.BranchPath] = true
 	}
 	return nil
 }
