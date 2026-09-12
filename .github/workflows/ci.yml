@@ -40,6 +40,17 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
 
+  runtime-smoke:
+    runs-on: ubuntu-latest
+    needs: [backend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+      - run: bash scripts/api-smoke.sh
+
   package:
     runs-on: ubuntu-latest
     needs: [backend, frontend]

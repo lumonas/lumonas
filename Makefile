@@ -3,7 +3,7 @@ SHELL := /bin/sh
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
 
-.PHONY: all test test-go test-web build build-go build-web package qemu-image qemu-smoke
+.PHONY: all test test-go test-web build build-go build-web package api-smoke qemu-image qemu-smoke
 
 all: build
 
@@ -28,6 +28,9 @@ build-web:
 
 package:
 	bash packaging/build-deb.sh $(VERSION)
+
+api-smoke:
+	bash scripts/api-smoke.sh
 
 qemu-image:
 	sudo MYNAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" MYNAS_QEMU_IMAGE="$(CURDIR)/build/qemu/mynas-debian13.raw" bash scripts/qemu-build-image.sh
