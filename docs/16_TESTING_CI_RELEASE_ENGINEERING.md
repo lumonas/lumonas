@@ -85,6 +85,10 @@ that `/api/v1/disks` serializes those fields, including the current device
 path, WWN/GPT/partition/filesystem identifiers, mount state, and last-seen
 timestamp. OpenAPI and frontend types are kept aligned with that response.
 
+Disk collection requests `PTUUID` from `lsblk` and uses the partition-table
+UUID as a stable fallback between serial and filesystem UUID. The collector
+contract test verifies both the command field and the resulting `gptDiskGuid`.
+
 `check-api-contract.py` runs on every backend and installer-scripts job. It
 checks the stable Disk and LumoEvent field sets in OpenAPI and TypeScript, so
 route parity alone cannot hide a response-shape regression.

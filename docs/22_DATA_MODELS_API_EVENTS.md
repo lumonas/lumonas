@@ -29,6 +29,7 @@ id
 stable_fingerprint
 wwn
 serial
+gpt_disk_guid
 model
 size_bytes
 current_device_path

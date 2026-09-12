@@ -297,6 +297,10 @@ GUID, partition UUID, filesystem UUID), the current path, mount state, and
 last-seen timestamp, and those fields are represented in the OpenAPI and
 frontend contracts.
 
+The collector test also verifies that `lsblk` requests and returns the GPT
+partition-table UUID, and that it is preferred over filesystem UUID/path for
+stable identity fallback.
+
 The same gate checks the complete SSE envelope field set in OpenAPI and the
 frontend types, including correlation and operation metadata.
 

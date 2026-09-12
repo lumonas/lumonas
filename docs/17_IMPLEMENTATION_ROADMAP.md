@@ -28,6 +28,7 @@ Exit criteria:
 Deliver:
 
 - disk discovery by stable identity;
+- partition-table identity fallback when WWN and serial are unavailable;
 - SMART;
 - sensors;
 - CPU/RAM;

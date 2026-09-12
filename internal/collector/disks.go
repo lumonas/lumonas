@@ -30,6 +30,7 @@ type lsblkDevice struct {
 	FSType     string `json:"fstype"`
 	UUID       string `json:"uuid"`
 	PartUUID   string `json:"partuuid"`
+	PTUUID     string `json:"ptuuid"`
 	Mountpoint string `json:"mountpoint"`
 }
 
@@ -43,7 +44,7 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 	if run == nil {
 		run = SystemRunner
 	}
-	out, err := run("lsblk", "-J", "-b", "-o", "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,ROTA,TRAN,FSTYPE,UUID,PARTUUID,MOUNTPOINT")
+	out, err := run("lsblk", "-J", "-b", "-o", "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,ROTA,TRAN,FSTYPE,UUID,PARTUUID,PTUUID,MOUNTPOINT")
 	if err != nil {
 		if runtime.GOOS != "linux" && errors.Is(err, exec.ErrNotFound) {
 			return []model.Disk{}, nil
@@ -70,7 +71,7 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 		}
 		id := StableID(d)
 		result = append(result, model.Disk{
-			ID: id, Name: d.Name, CurrentPath: d.Path, Model: strings.TrimSpace(d.Model), Serial: strings.TrimSpace(d.Serial), WWN: strings.TrimSpace(d.WWN), SizeBytes: d.Size,
+			ID: id, Name: d.Name, CurrentPath: d.Path, Model: strings.TrimSpace(d.Model), Serial: strings.TrimSpace(d.Serial), WWN: strings.TrimSpace(d.WWN), GPTDiskGUID: strings.TrimSpace(d.PTUUID), SizeBytes: d.Size,
 			Role: "unknown", Rotational: rotational, Interface: iface, Health: health, Filesystem: d.FSType, FilesystemUUID: strings.TrimSpace(d.UUID), PartitionUUID: strings.TrimSpace(d.PartUUID), Mounted: strings.TrimSpace(d.Mountpoint) != "", LastSeen: time.Now().UTC(),
 			SMART: model.SmartSummary{Overall: health},
 		})
@@ -95,6 +96,9 @@ func StableID(d lsblkDevice) string {
 	}
 	if value := strings.TrimSpace(d.Serial); value != "" {
 		return "serial:" + value
+	}
+	if value := strings.TrimSpace(d.PTUUID); value != "" {
+		return "gpt:" + value
 	}
 	if value := strings.TrimSpace(d.UUID); value != "" {
 		return "uuid:" + value

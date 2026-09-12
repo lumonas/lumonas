@@ -28,6 +28,7 @@ Store:
 - stable LumoNAS disk ID;
 - WWN;
 - serial;
+- GPT/partition-table UUID;
 - model;
 - size;
 - bus/controller;
