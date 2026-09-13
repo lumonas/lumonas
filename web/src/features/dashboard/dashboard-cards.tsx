@@ -278,6 +278,11 @@ export function DockerCard() {
         </Button>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {!docker?.available && docker ? (
+          <p className="rounded-lg border border-attention/40 bg-attention/5 px-3 py-2 text-xs text-muted-foreground">
+            Docker Engine is unavailable. Start <span className="font-mono">docker.service</span> to refresh app status.
+          </p>
+        ) : null}
         <div className="grid grid-cols-2 gap-4">
           <Metric
             label="Containers running"

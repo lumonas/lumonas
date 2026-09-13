@@ -375,7 +375,9 @@ with reordered data disks.
 
 The same runtime checks validate `/health/components`; Docker Engine
 availability is reported as an explicit attention component instead of being
-silently represented as zero containers.
+silently represented as zero containers. The dashboard and Docker page surface
+the same state so an unavailable Engine cannot be mistaken for an empty
+inventory.
 
 The QEMU reorder assertion compares each disk's stable identity tuple (ID,
 serial, WWN/UUID fields, and capacity) independently of `currentPath`, then

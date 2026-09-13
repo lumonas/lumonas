@@ -7,6 +7,8 @@ import { StackDrawer } from '@/features/docker/stack-drawer'
 import { StacksTab } from '@/features/docker/stacks-tab'
 import { VolumesTab } from '@/features/docker/volumes-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useDockerSummary } from '@/api/queries'
+import { DockerAvailabilityBanner } from '@/features/docker/docker-availability'
 
 const TABS = [
   { value: 'apps', label: 'Apps' },
@@ -17,6 +19,7 @@ const TABS = [
 ] as const
 
 export function DockerPage() {
+  const { data: docker } = useDockerSummary()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const tab = tabParam != null && TABS.some((t) => t.value === tabParam) ? tabParam : 'apps'
@@ -36,6 +39,7 @@ export function DockerPage() {
         title="Docker"
         description="Apps, stacks and containers. Compose stays the source of truth."
       />
+      <DockerAvailabilityBanner summary={docker} />
       <Tabs value={tab} onValueChange={(value) => setParam('tab', value)} className="gap-6">
         <TabsList className="w-full justify-start overflow-x-auto sm:w-fit">
           {TABS.map((t) => (
