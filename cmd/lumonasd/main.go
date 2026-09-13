@@ -2236,8 +2236,8 @@ func activityCategory(eventType string) string {
 func activityTitle(eventType string) string { return strings.ReplaceAll(eventType, ".", " ") }
 
 func (s *apiServer) dockerSummary(w http.ResponseWriter, r *http.Request) {
-	stacks, running, updates := s.dockerCounts()
-	writeJSON(w, http.StatusOK, map[string]int{"stacks": stacks, "appsRunning": running, "updatesAvailable": updates})
+	stacks, running, updates, available := s.dockerCounts()
+	writeJSON(w, http.StatusOK, map[string]any{"stacks": stacks, "appsRunning": running, "updatesAvailable": updates, "available": available})
 }
 
 func (s *apiServer) dockerApps(w http.ResponseWriter) {

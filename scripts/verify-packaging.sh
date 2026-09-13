@@ -110,6 +110,8 @@ require_line "$ROOT/internal/docker/engine_api_test.go" 'TestEngineAPIReadOnlyCo
 require_line "$ROOT/.github/workflows/ci.yml" 'docker-engine-api:'
 require_line "$ROOT/Makefile" 'docker-engine-api:'
 require_line "$ROOT/packaging/debian/lumonasd.env.example" 'LUMONAS_DOCKER_SOCKET'
+require_line "$ROOT/cmd/lumonasd/main.go" '"available": available'
+require_line "$ROOT/docs/openapi.yaml" 'available:'
 require_line "$ROOT/scripts/installer-signature-policy-smoke.sh" 'LUMONAS_REPO_SIGN_KEY is required'
 require_line "$ROOT/scripts/postinst-policy-smoke.sh" 'live systemd postinst still ignores service start failures'
 require_line "$ROOT/Makefile" 'postinst-policy-smoke:'

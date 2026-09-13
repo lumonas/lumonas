@@ -3588,6 +3588,8 @@ components:
     DockerSummary:
       type: object
       properties:
+        available:
+          type: boolean
         stacks:
           type: integer
         appsRunning:

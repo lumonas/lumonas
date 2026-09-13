@@ -185,6 +185,7 @@ for attempt in $(seq 1 120); do
 	if curl -kfsS https://127.0.0.1:18084/healthz >/dev/null 2>&1 && \
 		curl -kfsS https://127.0.0.1:18084/readyz >"$WORK/recovered-ready.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/docker/summary >"$WORK/recovered-docker-summary.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/services >"$WORK/recovered-services.json" 2>/dev/null; then
 		recovered_ready=true
 		break
@@ -201,6 +202,7 @@ done
 }
 grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
+grep -F '"available":true' "$WORK/recovered-docker-summary.json" >/dev/null
 grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
 grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
 grep -F '"id":"lumonas-privd.service","name":"lumonas-privd.service","active":true,"state":"running"' "$WORK/recovered-services.json" >/dev/null

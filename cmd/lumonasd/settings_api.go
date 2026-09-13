@@ -208,7 +208,7 @@ func (s *apiServer) loadSettings() (map[string]any, error) {
 func (s *apiServer) refreshDynamicSettings(value map[string]any) {
 	if updates, ok := value["updates"].(map[string]any); ok {
 		if docker, ok := updates["docker"].(map[string]any); ok {
-			_, _, updateCount := s.dockerCounts()
+			_, _, updateCount, _ := s.dockerCounts()
 			docker["availableCount"] = updateCount
 		}
 	}
@@ -452,12 +452,13 @@ func defaultSettings(s *apiServer) map[string]any {
 
 // dockerCounts reports stack/running/update numbers from the Docker service.
 // Zero values are reported when Docker is unavailable or unconfigured (tests).
-func (s *apiServer) dockerCounts() (stacks, running, updates int) {
+func (s *apiServer) dockerCounts() (stacks, running, updates int, available bool) {
 	if s.dockerService.Run == nil {
-		return 0, 0, 0
+		return 0, 0, 0, false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	available = s.dockerService.Available(ctx)
 	stackList, _ := s.dockerService.Stacks(ctx)
 	containers, _ := s.dockerService.Containers(ctx)
 	images, _ := s.dockerService.Images(ctx)
@@ -471,7 +472,7 @@ func (s *apiServer) dockerCounts() (stacks, running, updates int) {
 			updates++
 		}
 	}
-	return len(stackList), running, updates
+	return len(stackList), running, updates, available
 }
 
 func validSettings(value map[string]any) bool {

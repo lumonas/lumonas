@@ -648,6 +648,7 @@ export interface DockerSummary {
   stacks: number
   appsRunning: number
   updatesAvailable: number
+  available: boolean
 }
 
 export type FormFieldType = 'port' | 'storage_ref' | 'secret' | 'text' | 'timezone'
