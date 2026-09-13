@@ -170,6 +170,8 @@ retained for local development but is not the release source of truth.
 The source shutdown request and guest exit are fail-closed: a rejected
 shutdown or a timeout cannot be converted into a successful recovery fixture
 by killing the guest and continuing.
+The recovery VM's exit status is checked before its restored disk is inspected,
+so a failed guest cannot pass on filesystem artifacts alone.
 
 After offline restore, detach the ISO and boot the replacement system disk by
 itself. Pass only if the recovered disk reaches health/readiness and serves the

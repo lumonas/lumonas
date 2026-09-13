@@ -140,6 +140,11 @@ for marker in ("live recovery source shutdown request failed", "live recovery so
         raise SystemExit(f"live recovery source is missing clean-shutdown enforcement: {marker}")
 if 'api/v1/power/shutdown" >/dev/null 2>&1 || true' in live_recovery_text:
     raise SystemExit("live recovery source ignores a failed shutdown request")
+recovery_text = qemu_recovery_smoke.read_text(encoding="utf-8")
+if 'wait "$QEMU_PID"\n' not in recovery_text:
+    raise SystemExit("QEMU recovery smoke does not make guest exit status authoritative")
+if 'wait "$QEMU_PID" || true' in recovery_text:
+    raise SystemExit("QEMU recovery smoke ignores guest exit status")
 for path in (qemu_smoke, qemu_recovery_smoke, iso_smoke, live_recovery_source):
     text = path.read_text(encoding="utf-8")
     if text.count("hostfwd=") != text.count("restrict=on,hostfwd="):

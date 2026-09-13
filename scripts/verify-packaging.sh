@@ -437,6 +437,7 @@ require_line "$ROOT/installer/build-iso.sh" 'rsync -aHAX --numeric-ids --one-fil
 require_line "$ROOT/installer/build-iso.sh" 'UUID=%s / ext4 defaults 0 1'
 require_line "$ROOT/installer/build-iso.sh" '/mnt/lumonas-target/live/vmlinuz'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'recovered replacement disk did not boot a healthy API'
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'wait "$QEMU_PID"'
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'api/v1/recovery/export'
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'SOURCE_API="https://127.0.0.1:18083"'
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'curl -kfsS "$SOURCE_API/healthz"'

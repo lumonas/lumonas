@@ -120,7 +120,7 @@ done
 	cat "$LOG" >&2 || true
 	exit 1
 }
-wait "$QEMU_PID" || true
+wait "$QEMU_PID"
 QEMU_PID=""
 qemu-img convert -O raw "$TARGET_IMAGE" "$TARGET_RAW" >/dev/null
 mount -o loop,ro "$TARGET_RAW" "$TARGET_MOUNT"

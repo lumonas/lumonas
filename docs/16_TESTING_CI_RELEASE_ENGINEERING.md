@@ -409,6 +409,8 @@ remains a local fallback, while tagged CI asserts the live-source path.
 The source shutdown request is release-blocking: a failed API request or a
 guest that does not exit cleanly fails the harness instead of being
 force-killed and treated as a valid recovery source.
+The recovery VM exit status is authoritative as well; a non-zero QEMU exit
+cannot be hidden by a successful file-restoration check.
 
 ## Upgrade matrix
 
