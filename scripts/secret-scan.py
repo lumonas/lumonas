@@ -11,7 +11,7 @@ import sys
 
 
 PATTERNS = (
-    ("private key block", re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----")),
+    ("private key block", re.compile(rb"-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----\s*(?:[A-Za-z0-9+/]{32,}={0,2}\s*)+-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----")),
     ("AWS access key", re.compile(rb"\bAKIA[0-9A-Z]{16}\b")),
     ("GitHub token", re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b")),
     ("Slack token", re.compile(rb"\bxox[baprs]-[0-9A-Za-z-]{20,}\b")),
@@ -20,14 +20,6 @@ PATTERNS = (
     ("npm token", re.compile(rb"\bnpm_[A-Za-z0-9]{36}\b")),
     ("credential URL", re.compile(rb"https?://[^/\s:@]+:[^@\s/]+@")),
 )
-
-# Synthetic PEM canaries used by support-bundle redaction tests are not
-# credentials; the tests exercise their handling separately.
-CANARY_FILES = {
-    "internal/diagnostics/bundle_test.go",
-    "internal/diagnostics/fuzz_test.go",
-}
-
 
 def tracked_files(root: pathlib.Path) -> list[pathlib.Path]:
     result = subprocess.run(
@@ -49,8 +41,6 @@ def scan(paths: list[pathlib.Path], root: pathlib.Path) -> list[str]:
         if b"\0" in data:
             continue
         relative = path.relative_to(root).as_posix() if path.is_relative_to(root) else str(path)
-        if relative in CANARY_FILES:
-            continue
         for label, pattern in PATTERNS:
             match = pattern.search(data)
             if match:

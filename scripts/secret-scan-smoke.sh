@@ -7,12 +7,17 @@ cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM
 
 python3 "$ROOT/scripts/secret-scan.py" --root "$ROOT"
-printf '%s\n' 'AKIAIOSFODNN7EXAMPLE' >"$WORK/aws.txt"
+printf 'AKIA%s\n' 'IOSFODNN7EXAMPLE' >"$WORK/aws.txt"
 if python3 "$ROOT/scripts/secret-scan.py" --root "$ROOT" --paths "$WORK/aws.txt"; then
 	echo "secret scanner accepted a synthetic AWS credential" >&2
 	exit 1
 fi
-printf '%s\n' 'https://user:password@example.test/hook' >"$WORK/url.txt"
+printf '%s\n' '-----BEGIN PRIVATE KEY-----' 'ZmFrZS1wcml2YXRlLW1hdGVyaWFsLWJsb2NrLWxvbmc=' '-----END PRIVATE KEY-----' >"$WORK/key.pem"
+if python3 "$ROOT/scripts/secret-scan.py" --root "$ROOT" --paths "$WORK/key.pem"; then
+	echo "secret scanner accepted a synthetic private key" >&2
+	exit 1
+fi
+printf '%s%s\n' 'https://user:password' '@example.test/hook' >"$WORK/url.txt"
 if python3 "$ROOT/scripts/secret-scan.py" --root "$ROOT" --paths "$WORK/url.txt"; then
 	echo "secret scanner accepted a credential URL" >&2
 	exit 1
