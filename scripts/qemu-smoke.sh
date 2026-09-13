@@ -2,6 +2,7 @@
 set -eu
 
 ASSERT_MODE="${LUMONAS_QEMU_ASSERT:-false}"
+UPDATE_ASSERT="${LUMONAS_QEMU_UPDATE_ASSERT:-false}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
@@ -30,6 +31,13 @@ fi
 if [ "$ASSERT_MODE" = "true" ] && ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required for QEMU disk identity assertions" >&2
   exit 1
+fi
+
+if [ "$UPDATE_ASSERT" = "true" ]; then
+	[ -s "${LUMONAS_QEMU_UPDATE_FIXTURE:-}" ] || {
+		echo "LUMONAS_QEMU_UPDATE_FIXTURE is required when update assertions are enabled" >&2
+		exit 1
+	}
 fi
 
 DATA_DIR="${LUMONAS_QEMU_DATA_DIR:-/tmp/lumonas-qemu-disks}"
@@ -159,6 +167,39 @@ for attempt in $(seq 1 60); do
          grep -F '"verified":true' "$RECOVERY_STATUS_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_PLAN_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_STAGE_LOG" >/dev/null 2>&1; then
+        if [ "$UPDATE_ASSERT" = "true" ]; then
+          UPDATE_REQUEST_LOG="$LOG.update-request"
+          UPDATE_HEALTH_LOG="$LOG.update-health"
+          UPDATE_ROLLBACK_LOG="$LOG.update-rollback"
+          UPDATE_STATUS_LOG="$LOG.update-status"
+          python3 - "$LUMONAS_QEMU_UPDATE_FIXTURE" "$UPDATE_REQUEST_LOG" <<'PY'
+import json
+import sys
+
+fixture = json.load(open(sys.argv[1], encoding="utf-8"))
+request = {
+    "manifest": fixture["manifest"],
+    "signature": fixture["signature"],
+    "packagePath": "/var/lib/lumonas/update-fixture/package",
+    "backupPath": "/var/lib/lumonas/recovery/latest.mrb",
+}
+json.dump(request, open(sys.argv[2], "w", encoding="utf-8"), separators=(",", ":"))
+PY
+          curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$UPDATE_REQUEST_LOG" https://127.0.0.1:18080/api/v1/updates/apply >"$UPDATE_REQUEST_LOG.response" 2>/dev/null && \
+          grep -F '"pendingSlot":"b"' "$UPDATE_REQUEST_LOG.response" >/dev/null 2>&1 && \
+          curl -kfsS -X POST -H 'Content-Type: application/json' -d "{\"healthy\":true,\"version\":$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["manifest"]["version"]))' "$LUMONAS_QEMU_UPDATE_FIXTURE")}" https://127.0.0.1:18080/api/v1/updates/health >"$UPDATE_HEALTH_LOG" 2>/dev/null && \
+          grep -F '"activeSlot":"b"' "$UPDATE_HEALTH_LOG" >/dev/null 2>&1 && \
+          curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"reason":"qemu smoke rollback"}' https://127.0.0.1:18080/api/v1/updates/rollback >"$UPDATE_ROLLBACK_LOG" 2>/dev/null && \
+          grep -F '"activeSlot":"a"' "$UPDATE_ROLLBACK_LOG" >/dev/null 2>&1 && \
+          curl -kfsS https://127.0.0.1:18080/api/v1/updates/status >"$UPDATE_STATUS_LOG" 2>/dev/null && \
+          grep -F '"activeSlot":"a"' "$UPDATE_STATUS_LOG" >/dev/null 2>&1; then
+            echo "QEMU signed update promotion and rollback verified"
+          else
+            echo "QEMU signed update promotion and rollback failed" >&2
+            cat "$UPDATE_REQUEST_LOG.response" "$UPDATE_HEALTH_LOG" "$UPDATE_ROLLBACK_LOG" "$UPDATE_STATUS_LOG" 2>/dev/null || true
+            exit 1
+          fi
+        fi
         snapshot_disk_identities "$LOG.disks" "$LOG.identities.initial"
         kill "$QEMU_PID" 2>/dev/null || true
         wait "$QEMU_PID" 2>/dev/null || true
@@ -177,7 +218,7 @@ for attempt in $(seq 1 60); do
                 echo "QEMU appliance device reorder did not change any transient device path" >&2
                 exit 1
               fi
-              echo "QEMU appliance smoke test passed (disks=$disk_count, recovery=verified, stable identities=verified, reorder=verified)"
+              echo "QEMU appliance smoke test passed (disks=$disk_count, recovery=verified, stable identities=verified, reorder=verified, update=$UPDATE_ASSERT)"
               exit 0
             fi
           fi

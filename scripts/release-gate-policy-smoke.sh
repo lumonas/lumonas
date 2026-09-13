@@ -68,6 +68,13 @@ for marker in (
 qemu_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-smoke.sh"
 if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "validate-sse.py" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU smoke does not validate live API and SSE response contracts")
+for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollback", "activeSlot"):
+    if marker not in qemu_smoke.read_text(encoding="utf-8"):
+        raise SystemExit(f"QEMU smoke does not exercise signed update rollback: {marker}")
+qemu_builder = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-build-image.sh"
+for marker in ("LUMONAS_UPDATE_FIXTURE", "LUMONAS_UPDATE_PUBLIC_KEY", "update-fixture/package"):
+    if marker not in qemu_builder.read_text(encoding="utf-8"):
+        raise SystemExit(f"QEMU builder does not stage the signed update fixture: {marker}")
 api_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "api-smoke.sh"
 api_smoke_text = api_smoke.read_text(encoding="utf-8")
 if "Last-Event-ID" not in api_smoke_text or "cursor event twice" not in api_smoke_text:

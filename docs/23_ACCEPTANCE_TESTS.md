@@ -269,6 +269,11 @@ The real-daemon API smoke also stages a deterministic Ed25519-signed update
 against its verified recovery bundle, confirms candidate health, rolls back to
 the previous slot, and reads the persisted slot state after the rollback.
 
+The Debian QEMU smoke stages the same signed fixture and package inside the
+guest image. It must verify the recovery prerequisite, candidate promotion,
+manual rollback, and persisted active-slot state before device-reorder checks
+are accepted.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.

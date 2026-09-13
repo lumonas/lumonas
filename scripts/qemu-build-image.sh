@@ -5,6 +5,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUTPUT="${LUMONAS_QEMU_IMAGE:-$ROOT/build/qemu/lumonas-debian13.raw}"
 WORK="${LUMONAS_QEMU_WORKDIR:-$ROOT/build/qemu/work}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${LUMONAS_VERSION:-0.1.0-dev}_amd64.deb}"
+UPDATE_FIXTURE="${LUMONAS_UPDATE_FIXTURE:-}"
 SIZE="${LUMONAS_QEMU_DISK_SIZE:-4G}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"
 SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
@@ -19,6 +20,7 @@ for command in debootstrap qemu-img mkfs.ext4 grub-install; do
 done
 [ "$(id -u)" -eq 0 ] || { echo "Run this builder as root (for example: sudo $0)" >&2; exit 1; }
 [ -f "$DEB" ] || { echo "Build the Debian package first: $DEB" >&2; exit 1; }
+[ -z "$UPDATE_FIXTURE" ] || [ -f "$UPDATE_FIXTURE" ] || { echo "update fixture not found: $UPDATE_FIXTURE" >&2; exit 1; }
 [ ! -e "$OUTPUT" ] || { echo "Refusing to overwrite existing image: $OUTPUT" >&2; exit 1; }
 [ ! -e "$WORK" ] || { echo "Refusing to overwrite existing work directory: $WORK" >&2; exit 1; }
 
@@ -44,6 +46,36 @@ mount --make-rslave "$WORK/mnt/sys"
 rm -f "$WORK/mnt/etc/resolv.conf"
 cp /etc/resolv.conf "$WORK/mnt/etc/resolv.conf"
 cp "$DEB" "$WORK/mnt/tmp/lumonas.deb"
+
+if [ -n "$UPDATE_FIXTURE" ]; then
+	command -v python3 >/dev/null 2>&1 || { echo "python3 is required when LUMONAS_UPDATE_FIXTURE is set" >&2; exit 1; }
+	UPDATE_PACKAGE=$(python3 - "$UPDATE_FIXTURE" <<'PY'
+import json
+import sys
+
+fixture = json.load(open(sys.argv[1], encoding="utf-8"))
+path = fixture.get("packagePath", "")
+if not path:
+    raise SystemExit("update fixture packagePath is empty")
+print(path)
+PY
+)
+	[ -f "$UPDATE_PACKAGE" ] || { echo "update fixture package is missing: $UPDATE_PACKAGE" >&2; exit 1; }
+	UPDATE_PUBLIC_KEY=$(python3 - "$UPDATE_FIXTURE" <<'PY'
+import json
+import sys
+
+fixture = json.load(open(sys.argv[1], encoding="utf-8"))
+key = fixture.get("publicKey", "")
+if not key:
+    raise SystemExit("update fixture publicKey is empty")
+print(key)
+PY
+)
+	mkdir -p "$WORK/mnt/var/lib/lumonas/update-fixture"
+	cp "$UPDATE_PACKAGE" "$WORK/mnt/var/lib/lumonas/update-fixture/package"
+	chmod 0640 "$WORK/mnt/var/lib/lumonas/update-fixture/package"
+fi
 
 chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_COMMIT="$SOURCE_COMMIT" LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" /bin/sh -eux <<'EOF'
 export DEBIAN_FRONTEND=noninteractive
@@ -101,4 +133,14 @@ update-grub
 EOF
 
 grub-install --target=i386-pc --recheck --boot-directory="$WORK/mnt/boot" "$OUTPUT"
+
+if [ -n "$UPDATE_FIXTURE" ]; then
+	cat >>"$WORK/mnt/etc/lumonas/lumonasd.env" <<ENV
+LUMONAS_UPDATE_PUBLIC_KEY=$UPDATE_PUBLIC_KEY
+ENV
+	chown root:lumonas "$WORK/mnt/etc/lumonas/lumonasd.env"
+	chmod 0640 "$WORK/mnt/etc/lumonas/lumonasd.env"
+	chown -R lumonas:lumonas "$WORK/mnt/var/lib/lumonas/update-fixture"
+fi
+
 echo "Created Debian 13 QEMU image: $OUTPUT"
