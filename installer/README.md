@@ -46,6 +46,12 @@ development images.
 
 The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. CI publishes the ISO with checksums, SBOM, and release signatures. With `LUMONAS_ENABLE_RECOVERY_SMOKE=true`, the image installs a bootable Debian runtime and bootloader onto a blank replacement disk, restores a verified recovery fixture, starts `lumonasd` against the restored filesystem, verifies the restored SQLite state through the real principals/shares API, and then boots the recovered disk without the ISO before the gate passes.
 
+The x86 QEMU appliance created by `scripts/qemu-build-image.sh` contains a
+BIOS boot partition, an EFI system partition, and a UUID-backed root
+partition. Its UEFI A/B smoke assigns the inactive disk a distinct GPT
+identity before creating the EFI entry, so firmware `BootNext` cannot resolve
+both slots to the same device.
+
 ## Browser-based installation
 
 The live medium runs `lumonasd` with `LUMONAS_INSTALLER_MODE=true`, which

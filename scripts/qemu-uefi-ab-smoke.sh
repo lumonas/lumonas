@@ -96,6 +96,8 @@ ssh_guest 'set -eu
 test "$(findmnt -n -o SOURCE /)" = /dev/vda3
 test "$(findmnt -n -o FSTYPE /boot/efi)" = vfat
 efibootmgr -c -d /dev/vda -p 2 -L LumoNAS-A -l "\EFI\BOOT\BOOTX64.EFI" >/dev/null
+# Give slot B a distinct GPT disk/partition identity before registering its
+# EFI entry. The firmware device path embeds that identity.
 sgdisk -G /dev/vdb >/dev/null
 partx --update /dev/vdb >/dev/null
 efibootmgr -c -d /dev/vdb -p 2 -L LumoNAS-B -l "\EFI\BOOT\BOOTX64.EFI" >/dev/null

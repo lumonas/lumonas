@@ -104,7 +104,8 @@ make qemu-ab-smoke LUMONAS_AB_ASSERT=true LUMONAS_QEMU_IMAGE=build/qemu/lumonas-
 make qemu-uefi-ab-smoke LUMONAS_UEFI_AB_ASSERT=true LUMONAS_QEMU_IMAGE=build/qemu/lumonas-debian13.raw
 ```
 
-The second check rewrites a disposable inactive slot through `lumonas-privd`,
+The second check assigns the inactive disk a distinct GPT identity, rewrites
+it through `lumonas-privd`,
 arms EFI `BootNext`, reboots the guest, and verifies the root filesystem came
 from that slot.
 
