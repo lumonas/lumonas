@@ -592,6 +592,9 @@ signature, and Cosign bundle, while `SHA256SUMS` covers those sidecars and the
 manifest after they are generated. Release verification therefore fails if
 provenance or verification metadata is tampered with independently of the
 main artifact.
+Artifact names are also constrained to direct, non-symlink files in the
+release directory, so a tampered manifest cannot redirect verification to a
+path outside the published artifact set.
 
 The generated ISO and QEMU images embed versioned Debian package inventories
 under `/usr/share/doc/lumonas/`, including the source commit, source epoch, and

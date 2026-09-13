@@ -28,7 +28,10 @@ release_dir = pathlib.Path(sys.argv[1])
 manifest_path = pathlib.Path(sys.argv[2])
 expected_source_commit = sys.argv[3]
 expected_source_date_epoch = sys.argv[4]
-manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+try:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"release manifest is not valid JSON: {manifest_path.name}") from exc
 if manifest.get("schemaVersion") != 1:
     raise SystemExit("unsupported release manifest schema")
 if not manifest.get("sourceCommit"):
@@ -48,8 +51,10 @@ for item in manifest.get("artifacts", []):
     name = item.get("name")
     if not isinstance(name, str) or name in expected:
         raise SystemExit("release manifest contains an invalid or duplicate artifact")
+    if pathlib.PurePath(name).name != name:
+        raise SystemExit(f"release manifest artifact name is not a direct file name: {name}")
     path = release_dir / name
-    if not path.is_file() or path.suffix not in {".deb", ".iso", ".qcow2", ".raw"}:
+    if path.is_symlink() or not path.is_file() or path.parent != release_dir or path.suffix not in {".deb", ".iso", ".qcow2", ".raw"}:
         raise SystemExit(f"release manifest artifact is missing or invalid: {name}")
     if item.get("sizeBytes") != path.stat().st_size:
         raise SystemExit(f"release manifest size mismatch: {name}")

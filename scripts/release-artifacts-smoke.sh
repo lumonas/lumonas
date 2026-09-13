@@ -3,7 +3,12 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-release-artifacts.XXXXXX")"
-cleanup() { rm -rf "$WORK"; }
+cleanup() {
+	rm -rf "$WORK"
+	if [ -n "${outside:-}" ]; then
+		rm -f "$outside"
+	fi
+}
 trap cleanup EXIT INT TERM
 
 printf '%s\n' 'debian artifact' >"$WORK/lumonas_test.deb"
@@ -60,11 +65,42 @@ if LUMONAS_REQUIRE_RELEASE_SET=true sh "$ROOT/scripts/verify-release.sh" "$WORK"
 	exit 1
 fi
 rm -f "$WORK/unlisted.raw"
+cp "$WORK/RELEASE-MANIFEST.json" "$WORK/RELEASE-MANIFEST.json.before-path-test"
+cp "$WORK/SHA256SUMS" "$WORK/SHA256SUMS.before-path-test"
+outside="$WORK/../lumonas-release-artifact-outside.deb"
+printf '%s\n' 'outside release directory' >"$outside"
+python3 - "$WORK/RELEASE-MANIFEST.json" "$outside" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+outside = pathlib.Path(sys.argv[2])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+artifact = manifest["artifacts"][0]
+artifact["name"] = "../" + outside.name
+artifact["sha256"] = hashlib.sha256(outside.read_bytes()).hexdigest()
+artifact["sizeBytes"] = outside.stat().st_size
+manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+manifest_sha=$(sha256sum "$WORK/RELEASE-MANIFEST.json" | awk '{print $1}')
+sed -i.bak "s/^[0-9a-f][0-9a-f]*  RELEASE-MANIFEST.json$/$manifest_sha  RELEASE-MANIFEST.json/" "$WORK/SHA256SUMS"
+rm -f "$WORK/SHA256SUMS.bak"
+if path_output=$(sh "$ROOT/scripts/verify-release.sh" "$WORK" 2>&1); then
+	echo "release manifest accepted an artifact outside the release directory" >&2
+	exit 1
+fi
+printf '%s\n' "$path_output" | grep -F 'release manifest artifact name is not a direct file name' >/dev/null
+mv "$WORK/RELEASE-MANIFEST.json.before-path-test" "$WORK/RELEASE-MANIFEST.json"
+mv "$WORK/SHA256SUMS.before-path-test" "$WORK/SHA256SUMS"
+rm -f "$outside"
 cp "$WORK/RELEASE-MANIFEST.json" "$WORK/RELEASE-MANIFEST.json.backup"
 printf '%s\n' 'tampered' >>"$WORK/RELEASE-MANIFEST.json"
-if sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
+if manifest_output=$(sh "$ROOT/scripts/verify-release.sh" "$WORK" 2>&1); then
 	echo "tampered release manifest was accepted" >&2
 	exit 1
 fi
+printf '%s\n' "$manifest_output" | grep -F 'release manifest is not valid JSON' >/dev/null
 mv "$WORK/RELEASE-MANIFEST.json.backup" "$WORK/RELEASE-MANIFEST.json"
 echo "LumoNAS release artifact checksum smoke test passed"

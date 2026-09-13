@@ -680,6 +680,8 @@ itself without regenerating checksums must fail.
 Every SBOM sidecar must parse as an SPDX document with `spdxVersion`,
 `creationInfo`, and `packages`; a hash-valid placeholder or malformed JSON SBOM
 must be rejected.
+Manifest artifact names must resolve to direct, non-symlink files inside the
+release directory; traversal names and external files must be rejected.
 
 The generated ISO and QEMU images must also expose their versioned Debian
 package inventories under `/usr/share/doc/lumonas/`, including the source
