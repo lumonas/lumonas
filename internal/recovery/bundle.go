@@ -24,6 +24,16 @@ import (
 
 const FormatVersion = 1
 
+// Recovery bundles are read into memory before they are verified or staged.
+// Keep the parser bounded so a malformed ZIP cannot turn verification into an
+// unbounded allocation or entry traversal.
+const (
+	MaxBundleEntries              = 4096
+	MaxBundleEntryNameBytes       = 4096
+	MaxBundleEntryBytes     int64 = 20 << 30
+	MaxBundleExpandedBytes  int64 = 40 << 30
+)
+
 type Manifest struct {
 	FormatVersion  int               `json:"formatVersion"`
 	ConfigSchema   int               `json:"configSchema"`
@@ -113,6 +123,9 @@ func Create(input Input, key []byte) ([]byte, error) {
 			return nil, err
 		}
 		files["encrypted-secrets.bin"] = encrypted
+	}
+	if err := validateBundleShape(files, 1); err != nil {
+		return nil, err
 	}
 	input.Manifest.Checksums = map[string]string{}
 	for name, content := range files {
@@ -211,19 +224,32 @@ func readBundleFiles(bundle []byte) (map[string][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(reader.File) > MaxBundleEntries {
+		return nil, fmt.Errorf("recovery bundle contains too many entries: %d > %d", len(reader.File), MaxBundleEntries)
+	}
 	files := make(map[string][]byte, len(reader.File))
+	var expandedBytes int64
 	for _, file := range reader.File {
 		if _, exists := files[file.Name]; exists {
 			return nil, fmt.Errorf("duplicate bundle entry %q", file.Name)
 		}
+		if err := validateBundleEntryName(file.Name); err != nil {
+			return nil, err
+		}
 		if !allowedBundleEntry(file.Name) {
 			return nil, fmt.Errorf("unsupported or unsafe bundle entry %q", file.Name)
+		}
+		if file.UncompressedSize64 > uint64(MaxBundleEntryBytes) {
+			return nil, fmt.Errorf("bundle entry %q exceeds %d bytes", file.Name, MaxBundleEntryBytes)
+		}
+		if file.UncompressedSize64 > uint64(MaxBundleExpandedBytes-expandedBytes) {
+			return nil, fmt.Errorf("recovery bundle expanded size exceeds %d bytes", MaxBundleExpandedBytes)
 		}
 		handle, err := file.Open()
 		if err != nil {
 			return nil, err
 		}
-		data, readErr := io.ReadAll(handle)
+		data, readErr := io.ReadAll(io.LimitReader(handle, MaxBundleEntryBytes+1))
 		closeErr := handle.Close()
 		if readErr != nil {
 			return nil, readErr
@@ -231,6 +257,13 @@ func readBundleFiles(bundle []byte) (map[string][]byte, error) {
 		if closeErr != nil {
 			return nil, closeErr
 		}
+		if int64(len(data)) > MaxBundleEntryBytes {
+			return nil, fmt.Errorf("bundle entry %q exceeds %d bytes", file.Name, MaxBundleEntryBytes)
+		}
+		if expandedBytes > MaxBundleExpandedBytes-int64(len(data)) {
+			return nil, fmt.Errorf("recovery bundle expanded size exceeds %d bytes", MaxBundleExpandedBytes)
+		}
+		expandedBytes += int64(len(data))
 		files[file.Name] = data
 	}
 	return files, nil
@@ -485,6 +518,33 @@ func allowedPayloadEntry(name string) bool {
 		}
 	}
 	return false
+}
+
+func validateBundleShape(files map[string][]byte, additionalEntries int) error {
+	if additionalEntries < 0 || len(files) > MaxBundleEntries-additionalEntries {
+		return fmt.Errorf("recovery bundle contains too many entries: %d > %d", len(files)+additionalEntries, MaxBundleEntries)
+	}
+	var expandedBytes int64
+	for name, content := range files {
+		if err := validateBundleEntryName(name); err != nil {
+			return err
+		}
+		if int64(len(content)) > MaxBundleEntryBytes {
+			return fmt.Errorf("bundle entry %q exceeds %d bytes", name, MaxBundleEntryBytes)
+		}
+		if expandedBytes > MaxBundleExpandedBytes-int64(len(content)) {
+			return fmt.Errorf("recovery bundle expanded size exceeds %d bytes", MaxBundleExpandedBytes)
+		}
+		expandedBytes += int64(len(content))
+	}
+	return nil
+}
+
+func validateBundleEntryName(name string) error {
+	if len(name) > MaxBundleEntryNameBytes {
+		return fmt.Errorf("bundle entry name exceeds %d bytes", MaxBundleEntryNameBytes)
+	}
+	return nil
 }
 
 func contains(values []string, wanted string) bool {

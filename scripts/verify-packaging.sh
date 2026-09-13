@@ -166,6 +166,7 @@ done
 [ -x "$ROOT/scripts/qemu-recovery-smoke.sh" ] || { echo "QEMU recovery smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/qemu-live-recovery-source.sh" ] || { echo "live recovery source helper must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/recovery-api-smoke.sh" ] || { echo "recovery API smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/recovery-bundle-smoke.sh" ] || { echo "recovery bundle smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/security-smoke.sh" ] || { echo "security smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/secret-scan-smoke.sh" ] || { echo "secret scan smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/command-boundary-smoke.sh" ] || { echo "command-boundary smoke test must be executable" >&2; exit 1; }
@@ -251,6 +252,10 @@ require_line "$ROOT/cmd/lumonasd/main.go" 'versioned recovery copy failed'
 require_line "$ROOT/cmd/lumonasd/recovery_export_safety_test.go" 'TestRecoveryExportFailsClosedWhenDiskIdentityCollectionFails'
 require_line "$ROOT/cmd/lumonasd/recovery_export_safety_test.go" 'TestRecoveryExportRequiresNASIdentity'
 require_line "$ROOT/scripts/recovery-api-smoke.sh" 'TestRecoveryExportRequiresNASIdentity'
+require_line "$ROOT/scripts/recovery-bundle-smoke.sh" 'ReadBundleFilesRejectsTooManyZipEntries'
+require_line "$ROOT/internal/recovery/bundle.go" 'MaxBundleExpandedBytes'
+require_line "$ROOT/internal/recovery/bundle.go" 'io.LimitReader(handle, MaxBundleEntryBytes+1)'
+require_line "$ROOT/Makefile" 'recovery-bundle-smoke:'
 require_line "$ROOT/.github/workflows/ci.yml" 'TestClientRejectsOversizedResponse'
 require_line "$ROOT/.github/workflows/ci.yml" 'TestBrokerRejectsOversizedWorkerResponse'
 require_line "$ROOT/.github/workflows/ci.yml" 'TestRecoveryExportFailsClosedWhenDiskIdentityCollectionFails'

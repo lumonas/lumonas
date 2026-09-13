@@ -520,6 +520,10 @@ release-blocking Go safety suite.
 Recovery export now fails closed when stable disk identity collection, NAS
 identity, Docker stack discovery, bundle verification, or versioned-copy
 persistence fails; the API cannot report a verified bundle for partial state.
+Recovery ZIP parsing is bounded by entry count, entry-name length, per-entry
+expanded bytes, and aggregate expanded bytes. Both bundle creation and
+verification enforce these limits, and the release safety gate exercises the
+malformed-entry and oversized-shape paths before recovery artifacts can ship.
 Notification provider responses are bounded to 64 KiB before status handling,
 and the security gate exercises the oversized-response rejection path.
 Support bundles retain their downloadable archive even when a collector fails,
