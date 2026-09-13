@@ -17,8 +17,8 @@ func TestJobSchedulesSeedDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(schedules) != 5 {
-		t.Fatalf("expected 5 seeded schedules, got %d", len(schedules))
+	if len(schedules) != 6 {
+		t.Fatalf("expected 6 seeded schedules, got %d", len(schedules))
 	}
 	var sync monitoring.Schedule
 	for _, schedule := range schedules {

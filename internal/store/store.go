@@ -125,6 +125,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate Docker deployment schema: %w", err)
 	}
+	if err := s.ensureSnapshotsSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate storage snapshot schema: %w", err)
+	}
 	return s, nil
 }
 

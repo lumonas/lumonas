@@ -277,8 +277,14 @@ Snapshot support is layered behind the privileged broker:
 - deletion removes the persisted record only after the broker confirms the
   privileged destroy succeeded.
 
-Scheduled snapshot policies remain future work; snapshots are manual until
-then.
+Schedules can create filesystem snapshots without granting the scheduler raw
+shell access. The seeded policy is disabled until an administrator selects a
+validated btrfs or ZFS source, label, and retention count; once enabled, the
+normal job scheduler submits `snapshot.create` through `mynas-privd`, records
+the snapshot with `origin=scheduled`, and prunes only older scheduled records
+after each privileged delete succeeds. Manual snapshots are never eligible
+for this retention pass. A broker or persistence failure leaves the job
+failed and does not remove the SQLite record optimistically.
 
 ## Acceptance criteria
 

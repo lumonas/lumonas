@@ -2795,7 +2795,7 @@ paths:
   /schedules/{id}:
     patch:
       tags: [Monitoring]
-      summary: Update a maintenance schedule (enable, time, weekday)
+      summary: Update a maintenance schedule (enable, time, weekday, or snapshot policy)
       operationId: patch-schedules-id
       requestBody:
         required: true
@@ -4368,6 +4368,10 @@ components:
         nextDueAt: {type: string, format: date-time}
         schedule: {type: string}
         next: {type: string}
+        snapshotKind: {type: string, enum: [btrfs, zfs]}
+        snapshotSource: {type: string}
+        snapshotLabel: {type: string}
+        snapshotKeep: {type: integer, minimum: 1, maximum: 365}
 
     LogLine:
       type: object

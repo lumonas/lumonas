@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"time"
 )
 
@@ -11,13 +12,44 @@ CREATE TABLE IF NOT EXISTS storage_snapshots (
   source TEXT NOT NULL,
   name TEXT NOT NULL,
   label TEXT,
+  origin TEXT NOT NULL DEFAULT 'manual',
   created_at TEXT NOT NULL,
   UNIQUE(kind, source, name)
 );
 CREATE INDEX IF NOT EXISTS storage_snapshots_source_idx ON storage_snapshots(source, created_at);`
 
 func (s *Store) ensureSnapshotsSchema() error {
-	_, err := s.db.Exec(snapshotsSchema)
+	if _, err := s.db.Exec(snapshotsSchema); err != nil {
+		return err
+	}
+	rows, err := s.db.Query(`PRAGMA table_info(storage_snapshots)`)
+	if err != nil {
+		return err
+	}
+	hasOrigin := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, dataType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "origin" {
+			hasOrigin = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	if !hasOrigin {
+		if _, err := s.db.Exec(`ALTER TABLE storage_snapshots ADD COLUMN origin TEXT NOT NULL DEFAULT 'manual'`); err != nil {
+			return err
+		}
+	}
+	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(10, ?)`, time.Now().UTC().Format(timeFormat))
 	return err
 }
 
@@ -28,6 +60,7 @@ type StorageSnapshotRecord struct {
 	Source    string    `json:"source"`
 	Name      string    `json:"name"`
 	Label     string    `json:"label,omitempty"`
+	Origin    string    `json:"origin,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -43,8 +76,11 @@ func (s *Store) SaveStorageSnapshot(record StorageSnapshotRecord) (StorageSnapsh
 	if record.CreatedAt.IsZero() {
 		record.CreatedAt = time.Now().UTC()
 	}
-	_, err := s.db.Exec(`INSERT INTO storage_snapshots(id,kind,source,name,label,created_at) VALUES(?,?,?,?,?,?)
-ON CONFLICT(kind,source,name) DO NOTHING`, record.ID, record.Kind, record.Source, record.Name, nullable(record.Label), record.CreatedAt.UTC().Format(timeFormat))
+	if record.Origin == "" {
+		record.Origin = "manual"
+	}
+	_, err := s.db.Exec(`INSERT INTO storage_snapshots(id,kind,source,name,label,origin,created_at) VALUES(?,?,?,?,?,?,?)
+ON CONFLICT(kind,source,name) DO NOTHING`, record.ID, record.Kind, record.Source, record.Name, nullable(record.Label), record.Origin, record.CreatedAt.UTC().Format(timeFormat))
 	if err != nil {
 		return StorageSnapshotRecord{}, err
 	}
@@ -67,7 +103,7 @@ func (s *Store) StorageSnapshots(source string, limit int) ([]StorageSnapshotRec
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	query := `SELECT id,kind,source,name,COALESCE(label,''),created_at FROM storage_snapshots`
+	query := `SELECT id,kind,source,name,COALESCE(label,''),origin,created_at FROM storage_snapshots`
 	args := []any{}
 	if source != "" {
 		query += ` WHERE source=?`
@@ -80,7 +116,7 @@ func (s *Store) StorageSnapshots(source string, limit int) ([]StorageSnapshotRec
 
 // StorageSnapshot returns one persisted snapshot by id.
 func (s *Store) StorageSnapshot(id string) (StorageSnapshotRecord, bool, error) {
-	records, err := s.scanStorageSnapshots(`SELECT id,kind,source,name,COALESCE(label,''),created_at FROM storage_snapshots WHERE id=?`, id)
+	records, err := s.scanStorageSnapshots(`SELECT id,kind,source,name,COALESCE(label,''),origin,created_at FROM storage_snapshots WHERE id=?`, id)
 	if err != nil {
 		return StorageSnapshotRecord{}, false, err
 	}
@@ -92,7 +128,7 @@ func (s *Store) StorageSnapshot(id string) (StorageSnapshotRecord, bool, error) 
 
 // StorageSnapshotByTriple resolves a snapshot by its natural key.
 func (s *Store) StorageSnapshotByTriple(kind, source, name string) (StorageSnapshotRecord, bool, error) {
-	records, err := s.scanStorageSnapshots(`SELECT id,kind,source,name,COALESCE(label,''),created_at FROM storage_snapshots WHERE kind=? AND source=? AND name=?`, kind, source, name)
+	records, err := s.scanStorageSnapshots(`SELECT id,kind,source,name,COALESCE(label,''),origin,created_at FROM storage_snapshots WHERE kind=? AND source=? AND name=?`, kind, source, name)
 	if err != nil {
 		return StorageSnapshotRecord{}, false, err
 	}
@@ -122,7 +158,7 @@ func (s *Store) scanStorageSnapshots(query string, args ...any) ([]StorageSnapsh
 	for rows.Next() {
 		var record StorageSnapshotRecord
 		var created string
-		if err := rows.Scan(&record.ID, &record.Kind, &record.Source, &record.Name, &record.Label, &created); err != nil {
+		if err := rows.Scan(&record.ID, &record.Kind, &record.Source, &record.Name, &record.Label, &record.Origin, &created); err != nil {
 			return nil, err
 		}
 		record.CreatedAt, _ = parseTime(created)

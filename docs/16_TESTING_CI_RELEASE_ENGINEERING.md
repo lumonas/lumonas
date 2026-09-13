@@ -433,6 +433,10 @@ contains the old users, jobs, events, audit, and network table layouts in one
 database, then verifies that all records remain readable after the complete
 migration chain. This catches ordering problems that isolated migration tests
 can miss.
+The same gate verifies that the storage snapshot migration adds the scheduled
+snapshot origin field without losing legacy rows. The safety-recovery gate
+also fires an enabled snapshot schedule and checks that its privileged
+operation and persisted origin are present before release.
 
 The Debian maintainer scripts stop services in dependent-to-provider order
 (web, daemon, workers, broker) before an upgrade and start them in the reverse

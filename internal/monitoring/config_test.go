@@ -93,6 +93,20 @@ func TestScheduleValidation(t *testing.T) {
 	if err := badJobType.Validate(); err == nil {
 		t.Fatal("expected unsupported job type to fail validation")
 	}
+	snapshot := Schedule{ID: "sched-snapshot", Name: "Snapshots", JobType: "snapshot.create", Kind: ScheduleDaily, TimeOfDay: "01:30", SnapshotKind: "btrfs", SnapshotSource: "/srv/pools/media", SnapshotKeep: 7}
+	if err := snapshot.Validate(); err != nil {
+		t.Fatalf("valid snapshot schedule rejected: %v", err)
+	}
+	missingSnapshotSource := snapshot
+	missingSnapshotSource.SnapshotSource = ""
+	if err := missingSnapshotSource.Validate(); err == nil {
+		t.Fatal("snapshot schedule without a source unexpectedly passed")
+	}
+	invalidSnapshotKeep := snapshot
+	invalidSnapshotKeep.SnapshotKeep = 0
+	if err := invalidSnapshotKeep.Validate(); err == nil {
+		t.Fatal("snapshot schedule without bounded retention unexpectedly passed")
+	}
 	badTime := valid
 	badTime.TimeOfDay = "25:00"
 	if err := badTime.Validate(); err == nil {

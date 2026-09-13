@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/lumonas/lumonas/internal/monitoring"
 	"github.com/lumonas/lumonas/internal/power"
 	"github.com/lumonas/lumonas/internal/privileged"
+	"github.com/lumonas/lumonas/internal/storage"
 	"github.com/lumonas/lumonas/internal/store"
 )
 
@@ -42,16 +44,20 @@ func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 	var input struct {
-		Enabled   *bool   `json:"enabled"`
-		TimeOfDay *string `json:"timeOfDay"`
-		Weekday   *string `json:"weekday"`
+		Enabled        *bool   `json:"enabled"`
+		TimeOfDay      *string `json:"timeOfDay"`
+		Weekday        *string `json:"weekday"`
+		SnapshotKind   *string `json:"snapshotKind"`
+		SnapshotSource *string `json:"snapshotSource"`
+		SnapshotLabel  *string `json:"snapshotLabel"`
+		SnapshotKeep   *int    `json:"snapshotKeep"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	if input.Enabled == nil && input.TimeOfDay == nil && input.Weekday == nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "enabled, timeOfDay, or weekday is required"})
+	if input.Enabled == nil && input.TimeOfDay == nil && input.Weekday == nil && input.SnapshotKind == nil && input.SnapshotSource == nil && input.SnapshotLabel == nil && input.SnapshotKeep == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "schedule fields are required"})
 		return
 	}
 	if input.Enabled != nil {
@@ -63,12 +69,28 @@ func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id st
 	if input.Weekday != nil {
 		schedule.Weekday = strings.ToLower(*input.Weekday)
 	}
+	if input.SnapshotKind != nil {
+		schedule.SnapshotKind = strings.ToLower(strings.TrimSpace(*input.SnapshotKind))
+	}
+	if input.SnapshotSource != nil {
+		schedule.SnapshotSource = strings.TrimSpace(*input.SnapshotSource)
+	}
+	if input.SnapshotLabel != nil {
+		schedule.SnapshotLabel = strings.TrimSpace(*input.SnapshotLabel)
+	}
+	if input.SnapshotKeep != nil {
+		schedule.SnapshotKeep = *input.SnapshotKeep
+	}
 	// A cadence change re-arms the schedule from now; enabling a paused
 	// schedule keeps its previously computed due time when it is still future.
 	if input.TimeOfDay != nil || input.Weekday != nil {
 		now := time.Now()
 		next := monitoring.NextOccurrence(schedule, now)
 		schedule.NextDueAt = &next
+	}
+	if err := validateScheduledSnapshot(schedule); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
 	}
 	if err := s.store.SaveJobSchedule(schedule); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
@@ -83,6 +105,23 @@ func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 	writeJSON(w, http.StatusOK, saved)
+}
+
+func validateScheduledSnapshot(schedule monitoring.Schedule) error {
+	if schedule.JobType != "snapshot.create" {
+		return nil
+	}
+	kind := storage.SnapshotKind(schedule.SnapshotKind)
+	if err := storage.ValidateSnapshotSource(kind, schedule.SnapshotSource); err != nil {
+		return err
+	}
+	if err := storage.ValidateSnapshotLabel(schedule.SnapshotLabel); err != nil {
+		return err
+	}
+	if schedule.SnapshotKeep < 1 || schedule.SnapshotKeep > 365 {
+		return errors.New("snapshot retention must keep between 1 and 365 snapshots")
+	}
+	return nil
 }
 
 // scheduleLoop drives persisted schedules; it mirrors backupLoop's one-minute tick.
@@ -245,9 +284,103 @@ func (s *apiServer) launchScheduleJob(schedule monitoring.Schedule) {
 		}
 	case "backup.run":
 		s.requestAutomaticBackup("scheduled")
+	case "snapshot.create":
+		if err := validateScheduledSnapshot(schedule); err != nil {
+			s.publish("schedule.skipped", "warning", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "reason": err.Error()})
+			return
+		}
+		job := model.Job{ID: newID("job"), CorrelationID: "schedule-" + schedule.ID, Type: schedule.JobType, Title: "Filesystem snapshot (scheduled)", ResourceID: schedule.SnapshotSource, State: "queued", CreatedAt: time.Now().UTC()}
+		if err := s.admitJob(job); err != nil {
+			s.scheduleLaunchFailed(schedule, err)
+			return
+		}
+		s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "schedule": schedule.ID})
+		go s.runSnapshotJob(job, schedule)
 	default:
 		s.publish("schedule.skipped", "warning", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "reason": "unsupported job type " + schedule.JobType})
 	}
+}
+
+func (s *apiServer) runSnapshotJob(job model.Job, schedule monitoring.Schedule) {
+	now := time.Now().UTC()
+	job.State, job.Stage, job.StartedAt = "running", "creating snapshot", &now
+	_ = s.store.SaveJob(job)
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+	operationID := newID("scheduled-snapshot")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	result, err := s.executePrivileged(ctx, privileged.Request{
+		Operation:      "snapshot.create",
+		OperationID:    operationID,
+		CorrelationID:  job.CorrelationID,
+		PlanHash:       operationID,
+		RequestedState: map[string]any{"kind": schedule.SnapshotKind, "source": schedule.SnapshotSource, "label": schedule.SnapshotLabel},
+		ExpiresAt:      time.Now().UTC().Add(5 * time.Minute),
+		Confirmed:      true,
+	})
+	if err != nil || !result.OK {
+		if err == nil {
+			err = errors.New(result.Error)
+		}
+		job.State, job.Error = "failed", err.Error()
+		finished := time.Now().UTC()
+		job.FinishedAt = &finished
+		_ = s.store.SaveJob(job)
+		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "operationId": operationID})
+		s.publish("storage.snapshot.failed", "warning", &model.ResourceRef{Type: "snapshot", ID: schedule.SnapshotSource}, map[string]any{"jobId": job.ID, "operationId": operationID, "error": job.Error})
+		return
+	}
+	record := snapshotRecordFromResponse(result, storage.SnapshotKind(schedule.SnapshotKind), schedule.SnapshotSource, schedule.SnapshotLabel)
+	record.Origin = "scheduled"
+	if _, saveErr := s.store.SaveStorageSnapshot(record); saveErr != nil {
+		job.State, job.Error = "failed", "snapshot state persistence failed"
+		finished := time.Now().UTC()
+		job.FinishedAt = &finished
+		_ = s.store.SaveJob(job)
+		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "operationId": operationID})
+		return
+	}
+	if err := s.pruneScheduledSnapshots(schedule, record); err != nil {
+		s.publish("storage.snapshot.retention_failed", "warning", &model.ResourceRef{Type: "snapshot", ID: record.ID}, map[string]any{"jobId": job.ID, "error": err.Error()})
+	}
+	progress := 100.0
+	finished := time.Now().UTC()
+	job.State, job.Stage, job.Progress, job.FinishedAt = "successful", "snapshot created", &progress, &finished
+	_ = s.store.SaveJob(job)
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "operationId": operationID})
+	s.publish("storage.snapshot.created", "info", &model.ResourceRef{Type: "snapshot", ID: record.ID}, map[string]any{"snapshotId": record.ID, "source": record.Source, "name": record.Name, "origin": record.Origin, "operationId": operationID})
+}
+
+func (s *apiServer) pruneScheduledSnapshots(schedule monitoring.Schedule, newest store.StorageSnapshotRecord) error {
+	records, err := s.store.StorageSnapshots(schedule.SnapshotSource, 500)
+	if err != nil {
+		return err
+	}
+	kept := 0
+	for _, record := range records {
+		if record.Kind != schedule.SnapshotKind || record.Origin != "scheduled" {
+			continue
+		}
+		kept++
+		if record.ID == newest.ID || kept <= schedule.SnapshotKeep {
+			continue
+		}
+		operationID := newID("scheduled-snapshot-delete")
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		result, execErr := s.executePrivileged(ctx, privileged.Request{Operation: "snapshot.delete", OperationID: operationID, CorrelationID: "retention-" + schedule.ID, PlanHash: operationID, RequestedState: map[string]any{"kind": record.Kind, "source": record.Source, "name": record.Name}, ExpiresAt: time.Now().UTC().Add(5 * time.Minute), Confirmed: true})
+		cancel()
+		if execErr != nil {
+			return execErr
+		}
+		if !result.OK {
+			return errors.New(result.Error)
+		}
+		if err := s.store.DeleteStorageSnapshot(record.ID); err != nil {
+			return err
+		}
+		s.publish("storage.snapshot.deleted", "info", &model.ResourceRef{Type: "snapshot", ID: record.ID}, map[string]any{"snapshotId": record.ID, "source": record.Source, "name": record.Name, "origin": "scheduled", "reason": "retention"})
+	}
+	return nil
 }
 
 func (s *apiServer) scheduleLaunchFailed(schedule monitoring.Schedule, err error) {

@@ -107,6 +107,10 @@ export interface JobSchedule {
   nextDueAt?: string
   schedule: string
   next: string
+  snapshotKind?: 'btrfs' | 'zfs'
+  snapshotSource?: string
+  snapshotLabel?: string
+  snapshotKeep?: number
 }
 
 export type AlertSeverity = 'info' | 'attention' | 'warning' | 'critical'

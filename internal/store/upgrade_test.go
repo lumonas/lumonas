@@ -62,6 +62,29 @@ func TestStoreReopenPreservesStateAcrossMigrations(t *testing.T) {
 	}
 }
 
+func TestStorageSnapshotMigrationAddsOriginAndPreservesRows(t *testing.T) {
+	database, err := Open(filepath.Join(t.TempDir(), "legacy-snapshot.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.db.Exec(`DROP TABLE storage_snapshots; CREATE TABLE storage_snapshots (id TEXT PRIMARY KEY, kind TEXT NOT NULL, source TEXT NOT NULL, name TEXT NOT NULL, label TEXT, created_at TEXT NOT NULL, UNIQUE(kind, source, name)); INSERT INTO storage_snapshots(id,kind,source,name,label,created_at) VALUES('legacy','btrfs','/srv/pool','old','manual','2026-09-13T00:00:00Z')`); err != nil {
+		database.Close()
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(filepath.Join(filepath.Dir(database.path), "legacy-snapshot.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	records, err := reopened.StorageSnapshots("/srv/pool", 10)
+	if err != nil || len(records) != 1 || records[0].Origin != "manual" {
+		t.Fatalf("legacy snapshot migration failed: %#v err=%v", records, err)
+	}
+}
+
 func TestOpenMigratesLegacyEventSchema(t *testing.T) {
 	databasePath := filepath.Join(t.TempDir(), "legacy.db")
 	legacy, err := sql.Open("sqlite3", databasePath)

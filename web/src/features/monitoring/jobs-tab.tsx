@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { Input } from '@/components/ui/input'
 import { formatDuration, timeAgo } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
@@ -45,8 +46,18 @@ function ScheduleRow({ schedule }: { schedule: JobSchedule }) {
   const editable = schedule.kind !== 'event'
   const [time, setTime] = useState(schedule.timeOfDay)
   const [weekday, setWeekday] = useState(schedule.weekday ?? 'sunday')
+  const [snapshotKind, setSnapshotKind] = useState(schedule.snapshotKind ?? 'btrfs')
+  const [snapshotSource, setSnapshotSource] = useState(schedule.snapshotSource ?? '')
+  const [snapshotLabel, setSnapshotLabel] = useState(schedule.snapshotLabel ?? 'scheduled')
+  const [snapshotKeep, setSnapshotKeep] = useState(String(schedule.snapshotKeep ?? 7))
   const timeDirty = editable && time !== schedule.timeOfDay
   const weekdayDirty = schedule.kind === 'weekly' && weekday !== (schedule.weekday ?? 'sunday')
+  const snapshotDirty = schedule.jobType === 'snapshot.create' && (
+    snapshotKind !== (schedule.snapshotKind ?? 'btrfs') ||
+    snapshotSource !== (schedule.snapshotSource ?? '') ||
+    snapshotLabel !== (schedule.snapshotLabel ?? 'scheduled') ||
+    snapshotKeep !== String(schedule.snapshotKeep ?? 7)
+  )
 
   function saveTime() {
     update.mutate({ id: schedule.id, timeOfDay: time })
@@ -54,6 +65,16 @@ function ScheduleRow({ schedule }: { schedule: JobSchedule }) {
   function saveWeekday(day: string) {
     setWeekday(day)
     update.mutate({ id: schedule.id, weekday: day })
+  }
+
+  function saveSnapshot() {
+    update.mutate({
+      id: schedule.id,
+      snapshotKind,
+      snapshotSource,
+      snapshotLabel,
+      snapshotKeep: Number(snapshotKeep) || 0,
+    })
   }
 
   return (
@@ -103,6 +124,27 @@ function ScheduleRow({ schedule }: { schedule: JobSchedule }) {
               </button>
             )}
           </>
+        )}
+        {schedule.jobType === 'snapshot.create' && (
+          <div className="flex max-w-[520px] flex-wrap items-center justify-end gap-1.5">
+            <Select value={snapshotKind} onValueChange={(value) => setSnapshotKind(value as 'btrfs' | 'zfs')} disabled={update.isPending}>
+              <SelectTrigger className="h-7 w-[82px] text-xs" aria-label="Snapshot filesystem">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="btrfs" className="text-xs">Btrfs</SelectItem>
+                <SelectItem value="zfs" className="text-xs">ZFS</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input value={snapshotSource} onChange={(event) => setSnapshotSource(event.target.value)} placeholder="/srv/pools/media" className="h-7 w-[170px] text-xs" aria-label="Snapshot source" />
+            <Input value={snapshotLabel} onChange={(event) => setSnapshotLabel(event.target.value)} placeholder="Label" className="h-7 w-[92px] text-xs" aria-label="Snapshot label" />
+            <Input type="number" min={1} max={365} value={snapshotKeep} onChange={(event) => setSnapshotKeep(event.target.value)} className="h-7 w-[58px] text-xs" aria-label="Snapshots to keep" />
+            {snapshotDirty && (
+              <button type="button" onClick={saveSnapshot} disabled={update.isPending} className="h-7 rounded-md bg-primary px-2 text-xs font-medium text-primary-foreground disabled:opacity-50">
+                Save
+              </button>
+            )}
+          </div>
         )}
         <Switch
           checked={schedule.enabled}

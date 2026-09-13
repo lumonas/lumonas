@@ -147,7 +147,7 @@ interop-smoke:
 	bash scripts/interop/run-all.sh
 
 upgrade-compatibility:
-	$(GO_ENV) go test ./internal/store -run 'TestStoreReopenPreservesStateAcrossMigrations|TestOpenMigratesLegacyEventSchema|TestOpenMigratesLegacyRuntimeSchemaAsOneUpgrade'
+	$(GO_ENV) go test ./internal/store -run 'TestStoreReopenPreservesStateAcrossMigrations|TestOpenMigratesLegacyEventSchema|TestOpenMigratesLegacyRuntimeSchemaAsOneUpgrade|TestStorageSnapshotMigrationAddsOriginAndPreservesRows'
 
 release-gate-policy:
 	bash scripts/release-gate-policy-smoke.sh

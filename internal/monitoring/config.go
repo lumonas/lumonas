@@ -54,17 +54,21 @@ type NotificationChannel struct {
 }
 
 type Schedule struct {
-	ID            string     `json:"id"`
-	Name          string     `json:"name"`
-	JobType       string     `json:"jobType"`
-	Kind          string     `json:"kind"`
-	TimeOfDay     string     `json:"timeOfDay"`
-	Weekday       string     `json:"weekday,omitempty"`
-	Enabled       bool       `json:"enabled"`
-	LastStartedAt *time.Time `json:"lastStartedAt,omitempty"`
-	NextDueAt     *time.Time `json:"nextDueAt,omitempty"`
-	Schedule      string     `json:"schedule"`
-	Next          string     `json:"next"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	JobType        string     `json:"jobType"`
+	Kind           string     `json:"kind"`
+	TimeOfDay      string     `json:"timeOfDay"`
+	Weekday        string     `json:"weekday,omitempty"`
+	Enabled        bool       `json:"enabled"`
+	LastStartedAt  *time.Time `json:"lastStartedAt,omitempty"`
+	NextDueAt      *time.Time `json:"nextDueAt,omitempty"`
+	Schedule       string     `json:"schedule"`
+	Next           string     `json:"next"`
+	SnapshotKind   string     `json:"snapshotKind,omitempty"`
+	SnapshotSource string     `json:"snapshotSource,omitempty"`
+	SnapshotLabel  string     `json:"snapshotLabel,omitempty"`
+	SnapshotKeep   int        `json:"snapshotKeep,omitempty"`
 }
 
 const (
@@ -89,6 +93,16 @@ func (s Schedule) Validate() error {
 	}
 	switch s.JobType {
 	case "smart.short", "smart.extended", "snapraid.sync", "snapraid.scrub", "backup.run":
+	case "snapshot.create":
+		if strings.TrimSpace(s.SnapshotKind) == "" || strings.TrimSpace(s.SnapshotSource) == "" {
+			return errors.New("snapshot schedule kind and source are required")
+		}
+		if s.SnapshotKind != "btrfs" && s.SnapshotKind != "zfs" {
+			return fmt.Errorf("unsupported snapshot kind %q", s.SnapshotKind)
+		}
+		if s.SnapshotKeep < 1 || s.SnapshotKeep > 365 {
+			return errors.New("snapshot retention must keep between 1 and 365 snapshots")
+		}
 	default:
 		return fmt.Errorf("unsupported schedule job type %q", s.JobType)
 	}
@@ -251,5 +265,6 @@ func DefaultSchedules() []Schedule {
 		{ID: "sched-smart", Name: "SMART short tests", JobType: "smart.short", Kind: ScheduleWeekly, Weekday: "saturday", TimeOfDay: "04:00", Enabled: true},
 		{ID: "sched-backup", Name: "App backups", JobType: "backup.run", Kind: ScheduleDaily, TimeOfDay: "03:30", Enabled: true},
 		{ID: "sched-config", Name: "Config snapshot", JobType: "config.snapshot", Kind: ScheduleEvent, Enabled: true},
+		{ID: "sched-snapshot", Name: "Filesystem snapshots", JobType: "snapshot.create", Kind: ScheduleDaily, TimeOfDay: "01:30", Enabled: false, SnapshotKind: "btrfs", SnapshotSource: "/srv/pools/media", SnapshotLabel: "scheduled", SnapshotKeep: 7},
 	}
 }

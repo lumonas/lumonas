@@ -28,7 +28,7 @@ func TestSchedulesEndpointsRoundTrip(t *testing.T) {
 		Next     string `json:"next"`
 		Enabled  bool   `json:"enabled"`
 	}
-	if err := json.NewDecoder(list.Body).Decode(&schedules); err != nil || len(schedules) != 5 {
+	if err := json.NewDecoder(list.Body).Decode(&schedules); err != nil || len(schedules) != 6 {
 		t.Fatalf("unexpected schedules: %#v err=%v", schedules, err)
 	}
 	disable := httptest.NewRecorder()
@@ -62,6 +62,16 @@ func TestSchedulesEndpointsRoundTrip(t *testing.T) {
 	if reread.Code != http.StatusOK || !strings.Contains(reread.Body.String(), `"enabled":false`) {
 		t.Fatalf("expected persisted disable, got %d: %s", reread.Code, reread.Body.String())
 	}
+	snapshot := httptest.NewRecorder()
+	server.routes().ServeHTTP(snapshot, httptest.NewRequest(http.MethodPatch, "/api/v1/schedules/sched-snapshot", strings.NewReader(`{"snapshotKind":"btrfs","snapshotSource":"/srv/pools/media","snapshotLabel":"nightly","snapshotKeep":14}`)))
+	if snapshot.Code != http.StatusOK || !strings.Contains(snapshot.Body.String(), `"snapshotKeep":14`) || !strings.Contains(snapshot.Body.String(), `"snapshotSource":"/srv/pools/media"`) {
+		t.Fatalf("expected snapshot policy update, got %d: %s", snapshot.Code, snapshot.Body.String())
+	}
+	invalidSnapshot := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalidSnapshot, httptest.NewRequest(http.MethodPatch, "/api/v1/schedules/sched-snapshot", strings.NewReader(`{"snapshotSource":"relative"}`)))
+	if invalidSnapshot.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected invalid snapshot source rejection, got %d: %s", invalidSnapshot.Code, invalidSnapshot.Body.String())
+	}
 }
 
 func TestRunDueSchedulesFiresBackupSchedule(t *testing.T) {
@@ -89,6 +99,49 @@ func TestRunDueSchedulesFiresBackupSchedule(t *testing.T) {
 	if fired.LastStartedAt == nil {
 		t.Fatal("expected last started to be recorded")
 	}
+}
+
+func TestRunDueSchedulesFiresSnapshotScheduleAndPersistsOrigin(t *testing.T) {
+	server := testServer(t)
+	requests := make(chan privileged.Request, 4)
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		requests <- request
+		return nil
+	}
+	schedule, err := server.store.JobSchedule("sched-snapshot", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	schedule.Enabled = true
+	past := time.Now().Add(-time.Minute)
+	schedule.NextDueAt = &past
+	if err := server.store.SaveJobSchedule(schedule); err != nil {
+		t.Fatal(err)
+	}
+	server.runDueSchedules()
+	fired, err := server.store.JobSchedule("sched-snapshot", time.Now())
+	if err != nil || fired.LastStartedAt == nil {
+		t.Fatalf("snapshot schedule did not fire: %#v err=%v", fired, err)
+	}
+	var request privileged.Request
+	select {
+	case request = <-requests:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduled snapshot did not reach the privileged broker")
+	}
+	if request.Operation != "snapshot.create" || request.OperationID == "" {
+		t.Fatalf("unexpected scheduled snapshot broker request: %#v", request)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		records, readErr := server.store.StorageSnapshots(schedule.SnapshotSource, 10)
+		if readErr == nil && len(records) == 1 && records[0].Origin == "scheduled" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	records, err := server.store.StorageSnapshots(schedule.SnapshotSource, 10)
+	t.Fatalf("scheduled snapshot was not persisted with origin: %#v err=%v", records, err)
 }
 
 func TestRunDueSchedulesSkipsWhenJobActive(t *testing.T) {

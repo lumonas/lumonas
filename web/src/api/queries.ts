@@ -471,6 +471,10 @@ export interface SchedulePatch {
   enabled?: boolean
   timeOfDay?: string
   weekday?: string
+  snapshotKind?: 'btrfs' | 'zfs'
+  snapshotSource?: string
+  snapshotLabel?: string
+  snapshotKeep?: number
 }
 
 export function useUpdateSchedule() {
