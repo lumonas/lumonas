@@ -100,7 +100,7 @@ func TestHandlerServesAssetsAndFallsBackToSPA(t *testing.T) {
 	}
 }
 
-func TestWebListenAddressDefaultsToApplianceLAN(t *testing.T) {
+func TestWebListenAddressDefaultsToLoopback(t *testing.T) {
 	t.Setenv("LUMONAS_WEB_LISTEN", "")
 	if got := webListenAddress(); got != defaultWebListenAddress {
 		t.Fatalf("web listener default = %q, want %q", got, defaultWebListenAddress)

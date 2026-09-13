@@ -16,7 +16,9 @@ import (
 	"time"
 )
 
-const defaultWebListenAddress = "0.0.0.0:8081"
+// Keep an unconfigured binary local-only. Packaged appliances override this
+// through /etc/lumonas/lumonas-web.env after provisioning local HTTPS.
+const defaultWebListenAddress = "127.0.0.1:8081"
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
