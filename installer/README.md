@@ -28,6 +28,28 @@ development images.
 
 The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. CI publishes the ISO with checksums, SBOM, and release signatures. With `LUMONAS_ENABLE_RECOVERY_SMOKE=true`, the image installs a bootable Debian runtime and bootloader onto a blank replacement disk, restores a verified recovery fixture, starts `lumonasd` against the restored filesystem, verifies the restored SQLite state through the real principals/shares API, and then boots the recovered disk without the ISO before the gate passes.
 
+## Browser-based installation
+
+The live medium runs `lumonasd` with `LUMONAS_INSTALLER_MODE=true`, which
+enables the `/install/*` endpoints and the `/install` page:
+
+1. `GET /install/targets` reviews every disk. The running system disk,
+   mounted disks, parity members, disks carrying filesystems, undersized
+   disks, and disks in critical health are listed with explicit protection
+   reasons — they stay visible so the review step explains the exclusion.
+2. `POST /install/plan` validates the operator's choices and produces an
+   immutable, hash-pinned plan that expires after ten minutes.
+3. `POST /install/apply` requires the exact plan hash, explicit
+   confirmation, and a 12+ character administrator password. The plan hash
+   and disk identity are revalidated at the privileged boundary; the broker
+   invokes the packaged `install-disk` provisioner (partition, filesystem,
+   Debian bootstrap, bootloader) with the password delivered over stdin and
+   written only to the root-owned first-boot environment file.
+4. `GET /install/status` reports the current stage.
+
+Outside installer mode all `/install/*` endpoints return 404, so a running
+appliance can never offer to install over itself.
+
 The release storage gate separately installs `e2fsprogs`, `xfsprogs`, mergerfs,
 and SnapRAID and exercises disposable ext4/XFS branches, a real mergerfs pool,
 and a read-only SnapRAID status probe before an appliance release is accepted.

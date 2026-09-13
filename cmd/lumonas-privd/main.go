@@ -244,7 +244,7 @@ func executeWorker(req request, worker string) response {
 
 func operationWorker(operation string) string {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.delete":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.delete", "install.apply":
 		return "storage"
 	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply":
 		return "network"
@@ -304,7 +304,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 			return response{Error: "disk identity discovery failed"}
 		}
 		return response{OK: true, Data: disks}
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "install.apply":
 		if req.TargetDiskID == "" {
 			return response{Error: "targetDiskId is required for filesystem operations"}
 		}
@@ -331,10 +331,10 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		if err := validateIdentity(*target, req.ExpectedIdentity); err != nil {
 			return response{Error: err.Error()}
 		}
-		if (req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase") && (target.Mounted || target.PoolID != "") {
+		if (req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase" || req.Operation == "install.apply") && (target.Mounted || target.PoolID != "") {
 			return response{Error: "target disk is mounted or assigned to a pool"}
 		}
-		if req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase" {
+		if req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase" || req.Operation == "install.apply" {
 			mounted, mountErr := deviceHasMounts(target.CurrentPath, run)
 			if mountErr != nil {
 				return response{Error: "could not verify target mount state"}
@@ -342,6 +342,9 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 			if mounted {
 				return response{Error: "target device or one of its partitions is mounted"}
 			}
+		}
+		if req.Operation == "install.apply" {
+			return applyDiskInstall(req, *target, run, stdinCommandRunner)
 		}
 		return executeStorage(req, *target, run)
 	case "pool.mount":
@@ -487,7 +490,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 
 func requiresOperationID(operation string) bool {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.delete":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.delete", "install.apply":
 		return true
 	default:
 		return false
@@ -763,6 +766,8 @@ func validateIdentity(disk model.Disk, expected map[string]string) error {
 func executeStorage(req request, disk model.Disk, run command) response {
 	path := disk.CurrentPath
 	switch req.Operation {
+	case "install.apply":
+		return applyDiskInstall(req, disk, run, stdinCommandRunner)
 	case "filesystem.mount":
 		target := requestedString(req.RequestedState, "mountPath")
 		if !safePath(target) {

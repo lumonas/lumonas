@@ -938,6 +938,91 @@ export const handlers = [
 
   http.get(`${BASE}/network/firewall/policy`, () => HttpResponse.json(firewall)),
 
+  http.get(`${BASE}/install/targets`, () =>
+    HttpResponse.json([
+      {
+        diskId: 'wwn:system-usb',
+        name: 'sda',
+        model: 'Installer Medium (USB)',
+        sizeBytes: 32_000_000_000,
+        role: 'system',
+        filesystem: 'ext4',
+        mounted: true,
+        eligible: false,
+        protectedBy: ['running system disk'],
+        identity: { wwn: 'wwn:system-usb', serial: 'USB1', sizeBytes: String(32_000_000_000) },
+      },
+      {
+        diskId: 'wwn:blank-target',
+        name: 'sdb',
+        model: 'WDC WD40EFRX',
+        sizeBytes: 4_000_000_000_000,
+        role: 'unknown',
+        mounted: false,
+        eligible: true,
+        identity: { wwn: 'wwn:blank-target', serial: 'WD1', sizeBytes: String(4_000_000_000_000) },
+      },
+      {
+        diskId: 'wwn:data-disk',
+        name: 'sdc',
+        model: 'Seagate IronWolf',
+        sizeBytes: 8_000_000_000_000,
+        role: 'data',
+        filesystem: 'ext4',
+        mounted: true,
+        eligible: false,
+        protectedBy: ['disk is mounted', 'disk holds an existing filesystem'],
+        identity: { wwn: 'wwn:data-disk', serial: 'SG1', sizeBytes: String(8_000_000_000_000) },
+      },
+    ]),
+  ),
+
+  http.post(`${BASE}/install/plan`, async ({ request }) => {
+    const body = (await request.json()) as {
+      targetDiskId?: string
+      hostname?: string
+      adminUsername?: string
+      filesystem?: string
+    }
+    if (!body.targetDiskId || !body.hostname) return new HttpResponse(null, { status: 422 })
+    const now = new Date()
+    const expires = new Date(now.getTime() + 10 * 60_000)
+    return HttpResponse.json(
+      {
+        plan: {
+          id: `install-${now.getTime()}`,
+          targetDiskId: body.targetDiskId,
+          expectedIdentity: { wwn: body.targetDiskId, sizeBytes: String(4_000_000_000_000) },
+          hostname: body.hostname,
+          adminUsername: body.adminUsername ?? 'admin',
+          filesystem: body.filesystem ?? 'ext4',
+          uefi: true,
+          createdAt: now.toISOString(),
+          expiresAt: expires.toISOString(),
+        },
+        hash: 'mock-plan-hash-0123456789abcdef',
+        targets: [],
+      },
+      { status: 201 },
+    )
+  }),
+
+  http.post(`${BASE}/install/apply`, async ({ request }) => {
+    const body = (await request.json()) as { hash?: string; confirm?: boolean; adminPassword?: string }
+    if (!body.hash || !body.confirm) return new HttpResponse(null, { status: 422 })
+    if ((body.adminPassword ?? '').length < 12) {
+      return new HttpResponse(null, { status: 422 })
+    }
+    pushActivity({
+      category: 'config',
+      title: 'Installation completed',
+      description: 'Reboot and remove the installer medium',
+    })
+    return HttpResponse.json({ status: 'succeeded', hostname: 'lumonas' })
+  }),
+
+  http.get(`${BASE}/install/status`, () => HttpResponse.json({ stage: 'idle' })),
+
   http.get(`${BASE}/network/lan/hosts`, () => HttpResponse.json(lanHosts)),
 
   http.post(`${BASE}/network/lan/scan`, () => {

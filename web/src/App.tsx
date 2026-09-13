@@ -18,6 +18,7 @@ import { SettingsPage } from '@/features/settings/SettingsPage'
 import { StoragePage } from '@/features/storage/StoragePage'
 import { UsersPage } from '@/features/users/UsersPage'
 import { UpdatesPage } from '@/features/updates/UpdatesPage'
+import { InstallPage } from '@/features/installer/InstallPage'
 import { useOnboardingState } from '@/api/queries'
 import { useUiStore } from '@/stores/ui'
 import { ThemeProvider } from '@/theme/ThemeProvider'
@@ -64,6 +65,7 @@ function RoutedApp() {
         <OnboardingPage />
       ) : (
         <Routes>
+        <Route path="install" element={<InstallPage />} />
         <Route element={<AppShell />}>
           <Route index element={<DashboardPage />} />
           <Route path="storage" element={<StoragePage />} />

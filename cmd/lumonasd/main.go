@@ -80,6 +80,7 @@ type apiServer struct {
 	clock                       func() time.Time
 	deploymentOptions           deploymentOptions
 	lanScanImpl                 func(ctx context.Context) ([]network.LanHost, error)
+	installer                   installerState
 }
 
 var version = "0.1.0-dev"
@@ -484,6 +485,14 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.supportBundle(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
 		s.networkInterfaces(w)
+	case r.Method == http.MethodGet && endpoint == "/install/targets":
+		s.installerTargets(w, r)
+	case r.Method == http.MethodPost && endpoint == "/install/plan":
+		s.installerPlan(w, r)
+	case r.Method == http.MethodPost && endpoint == "/install/apply":
+		s.installerApply(w, r)
+	case r.Method == http.MethodGet && endpoint == "/install/status":
+		s.installerStatus(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/lan/hosts":
 		s.lanHosts(w, r)
 	case r.Method == http.MethodPost && endpoint == "/network/lan/scan":

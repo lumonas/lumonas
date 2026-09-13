@@ -462,6 +462,44 @@ export interface LanHost {
   lastSeen: string
 }
 
+export interface InstallTarget {
+  diskId: string
+  name: string
+  model: string
+  sizeBytes: number
+  role: string
+  filesystem?: string
+  mounted: boolean
+  eligible: boolean
+  protectedBy?: string[]
+  identity: Record<string, string>
+}
+
+export interface InstallPlan {
+  id: string
+  targetDiskId: string
+  expectedIdentity: Record<string, string>
+  hostname: string
+  adminUsername: string
+  filesystem: 'ext4' | 'xfs'
+  uefi: boolean
+  createdAt: string
+  expiresAt: string
+}
+
+export interface InstallPlanResponse {
+  plan: InstallPlan
+  hash: string
+  targets: InstallTarget[]
+}
+
+export interface InstallStatus {
+  stage: 'idle' | 'planned' | 'applying' | 'succeeded' | 'failed'
+  detail?: string
+  planId?: string
+  hostname?: string
+}
+
 export interface StorageSafety {
   state: 'locked' | 'unlocked'
   unlockedUntil: string | null

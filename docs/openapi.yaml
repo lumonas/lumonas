@@ -844,6 +844,90 @@ paths:
                 items:
                   $ref: '#/components/schemas/NetworkInterface'
 
+  /install/targets:
+    get:
+      tags: [Installer]
+      summary: Review installation target disks (installer medium only)
+      operationId: listInstallTargets
+      responses:
+        '200':
+          description: Reviewed targets with protection reasons
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InstallTarget'
+        '404':
+          description: Not running from the installer medium
+
+  /install/plan:
+    post:
+      tags: [Installer]
+      summary: Generate an immutable installation plan
+      operationId: createInstallPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetDiskId, hostname, adminUsername, filesystem]
+              properties:
+                targetDiskId: {type: string}
+                hostname: {type: string}
+                adminUsername: {type: string}
+                filesystem: {type: string, enum: [ext4, xfs]}
+                uefi: {type: boolean}
+      responses:
+        '201':
+          description: Plan generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallPlanResponse'
+        '422':
+          description: Invalid request or protected target
+
+  /install/apply:
+    post:
+      tags: [Installer]
+      summary: Apply a confirmed installation plan
+      operationId: applyInstallPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hash, confirm, adminPassword]
+              properties:
+                hash: {type: string}
+                confirm: {type: boolean}
+                adminPassword: {type: string, format: password}
+      responses:
+        '200':
+          description: Installation succeeded
+        '409':
+          description: No plan generated
+        '422':
+          description: Plan validation or installation failure
+        '503':
+          description: Privileged broker unavailable
+
+  /install/status:
+    get:
+      tags: [Installer]
+      summary: Installation progress
+      operationId: getInstallStatus
+      responses:
+        '200':
+          description: Current installation stage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstallStatus'
+
   /network/lan/hosts:
     get:
       tags: [Network]
@@ -4032,6 +4116,52 @@ components:
         hostname: {type: string}
         firstSeen: {type: string, format: date-time}
         lastSeen: {type: string, format: date-time}
+
+    InstallTarget:
+      type: object
+      required: [diskId, name, model, sizeBytes, role, mounted, eligible, identity]
+      properties:
+        diskId: {type: string}
+        name: {type: string}
+        model: {type: string}
+        sizeBytes: {type: integer}
+        role: {type: string}
+        filesystem: {type: string}
+        mounted: {type: boolean}
+        eligible: {type: boolean}
+        protectedBy: {type: array, items: {type: string}}
+        identity: {type: object, additionalProperties: {type: string}}
+
+    InstallPlan:
+      type: object
+      required: [id, targetDiskId, expectedIdentity, hostname, adminUsername, filesystem, uefi, createdAt, expiresAt]
+      properties:
+        id: {type: string}
+        targetDiskId: {type: string}
+        expectedIdentity: {type: object, additionalProperties: {type: string}}
+        hostname: {type: string}
+        adminUsername: {type: string}
+        filesystem: {type: string, enum: [ext4, xfs]}
+        uefi: {type: boolean}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+
+    InstallPlanResponse:
+      type: object
+      required: [plan, hash, targets]
+      properties:
+        plan: {$ref: '#/components/schemas/InstallPlan'}
+        hash: {type: string}
+        targets: {type: array, items: {$ref: '#/components/schemas/InstallTarget'}}
+
+    InstallStatus:
+      type: object
+      required: [stage]
+      properties:
+        stage: {type: string, enum: [idle, planned, applying, succeeded, failed]}
+        detail: {type: string}
+        planId: {type: string}
+        hostname: {type: string}
         up:
           type: boolean
         loopback:
