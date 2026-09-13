@@ -315,7 +315,16 @@ Source date epoch: $SOURCE_DATE_EPOCH
 Source commit: $SOURCE_COMMIT
 EOF
 
-(cd "$WORK" && lb config --distribution trixie --architectures amd64 --binary-images iso-hybrid --debian-installer live --archive-areas "main contrib non-free-firmware" --apt-indices false)
+(cd "$WORK" && lb config \
+	--distribution trixie \
+	--architectures amd64 \
+	--binary-images iso-hybrid \
+	--debian-installer live \
+	--archive-areas "main contrib non-free-firmware" \
+	--apt-indices false \
+	--apt-options "-o Acquire::ForceIPv4=true -o Acquire::Retries=5" \
+	--firmware-binary false \
+	--firmware-chroot false)
 (cd "$WORK" && lb build)
 mkdir -p "$ROOT/build/releases"
 cp "$WORK"/live-image-amd64.hybrid.iso "$ROOT/build/releases/lumonas-$VERSION-amd64.iso"
