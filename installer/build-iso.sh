@@ -7,7 +7,7 @@ WORK="${LUMONAS_ISO_WORKDIR:-$ROOT/build/iso-live}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${VERSION}_amd64.deb}"
 REPO_ORIGIN="LumoNAS"
 REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY:-}"
-SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"
+SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || date +%s)}"
 SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
 case "$SOURCE_DATE_EPOCH" in
 	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
