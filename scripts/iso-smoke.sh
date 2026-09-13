@@ -67,6 +67,7 @@ for attempt in $(seq 1 90); do
 		python3 "$ROOT/scripts/validate-api-response.py" server "$LOG.server"
 		python3 "$ROOT/scripts/validate-api-response.py" metrics "$LOG.metrics"
 		python3 "$ROOT/scripts/validate-api-response.py" jobs "$LOG.jobs"
+		python3 "$ROOT/scripts/validate-api-response.py" services "$LOG.services"
 		EVENTS_LOG="$LOG.events"
 		curl -kfsS --max-time 5 -N https://127.0.0.1:18081/api/v1/events >"$EVENTS_LOG" 2>/dev/null || true
 		python3 "$ROOT/scripts/validate-sse.py" "$EVENTS_LOG" system.metrics

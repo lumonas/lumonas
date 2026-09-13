@@ -62,7 +62,8 @@ source_ready=false
 for attempt in $(seq 1 120); do
 	if curl -kfsS "$SOURCE_API/healthz" >/dev/null 2>&1 && \
 		curl -kfsS "$SOURCE_API/readyz" >"$WORK/source-ready.json" 2>/dev/null && \
-		curl -kfsS "$SOURCE_API/api/v1/server" >/dev/null 2>&1; then
+		curl -kfsS "$SOURCE_API/api/v1/server" >"$WORK/source-server.json" 2>/dev/null && \
+		curl -kfsS "$SOURCE_API/api/v1/services" >"$WORK/source-services.json" 2>/dev/null; then
 		source_ready=true
 		break
 	fi
@@ -73,6 +74,8 @@ for attempt in $(seq 1 120); do
 done
 [ "$source_ready" = true ] || { echo "live recovery source appliance never became ready" >&2; cat "$SOURCE_LOG" >&2 || true; exit 1; }
 grep -F '"privilegedBroker":true' "$WORK/source-ready.json" >/dev/null
+python3 "$ROOT/scripts/validate-api-response.py" server "$WORK/source-server.json"
+python3 "$ROOT/scripts/validate-api-response.py" services "$WORK/source-services.json"
 
 curl -kfsS -X POST "$SOURCE_API/api/v1/recovery/key" >"$WORK/source-key.json"
 python3 -c 'import json,sys; value=json.load(open(sys.argv[1],encoding="utf-8")).get("key","").strip(); assert value; open(sys.argv[2],"w",encoding="utf-8").write(value+"\n")' "$WORK/source-key.json" "$WORK/recovery.key"

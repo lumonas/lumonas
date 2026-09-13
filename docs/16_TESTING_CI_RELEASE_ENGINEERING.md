@@ -132,6 +132,10 @@ service ownership, the compiled frontend shell, and the authenticated SSE
 stream are validated after login. This catches an installation that boots but
 ships an incomplete or misconfigured runtime.
 
+The same typed service-status validator is used by the live ISO, appliance,
+recovery-source, and recovered-disk smokes. These paths therefore validate the
+complete `/api/v1/services` response shape, not only a few expected unit names.
+
 The release ISO job additionally attaches a disposable recovery media image
 containing a verified fixture bundle and a blank replacement disk. A
 systemd-managed recovery helper identifies both devices by stable virtio

@@ -216,6 +216,7 @@ python3 "$ROOT/scripts/validate-api-response.py" docker-summary "$WORK/recovered
 python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$WORK/recovered-docker-containers.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-images "$WORK/recovered-docker-images.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-volumes "$WORK/recovered-docker-volumes.json"
+python3 "$ROOT/scripts/validate-api-response.py" services "$WORK/recovered-services.json"
 grep -F '"available":true' "$WORK/recovered-docker-summary.json" >/dev/null
 grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
 grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null

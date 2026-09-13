@@ -193,6 +193,10 @@ The same installed-disk standard applies to the browser installer path: a
 successful install must serve the authenticated disks, metrics, jobs, health,
 services, frontend, and SSE contracts before the installer gate passes.
 
+All ISO, appliance, recovery-source, and recovered-disk boots must validate the
+complete service-status response against the API contract; checking only that
+one or two expected units are present is insufficient.
+
 ## M. Incomplete Docker backup
 
 One app has no appdata protection.

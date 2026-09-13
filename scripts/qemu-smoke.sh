@@ -167,6 +167,7 @@ for attempt in $(seq 1 60); do
       python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$LOG.docker-containers"
       python3 "$ROOT/scripts/validate-api-response.py" docker-images "$LOG.docker-images"
       python3 "$ROOT/scripts/validate-api-response.py" docker-volumes "$LOG.docker-volumes"
+      python3 "$ROOT/scripts/validate-api-response.py" services "$LOG.services"
       EVENTS_LOG="$LOG.events"
       curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
       python3 "$ROOT/scripts/validate-sse.py" "$EVENTS_LOG" system.metrics

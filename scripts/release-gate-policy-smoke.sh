@@ -98,6 +98,9 @@ if "audit response did not include typed trace fields after a mutation" not in a
 for script, marker in (("scripts/api-smoke.sh", "/api/v1/events"), ("scripts/qemu-smoke.sh", "EVENTS_COMPAT_LOG"), ("scripts/iso-smoke.sh", "validate-sse.py"), ("scripts/qemu-recovery-smoke.sh", "RECOVERED_EVENTS_LOG")):
     if marker not in (repo_root / script).read_text(encoding="utf-8"):
         raise SystemExit(f"runtime contract smoke is missing compatibility SSE coverage: {script}")
+for script in ("scripts/qemu-smoke.sh", "scripts/iso-smoke.sh", "scripts/qemu-live-recovery-source.sh", "scripts/qemu-recovery-smoke.sh"):
+    if 'validate-api-response.py" services' not in (repo_root / script).read_text(encoding="utf-8"):
+        raise SystemExit(f"runtime contract smoke is missing service response validation: {script}")
 if "docker-engine-api" not in match.group(1):
     raise SystemExit("release job must require the Docker Engine API gate")
 for marker in ("TestEngineAPIReadOnlyCollectors", "TestEngineAPIRejectsEngineErrors", "TestSplitImageReference", "TestContainerCPUPercent", "TestImageUsageFallsBackToContainerReference", "TestImageIDNormalization", "TestVolumeUsageFailureKeepsInventory"):
