@@ -198,7 +198,7 @@ func (s *apiServer) shutdownPower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordRequestAudit(r, actor, "power.shutdown", operationID, map[string]any{"operationId": operationID, "action": input.Action})
-	s.publish("power.shutdown", "critical", nil, map[string]any{"operationId": operationID, "action": input.Action})
+	s.publishActor(actor, "power.shutdown", "critical", nil, map[string]any{"operationId": operationID, "action": input.Action})
 	writeJSON(w, http.StatusAccepted, map[string]any{"operationId": operationID, "action": input.Action})
 }
 

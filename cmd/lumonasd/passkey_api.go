@@ -256,7 +256,7 @@ func (s *apiServer) passkeyRegisterFinish(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.recordRequestAudit(r, actor, "auth.passkey.registered", principal.ID, map[string]any{"name": name})
-	s.publish("auth.passkey.registered", "info", &model.ResourceRef{Type: "user", ID: principal.ID}, map[string]any{"userId": principal.ID, "name": name})
+	s.publishActor(actor, "auth.passkey.registered", "info", &model.ResourceRef{Type: "user", ID: principal.ID}, map[string]any{"userId": principal.ID, "name": name})
 	writeJSON(w, http.StatusCreated, map[string]any{"ok": true, "name": name})
 }
 
@@ -410,7 +410,7 @@ func (s *apiServer) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}
 	csrfToken := s.issueCSRFToken(token, expires)
 	http.SetCookie(w, &http.Cookie{Name: "lumonas_session", Value: token, Path: "/", Expires: expires, HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: os.Getenv("LUMONAS_COOKIE_SECURE") == "true"})
-	s.publish("auth.passkey.login", "info", &model.ResourceRef{Type: "user", ID: principal.ID}, map[string]any{"userId": principal.ID, "username": principal.Name})
+	s.publishActor(principal.Name, "auth.passkey.login", "info", &model.ResourceRef{Type: "user", ID: principal.ID}, map[string]any{"userId": principal.ID, "username": principal.Name})
 	writeJSON(w, http.StatusOK, map[string]any{"username": principal.Name, "expiresAt": expires, "csrfToken": csrfToken})
 }
 
@@ -464,7 +464,7 @@ func (s *apiServer) deletePasskey(w http.ResponseWriter, r *http.Request, id, cr
 		return
 	}
 	s.recordRequestAudit(r, actor, "auth.passkey.removed", id, nil)
-	s.publish("auth.passkey.removed", "info", &model.ResourceRef{Type: "user", ID: id}, nil)
+	s.publishActor(actor, "auth.passkey.removed", "info", &model.ResourceRef{Type: "user", ID: id}, nil)
 	writeJSON(w, http.StatusNoContent, nil)
 }
 

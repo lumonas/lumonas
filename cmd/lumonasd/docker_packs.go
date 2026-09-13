@@ -63,6 +63,6 @@ func (s *apiServer) dockerImagePackImport(w http.ResponseWriter, r *http.Request
 		return
 	}
 	s.recordRequestAudit(r, actor, "docker.image.pack.import", "images", map[string]any{"pack": result.Pack, "imported": len(result.Imported), "failed": len(result.Failed)})
-	s.publish("docker.image.pack.imported", "info", nil, map[string]any{"pack": result.Pack, "imported": strings.Join(result.Imported, ","), "failed": len(result.Failed)})
+	s.publishActor(actor, "docker.image.pack.imported", "info", nil, map[string]any{"pack": result.Pack, "imported": strings.Join(result.Imported, ","), "failed": len(result.Failed)})
 	writeJSON(w, http.StatusOK, result)
 }

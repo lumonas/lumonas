@@ -343,7 +343,7 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && endpoint == "/storage/safety/unlock":
 		s.unlockStorageSafety(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/safety/lock":
-		s.lockStorageSafety(w)
+		s.lockStorageSafety(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/operations/plan":
 		s.planStorageOperation(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/disks/") && strings.HasSuffix(endpoint, "/retire"):
@@ -1053,14 +1053,18 @@ func (s *apiServer) retireDisk(w http.ResponseWriter, r *http.Request, diskID st
 	// Retire may be used while the disk is absent (replacement already
 	// pulled) or while it is still attached (wiping for reuse).
 	if resolved, err := s.store.ResolveGeneratedAlerts("disk-missing", diskID); err == nil && resolved {
-		s.publish("alert.resolved", "info", nil, map[string]any{"ruleId": "disk-missing", "resourceId": diskID})
+		s.publishActor(actor, "alert.resolved", "info", nil, map[string]any{"ruleId": "disk-missing", "resourceId": diskID})
 	}
 	s.recordRequestAudit(r, actor, "storage.disk.retire", diskID, map[string]any{"model": retired.Model, "serial": retired.Serial})
-	s.publish("disk.retired", "info", &model.ResourceRef{Type: "disk", ID: diskID}, map[string]any{"diskId": diskID, "model": retired.Model})
+	s.publishActor(actor, "disk.retired", "info", &model.ResourceRef{Type: "disk", ID: diskID}, map[string]any{"diskId": diskID, "model": retired.Model})
 	writeJSON(w, http.StatusOK, map[string]any{"id": diskID, "retired": true})
 }
 
 func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		Action         storage.Action `json:"action"`
 		DiskID         string         `json:"diskId"`
@@ -1105,11 +1109,15 @@ func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.publish("storage.operation.planned", "warning", &model.ResourceRef{Type: "disk", ID: target.ID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
+	s.publishActor(actor, "storage.operation.planned", "warning", &model.ResourceRef{Type: "disk", ID: target.ID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
 	writeJSON(w, http.StatusCreated, plan)
 }
 
 func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Request, operationID string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	plan, err := s.store.Plan(operationID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "operation plan not found"})
@@ -1173,7 +1181,7 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.advanceGeneration("storage." + string(plan.Action))
-	s.publish("storage.operation.completed", "warning", &model.ResourceRef{Type: "disk", ID: plan.Target.DiskID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
+	s.publishActor(actor, "storage.operation.completed", "warning", &model.ResourceRef{Type: "disk", ID: plan.Target.DiskID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
 	s.persistMountState("storage." + string(plan.Action))
 	writeJSON(w, http.StatusOK, result)
 }
@@ -1195,6 +1203,10 @@ func (s *apiServer) storageSafety(w http.ResponseWriter) {
 }
 
 func (s *apiServer) unlockStorageSafety(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		Reauthenticated bool `json:"reauthenticated"`
 	}
@@ -1210,15 +1222,19 @@ func (s *apiServer) unlockStorageSafety(w http.ResponseWriter, r *http.Request) 
 	s.safetyUntil = time.Now().UTC().Add(15 * time.Minute)
 	unlockedUntil := s.safetyUntil
 	s.safetyMu.Unlock()
-	s.publish("storage.safety.unlocked", "warning", nil, map[string]any{"unlockedUntil": unlockedUntil})
+	s.publishActor(actor, "storage.safety.unlocked", "warning", nil, map[string]any{"unlockedUntil": unlockedUntil})
 	writeJSON(w, http.StatusOK, map[string]any{"state": "unlocked", "unlockedUntil": unlockedUntil})
 }
 
-func (s *apiServer) lockStorageSafety(w http.ResponseWriter) {
+func (s *apiServer) lockStorageSafety(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	s.safetyMu.Lock()
 	s.safetyUntil = time.Time{}
 	s.safetyMu.Unlock()
-	s.publish("storage.safety.locked", "info", nil, nil)
+	s.publishActor(actor, "storage.safety.locked", "info", nil, nil)
 	writeJSON(w, http.StatusOK, map[string]any{"state": "locked", "unlockedUntil": nil})
 }
 
@@ -1583,6 +1599,10 @@ func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) networkCheckpointAction(w http.ResponseWriter, r *http.Request, endpoint string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	parts := strings.Split(strings.Trim(endpoint, "/"), "/")
 	if len(parts) != 4 || (parts[3] != "commit" && parts[3] != "rollback") {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "network checkpoint action not found"})
@@ -1637,7 +1657,7 @@ func (s *apiServer) networkCheckpointAction(w http.ResponseWriter, r *http.Reque
 	if parts[3] == "commit" {
 		s.advanceGeneration("network.checkpoint.commit")
 	}
-	s.publish("network.checkpoint."+parts[3], "info", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, nil)
+	s.publishActor(actor, "network.checkpoint."+parts[3], "info", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, nil)
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1684,7 +1704,7 @@ func (s *apiServer) applyWireGuard(w http.ResponseWriter, r *http.Request) {
 	}
 	s.recordRequestAudit(r, actor, "network.wireguard.apply", iface, map[string]any{"operationId": operationID})
 	s.advanceGeneration("network.wireguard.apply")
-	s.publish("network.wireguard.applied", "info", &model.ResourceRef{Type: "wireguard", ID: iface}, map[string]any{"operationId": operationID})
+	s.publishActor(actor, "network.wireguard.applied", "info", &model.ResourceRef{Type: "wireguard", ID: iface}, map[string]any{"operationId": operationID})
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1745,7 +1765,7 @@ func (s *apiServer) tailscaleUp(w http.ResponseWriter, r *http.Request) {
 	}
 	s.recordRequestAudit(r, actor, "network.tailscale.up", input.Hostname, map[string]any{"operationId": operationID})
 	s.advanceGeneration("network.tailscale.up")
-	s.publish("network.tailscale.connected", "info", &model.ResourceRef{Type: "tailscale", ID: input.Hostname}, map[string]any{"operationId": operationID})
+	s.publishActor(actor, "network.tailscale.connected", "info", &model.ResourceRef{Type: "tailscale", ID: input.Hostname}, map[string]any{"operationId": operationID})
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1766,7 +1786,7 @@ func (s *apiServer) tailscaleDown(w http.ResponseWriter, r *http.Request) {
 	}
 	s.recordRequestAudit(r, actor, "network.tailscale.down", "tailscale", map[string]any{"operationId": operationID})
 	s.advanceGeneration("network.tailscale.down")
-	s.publish("network.tailscale.disconnected", "info", nil, map[string]any{"operationId": operationID})
+	s.publishActor(actor, "network.tailscale.disconnected", "info", nil, map[string]any{"operationId": operationID})
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1798,7 +1818,7 @@ func (s *apiServer) tailscaleExitNode(w http.ResponseWriter, r *http.Request) {
 	}
 	s.recordRequestAudit(r, actor, "network.tailscale.exit-node", input.PeerIP, map[string]any{"operationId": operationID})
 	s.advanceGeneration("network.tailscale.exit-node")
-	s.publish("network.tailscale.exit-node.updated", "info", &model.ResourceRef{Type: "tailscale", ID: "exit-node"}, map[string]any{"operationId": operationID})
+	s.publishActor(actor, "network.tailscale.exit-node.updated", "info", &model.ResourceRef{Type: "tailscale", ID: "exit-node"}, map[string]any{"operationId": operationID})
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -1852,7 +1872,7 @@ func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordRequestAudit(r, actor, "power.action", operationID, map[string]any{"operationId": operationID, "action": input.Action})
-	s.publish("power.action", "critical", nil, map[string]any{"operationId": operationID, "action": input.Action})
+	s.publishActor(actor, "power.action", "critical", nil, map[string]any{"operationId": operationID, "action": input.Action})
 	writeJSON(w, http.StatusAccepted, result)
 }
 
@@ -1870,6 +1890,10 @@ func (s *apiServer) listShares(w http.ResponseWriter) {
 }
 
 func (s *apiServer) createShare(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var share shares.Share
 	if err := json.NewDecoder(r.Body).Decode(&share); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -1914,11 +1938,15 @@ func (s *apiServer) createShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.advanceGeneration("share.create")
-	s.publish("share.created", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"name": share.Name})
+	s.publishActor(actor, "share.created", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"name": share.Name})
 	writeJSON(w, http.StatusCreated, share)
 }
 
 func (s *apiServer) updateShare(w http.ResponseWriter, r *http.Request, id string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var replacement shares.Share
 	if err := json.NewDecoder(r.Body).Decode(&replacement); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -1966,7 +1994,7 @@ func (s *apiServer) updateShare(w http.ResponseWriter, r *http.Request, id strin
 		return
 	}
 	s.advanceGeneration("share.update")
-	s.publish("share.updated", "info", &model.ResourceRef{Type: "share", ID: id}, map[string]any{"name": replacement.Name})
+	s.publishActor(actor, "share.updated", "info", &model.ResourceRef{Type: "share", ID: id}, map[string]any{"name": replacement.Name})
 	writeJSON(w, http.StatusOK, replacement)
 }
 
@@ -2284,7 +2312,7 @@ func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
 	}
 	s.advanceGeneration("docker.stack.create")
 	s.recordRequestAudit(r, actor, "docker.stack.create", stack.ID, map[string]any{"name": stack.Name})
-	s.publish("docker.stack.created", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID})
+	s.publishActor(actor, "docker.stack.created", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID})
 	if input.Deploy {
 		deployCtx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 		defer cancel()
@@ -2378,13 +2406,13 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 				if failure.Result.RolledBack {
 					eventKind = "docker.stack.rollback"
 				}
-				s.publish(eventKind, "warning", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "reason": failure.Result.Reason})
+				s.publishActor(actor, eventKind, "warning", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "reason": failure.Result.Reason})
 				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": updateErr.Error(), "rolledBack": failure.Result.RolledBack, "reason": failure.Result.Reason})
 				return
 			}
 			stack = updated
 			s.recordRequestAudit(r, actor, "docker.stack.action", stack.ID, map[string]any{"action": action, "healthGated": true})
-			s.publish("docker.stack.action", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "action": action})
+			s.publishActor(actor, "docker.stack.action", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "action": action})
 			writeJSON(w, http.StatusAccepted, stack)
 			return
 		}
@@ -2393,7 +2421,7 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 			return
 		}
 		s.recordRequestAudit(r, actor, "docker.stack.action", stack.ID, map[string]any{"action": action})
-		s.publish("docker.stack.action", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "action": action})
+		s.publishActor(actor, "docker.stack.action", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "action": action})
 		writeJSON(w, http.StatusAccepted, stack)
 		return
 	}
@@ -2532,7 +2560,7 @@ func (s *apiServer) dockerImageImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordRequestAudit(r, actor, "docker.image.import", "images", map[string]any{"bytes": written})
-	s.publish("docker.image.imported", "info", nil, map[string]any{"bytes": written})
+	s.publishActor(actor, "docker.image.imported", "info", nil, map[string]any{"bytes": written})
 	writeJSON(w, http.StatusOK, map[string]any{"status": "imported", "bytes": written})
 }
 
@@ -2561,7 +2589,7 @@ func (s *apiServer) dockerContainerAction(w http.ResponseWriter, r *http.Request
 	}
 	for _, container := range containers {
 		if container.ID == id || container.Name == id {
-			s.publish("docker.container.action", "info", &model.ResourceRef{Type: "container", ID: id}, map[string]any{"action": action})
+			s.publishActor(actor, "docker.container.action", "info", &model.ResourceRef{Type: "container", ID: id}, map[string]any{"action": action})
 			writeJSON(w, http.StatusOK, container)
 			return
 		}
@@ -2594,7 +2622,7 @@ func (s *apiServer) dockerImageAction(w http.ResponseWriter, r *http.Request, en
 			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 			return
 		}
-		s.publish("docker.image.updated", "info", &model.ResourceRef{Type: "image", ID: image.ID}, map[string]any{"repository": image.Repo, "tag": image.Tag})
+		s.publishActor(actor, "docker.image.updated", "info", &model.ResourceRef{Type: "image", ID: image.ID}, map[string]any{"repository": image.Repo, "tag": image.Tag})
 		s.recordRequestAudit(r, actor, "docker.image.update", image.ID, map[string]any{"repository": image.Repo, "tag": image.Tag})
 		writeJSON(w, http.StatusAccepted, image)
 		return

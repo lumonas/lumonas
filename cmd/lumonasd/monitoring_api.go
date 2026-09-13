@@ -19,6 +19,10 @@ func (s *apiServer) alertRules(w http.ResponseWriter) {
 }
 
 func (s *apiServer) updateAlertRule(w http.ResponseWriter, r *http.Request, id string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	rule, err := s.store.AlertRule(id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "alert rule not found"})
@@ -37,7 +41,7 @@ func (s *apiServer) updateAlertRule(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 	s.advanceGeneration("alert-rule.update")
-	s.publish("alert.rule.updated", "info", nil, map[string]any{"ruleId": id, "enabled": rule.Enabled})
+	s.publishActor(actor, "alert.rule.updated", "info", nil, map[string]any{"ruleId": id, "enabled": rule.Enabled})
 	writeJSON(w, http.StatusOK, rule)
 }
 

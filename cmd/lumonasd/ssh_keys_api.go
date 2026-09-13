@@ -37,6 +37,10 @@ func (s *apiServer) listSSHKeys(w http.ResponseWriter) {
 }
 
 func (s *apiServer) addSSHKey(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		PublicKey string `json:"publicKey"`
 	}
@@ -73,11 +77,15 @@ func (s *apiServer) addSSHKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.publish("settings.ssh.key_added", "info", nil, map[string]any{"comment": commentFromKey(input.PublicKey)})
+	s.publishActor(actor, "settings.ssh.key_added", "info", nil, map[string]any{"comment": commentFromKey(input.PublicKey)})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "added"})
 }
 
 func (s *apiServer) removeSSHKey(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		PublicKey string `json:"publicKey"`
 	}
@@ -117,7 +125,7 @@ func (s *apiServer) removeSSHKey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.publish("settings.ssh.key_removed", "info", nil, nil)
+	s.publishActor(actor, "settings.ssh.key_removed", "info", nil, nil)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "removed"})
 }
 

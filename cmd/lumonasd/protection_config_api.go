@@ -44,6 +44,10 @@ func (s *apiServer) protectionConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) updateProtectionConfig(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		ParityDiskID string   `json:"parityDiskId"`
 		DataDiskIDs  []string `json:"dataDiskIds"`
@@ -92,7 +96,7 @@ func (s *apiServer) updateProtectionConfig(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.advanceGeneration("storage.protection.config")
-	s.publish("storage.protection.configured", "warning", &model.ResourceRef{Type: "pool", ID: "protection"}, map[string]any{"parityDiskId": input.ParityDiskID, "dataDiskIds": input.DataDiskIDs})
+	s.publishActor(actor, "storage.protection.configured", "warning", &model.ResourceRef{Type: "pool", ID: "protection"}, map[string]any{"parityDiskId": input.ParityDiskID, "dataDiskIds": input.DataDiskIDs})
 	writeJSON(w, http.StatusOK, map[string]any{"configPath": s.snapraidConfigPath(), "parityDiskId": input.ParityDiskID, "dataDiskIds": input.DataDiskIDs, "config": rendered})
 }
 

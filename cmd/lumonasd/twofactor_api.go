@@ -173,7 +173,7 @@ func (s *apiServer) enableTwoFactor(w http.ResponseWriter, r *http.Request, id s
 		return
 	}
 	s.recordRequestAudit(r, actor, "identity.2fa.enable", id, nil)
-	s.publish("identity.2fa.enabled", "warning", &model.ResourceRef{Type: "user", ID: id}, map[string]any{"userId": id})
+	s.publishActor(actor, "identity.2fa.enabled", "warning", &model.ResourceRef{Type: "user", ID: id}, map[string]any{"userId": id})
 	writeJSON(w, http.StatusOK, map[string]any{"twoFactor": true})
 }
 
@@ -192,7 +192,7 @@ func (s *apiServer) disableTwoFactor(w http.ResponseWriter, r *http.Request, id 
 		return
 	}
 	s.recordRequestAudit(r, actor, "identity.2fa.disable", id, map[string]any{"username": principal.Name})
-	s.publish("identity.2fa.disabled", "warning", &model.ResourceRef{Type: "user", ID: id}, map[string]any{"userId": id})
+	s.publishActor(actor, "identity.2fa.disabled", "warning", &model.ResourceRef{Type: "user", ID: id}, map[string]any{"userId": id})
 	writeJSON(w, http.StatusOK, map[string]any{"twoFactor": false})
 }
 
