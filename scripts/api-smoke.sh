@@ -224,28 +224,7 @@ if ! grep -F 'retry: 3000' "$SSE_PATH" >/dev/null 2>&1 || ! grep -F 'system.metr
 	sed -n '1,80p' "$SSE_PATH" >&2
 	exit 1
 fi
-awk '
-	/^data: / {
-		payload=$0
-		sub(/^data: /, "", payload)
-		print payload
-	}
-' "$SSE_PATH" >"$TEMP_DIR/events.jsonl"
-python3 - "$TEMP_DIR/events.jsonl" <<'PY'
-import json
-import sys
-
-events = []
-with open(sys.argv[1], encoding="utf-8") as handle:
-    for line in handle:
-        if line.strip():
-            events.append(json.loads(line))
-if not events:
-    raise SystemExit("SSE stream contained no JSON events")
-with open(sys.argv[1] + ".json", "w", encoding="utf-8") as handle:
-    json.dump(events, handle)
-PY
-validate_response events "$TEMP_DIR/events.jsonl.json"
+python3 "$ROOT_DIR/scripts/validate-sse.py" "$SSE_PATH" system.metrics
 
 # Restart the real daemon against the same SQLite state. The metrics event is
 # the replay cursor; the short SMART job is deliberately interrupted while it

@@ -2,6 +2,7 @@
 set -eu
 
 ASSERT_MODE="${LUMONAS_QEMU_ASSERT:-false}"
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
   if [ "$ASSERT_MODE" = "true" ]; then
@@ -105,10 +106,10 @@ for attempt in $(seq 1 60); do
   if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
      curl -kfsS https://127.0.0.1:18080/readyz >/dev/null 2>&1 && \
      curl -kfsS https://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/server >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/server >"$LOG.server" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >/dev/null 2>&1 && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/jobs >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.metrics" 2>/dev/null && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
      curl -kfsS https://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
@@ -127,8 +128,13 @@ for attempt in $(seq 1 60); do
        grep -F '"id":"lumonas-privd-general.service","name":"lumonas-privd-general.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$LOG.services" >/dev/null 2>&1; then
+      python3 "$ROOT/scripts/validate-api-response.py" server "$LOG.server"
+      python3 "$ROOT/scripts/validate-api-response.py" disks "$LOG.disks"
+      python3 "$ROOT/scripts/validate-api-response.py" metrics "$LOG.metrics"
+      python3 "$ROOT/scripts/validate-api-response.py" jobs "$LOG.jobs"
       EVENTS_LOG="$LOG.events"
       curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
+      python3 "$ROOT/scripts/validate-sse.py" "$EVENTS_LOG" system.metrics
       RECOVERY_KEY_LOG="$LOG.recovery-key"
       RECOVERY_EXPORT_LOG="$LOG.recovery-export"
       RECOVERY_STATUS_LOG="$LOG.recovery-status"

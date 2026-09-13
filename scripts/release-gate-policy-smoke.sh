@@ -40,5 +40,8 @@ for marker in (
 ):
     if marker not in installer_text:
         raise SystemExit(f"installer signed-repository fail-closed marker is missing: {marker}")
+qemu_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-smoke.sh"
+if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "validate-sse.py" not in qemu_smoke.read_text(encoding="utf-8"):
+    raise SystemExit("QEMU smoke does not validate live API and SSE response contracts")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY
