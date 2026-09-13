@@ -3,6 +3,7 @@ import type {
   Alert,
   Disk,
   Job,
+  LanHost,
   Pool,
   Protection,
   ServerInfo,
@@ -242,6 +243,32 @@ export const storageSnapshots: StorageSnapshot[] = [
     source: '/srv/pools/main',
     name: '20260911T120000Z',
     createdAt: daysAgo(2),
+  },
+]
+
+export const lanHosts: LanHost[] = [
+  {
+    mac: 'aa:bb:cc:dd:ee:10',
+    interface: 'eth0',
+    ip: '192.168.1.34',
+    hostname: 'living-room-tv',
+    firstSeen: daysAgo(21),
+    lastSeen: minutesAgo(4),
+  },
+  {
+    mac: 'aa:bb:cc:dd:ee:11',
+    interface: 'eth0',
+    ip: '192.168.1.42',
+    firstSeen: daysAgo(9),
+    lastSeen: minutesAgo(38),
+  },
+  {
+    mac: 'aa:bb:cc:dd:ee:12',
+    interface: 'eth0',
+    ip: '192.168.1.57',
+    hostname: 'office-desktop',
+    firstSeen: daysAgo(40),
+    lastSeen: daysAgo(3),
   },
 ]
 

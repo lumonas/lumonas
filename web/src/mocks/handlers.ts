@@ -6,6 +6,7 @@ import {
   disks,
   findDisk,
   jobs,
+  lanHosts,
   pools,
   protection,
   pushActivity,
@@ -936,6 +937,32 @@ export const handlers = [
   http.get(`${BASE}/network/bindings`, () => HttpResponse.json(bindings)),
 
   http.get(`${BASE}/network/firewall/policy`, () => HttpResponse.json(firewall)),
+
+  http.get(`${BASE}/network/lan/hosts`, () => HttpResponse.json(lanHosts)),
+
+  http.post(`${BASE}/network/lan/scan`, () => {
+    for (const host of lanHosts) host.lastSeen = new Date().toISOString()
+    return HttpResponse.json(lanHosts)
+  }),
+
+  http.post(`${BASE}/network/lan/hosts/wake`, async ({ request }) => {
+    const body = (await request.json()) as { mac?: string; interface?: string }
+    if (!body.mac || !body.interface) return new HttpResponse(null, { status: 422 })
+    pushActivity({
+      category: 'network',
+      title: `Wake packet sent — ${body.mac.toLowerCase()}`,
+      description: `via ${body.interface}`,
+    })
+    return HttpResponse.json({ status: 'wake packet sent' })
+  }),
+
+  http.post(`${BASE}/network/lan/hosts/rename`, async ({ request }) => {
+    const body = (await request.json()) as { mac?: string; interface?: string; hostname?: string }
+    const host = lanHosts.find((h) => h.mac === body.mac?.toLowerCase() && h.interface === body.interface)
+    if (!host) return new HttpResponse(null, { status: 404 })
+    host.hostname = body.hostname
+    return HttpResponse.json({ status: 'renamed' })
+  }),
 
   http.post(`${BASE}/network/diagnostics`, async ({ request }) => {
     const body = (await request.json()) as { kind?: string; target?: string }

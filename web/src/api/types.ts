@@ -453,6 +453,15 @@ export interface StorageSnapshot {
   createdAt: string
 }
 
+export interface LanHost {
+  mac: string
+  interface: string
+  ip: string
+  hostname?: string
+  firstSeen: string
+  lastSeen: string
+}
+
 export interface StorageSafety {
   state: 'locked' | 'unlocked'
   unlockedUntil: string | null

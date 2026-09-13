@@ -246,7 +246,7 @@ func operationWorker(operation string) string {
 	switch operation {
 	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.delete":
 		return "storage"
-	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "firewall.apply":
+	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply":
 		return "network"
 	case "power.action", "power.shutdown":
 		return "power"
@@ -441,6 +441,18 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 			return response{Error: err.Error()}
 		}
 		return response{OK: true, Data: map[string]any{"interface": iface, "enabled": requestedBool(req.RequestedState, "enabled")}}
+	case "network.wol.wake":
+		if !req.Confirmed {
+			return response{Error: "operation plan is not confirmed"}
+		}
+		iface := requestedString(req.RequestedState, "interface")
+		mac := requestedString(req.RequestedState, "mac")
+		if err := network.WakeHost(context.Background(), iface, mac, func(_ context.Context, name string, args ...string) ([]byte, error) {
+			return run(name, args...)
+		}); err != nil {
+			return response{Error: err.Error()}
+		}
+		return response{OK: true, Data: map[string]any{"interface": iface, "mac": strings.ToLower(mac)}}
 	case "power.action":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -475,7 +487,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 
 func requiresOperationID(operation string) bool {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.delete":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.delete":
 		return true
 	default:
 		return false

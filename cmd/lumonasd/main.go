@@ -79,6 +79,7 @@ type apiServer struct {
 	rateAttempts                map[string][]time.Time
 	clock                       func() time.Time
 	deploymentOptions           deploymentOptions
+	lanScanImpl                 func(ctx context.Context) ([]network.LanHost, error)
 }
 
 var version = "0.1.0-dev"
@@ -178,6 +179,7 @@ func main() {
 	server.reconcileUpdateBoot()
 	server.ensureRestartedJobs()
 	go server.persistMountState("startup")
+	go server.lanScanLoop()
 	go server.metricsLoop()
 	go server.metricsHistoryLoop()
 	go server.capacityLoop()
@@ -482,6 +484,14 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.supportBundle(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
 		s.networkInterfaces(w)
+	case r.Method == http.MethodGet && endpoint == "/network/lan/hosts":
+		s.lanHosts(w, r)
+	case r.Method == http.MethodPost && endpoint == "/network/lan/scan":
+		s.lanScanNow(w, r)
+	case r.Method == http.MethodPost && endpoint == "/network/lan/hosts/wake":
+		s.lanWake(w, r)
+	case r.Method == http.MethodPost && endpoint == "/network/lan/hosts/rename":
+		s.lanRename(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces/metrics":
 		s.networkInterfaceMetrics(w)
 	case r.Method == http.MethodGet && endpoint == "/network/wifi/scan":
@@ -3333,6 +3343,18 @@ func envOr(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func envInt(key string, fallback int) int {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 func parseCORSOrigins() []string {
 	raw := os.Getenv("LUMONAS_CORS_ORIGINS")

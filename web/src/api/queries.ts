@@ -62,6 +62,7 @@ import type {
   TailscaleStatus,
   SSHKey,
   NetworkConnection,
+  LanHost,
   NetworkInterface,
   WiFiScanResult,
 } from '@/api/types'
@@ -971,6 +972,42 @@ export function useNetworkInterfaces() {
     queryKey: queryKeys.networkInterfaces,
     queryFn: () => apiGet<NetworkInterface[]>('/network/interfaces'),
     throwOnError: false,
+  })
+}
+
+export function useLanHosts() {
+  return useQuery({
+    queryKey: ['network', 'lan', 'hosts'],
+    queryFn: () => apiGet<LanHost[]>('/network/lan/hosts'),
+    throwOnError: false,
+  })
+}
+
+export function useLanScan() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiPost<LanHost[]>('/network/lan/scan'),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['network', 'lan'] })
+    },
+  })
+}
+
+export function useLanWake() {
+  return useMutation({
+    mutationFn: (input: { mac: string; interface: string }) =>
+      apiPost<{ status: string }>('/network/lan/hosts/wake', input),
+  })
+}
+
+export function useLanRename() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { mac: string; interface: string; hostname: string }) =>
+      apiPost<{ status: string }>('/network/lan/hosts/rename', input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['network', 'lan'] })
+    },
   })
 }
 

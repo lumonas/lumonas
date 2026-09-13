@@ -844,6 +844,87 @@ paths:
                 items:
                   $ref: '#/components/schemas/NetworkInterface'
 
+  /network/lan/hosts:
+    get:
+      tags: [Network]
+      summary: List discovered LAN hosts
+      operationId: listLanHosts
+      responses:
+        '200':
+          description: Known neighbors, most recently seen first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LanHost'
+
+  /network/lan/scan:
+    post:
+      tags: [Network]
+      summary: Run an on-demand LAN discovery pass
+      operationId: scanLanHosts
+      responses:
+        '200':
+          description: Refreshed neighbor inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LanHost'
+        '503':
+          description: Neighbor table unavailable
+
+  /network/lan/hosts/wake:
+    post:
+      tags: [Network]
+      summary: Send a Wake-on-LAN packet to a known host
+      operationId: wakeLanHost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mac, interface]
+              properties:
+                mac: {type: string}
+                interface: {type: string}
+      responses:
+        '200':
+          description: Wake packet sent
+        '422':
+          description: Invalid wake target
+        '404':
+          description: LAN host has not been discovered on this interface
+        '503':
+          description: Privileged broker unavailable
+
+  /network/lan/hosts/rename:
+    post:
+      tags: [Network]
+      summary: Attach an operator hostname to a known host
+      operationId: renameLanHost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mac, interface]
+              properties:
+                mac: {type: string}
+                interface: {type: string}
+                hostname: {type: string}
+      responses:
+        '200':
+          description: Hostname stored
+        '422':
+          description: Invalid hostname
+        '404':
+          description: LAN host has not been discovered on this interface
+
   /network/wireguard/status:
     get:
       tags: [Network]
@@ -3940,6 +4021,17 @@ components:
           type: string
         mtu:
           type: integer
+
+    LanHost:
+      type: object
+      required: [mac, interface, ip, firstSeen, lastSeen]
+      properties:
+        mac: {type: string}
+        interface: {type: string}
+        ip: {type: string}
+        hostname: {type: string}
+        firstSeen: {type: string, format: date-time}
+        lastSeen: {type: string, format: date-time}
         up:
           type: boolean
         loopback:

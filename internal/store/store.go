@@ -129,6 +129,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate storage snapshot schema: %w", err)
 	}
+	if err := s.ensureLanHostsSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate LAN host schema: %w", err)
+	}
 	return s, nil
 }
 

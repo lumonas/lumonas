@@ -14,6 +14,7 @@ import { AlertBanner } from '@/components/core/alert-banner'
 import { PageHeader } from '@/components/core/page-header'
 import { WireGuardSection } from '@/features/network/wireguard-section'
 import { TailscaleSection } from '@/features/network/tailscale-section'
+import { LanHostsSection } from '@/features/network/lan-section'
 import { NetworkMonitoring } from '@/features/network/network-monitoring'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -56,6 +57,7 @@ const DIAGNOSTIC_KINDS = [
 
 const TABS = [
   { value: 'connections', label: 'Connections' },
+  { value: 'lan', label: 'LAN' },
   { value: 'vpn', label: 'VPN' },
   { value: 'diagnostics', label: 'Diagnostics' },
 ] as const
@@ -388,6 +390,10 @@ export function NetworkPage() {
               <p className="text-xs text-muted-foreground">Bindings: {bindings.data?.length ?? 0} · Firewall: {firewall.data?.enabled ? 'enabled' : 'disabled'}</p>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="lan" className="flex flex-col gap-4">
+          <LanHostsSection />
         </TabsContent>
 
         <TabsContent value="vpn" className="flex flex-col gap-4">
