@@ -27,7 +27,7 @@ test.describe('onboarding', () => {
 
     // Step 4: finish.
     await page.getByRole('button', { name: /finish setup/i }).click()
-    await expect(page.getByText('Setup complete')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('Setup complete', { exact: true })).toBeVisible({ timeout: 15_000 })
 
     // The app shell replaces the wizard.
     await expect(page.getByRole('link', { name: 'Overview' }).first()).toBeVisible()
