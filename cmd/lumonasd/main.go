@@ -42,35 +42,36 @@ import (
 )
 
 type apiServer struct {
-	store                     *store.Store
-	hub                       *events.Hub
-	log                       *slog.Logger
-	jobsMu                    sync.Mutex
-	version                   string
-	diskFunc                  func() ([]model.Disk, error)
-	authRequired              bool
-	dynamicAuth               bool
-	dockerService             dockerruntime.Service
-	catalogFile               string
-	notificationMu            sync.Mutex
-	notificationFailures      map[string]notificationFailureState
-	notificationClient        *http.Client
-	updateHTTPClient          *http.Client
-	totpMu                    sync.Mutex
-	totpChallenges            map[string]totpChallenge
-	safetyMu                  sync.Mutex
-	safetyUntil               time.Time
-	brokerExec                func(ctx context.Context, request privileged.Request) error
-	recordNetworkCheckpointFn func(operationID, connectionID, state string) error
-	corsOrigins               []string
-	csrfTokens                map[string]csrfBinding
-	csrfMu                    sync.Mutex
-	fixStages                 map[string]string
-	fixStageMu                sync.Mutex
-	runtimeStateFunc          func() map[string]any
-	rateMu                    sync.Mutex
-	rateAttempts              map[string][]time.Time
-	clock                     func() time.Time
+	store                       *store.Store
+	hub                         *events.Hub
+	log                         *slog.Logger
+	jobsMu                      sync.Mutex
+	version                     string
+	diskFunc                    func() ([]model.Disk, error)
+	authRequired                bool
+	dynamicAuth                 bool
+	dockerService               dockerruntime.Service
+	catalogFile                 string
+	notificationMu              sync.Mutex
+	notificationFailures        map[string]notificationFailureState
+	notificationClient          *http.Client
+	updateHTTPClient            *http.Client
+	totpMu                      sync.Mutex
+	totpChallenges              map[string]totpChallenge
+	safetyMu                    sync.Mutex
+	safetyUntil                 time.Time
+	brokerExec                  func(ctx context.Context, request privileged.Request) error
+	recordNetworkCheckpointFn   func(operationID, connectionID, state string) error
+	completeNetworkCheckpointFn func(operationID, state string) (string, error)
+	corsOrigins                 []string
+	csrfTokens                  map[string]csrfBinding
+	csrfMu                      sync.Mutex
+	fixStages                   map[string]string
+	fixStageMu                  sync.Mutex
+	runtimeStateFunc            func() map[string]any
+	rateMu                      sync.Mutex
+	rateAttempts                map[string][]time.Time
+	clock                       func() time.Time
 }
 
 var version = "0.1.0-dev"
@@ -1589,15 +1590,28 @@ func (s *apiServer) networkCheckpointAction(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
 		return
 	}
-	if connectionID, err := s.store.CompleteNetworkCheckpoint(operationID, parts[3]); err == nil {
-		if connection, getErr := s.store.NetworkConnection(connectionID); getErr == nil {
-			if parts[3] == "commit" {
-				connection.Status = "committed"
-			} else {
-				connection.Status = "rolled-back"
-			}
-			_, _ = s.store.UpsertNetworkConnection(connection)
-		}
+	complete := s.completeNetworkCheckpointFn
+	if complete == nil {
+		complete = s.store.CompleteNetworkCheckpoint
+	}
+	connectionID, err := complete(operationID, parts[3])
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network checkpoint action completed but persistence failed: " + err.Error()})
+		return
+	}
+	connection, err := s.store.NetworkConnection(connectionID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network checkpoint action completed but connection state could not be loaded: " + err.Error()})
+		return
+	}
+	if parts[3] == "commit" {
+		connection.Status = "committed"
+	} else {
+		connection.Status = "rolled-back"
+	}
+	if _, err := s.store.UpsertNetworkConnection(connection); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network checkpoint action completed but connection state persistence failed: " + err.Error()})
+		return
 	}
 	if parts[3] == "commit" {
 		s.advanceGeneration("network.checkpoint.commit")

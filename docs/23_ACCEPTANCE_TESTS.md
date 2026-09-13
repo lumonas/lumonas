@@ -685,3 +685,5 @@ Pass if a failure to persist a pending NetworkManager checkpoint invokes the
 typed privileged rollback operation, restores the prior connection state, and
 returns an error. A checkpoint must not remain active without a durable
 rollback record.
+The commit and rollback endpoints must likewise report an incomplete result if
+their durable completion state cannot be written after the privileged action.

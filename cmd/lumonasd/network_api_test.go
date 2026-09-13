@@ -34,6 +34,30 @@ func TestNetworkCheckpointRollsBackWhenPersistenceFails(t *testing.T) {
 	}
 }
 
+func TestNetworkCheckpointActionReportsCompletionPersistenceFailure(t *testing.T) {
+	server := testServer(t)
+	if err := server.store.RecordNetworkCheckpoint("net-commit", "lan", "pending"); err != nil {
+		t.Fatal(err)
+	}
+	server.completeNetworkCheckpointFn = func(string, string) (string, error) {
+		return "", errors.New("checkpoint database unavailable")
+	}
+	var operations []string
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		operations = append(operations, request.Operation)
+		return nil
+	}
+
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/network/checkpoints/net-commit/commit", strings.NewReader(`{"confirmed":true}`)))
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "persistence failed") {
+		t.Fatalf("expected completion persistence failure, got %d: %s", response.Code, response.Body.String())
+	}
+	if len(operations) != 1 || operations[0] != "network.checkpoint.commit" {
+		t.Fatalf("unexpected privileged operation sequence: %#v", operations)
+	}
+}
+
 func TestNetworkConfigurationAPIRequiresReauthenticationAndPersistsTypedState(t *testing.T) {
 	server := testServer(t)
 

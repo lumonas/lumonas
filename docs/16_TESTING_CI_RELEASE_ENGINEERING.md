@@ -188,6 +188,9 @@ The network checkpoint safety test also forces persistence of the pending
 checkpoint record to fail and requires the daemon to invoke the typed rollback
 operation before returning an error. A checkpoint is never considered safely
 created unless both the privileged state and its durable rollback record exist.
+The corresponding commit/rollback test also fails the completion write and
+requires the API to report that the privileged action completed with
+persistence incomplete.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the
