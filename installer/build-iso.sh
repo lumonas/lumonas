@@ -103,7 +103,6 @@ mergerfs
 snapraid
 docker.io
 docker-compose
-rsync
 grub-pc-bin
 EOF
 cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<EOF
@@ -183,7 +182,9 @@ rsync -aHAX --numeric-ids --one-file-system \
 	--exclude=/srv/lumonas/** \
 	/ /mnt/lumonas-target/
 mkdir -p /mnt/lumonas-target/{dev,proc,sys,run,tmp,var/lib/lumonas,srv/lumonas}
-printf '%s\n' '/dev/vda / ext4 defaults 0 1' > /mnt/lumonas-target/etc/fstab
+root_uuid=$(blkid -s UUID -o value "$target_device")
+[ -n "$root_uuid" ]
+printf 'UUID=%s / ext4 defaults 0 1\n' "$root_uuid" > /mnt/lumonas-target/etc/fstab
 printf '%s\n' 'lumonas-recovered' > /mnt/lumonas-target/etc/hostname
 mkdir -p /mnt/lumonas-target/etc/NetworkManager/system-connections
 cat >/mnt/lumonas-target/etc/NetworkManager/system-connections/recovery-ethernet.nmconnection <<'NETWORK'
@@ -201,9 +202,16 @@ method=auto
 NETWORK
 chmod 600 /mnt/lumonas-target/etc/NetworkManager/system-connections/recovery-ethernet.nmconnection
 grub-install --target=i386-pc --recheck --boot-directory=/mnt/lumonas-target/boot "$target_device"
-root_uuid=$(blkid -s UUID -o value "$target_device")
 kernel_path=$(find /mnt/lumonas-target/boot -maxdepth 1 -type f -name 'vmlinuz-*' | sort | tail -n 1)
 initrd_path=$(find /mnt/lumonas-target/boot -maxdepth 1 -type f -name 'initrd.img-*' | sort | tail -n 1)
+if [ -z "$kernel_path" ] && [ -f /mnt/lumonas-target/live/vmlinuz ]; then
+	cp /mnt/lumonas-target/live/vmlinuz /mnt/lumonas-target/boot/vmlinuz-recovery
+	kernel_path=/mnt/lumonas-target/boot/vmlinuz-recovery
+fi
+if [ -z "$initrd_path" ] && [ -f /mnt/lumonas-target/live/initrd.img ]; then
+	cp /mnt/lumonas-target/live/initrd.img /mnt/lumonas-target/boot/initrd.img-recovery
+	initrd_path=/mnt/lumonas-target/boot/initrd.img-recovery
+fi
 [ -n "$root_uuid" ] && [ -n "$kernel_path" ] && [ -n "$initrd_path" ]
 kernel_name=${kernel_path##*/}
 initrd_name=${initrd_path##*/}
