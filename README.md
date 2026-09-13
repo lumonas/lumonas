@@ -96,6 +96,18 @@ Debian package creation requires `dpkg-deb` and is intended for Debian/Ubuntu CI
 make package
 ```
 
+The Debian 13 QEMU image is dual-bootable (BIOS and UEFI). On a Debian/Ubuntu
+host with QEMU and OVMF, the release-blocking A/B checks can be run explicitly:
+
+```sh
+make qemu-ab-smoke LUMONAS_AB_ASSERT=true LUMONAS_QEMU_IMAGE=build/qemu/lumonas-debian13.raw
+make qemu-uefi-ab-smoke LUMONAS_UEFI_AB_ASSERT=true LUMONAS_QEMU_IMAGE=build/qemu/lumonas-debian13.raw
+```
+
+The second check rewrites a disposable inactive slot through `lumonas-privd`,
+arms EFI `BootNext`, reboots the guest, and verifies the root filesystem came
+from that slot.
+
 After the Debian package and QEMU smoke test are reliable, the offline installer can be built on Debian/Ubuntu with `live-build`:
 
 ```sh

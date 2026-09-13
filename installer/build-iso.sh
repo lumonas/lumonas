@@ -156,6 +156,7 @@ docker-compose
 grub-pc-bin
 grub-efi-amd64
 dosfstools
+efibootmgr
 EOF
 cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<EOF
 #!/bin/sh

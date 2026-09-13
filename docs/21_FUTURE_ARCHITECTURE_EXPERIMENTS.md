@@ -48,12 +48,14 @@ The core of this design is implemented behind the privileged broker:
 
 `scripts/qemu-ab-smoke.sh` (`LUMONAS_AB_ASSERT=true`) exercises stage,
 privileged write, tamper rejection, and BIOS fail-closed BootNext in QEMU.
+The x86 QEMU image is GPT-partitioned with both a BIOS boot partition and an
+EFI system partition. `scripts/qemu-uefi-ab-smoke.sh`
+(`LUMONAS_UEFI_AB_ASSERT=true`) boots it through OVMF, registers both slot
+entries, rewrites the inactive disk through the broker, arms `BootNext`, and
+verifies after a real reboot that the root filesystem came from slot B.
 
 ### Remaining for full immutable A/B
 
-- UEFI QEMU boot-flip verification (BootNext into the written slot and health
-  gate; the daemon now arms the previous EFI entry and reboots after repeated
-  failed health boots);
 - secure boot / UKI integration;
 - atomic deduplicated images;
 - background automatic updates.

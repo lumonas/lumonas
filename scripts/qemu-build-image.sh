@@ -22,7 +22,7 @@ case "$DEBIAN_MIRROR" in
 esac
 export SOURCE_DATE_EPOCH
 
-for command in debootstrap qemu-img mkfs.ext4 grub-install; do
+for command in debootstrap qemu-img sfdisk losetup partx mkfs.ext4 mkfs.vfat blkid mount umount grub-install; do
   command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 1; }
 done
 [ "$(id -u)" -eq 0 ] || { echo "Run this builder as root (for example: sudo $0)" >&2; exit 1; }
@@ -37,14 +37,41 @@ done
 
 mkdir -p "$(dirname "$OUTPUT")" "$WORK/mnt"
 qemu-img create -f raw "$OUTPUT" "$SIZE" >/dev/null
-mkfs.ext4 -F "$OUTPUT" >/dev/null
-mount -o loop "$OUTPUT" "$WORK/mnt"
+sfdisk "$OUTPUT" <<'PARTITIONS'
+label: gpt
+unit: sectors
+first-lba: 2048
+2048,4096,bios_grub
+6144,262144,uefi
+268288,,linux
+PARTITIONS
+
+LOOP="$(losetup --find --show --partscan "$OUTPUT")"
+case "$LOOP" in
+	*[0-9]) EFI_PART="${LOOP}p2"; ROOT_PART="${LOOP}p3" ;;
+	*) EFI_PART="${LOOP}2"; ROOT_PART="${LOOP}3" ;;
+esac
+partx -u "$LOOP"
+mkfs.vfat -F 32 -n LUMONAS_EFI "$EFI_PART" >/dev/null
+mkfs.ext4 -F -L LUMONAS_ROOT "$ROOT_PART" >/dev/null
+mount "$ROOT_PART" "$WORK/mnt"
+mkdir -p "$WORK/mnt/boot/efi"
+mount "$EFI_PART" "$WORK/mnt/boot/efi"
+ROOT_UUID="$(blkid -s UUID -o value "$ROOT_PART")"
+EFI_UUID="$(blkid -s UUID -o value "$EFI_PART")"
+[ -n "$ROOT_UUID" ] && [ -n "$EFI_UUID" ] || { echo "could not read generated partition UUIDs" >&2; exit 1; }
 
 cleanup() {
-  umount -R "$WORK/mnt/dev" 2>/dev/null || true
-  umount -R "$WORK/mnt/proc" 2>/dev/null || true
-  umount -R "$WORK/mnt/sys" 2>/dev/null || true
-  umount "$WORK/mnt" 2>/dev/null || true
+	set +e
+	umount "$WORK/mnt/boot/efi" 2>/dev/null || true
+	umount -R "$WORK/mnt/dev" 2>/dev/null || true
+	umount -R "$WORK/mnt/proc" 2>/dev/null || true
+	umount -R "$WORK/mnt/sys" 2>/dev/null || true
+	umount "$WORK/mnt" 2>/dev/null || true
+	if [ -n "${LOOP:-}" ]; then
+		partx --delete "$LOOP" 2>/dev/null || true
+		losetup -d "$LOOP" 2>/dev/null || true
+	fi
 }
 trap cleanup EXIT
 
@@ -88,14 +115,14 @@ PY
 	chmod 0640 "$WORK/mnt/var/lib/lumonas/update-fixture/package"
 fi
 
-chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_COMMIT="$SOURCE_COMMIT" LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" LUMONAS_DEBIAN_MIRROR="$DEBIAN_MIRROR" LUMONAS_QEMU_SSH_PUBLIC_KEY="$SSH_PUBLIC_KEY" /bin/sh -eux <<'EOF'
+chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_COMMIT="$SOURCE_COMMIT" LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" LUMONAS_DEBIAN_MIRROR="$DEBIAN_MIRROR" LUMONAS_QEMU_SSH_PUBLIC_KEY="$SSH_PUBLIC_KEY" LUMONAS_ROOT_UUID="$ROOT_UUID" LUMONAS_EFI_UUID="$EFI_UUID" LUMONAS_LOOP_DEVICE="$LOOP" /bin/sh -eux <<'EOF'
 export DEBIAN_FRONTEND=noninteractive
 cat >/etc/apt/apt.conf.d/99lumonas-snapshot <<'APT'
 Acquire::Check-Valid-Until "false";
 APT
 apt-get update
 apt-get install -y --no-install-recommends \
-  systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc grub-efi-amd64 dosfstools openssh-server curl ca-certificates openssl \
+  systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc grub-efi-amd64 dosfstools efibootmgr gdisk openssh-server curl ca-certificates openssl \
   iproute2 util-linux smartmontools lm-sensors nut nut-client e2fsprogs xfsprogs mergerfs snapraid \
   network-manager docker.io docker-compose samba samba-common-bin nfs-kernel-server rsync vsftpd \
   avahi-daemon nftables
@@ -134,8 +161,9 @@ cat >/etc/systemd/system/lumonas-web.service.d/qemu.conf <<'DROPIN'
 [Service]
 Environment=LUMONAS_WEB_LISTEN=0.0.0.0:8081
 DROPIN
-cat >/etc/fstab <<'FSTAB'
-/dev/vda / ext4 defaults 0 1
+cat >/etc/fstab <<FSTAB
+UUID=$LUMONAS_ROOT_UUID / ext4 defaults 0 1
+UUID=$LUMONAS_EFI_UUID /boot/efi vfat umask=0077 0 1
 FSTAB
 systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service ssh.service lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
 systemctl disable systemd-networkd.service systemd-networkd-wait-online.service || true
@@ -154,9 +182,9 @@ GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=
 GRUB_TIMEOUT=1
 GRUB
 update-grub
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=LumoNAS --removable --no-nvram
+grub-install --target=i386-pc --recheck "$LUMONAS_LOOP_DEVICE"
 EOF
-
-grub-install --target=i386-pc --recheck --boot-directory="$WORK/mnt/boot" "$OUTPUT"
 
 if [ -n "$UPDATE_FIXTURE" ]; then
 	cat >>"$WORK/mnt/etc/lumonas/lumonasd.env" <<ENV

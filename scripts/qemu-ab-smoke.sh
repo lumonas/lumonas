@@ -2,8 +2,8 @@
 # A/B slot smoke: boots the installed appliance image and exercises the
 # slot-image pipeline end to end — stage, privileged write to a spare disk,
 # digest verification, BootNext fail-closed behavior on BIOS guests, and the
-# confirm conflict path. The full UEFI BootNext boot-flip requires UEFI QEMU
-# firmware and is documented in docs/21 as the next acceptance step.
+# confirm conflict path. The companion qemu-uefi-ab-smoke.sh exercises the
+# real UEFI firmware reboot path.
 set -eu
 
 ASSERT_MODE="${LUMONAS_AB_ASSERT:-false}"

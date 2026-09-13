@@ -341,6 +341,19 @@ if "LUMONAS_AB_ASSERT=true" not in workflow_text:
 makefile_text = (repo_root / "Makefile").read_text(encoding="utf-8")
 if 'qemu-ab-smoke:' not in makefile_text or 'LUMONAS_AB_ASSERT="$${LUMONAS_AB_ASSERT:-false}"' not in makefile_text:
     raise SystemExit("Makefile A/B smoke target does not preserve shell assertion defaults")
+uefi_ab_smoke = repo_root / "scripts" / "qemu-uefi-ab-smoke.sh"
+uefi_ab_text = uefi_ab_smoke.read_text(encoding="utf-8")
+for marker in ("LUMONAS_UEFI_AB_ASSERT", "OVMF_CODE", "if=pflash", "BootNext", "/dev/vdb3"):
+    if marker not in uefi_ab_text:
+        raise SystemExit(f"QEMU UEFI A/B smoke is missing {marker}")
+if "LUMONAS_UEFI_AB_ASSERT=true" not in workflow_text:
+    raise SystemExit("QEMU release job does not run the UEFI A/B smoke")
+if "qemu-uefi-ab-smoke:" not in makefile_text or 'LUMONAS_UEFI_AB_ASSERT="$${LUMONAS_UEFI_AB_ASSERT:-false}"' not in makefile_text:
+    raise SystemExit("Makefile UEFI A/B smoke target does not preserve shell assertion defaults")
+qemu_builder_text = (repo_root / "scripts" / "qemu-build-image.sh").read_text(encoding="utf-8")
+for marker in ("label: gpt", "bios_grub", "mkfs.vfat", "grub-install --target=x86_64-efi", "efibootmgr"):
+    if marker not in qemu_builder_text:
+        raise SystemExit(f"QEMU builder is missing dual-boot image support: {marker}")
 for marker in ("package-arm64:", "LUMONAS_CC=aarch64-linux-gnu-gcc", "name: lumonas-deb-arm64", "deb-verify-arm64:"):
     if marker not in workflow_text:
         raise SystemExit(f"CI does not build and verify the arm64 package: {marker}")
