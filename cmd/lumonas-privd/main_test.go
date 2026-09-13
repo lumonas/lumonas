@@ -277,15 +277,15 @@ func TestTypedIdentityAndACLOperationsAreAllowListed(t *testing.T) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
 		return nil, nil
 	}
-	user := execute(request{Operation: "identity.system-user.ensure", PlanHash: "identity", Confirmed: true, RequestedState: map[string]any{"name": "media", "uid": 1001, "gid": 1001, "home": "/srv/pools/media"}}, nil, run)
+	user := execute(request{Operation: "identity.system-user.ensure", OperationID: "identity-1", PlanHash: "identity", Confirmed: true, RequestedState: map[string]any{"name": "media", "uid": 1001, "gid": 1001, "home": "/srv/pools/media"}}, nil, run)
 	if !user.OK || !strings.HasPrefix(commands[0], "useradd --system") {
 		t.Fatalf("unexpected system-user result: %#v commands=%v", user, commands)
 	}
-	acl := execute(request{Operation: "acl.apply", PlanHash: "acl", Confirmed: true, RequestedState: map[string]any{"path": "/srv/pools/media", "entries": []any{map[string]any{"principal": "media", "level": "read"}}}}, nil, run)
+	acl := execute(request{Operation: "acl.apply", OperationID: "acl-1", PlanHash: "acl", Confirmed: true, RequestedState: map[string]any{"path": "/srv/pools/media", "entries": []any{map[string]any{"principal": "media", "level": "read"}}}}, nil, run)
 	if !acl.OK || !strings.HasPrefix(commands[1], "setfacl") {
 		t.Fatalf("unexpected ACL result: %#v commands=%v", acl, commands)
 	}
-	unsafe := execute(request{Operation: "acl.apply", PlanHash: "acl", Confirmed: true, RequestedState: map[string]any{"path": "/etc/passwd", "entries": []any{map[string]any{"principal": "media", "level": "write"}}}}, nil, run)
+	unsafe := execute(request{Operation: "acl.apply", OperationID: "acl-1", PlanHash: "acl", Confirmed: true, RequestedState: map[string]any{"path": "/etc/passwd", "entries": []any{map[string]any{"principal": "media", "level": "write"}}}}, nil, run)
 	if unsafe.OK || !strings.Contains(unsafe.Error, "allow-listed") {
 		t.Fatalf("unsafe ACL path was accepted: %#v", unsafe)
 	}
@@ -313,7 +313,7 @@ func TestFirewallApplyRequiresOperationID(t *testing.T) {
 }
 
 func TestShareActivationRequiresOperationID(t *testing.T) {
-	for _, operation := range []string{"service.config.apply", "avahi.config.apply"} {
+	for _, operation := range []string{"service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply"} {
 		t.Run(operation, func(t *testing.T) {
 			result := execute(request{Operation: operation, PlanHash: "share-plan", Confirmed: true}, nil, func(string, ...string) ([]byte, error) {
 				t.Fatal("share activation command ran without an operation ID")
@@ -339,7 +339,7 @@ func TestSambaUserProvisioningUsesStdinPasswords(t *testing.T) {
 		stdinPayload = stdin
 		return nil, nil
 	}
-	base := request{Operation: "samba.user.ensure", PlanHash: "samba", Confirmed: true}
+	base := request{Operation: "samba.user.ensure", OperationID: "samba-1", PlanHash: "samba", Confirmed: true}
 	created := ensureSambaUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: map[string]any{"name": "media", "create": true, "password": "a-file-user-password"}}, run, stdinRun)
 	if !created.OK || len(stdinCommands) != 1 || stdinCommands[0] != "pdbedit -a -t -u media" || stdinPayload != "a-file-user-password\na-file-user-password\n" {
 		t.Fatalf("unexpected create result %#v stdin=%v payload=%q", created, stdinCommands, stdinPayload)
@@ -359,7 +359,7 @@ func TestSambaUserProvisioningUsesStdinPasswords(t *testing.T) {
 }
 
 func TestSambaUserProvisioningRejectsUnsafeInput(t *testing.T) {
-	base := request{Operation: "samba.user.ensure", PlanHash: "samba", Confirmed: true}
+	base := request{Operation: "samba.user.ensure", OperationID: "samba-1", PlanHash: "samba", Confirmed: true}
 	run := func(string, ...string) ([]byte, error) { return nil, nil }
 	stdinRun := func(string, []string, string) ([]byte, error) { return nil, nil }
 	cases := []struct {
@@ -386,7 +386,7 @@ func TestSystemUserLockAndUnlockAreAllowListed(t *testing.T) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
 		return nil, nil
 	}
-	base := request{Operation: "identity.system-user.ensure", PlanHash: "identity", Confirmed: true}
+	base := request{Operation: "identity.system-user.ensure", OperationID: "identity-1", PlanHash: "identity", Confirmed: true}
 	locked := ensureSystemUser(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, RequestedState: map[string]any{"name": "media", "disabled": true}}, run)
 	if !locked.OK || commands[len(commands)-1] != "usermod -L media" {
 		t.Fatalf("unexpected lock result %#v commands=%v", locked, commands)

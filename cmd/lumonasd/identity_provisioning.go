@@ -52,6 +52,7 @@ func (s *apiServer) ensureFileIdentitySystemUser(principal identity.Principal, s
 	}
 	request := privileged.Request{
 		Operation:      "identity.system-user.ensure",
+		OperationID:    newID("identity"),
 		PlanHash:       "identity-" + principal.Name + "-" + strconv.FormatInt(s.currentGeneration(), 10),
 		RequestedState: state,
 		ExpiresAt:      time.Now().UTC().Add(5 * time.Minute),
@@ -65,6 +66,7 @@ func (s *apiServer) ensureFileIdentitySystemUser(principal identity.Principal, s
 func (s *apiServer) ensureFileIdentitySambaUser(name string, state map[string]any) error {
 	request := privileged.Request{
 		Operation:      "samba.user.ensure",
+		OperationID:    newID("samba"),
 		PlanHash:       "samba-" + name + "-" + strconv.FormatInt(s.currentGeneration(), 10),
 		RequestedState: state,
 		ExpiresAt:      time.Now().UTC().Add(5 * time.Minute),

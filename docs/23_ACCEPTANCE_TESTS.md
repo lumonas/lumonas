@@ -620,3 +620,8 @@ Pass if firewall rules are staged and activated only through the typed
 privileged worker, every firewall mutation carries an operation ID and expiry,
 and a missing broker or failed validation leaves the previous generated
 ruleset unchanged.
+
+## BC. Privileged identity mutation scope
+
+Pass if system-user, Samba-user, and ACL mutations are rejected without an
+operation ID and production provisioning requests include operation IDs.

@@ -64,6 +64,10 @@ staged first, but a share mutation is not successful until the typed broker
 has applied every required service and Avahi change. A missing broker rolls
 back the generated files and stored share state; release CI covers this
 fail-closed path.
+File-identity provisioning and ACL changes are also operation-scoped at the
+privileged boundary. System-user, Samba-user, and ACL mutations carry a
+non-empty operation ID before the worker can execute them; the safety gate
+checks rejection of unscoped requests.
 
 ### QEMU end-to-end
 

@@ -47,6 +47,9 @@ func TestFileUserCreationProvisionsOSAndSambaAccounts(t *testing.T) {
 	if record.requests[0].Operation != "identity.system-user.ensure" {
 		t.Fatalf("expected system user provisioning first, got %q", record.requests[0].Operation)
 	}
+	if record.requests[0].OperationID == "" || record.requests[1].OperationID == "" {
+		t.Fatalf("identity provisioning requests must carry operation IDs: %#v", record.requests)
+	}
 	uid := int(record.requests[0].RequestedState["uid"].(int))
 	gid := int(record.requests[0].RequestedState["gid"].(int))
 	if uid < 100 || uid > 60000 || gid < 100 || gid > 60000 {
