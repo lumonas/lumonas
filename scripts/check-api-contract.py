@@ -114,11 +114,16 @@ def main() -> int:
     disk_type = between(types, "export interface Disk {", "export interface PoolMember {")
     event_schema = between(openapi, "    Event:\n", "    ResourceRef:\n")
     event_type = between(types, "export interface LumoEvent", "export type IPMethod")
+    audit_schema = between(openapi, "    AuditEntry:\n", "    ServiceStatus:\n")
+    audit_type = between(types, "export interface AuditEntry {", "export interface CapacityForecast {")
+    audit_fields = ["id", "timestamp", "actor", "action", "outcome", "correlationId", "operationId", "planHash", "generation", "resourceType", "resourceId", "metadata"]
 
     check_fields("OpenAPI Disk", disk_schema, disk_fields, r"^\s+{field}:\s*$")
     check_fields("frontend Disk", disk_type, disk_fields, r"^\s+{field}\??\s*[:(]")
     check_fields("OpenAPI Event", event_schema, event_fields, r"^\s+{field}:\s*$")
     check_fields("frontend LumoEvent", event_type, event_fields, r"^\s+{field}\??\s*[:(]")
+    check_fields("OpenAPI AuditEntry", audit_schema, audit_fields, r"^\s+{field}:\s*$")
+    check_fields("frontend AuditEntry", audit_type, audit_fields, r"^\s+{field}\??\s*[:(]")
 
     spec = importlib.util.spec_from_file_location("lumonas_check_openapi", OPENAPI_CHECK)
     if spec is None or spec.loader is None:

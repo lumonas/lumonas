@@ -29,6 +29,7 @@ export function AuditTab() {
                 <TableHead>Actor</TableHead>
                 <TableHead>Action</TableHead>
                 <TableHead>Resource</TableHead>
+                <TableHead>Trace</TableHead>
                 <TableHead>Outcome</TableHead>
               </TableRow>
             </TableHeader>
@@ -42,6 +43,16 @@ export function AuditTab() {
                   <TableCell className="font-mono text-xs">{entry.action}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {entry.resourceType ? `${entry.resourceType}/${entry.resourceId ?? ''}` : '—'}
+                  </TableCell>
+                  <TableCell className="max-w-[220px] text-xs text-muted-foreground">
+                    {entry.operationId || entry.correlationId ? (
+                      <div className="space-y-0.5" title={[entry.operationId, entry.planHash, entry.correlationId].filter(Boolean).join(' · ')}>
+                        {entry.operationId && <div className="font-mono">op: {entry.operationId}</div>}
+                        {entry.planHash && <div className="font-mono">plan: {entry.planHash}</div>}
+                        {entry.correlationId && <div className="font-mono">req: {entry.correlationId}</div>}
+                        {entry.generation !== undefined && <div>generation: {entry.generation}</div>}
+                      </div>
+                    ) : '—'}
                   </TableCell>
                   <TableCell>
                     <Badge variant={entry.outcome === 'recorded' || entry.outcome === 'committed' ? 'secondary' : 'warning'}>

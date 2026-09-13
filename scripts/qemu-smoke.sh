@@ -119,6 +119,7 @@ for attempt in $(seq 1 60); do
      curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.metrics" 2>/dev/null && \
      curl -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
+     curl -kfsS 'https://127.0.0.1:18080/api/v1/audit?limit=100' >"$LOG.audit" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/health/components >"$LOG.health" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/docker/summary >"$LOG.docker-summary" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/docker/containers >"$LOG.docker-containers" 2>/dev/null && \
@@ -157,6 +158,7 @@ for attempt in $(seq 1 60); do
       grep -F '"capturedAt"' "$LOG.metrics-history" >/dev/null 2>&1 || continue
       python3 "$ROOT/scripts/validate-api-response.py" metrics-history "$LOG.metrics-history"
       python3 "$ROOT/scripts/validate-api-response.py" jobs "$LOG.jobs"
+      python3 "$ROOT/scripts/validate-api-response.py" audit "$LOG.audit"
       python3 "$ROOT/scripts/validate-api-response.py" health "$LOG.health"
       python3 "$ROOT/scripts/validate-api-response.py" docker-summary "$LOG.docker-summary"
       python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$LOG.docker-containers"

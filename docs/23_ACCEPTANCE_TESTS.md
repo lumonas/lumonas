@@ -528,6 +528,10 @@ and the frontend event type exposes the same optional metadata. Restart
 reconciliation must emit only one persisted failure event per interrupted job,
 including the job correlation and operation IDs.
 
+The audit API and monitoring view must expose the same typed trace fields
+(`correlationId`, `operationId`, `planHash`, and `generation`) as the backend
+audit record; dropping them from the frontend contract fails API compatibility.
+
 The API, Debian appliance, offline ISO, and recovered-disk smoke tests must
 exercise both routes. A route that only returns a successful HTTP status but
 does not deliver a validated `system.metrics` SSE frame fails the gate.

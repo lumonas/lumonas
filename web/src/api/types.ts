@@ -570,6 +570,10 @@ export interface AuditEntry {
   actor: string
   action: string
   outcome: string
+  correlationId?: string
+  operationId?: string
+  planHash?: string
+  generation?: number
   resourceType?: string
   resourceId?: string
   metadata?: Record<string, unknown>

@@ -314,6 +314,11 @@ status=$(curl -sS -o "$TEMP_DIR/jobs.json" -w '%{http_code}' \
 [ "$status" = 200 ] || { echo "authenticated jobs request failed (HTTP $status)" >&2; exit 1; }
 validate_response jobs "$TEMP_DIR/jobs.json"
 
+status=$(curl -sS -o "$TEMP_DIR/audit.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/audit?limit=100")
+[ "$status" = 200 ] || { echo "authenticated audit request failed (HTTP $status)" >&2; exit 1; }
+validate_response audit "$TEMP_DIR/audit.json"
+
 status=$(curl -sS -o "$TEMP_DIR/health-components.json" -w '%{http_code}' \
 	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/health/components")
 [ "$status" = 200 ] || { echo "authenticated health components request failed (HTTP $status)" >&2; exit 1; }

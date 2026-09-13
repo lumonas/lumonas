@@ -212,6 +212,26 @@ def validate_events(value: Any) -> None:
         object_value(obj["data"], f"{label}.data")
 
 
+def validate_audit(value: Any) -> None:
+    if not isinstance(value, list):
+        fail("audit must be a JSON array")
+    fields = ("id", "timestamp", "actor", "action", "outcome")
+    for index, entry in enumerate(value):
+        label = f"audit[{index}]"
+        obj = object_value(entry, label)
+        required(obj, fields, label)
+        for field in fields:
+            string_field(obj, field, label)
+        for field in ("correlationId", "operationId", "planHash", "resourceType", "resourceId"):
+            if field in obj:
+                string_field(obj, field, label)
+        if "generation" in obj:
+            if not isinstance(obj["generation"], int) or isinstance(obj["generation"], bool) or obj["generation"] < 0:
+                fail(f"{label}.generation must be a non-negative integer")
+        if "metadata" in obj:
+            object_value(obj["metadata"], f"{label}.metadata")
+
+
 def self_test() -> None:
     validate_server({field: "value" for field in ("id", "name", "hostname", "version", "nasUuid", "timezone", "health", "ip")})
     validate_disks([{
@@ -241,6 +261,12 @@ def self_test() -> None:
     validate_docker_volumes([])
     validate_health({"status": "healthy", "score": 100, "components": []})
     validate_events([{"schemaVersion": 1, "id": "evt-1", "type": "system.metrics", "timestamp": "now", "severity": "info", "data": {}}])
+    validate_audit([{
+        "id": "audit-1", "timestamp": "now", "actor": "admin", "action": "disk.plan",
+        "outcome": "committed", "correlationId": "corr-1", "operationId": "op-1",
+        "planHash": "sha256:plan", "generation": 7, "resourceType": "disk",
+        "resourceId": "wwn-1", "metadata": {"confirmed": True},
+    }])
 
 
 VALIDATORS = {
@@ -255,6 +281,7 @@ VALIDATORS = {
     "docker-volumes": validate_docker_volumes,
     "health": validate_health,
     "events": validate_events,
+    "audit": validate_audit,
 }
 
 
