@@ -524,6 +524,11 @@ Recovery ZIP parsing is bounded by entry count, entry-name length, per-entry
 expanded bytes, and aggregate expanded bytes. Both bundle creation and
 verification enforce these limits, and the release safety gate exercises the
 malformed-entry and oversized-shape paths before recovery artifacts can ship.
+Recovery export verifies the complete bundle before publication, stages both
+latest and generation-addressed copies with mode 0600, fsyncs file and
+directory metadata, and publishes them with collision-safe atomic renames.
+Persistence tests cover repeated exports in the same timestamp and tampered
+bundles that must not create a recovery directory.
 Notification provider responses are bounded to 64 KiB before status handling,
 and the security gate exercises the oversized-response rejection path.
 Support bundles retain their downloadable archive even when a collector fails,

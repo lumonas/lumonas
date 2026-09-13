@@ -1267,50 +1267,14 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context) {
 		return
 	}
 	directory := envOr("LUMONAS_RECOVERY_DIR", "/var/lib/lumonas/recovery")
-	if err := os.MkdirAll(directory, 0o750); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	temporary, err := os.CreateTemp(directory, ".latest-*.mrb")
+	persisted, err := recovery.PersistVerified(directory, bundle, []byte(key), time.Now().UTC())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	temporaryPath := temporary.Name()
-	cleanup := func() { temporary.Close(); _ = os.Remove(temporaryPath) }
-	if _, err := temporary.Write(bundle); err != nil {
-		cleanup()
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if err := temporary.Chmod(0o600); err != nil {
-		cleanup()
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if err := temporary.Close(); err != nil {
-		_ = os.Remove(temporaryPath)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if err := os.Rename(temporaryPath, filepath.Join(directory, "latest.mrb")); err != nil {
-		_ = os.Remove(temporaryPath)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	manifest, err := recovery.Verify(bundle, []byte(key))
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recovery bundle verification failed: " + err.Error()})
-		return
-	}
-	versioned := filepath.Join(directory, fmt.Sprintf("generation-%d-%s.mrb", manifest.Generation, time.Now().UTC().Format("20060102T150405Z")))
-	if err := os.WriteFile(versioned, bundle, 0o600); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "versioned recovery copy failed: " + err.Error()})
 		return
 	}
 	s.pruneRecoveryBundles(directory, 20)
-	s.publish("recovery.bundle.created", "info", nil, map[string]any{"generation": manifest.Generation})
-	writeJSON(w, http.StatusCreated, map[string]any{"path": filepath.Join(directory, "latest.mrb"), "manifest": manifest, "verified": true, "appdataArchives": len(appdata.Payloads), "warnings": appdata.Warnings})
+	s.publish("recovery.bundle.created", "info", nil, map[string]any{"generation": persisted.Manifest.Generation})
+	writeJSON(w, http.StatusCreated, map[string]any{"path": persisted.LatestPath, "manifest": persisted.Manifest, "verified": true, "appdataArchives": len(appdata.Payloads), "warnings": appdata.Warnings})
 }
 
 func (s *apiServer) pruneRecoveryBundles(directory string, keep int) {
