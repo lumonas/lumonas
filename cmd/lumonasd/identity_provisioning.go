@@ -45,6 +45,9 @@ func (s *apiServer) executePrivileged(ctx context.Context, request privileged.Re
 	// brokerExec is a test seam; production leaves it nil so requests go to
 	// the real privileged broker over the Unix socket. Returning a typed OK
 	// response keeps the seam usable for operations that need response data.
+	if s.brokerExecWithResponse != nil {
+		return s.brokerExecWithResponse(ctx, request)
+	}
 	if s.brokerExec != nil {
 		if err := s.brokerExec(ctx, request); err != nil {
 			return privileged.Response{}, err

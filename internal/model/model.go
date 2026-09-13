@@ -213,6 +213,13 @@ type DockerDeployment struct {
 	ImageBeforeJSON string    `json:"-"`
 }
 
+type SnapshotEntry struct {
+	Name       string    `json:"name"`
+	SizeBytes  int64     `json:"sizeBytes"`
+	Directory  bool      `json:"directory"`
+	ModifiedAt time.Time `json:"modifiedAt"`
+}
+
 type ActivityEvent struct {
 	ID          string       `json:"id"`
 	Timestamp   time.Time    `json:"timestamp"`

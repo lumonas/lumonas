@@ -363,6 +363,37 @@ paths:
         '503':
           description: Privileged broker unavailable
 
+  /storage/snapshots/{id}/files:
+    get:
+      tags: [Storage]
+      summary: Browse a read-only Btrfs snapshot directory
+      operationId: browseStorageSnapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Relative path inside the snapshot
+      responses:
+        '200':
+          description: Snapshot directory entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSnapshotFiles'
+        '404':
+          description: Snapshot not found
+        '422':
+          description: Snapshot kind or path cannot be browsed
+        '503':
+          description: Privileged broker unavailable
+
   /storage/safety:
     get:
       tags: [Storage]
@@ -4871,6 +4902,26 @@ components:
         name: {type: string}
         label: {type: string}
         createdAt: {type: string, format: date-time}
+
+    SnapshotEntry:
+      type: object
+      required: [name, sizeBytes, directory, modifiedAt]
+      properties:
+        name: {type: string}
+        sizeBytes: {type: integer, minimum: 0}
+        directory: {type: boolean}
+        modifiedAt: {type: string, format: date-time}
+
+    StorageSnapshotFiles:
+      type: object
+      required: [path, entries, total]
+      properties:
+        path: {type: string}
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SnapshotEntry'
+        total: {type: integer, minimum: 0}
 
     StorageOperationPlan:
       type: object

@@ -101,6 +101,14 @@ func ValidateSnapshotLabel(label string) error {
 	return nil
 }
 
+// ValidateSnapshotName checks a concrete snapshot name (label-stamp or stamp).
+func ValidateSnapshotName(name string) error {
+	if !snapshotNamePattern.MatchString(name) {
+		return errors.New("invalid snapshot name")
+	}
+	return nil
+}
+
 // DetectBtrfs reports whether path is a btrfs subvolume.
 func DetectBtrfs(ctx context.Context, run SnapshotRunner, path string) (bool, error) {
 	out, err := run(ctx, "btrfs", "subvolume", "show", path)

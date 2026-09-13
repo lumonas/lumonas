@@ -278,6 +278,16 @@ export const handlers = [
     return HttpResponse.json(list)
   }),
 
+  http.get(`${BASE}/storage/snapshots/:id/files`, ({ params, request }) => {
+    const snapshot = storageSnapshots.find((item) => item.id === params.id)
+    if (!snapshot || snapshot.kind !== 'btrfs') return new HttpResponse(null, { status: 422 })
+    const path = new URL(request.url).searchParams.get('path') ?? ''
+    const entries = path
+      ? [{ name: 'movies', sizeBytes: 128, directory: true, modifiedAt: snapshot.createdAt }]
+      : [{ name: 'media', sizeBytes: 128, directory: true, modifiedAt: snapshot.createdAt }]
+    return HttpResponse.json({ path, entries, total: entries.length })
+  }),
+
   http.post(`${BASE}/storage/snapshots`, async ({ request }) => {
     const body = (await request.json()) as { kind?: string; source?: string; label?: string }
     if (!body.kind || !body.source) return new HttpResponse(null, { status: 422 })

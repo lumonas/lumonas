@@ -453,6 +453,19 @@ export interface StorageSnapshot {
   createdAt: string
 }
 
+export interface SnapshotEntry {
+  name: string
+  sizeBytes: number
+  directory: boolean
+  modifiedAt: string
+}
+
+export interface StorageSnapshotFiles {
+  path: string
+  entries: SnapshotEntry[]
+  total: number
+}
+
 export interface LanHost {
   mac: string
   interface: string

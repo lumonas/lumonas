@@ -52,6 +52,7 @@ import type {
   StorageOperationPlan,
   StorageSafety,
   StorageSnapshot,
+  StorageSnapshotFiles,
   SystemMetrics,
   UPSStatus,
   UPSConfig,
@@ -1089,6 +1090,16 @@ export function useStorageSnapshots(source?: string) {
   return useQuery({
     queryKey: ['storage', 'snapshots', source ?? 'all'],
     queryFn: () => apiGet<StorageSnapshot[]>(`/storage/snapshots${query}`),
+    throwOnError: false,
+  })
+}
+
+export function useStorageSnapshotFiles(snapshotId: string | null, path = '') {
+  const query = path ? `?path=${encodeURIComponent(path)}` : ''
+  return useQuery({
+    queryKey: ['storage', 'snapshot-files', snapshotId, path],
+    queryFn: () => apiGet<StorageSnapshotFiles>(`/storage/snapshots/${snapshotId}/files${query}`),
+    enabled: snapshotId != null,
     throwOnError: false,
   })
 }

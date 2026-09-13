@@ -244,7 +244,7 @@ func executeWorker(req request, worker string) response {
 
 func operationWorker(operation string) string {
 	switch operation {
-	case "worker.ping.storage", "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.delete", "install.apply":
+	case "worker.ping.storage", "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.browse", "snapshot.delete", "install.apply":
 		return "storage"
 	case "worker.ping.network", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply":
 		return "network"
@@ -353,7 +353,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return executePoolMount(req, discover, run)
 	case "pool.unmount":
 		return executePoolUnmount(req, run)
-	case "snapshot.create", "snapshot.list", "snapshot.delete":
+	case "snapshot.create", "snapshot.list", "snapshot.browse", "snapshot.delete":
 		return executeSnapshotOperation(req, run)
 	case "storage.mountpersist.apply":
 		return applyMountPersistence(req, discover, run)

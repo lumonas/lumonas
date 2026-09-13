@@ -64,6 +64,7 @@ type apiServer struct {
 	safetyMu                    sync.Mutex
 	safetyUntil                 time.Time
 	brokerExec                  func(ctx context.Context, request privileged.Request) error
+	brokerExecWithResponse      func(ctx context.Context, request privileged.Request) (privileged.Response, error)
 	upsDiscover                 func(context.Context, []string) []power.UPS
 	recordNetworkCheckpointFn   func(operationID, connectionID, state string) error
 	completeNetworkCheckpointFn func(operationID, state string) (string, error)
@@ -378,6 +379,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.storageSnapshots(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/snapshots":
 		s.createStorageSnapshot(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/storage/snapshots/") && strings.HasSuffix(endpoint, "/files"):
+		s.storageSnapshotFiles(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/storage/snapshots/"):
 		s.deleteStorageSnapshot(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/storage/safety":

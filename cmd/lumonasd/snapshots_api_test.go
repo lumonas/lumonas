@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/privileged"
 	"github.com/lumonas/lumonas/internal/store"
 )
@@ -128,5 +129,53 @@ func TestStorageSnapshotsList(t *testing.T) {
 	}
 	if len(records) != 1 || records[0].Name != "b" {
 		t.Fatalf("unexpected listing: %#v", records)
+	}
+}
+
+func TestStorageSnapshotFilesBrowsesBtrfsThroughPrivilegedBroker(t *testing.T) {
+	server := testServer(t)
+	saved, err := server.store.SaveStorageSnapshot(store.StorageSnapshotRecord{Kind: "btrfs", Source: "/srv/pool", Name: "nightly-20260913T100000Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen privileged.Request
+	server.brokerExecWithResponse = func(_ context.Context, request privileged.Request) (privileged.Response, error) {
+		seen = request
+		return privileged.Response{OK: true, Data: map[string]any{
+			"total":   float64(1),
+			"entries": []any{map[string]any{"name": "movies", "directory": true, "sizeBytes": float64(128), "modifiedAt": "2026-09-13T10:00:00Z"}},
+		}}, nil
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/storage/snapshots/"+saved.ID+"/files?path=media", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload struct {
+		Path    string                `json:"path"`
+		Entries []model.SnapshotEntry `json:"entries"`
+		Total   int                   `json:"total"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Path != "media" || payload.Total != 1 || len(payload.Entries) != 1 || payload.Entries[0].Name != "movies" || !payload.Entries[0].Directory {
+		t.Fatalf("unexpected browse response: %#v", payload)
+	}
+	if seen.Operation != "snapshot.browse" || seen.RequestedState["subpath"] != "media" || !seen.Confirmed {
+		t.Fatalf("unexpected browse broker request: %#v", seen)
+	}
+}
+
+func TestStorageSnapshotFilesRejectsZFS(t *testing.T) {
+	server := testServer(t)
+	saved, err := server.store.SaveStorageSnapshot(store.StorageSnapshotRecord{Kind: "zfs", Source: "tank/media", Name: "nightly-20260913T100000Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/storage/snapshots/"+saved.ID+"/files", nil))
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for zfs browse, got %d: %s", response.Code, response.Body.String())
 	}
 }

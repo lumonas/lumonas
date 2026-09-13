@@ -1,5 +1,6 @@
-import { HardDrive, Plus, Trash2 } from 'lucide-react'
-import { useCreateStorageSnapshot, useDeleteStorageSnapshot, useDisks, usePools, useProtection, useStorageSafety, useStorageSnapshots, useUnlockStorageSafety } from '@/api/queries'
+import { useState } from 'react'
+import { ChevronRight, FolderOpen, HardDrive, Plus, Trash2 } from 'lucide-react'
+import { useCreateStorageSnapshot, useDeleteStorageSnapshot, useDisks, usePools, useProtection, useStorageSafety, useStorageSnapshotFiles, useStorageSnapshots, useUnlockStorageSafety } from '@/api/queries'
 import { Metric } from '@/components/core/metric'
 import { StorageUsage } from '@/components/core/storage-usage'
 import { Badge } from '@/components/ui/badge'
@@ -9,10 +10,12 @@ import { formatBytes } from '@/lib/format'
 import { ROLE_LABELS } from '@/features/storage/roles'
 
 export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
+  const [browser, setBrowser] = useState<{ id: string; name: string; path: string } | null>(null)
   const { data: disks } = useDisks()
   const { data: pools } = usePools()
   const { data: protection } = useProtection()
   const { data: snapshots } = useStorageSnapshots()
+  const { data: snapshotFiles, isFetching: snapshotFilesLoading } = useStorageSnapshotFiles(browser?.id ?? null, browser?.path ?? '')
   const { data: storageSafety } = useStorageSafety()
   const unlockStorageSafety = useUnlockStorageSafety()
   const createSnapshot = useCreateStorageSnapshot()
@@ -153,16 +156,24 @@ export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
                     {snapshot.source} · {new Date(snapshot.createdAt).toLocaleString()}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 shrink-0 gap-1.5 text-xs text-destructive hover:text-destructive"
-                  disabled={deleteSnapshot.isPending || unlockStorageSafety.isPending}
-                  onClick={() => void handleDeleteSnapshot(snapshot.id)}
-                >
-                  <Trash2 className="size-3.5" />
-                  Delete
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {snapshot.kind === 'btrfs' && (
+                    <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs" onClick={() => setBrowser({ id: snapshot.id, name: snapshot.name, path: '' })}>
+                      <FolderOpen className="size-3.5" />
+                      Browse
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
+                    disabled={deleteSnapshot.isPending || unlockStorageSafety.isPending}
+                    onClick={() => void handleDeleteSnapshot(snapshot.id)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    Delete
+                  </Button>
+                </div>
               </div>
             ))
           ) : (
@@ -170,6 +181,41 @@ export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
               No snapshots yet. Snapshots are read-only point-in-time copies kept on the source
               filesystem.
             </p>
+          )}
+          {browser && (
+            <div className="mt-2 rounded-lg border bg-muted/20 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="truncate text-xs font-medium">
+                  {browser.name}{browser.path ? ` / ${browser.path}` : ''}
+                </p>
+                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setBrowser(null)}>
+                  Close
+                </Button>
+              </div>
+              {snapshotFilesLoading ? (
+                <p className="text-xs text-muted-foreground">Loading snapshot contents…</p>
+              ) : snapshotFiles?.entries.length ? (
+                <div className="flex flex-col gap-1">
+                  {snapshotFiles.entries.map((entry) => (
+                    <button
+                      key={`${browser.path}/${entry.name}`}
+                      type="button"
+                      disabled={!entry.directory}
+                      className="flex items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-accent disabled:cursor-default"
+                      onClick={() => entry.directory && setBrowser((current) => current ? { ...current, path: current.path ? `${current.path}/${entry.name}` : entry.name } : current)}
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5 truncate">
+                        {entry.directory && <ChevronRight className="size-3 shrink-0" />}
+                        <span className="truncate">{entry.name}</span>
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">{entry.directory ? 'directory' : formatBytes(entry.sizeBytes)}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">This snapshot directory is empty.</p>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>
