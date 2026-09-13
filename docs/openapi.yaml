@@ -909,7 +909,7 @@ paths:
         '200':
           description: Installation succeeded
         '409':
-          description: No plan generated
+          description: No plan generated or another installation is already in progress
         '422':
           description: Plan validation or installation failure
         '503':

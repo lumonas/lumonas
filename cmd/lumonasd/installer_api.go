@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -94,6 +95,11 @@ func (s *apiServer) installerPlan(w http.ResponseWriter, r *http.Request) {
 	}
 	hash := plan.Hash()
 	s.installer.mu.Lock()
+	if s.installer.stage == "applying" {
+		s.installer.mu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "an installation is already in progress"})
+		return
+	}
 	s.installer.plan, s.installer.hash, s.installer.stage, s.installer.detail = &plan, hash, "planned", ""
 	s.installer.mu.Unlock()
 	s.recordRequestAudit(r, actor, "install.plan", plan.TargetDiskID, map[string]any{"planId": plan.ID})
@@ -122,20 +128,27 @@ func (s *apiServer) installerApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.installer.mu.Lock()
-	plan, hash, stage := s.installer.plan, s.installer.hash, s.installer.stage
-	s.installer.mu.Unlock()
-	if plan == nil || stage != "planned" {
+	if s.installer.plan == nil || s.installer.stage != "planned" {
+		s.installer.mu.Unlock()
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "generate an installation plan first"})
 		return
 	}
+	plan := *s.installer.plan
+	hash := s.installer.hash
 	if err := plan.ValidateForApply(input.Hash, input.Confirm, time.Now()); err != nil {
+		s.installer.mu.Unlock()
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	if len(input.AdminPassword) < 12 {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "administrator password must contain at least 12 characters"})
+	if len(input.AdminPassword) < 12 || strings.ContainsAny(input.AdminPassword, "\x00\r\n") {
+		s.installer.mu.Unlock()
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "administrator password must contain at least 12 characters and no line breaks"})
 		return
 	}
+	// Claim the plan while holding the state lock. This makes the destructive
+	// operation single-flight even when two browser requests arrive together.
+	s.installer.stage, s.installer.detail = "applying", ""
+	s.installer.mu.Unlock()
 	request := privileged.Request{
 		Operation:        "install.apply",
 		OperationID:      newID("install"),
@@ -152,7 +165,6 @@ func (s *apiServer) installerApply(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: time.Now().UTC().Add(10 * time.Minute),
 		Confirmed: true,
 	}
-	s.setInstallerStage("applying", "")
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Minute)
 	defer cancel()
 	result, err := s.executePrivileged(ctx, request)

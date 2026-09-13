@@ -43,8 +43,10 @@ enables the `/install/*` endpoints and the `/install` page:
    confirmation, and a 12+ character administrator password. The plan hash
    and disk identity are revalidated at the privileged boundary; the broker
    invokes the packaged `install-disk` provisioner (partition, filesystem,
-   Debian bootstrap, bootloader) with the password delivered over stdin and
-   written only to the root-owned first-boot environment file.
+   Debian runtime copy, bootloader) with the password delivered over stdin and
+   written only to the account-owned first-boot environment file. Apply is
+   single-flight: while a disk is being provisioned, a second plan or apply
+   request is rejected.
 4. `GET /install/status` reports the current stage.
 
 Outside installer mode all `/install/*` endpoints return 404, so a running
