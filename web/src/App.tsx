@@ -59,9 +59,10 @@ function DensityEffect() {
 
 function RoutedApp() {
   const { data: onboarding } = useOnboardingState()
+  const isInstallerRoute = window.location.pathname === '/install'
   return (
     <BrowserRouter>
-      {!onboarding?.completed ? (
+      {!onboarding?.completed && !isInstallerRoute ? (
         <OnboardingPage />
       ) : (
         <Routes>

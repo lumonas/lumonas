@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -165,11 +166,24 @@ func main() {
 	}
 	defer db.Close()
 	nasUUID := ensureNASUUID(db)
-	if password := os.Getenv("LUMONAS_ADMIN_PASSWORD"); password != "" {
-		if err := db.EnsureAdmin("admin", password); err != nil {
+	password := os.Getenv("LUMONAS_ADMIN_PASSWORD")
+	if password == "" {
+		if encoded := os.Getenv("LUMONAS_ADMIN_PASSWORD_B64"); encoded != "" {
+			decoded, decodeErr := base64.StdEncoding.DecodeString(encoded)
+			if decodeErr != nil {
+				logger.Error("admin bootstrap credential is not valid base64", "error", decodeErr)
+				os.Exit(1)
+			}
+			password = string(decoded)
+		}
+	}
+	if password != "" {
+		username := envOr("LUMONAS_ADMIN_USERNAME", "admin")
+		if err := db.EnsureAdmin(username, password); err != nil {
 			logger.Error("admin bootstrap failed", "error", err)
 			os.Exit(1)
 		}
+		_ = os.Remove("/var/lib/lumonas/secrets/first-boot.env")
 	}
 	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", dynamicAuth: true, corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]csrfBinding), rateAttempts: make(map[string][]time.Time)}
 	server.dockerService = server.dockerServiceWithBroker(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"))

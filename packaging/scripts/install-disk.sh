@@ -1,140 +1,191 @@
 #!/bin/sh
-# LumoNAS disk provisioner — invoked by the privileged broker's
-# `install.apply` operation with five validated arguments:
+# LumoNAS offline system-disk provisioner.
 #
+# Arguments:
 #   install-disk.sh <device> <filesystem> <uefi|bios> <hostname> <adminUsername>
 #
-# The administrator password hash arrives on stdin (never argv). The script
-# partitions the target disk, creates the root filesystem, bootstraps a
-# minimal Debian runtime from the medium's embedded package repository,
-# installs the LumoNAS packages plus a bootloader, and records the
-# administrator credential. Every step fails the whole installation.
+# The live ISO already contains the pinned Debian runtime and the LumoNAS
+# package. The target is built by copying that runtime, so the installation
+# path never needs a network mirror or a package download.
 set -eu
 
-DEVICE="$1"
-FILESYSTEM="$2"
-BOOT_MODE="$3"
-HOSTNAME="$4"
-ADMIN_NAME="$5"
+DEVICE_INPUT="${1:-}"
+FILESYSTEM="${2:-}"
+BOOT_MODE="${3:-}"
+HOSTNAME="${4:-}"
+ADMIN_NAME="${5:-}"
 ADMIN_PASSWORD="$(sed -n '1p')"
-
-MIRROR="${LUMONAS_INSTALL_MIRROR:-}"
-SUITE="${LUMONAS_INSTALL_SUITE:-bookworm}"
 MOUNT="${LUMONAS_INSTALL_MOUNT:-/mnt/lumonas-install}"
-REPO_DIR="${LUMONAS_INSTALL_REPO_DIR:-/opt/lumonas-repo}"
 
-log() { printf '[install-disk] %s\n' "$*" >&2; }
+log() { printf '[install-disk] %s\n' "$*"; }
 die() { log "ERROR: $*"; exit 1; }
 
 [ "$(id -u)" = "0" ] || die "must run as root"
-[ -b "$DEVICE" ] || die "$DEVICE is not a block device"
+[ -n "$ADMIN_PASSWORD" ] || die "administrator password is required"
 [ "$FILESYSTEM" = "ext4" ] || [ "$FILESYSTEM" = "xfs" ] || die "unsupported filesystem $FILESYSTEM"
 [ "$BOOT_MODE" = "uefi" ] || [ "$BOOT_MODE" = "bios" ] || die "unsupported boot mode $BOOT_MODE"
-case "$DEVICE" in
-	*/disk/by-id/*|/dev/[a-z]d[a-z]|/dev/nvme[0-9]n[0-9]|/dev/vd[a-z]|/dev/xvd[a-z]) ;;
-	*) die "device path $DEVICE is not an accepted disk path" ;;
+printf '%s' "$HOSTNAME" | grep -Eq '^[a-z0-9][a-z0-9-]{0,62}$' || die "hostname is invalid"
+printf '%s' "$ADMIN_NAME" | grep -Eq '^[a-z_][a-z0-9_-]{0,31}$' || die "administrator name is invalid"
+
+case "$MOUNT" in
+	''|/|/dev|/proc|/sys|/run|/tmp|/var|/var/*) die "unsafe installation mount path" ;;
+	/*) ;;
+	*) die "installation mount path must be absolute" ;;
 esac
-command -v sfdisk >/dev/null || die "sfdisk is required"
-command -v "mkfs.$FILESYSTEM" >/dev/null || die "mkfs.$FILESYSTEM is required"
-command -v debootstrap >/dev/null || die "debootstrap is required"
-[ -d "$REPO_DIR/dists" ] || die "embedded LumoNAS repository not found at $REPO_DIR"
 
-log "provisioning $DEVICE ($FILESYSTEM, $BOOT_MODE) as $HOSTNAME"
+command -v readlink >/dev/null 2>&1 || die "readlink is required"
+command -v sfdisk >/dev/null 2>&1 || die "sfdisk is required"
+command -v rsync >/dev/null 2>&1 || die "rsync is required"
+command -v findmnt >/dev/null 2>&1 || die "findmnt is required"
+command -v lsblk >/dev/null 2>&1 || die "lsblk is required"
+command -v partx >/dev/null 2>&1 || die "partx is required"
+command -v udevadm >/dev/null 2>&1 || die "udevadm is required"
+command -v base64 >/dev/null 2>&1 || die "base64 is required"
+command -v "mkfs.$FILESYSTEM" >/dev/null 2>&1 || die "mkfs.$FILESYSTEM is required"
+[ "$BOOT_MODE" != "uefi" ] || command -v mkfs.vfat >/dev/null 2>&1 || die "mkfs.vfat is required"
 
-# 1. Partition: one ESP/firmware partition plus the root partition.
-wipefs -a "$DEVICE" >/dev/null 2>&1 || true
+[ -b "$DEVICE_INPUT" ] || die "$DEVICE_INPUT is not a block device"
+DEVICE="$(readlink -f "$DEVICE_INPUT")"
+[ -b "$DEVICE" ] || die "could not resolve installation device"
+case "$DEVICE" in
+	/dev/[a-z]d[a-z]|/dev/nvme[0-9]n[0-9]|/dev/vd[a-z]|/dev/xvd[a-z]) ;;
+	*) die "device path $DEVICE is not an accepted whole-disk path" ;;
+esac
+
+if mounts="$(findmnt -rn -S "$DEVICE" 2>/dev/null)"; then
+	[ -z "$mounts" ] || die "installation device is mounted"
+else
+	status=$?
+	[ "$status" -eq 1 ] || die "could not verify installation device mounts"
+fi
+mounts="$(lsblk -nrpo MOUNTPOINT -- "$DEVICE")" || die "could not inspect installation device mounts"
+while IFS= read -r mountpoint; do
+	case "$mountpoint" in
+		''|-) ;;
+		*) die "installation device has mounted partitions" ;;
+	esac
+done <<EOF
+$mounts
+EOF
+
+log "provisioning $DEVICE_INPUT ($FILESYSTEM, $BOOT_MODE) as $HOSTNAME"
+wipefs -a -f "$DEVICE" >/dev/null
+
 if [ "$BOOT_MODE" = "uefi" ]; then
-	sfdisk --quiet "$DEVICE" <<-'PARTS'
+	sfdisk --wipe always --wipe-partitions always --quiet "$DEVICE" <<-'PARTS'
 		label: gpt
-		name="lumonas-esp", size=512MiB, type=U
-		name="lumonas-root", type=L
+		size=512MiB, type=U, name="LumoNAS ESP"
+		type=L, name="LumoNAS root"
 	PARTS
 else
-	sfdisk --quiet "$DEVICE" <<-'PARTS'
+	sfdisk --wipe always --wipe-partitions always --quiet "$DEVICE" <<-'PARTS'
 		label: dos
 		type=83, bootable
 	PARTS
 fi
 
-# 2. Resolve the partitions the kernel created.
-PART_ROOT=""
-for candidate in "${DEVICE}2" "${DEVICE}p2" "${DEVICE}-part2"; do
-	[ -b "$candidate" ] && PART_ROOT="$candidate" && break
-done
-PART_ESP=""
-if [ "$BOOT_MODE" = "uefi" ]; then
-	for candidate in "${DEVICE}1" "${DEVICE}p1" "${DEVICE}-part1"; do
-		[ -b "$candidate" ] && PART_ESP="$candidate" && break
-	done
-	[ -n "$PART_ESP" ] || die "ESP partition not found"
-fi
-[ -n "$PART_ROOT" ] || die "root partition not found"
+partx --update "$DEVICE" >/dev/null 2>&1 || true
+udevadm settle --timeout=10
 
-# 3. Filesystems.
+partition_path() {
+	index="$1"
+	for candidate in "${DEVICE}${index}" "${DEVICE}p${index}" "${DEVICE}-part${index}"; do
+		if [ -b "$candidate" ]; then
+			printf '%s' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
 if [ "$BOOT_MODE" = "uefi" ]; then
+	PART_ESP="$(partition_path 1)" || die "ESP partition was not created"
+	PART_ROOT="$(partition_path 2)" || die "root partition was not created"
 	mkfs.vfat -F 32 -n LUMOESP "$PART_ESP" >/dev/null
+else
+	PART_ESP=""
+	PART_ROOT="$(partition_path 1)" || die "root partition was not created"
 fi
-"mkfs.$FILESYSTEM" -L luminasroot "$PART_ROOT" >/dev/null
+
+if [ "$FILESYSTEM" = "ext4" ]; then
+	mkfs.ext4 -F -L lumonasroot "$PART_ROOT" >/dev/null
+else
+	mkfs.xfs -f -L lumonasroot "$PART_ROOT" >/dev/null
+fi
 
 mkdir -p "$MOUNT"
 mount "$PART_ROOT" "$MOUNT"
 cleanup() {
-	umount "$MOUNT/dev" "$MOUNT/proc" "$MOUNT/sys" 2>/dev/null || true
 	umount "$MOUNT/boot/efi" 2>/dev/null || true
+	umount "$MOUNT/dev" 2>/dev/null || true
+	umount "$MOUNT/proc" 2>/dev/null || true
+	umount "$MOUNT/sys" 2>/dev/null || true
 	umount "$MOUNT" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-# 4. Bootstrap the Debian runtime. The embedded repository supplies the
-# LumoNAS packages afterwards; the Debian mirror is only needed here.
-DEBIAN_FRONTEND=noninteractive debootstrap --variant=minbase "$SUITE" "$MOUNT" "$MIRROR" >/dev/null
+# Copy the live Debian runtime, excluding virtual filesystems and the target
+# mount itself. This is the offline installation boundary.
+rsync -aHAX --numeric-ids --one-file-system \
+	--exclude=/dev/*** \
+	--exclude=/proc/*** \
+	--exclude=/sys/*** \
+	--exclude=/run/*** \
+	--exclude=/tmp/*** \
+	--exclude=/var/tmp/*** \
+	--exclude=/mnt/*** \
+	--exclude="$MOUNT/***" \
+	/ "$MOUNT/"
+
+mkdir -p "$MOUNT/etc/lumonas" "$MOUNT/var/lib/lumonas/secrets" "$MOUNT/boot"
+if [ -f "$MOUNT/etc/lumonas/lumonasd.env" ]; then
+	sed -i '/^LUMONAS_INSTALLER_MODE=/d' "$MOUNT/etc/lumonas/lumonasd.env"
+fi
+printf '%s\n' "$HOSTNAME" >"$MOUNT/etc/hostname"
+if ! grep -Eq '^[[:space:]]*127\.0\.1\.1[[:space:]]' "$MOUNT/etc/hosts"; then
+	printf '127.0.1.1\t%s\n' "$HOSTNAME" >>"$MOUNT/etc/hosts"
+fi
+
+root_uuid="$(blkid -s UUID -o value "$PART_ROOT")"
+printf 'UUID=%s / %s errors=remount-ro 0 1\n' "$root_uuid" "$FILESYSTEM" >"$MOUNT/etc/fstab"
+if [ "$BOOT_MODE" = "uefi" ]; then
+	mkdir -p "$MOUNT/boot/efi"
+	mount "$PART_ESP" "$MOUNT/boot/efi"
+	esp_uuid="$(blkid -s UUID -o value "$PART_ESP")"
+	printf 'UUID=%s /boot/efi vfat umask=0077 0 1\n' "$esp_uuid" >>"$MOUNT/etc/fstab"
+fi
+
+# The live image already contains the service account from package postinst.
+# Store the password only in the account-owned first-boot secret; lumonasd
+# removes it after creating the application administrator.
+first_boot="$MOUNT/var/lib/lumonas/secrets/first-boot.env"
+umask 077
+encoded_password="$(printf '%s' "$ADMIN_PASSWORD" | base64 | tr -d '\n')"
+printf 'LUMONAS_ADMIN_USERNAME=%s\nLUMONAS_ADMIN_PASSWORD_B64=%s\n' "$ADMIN_NAME" "$encoded_password" >"$first_boot"
+chown lumonas:lumonas "$first_boot"
+chmod 0600 "$first_boot"
 
 mount --bind /dev "$MOUNT/dev"
 mount --bind /proc "$MOUNT/proc"
 mount --bind /sys "$MOUNT/sys"
 
-# 5. System identity and package installation.
-printf '%s\n' "$HOSTNAME" > "$MOUNT/etc/hostname"
-printf '127.0.1.1\t%s\n' "$HOSTNAME" >> "$MOUNT/etc/hosts"
-: > "$MOUNT/etc/fstab"
-if [ "$BOOT_MODE" = "uefi" ]; then
-	printf 'UUID=%s /boot/efi vfat umask=0077 0 1\n' "$(blkid -s UUID -o value "$PART_ESP")" >> "$MOUNT/etc/fstab"
-fi
-printf 'UUID=%s / %s errors=remount-ro 0 1\n' "$(blkid -s UUID -o value "$PART_ROOT")" "$FILESYSTEM" >> "$MOUNT/etc/fstab"
-
-# 6. First-boot administrator bootstrap. The credential lives only in the
-# root-owned environment file and is consumed by lumonasd on first start;
-# it is never embedded in argv or logs.
-mkdir -p "$MOUNT/etc/lumonas"
-{
-	printf 'LUMONAS_AUTH_REQUIRED=true\n'
-	printf 'LUMONAS_ADMIN_PASSWORD=%s\n' "$ADMIN_PASSWORD"
-} > "$MOUNT/etc/lumonas/lumonasd.env"
-chmod 0600 "$MOUNT/etc/lumonas/lumonasd.env"
-
-chroot "$MOUNT" /bin/sh -s <<-'CHROOT'
+chroot "$MOUNT" /bin/sh -s -- "$ADMIN_NAME" <<-'CHROOT'
 	set -eu
-	apt-get update >/dev/null
-	apt-get install --yes --no-install-recommends \
-		linux-image-amd64 systemd-sysv locales ca-certificates >/dev/null
-	if [ -d /opt/lumonas-repo ]; then
-		printf 'deb [trusted=yes] file:/opt/lumonas-repo ./\n' > /etc/apt/sources.list.d/lumonas.list
-		apt-get update >/dev/null
-		apt-get install --yes --no-install-recommends lumonas >/dev/null
+	admin_name="$1"
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
+	update-initramfs -u -k all >/dev/null 2>&1 || true
+	if [ "$admin_name" = "root" ]; then
+		echo "administrator name may not be root" >&2
+		exit 1
 	fi
 CHROOT
 
-# 7. Bootloader.
 if [ "$BOOT_MODE" = "uefi" ]; then
-	mkdir -p "$MOUNT/boot/efi"
-	mount "$PART_ESP" "$MOUNT/boot/efi"
-	chroot "$MOUNT" bootctl install >/dev/null 2>&1 || {
-		apt-get install --yes --no-install-recommends grub-efi-amd64 >/dev/null 2>&1
-		chroot "$MOUNT" grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=lumonas >/dev/null
-	}
+	chroot "$MOUNT" grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=LumoNAS --removable --no-nvram >/dev/null
 else
 	chroot "$MOUNT" grub-install --target=i386-pc "$DEVICE" >/dev/null
 fi
 chroot "$MOUNT" update-grub >/dev/null 2>&1 || true
 
-log "installation complete on $DEVICE"
+sync
+log "installation complete on $DEVICE_INPUT"

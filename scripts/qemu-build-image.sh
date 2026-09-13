@@ -90,7 +90,7 @@ Acquire::Check-Valid-Until "false";
 APT
 apt-get update
 apt-get install -y --no-install-recommends \
-  systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc openssh-server curl ca-certificates openssl \
+  systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc grub-efi-amd64 dosfstools openssh-server curl ca-certificates openssl \
   iproute2 util-linux smartmontools lm-sensors nut nut-client e2fsprogs xfsprogs mergerfs snapraid \
   network-manager docker.io docker-compose samba samba-common-bin nfs-kernel-server rsync vsftpd \
   avahi-daemon nftables

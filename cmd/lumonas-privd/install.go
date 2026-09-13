@@ -50,7 +50,7 @@ func applyDiskInstall(req request, disk model.Disk, run command, stdinRun stdinR
 		return response{Error: "administrator name is invalid"}
 	}
 	adminPassword, _ := req.RequestedState["adminPassword"].(string)
-	if len(adminPassword) < 12 {
+	if len(adminPassword) < 12 || strings.ContainsAny(adminPassword, "\x00\r\n") {
 		return response{Error: "administrator password must contain at least 12 characters"}
 	}
 	uefi := requestedBool(req.RequestedState, "uefi")

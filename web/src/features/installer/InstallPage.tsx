@@ -68,6 +68,7 @@ export function InstallPage() {
         confirm: true,
         adminPassword: password,
       }),
+    onSuccess: () => void status.refetch(),
   })
 
   const stage = status.data?.stage ?? 'idle'

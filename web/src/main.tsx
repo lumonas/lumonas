@@ -7,7 +7,12 @@ import App from '@/App'
 async function prepare() {
   if (import.meta.env.VITE_USE_MOCKS !== 'true') return
   const { worker } = await import('@/mocks/browser')
-  await worker.start({ onUnhandledRequest: 'bypass', quiet: true })
+  try {
+    await worker.start({ onUnhandledRequest: 'bypass', quiet: true })
+  } catch {
+    // A browser policy may block service workers. Keep the UI usable so the
+    // real API or an externally provided test backend can still be reached.
+  }
 }
 
 prepare().then(() => {

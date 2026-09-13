@@ -27,10 +27,10 @@ func (s *apiServer) installerUnavailable(w http.ResponseWriter) {
 // medium serves one operator at a time, so a mutex-guarded slot is
 // intentionally simple.
 type installerState struct {
-	mu    sync.Mutex
-	plan  *installer.Plan
-	hash  string
-	stage string
+	mu     sync.Mutex
+	plan   *installer.Plan
+	hash   string
+	stage  string
 	detail string
 }
 
@@ -137,10 +137,10 @@ func (s *apiServer) installerApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	request := privileged.Request{
-		Operation:   "install.apply",
-		OperationID: newID("install"),
-		PlanHash:    hash,
-		TargetDiskID: plan.TargetDiskID,
+		Operation:        "install.apply",
+		OperationID:      newID("install"),
+		PlanHash:         hash,
+		TargetDiskID:     plan.TargetDiskID,
 		ExpectedIdentity: plan.ExpectedIdentity,
 		RequestedState: map[string]any{
 			"filesystem":    plan.Filesystem,
@@ -181,7 +181,11 @@ func (s *apiServer) installerStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.installer.mu.Lock()
 	defer s.installer.mu.Unlock()
-	payload := map[string]any{"stage": s.installer.stage, "detail": s.installer.detail}
+	stage := s.installer.stage
+	if stage == "" {
+		stage = "idle"
+	}
+	payload := map[string]any{"stage": stage, "detail": s.installer.detail}
 	if s.installer.plan != nil {
 		payload["planId"] = s.installer.plan.ID
 		payload["hostname"] = s.installer.plan.Hostname

@@ -11,9 +11,9 @@ import (
 func installerDisks() []model.Disk {
 	return []model.Disk{
 		{ID: "wwn:system", Name: "sda", Model: "System SSD", SizeBytes: 256 << 30, Role: "system", Health: model.Healthy, Filesystem: "ext4", Mounted: true, WWN: "wwn:system", Serial: "S1"},
-		{ID: "wwn:blank", Name: "sdb", Model: "Blank HDD", SizeBytes: 4 << 30 * 1000 * 1000, Role: "unknown", Health: model.Healthy, WWN: "wwn:blank", Serial: "S2"},
-		{ID: "wwn:parity", Name: "sdc", Model: "Parity HDD", SizeBytes: 12 << 30 * 1000 * 1000, Role: "parity", Health: model.Healthy, WWN: "wwn:parity", Serial: "S3"},
-		{ID: "wwn:mounted", Name: "sdd", Model: "Data HDD", SizeBytes: 8 << 30 * 1000 * 1000, Role: "data", Health: model.Healthy, Filesystem: "ext4", Mounted: true, WWN: "wwn:mounted", Serial: "S4"},
+		{ID: "wwn:blank", Name: "sdb", Model: "Blank HDD", SizeBytes: 12 << 30, Role: "unknown", Health: model.Healthy, WWN: "wwn:blank", Serial: "S2"},
+		{ID: "wwn:parity", Name: "sdc", Model: "Parity HDD", SizeBytes: 12 << 30, Role: "parity", Health: model.Healthy, WWN: "wwn:parity", Serial: "S3"},
+		{ID: "wwn:mounted", Name: "sdd", Model: "Data HDD", SizeBytes: 8 << 30, Role: "data", Health: model.Healthy, Filesystem: "ext4", Mounted: true, WWN: "wwn:mounted", Serial: "S4"},
 		{ID: "wwn:tiny", Name: "sde", Model: "USB Stick", SizeBytes: 4 << 30, Role: "unknown", Health: model.Healthy, WWN: "wwn:tiny", Serial: "S5"},
 	}
 }

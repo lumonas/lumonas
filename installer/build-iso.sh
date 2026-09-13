@@ -150,6 +150,8 @@ snapraid
 docker.io
 docker-compose
 grub-pc-bin
+grub-efi-amd64
+dosfstools
 EOF
 cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<EOF
 #!/bin/sh
@@ -193,6 +195,11 @@ LUMONAS_COOKIE_SECURE=true
 ENV
 chown root:lumonas /etc/lumonas/lumonas-web.env
 chmod 0640 /etc/lumonas/lumonas-web.env
+if ! grep -q '^LUMONAS_INSTALLER_MODE=' /etc/lumonas/lumonasd.env; then
+  printf '%s\n' 'LUMONAS_INSTALLER_MODE=true' >>/etc/lumonas/lumonasd.env
+fi
+chown root:lumonas /etc/lumonas/lumonasd.env
+chmod 0640 /etc/lumonas/lumonasd.env
 systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
 EOF
 chmod 0755 "$WORK/config/hooks/live/020-install-lumonas.hook.chroot"

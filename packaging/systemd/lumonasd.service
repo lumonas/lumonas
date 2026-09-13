@@ -8,6 +8,7 @@ PartOf=lumonas-jobs.target
 [Service]
 Type=simple
 EnvironmentFile=-/etc/lumonas/lumonasd.env
+EnvironmentFile=-/var/lib/lumonas/secrets/first-boot.env
 ExecStart=/usr/lib/lumonas/lumonasd
 StandardOutput=journal
 StandardError=journal
