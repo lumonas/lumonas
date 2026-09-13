@@ -450,6 +450,8 @@ require_line "$ROOT/cmd/lumonas-privd/storage_safety_contract_test.go" 'TestDest
 require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'sfdisk --no-reread'
 require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'partx --update'
 require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'partition-mounted'
+require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'unstable-path'
+require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'no stable identity'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONASD_LISTEN=127.0.0.1:18083'
 require_line "$ROOT/installer/build-iso.sh" 'restored-principals.json'
 require_line "$ROOT/installer/build-iso.sh" 'restored-shares.json'

@@ -325,6 +325,10 @@ loopback disk: mounting its partition must block an erase request targeting the
 parent disk. The test must refresh the loop partition map with the baseline
 `partx` utility rather than relying on an undeclared package.
 
+The same smoke must use a GPT-backed identity for the disposable format
+fixture and must reject an unpartitioned loop device whose only identity is
+its transient `/dev/loopN` path.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.

@@ -507,8 +507,11 @@ protected media.
 
 The privileged storage loopback job additionally starts the actual
 `lumonas-privd` storage worker as root and sends typed Unix-socket requests
-against a temporary loop device. It verifies format, read-only mount, mounted
-disk rejection, stale identity rejection, missing operation ID rejection,
+against temporary loop devices. The primary fixture receives a GPT disk GUID
+because an unpartitioned loop device has no stable hardware identity. A
+separate unpartitioned fixture proves that a path-only identity is rejected
+before formatting. The job verifies format, read-only mount, mounted disk
+rejection, stale identity rejection, missing operation ID rejection,
 expired-plan rejection, unmount, and erase. This job is release-blocking and
 never uses a production device path.
 

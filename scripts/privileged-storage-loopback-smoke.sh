@@ -22,6 +22,7 @@ ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-privileged-storage.XXXXXX")"
 LOOP=""
 PARTITION_LOOP=""
+UNSTABLE_LOOP=""
 WORKER_PID=""
 MOUNT_PATH=""
 PARTITION_MOUNT_PATH=""
@@ -45,6 +46,9 @@ cleanup() {
 	if [ -n "$PARTITION_LOOP" ]; then
 		losetup -d "$PARTITION_LOOP" 2>/dev/null || true
 	fi
+	if [ -n "$UNSTABLE_LOOP" ]; then
+		losetup -d "$UNSTABLE_LOOP" 2>/dev/null || true
+	fi
 	rm -rf "$WORK"
 }
 trap cleanup EXIT INT TERM
@@ -55,6 +59,10 @@ PARTITION_IMAGE="$WORK/partitioned-storage.img"
 WORKER_LOG="$WORK/privd-storage.log"
 truncate -s 96M "$IMAGE"
 LOOP="$(losetup --find --show "$IMAGE")"
+# A disposable loop device has no serial or WWN. Give the main fixture a GPT
+# disk GUID so the broker exercises the same stable-identity path as a real
+# appliance disk instead of relying on /dev/loopN.
+printf 'label: gpt\n' | sfdisk --no-reread "$LOOP" >/dev/null
 truncate -s 128M "$PARTITION_IMAGE"
 PARTITION_LOOP="$(losetup --find --show --partscan "$PARTITION_IMAGE")"
 printf 'label: gpt\n,96M,L\n' | sfdisk --no-reread "$PARTITION_LOOP" >/dev/null
@@ -186,6 +194,18 @@ if payload.get("ok") or sys.argv[2] not in payload.get("error", ""):
     raise SystemExit(f"expected rejected operation containing {sys.argv[2]!r}: {payload}")
 PY
 }
+
+UNSTABLE_IMAGE="$WORK/unstable-identity.img"
+truncate -s 64M "$UNSTABLE_IMAGE"
+UNSTABLE_LOOP="$(losetup --find --show "$UNSTABLE_IMAGE")"
+discover_identity "$UNSTABLE_LOOP" "$WORK/unstable-identity.json"
+UNSTABLE_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$WORK/unstable-identity.json")"
+case "$UNSTABLE_ID" in
+	path:*) ;;
+	*) echo "unpartitioned loop fixture unexpectedly has a stable identity: $UNSTABLE_ID" >&2; exit 1 ;;
+esac
+send_request filesystem.format unstable-path "$WORK/unstable-identity.json" '{"filesystem":"ext4"}' "$WORK/unstable-format.json"
+assert_error "$WORK/unstable-format.json" "no stable identity"
 
 discover_identity "$LOOP" "$WORK/identity-before-format.json"
 DISK_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$WORK/identity-before-format.json")"
