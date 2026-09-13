@@ -39,6 +39,8 @@ Deliver:
   fail-closed extraction targets.
 - Docker Compose bind and named-volume appdata sources are resolved and
   exported through the declared stop-backup contract.
+- recovery export requires stable disk and NAS identity, verifies the bundle,
+  and persists a versioned copy before reporting success.
 
 Exit criteria:
 

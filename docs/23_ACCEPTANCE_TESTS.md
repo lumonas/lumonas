@@ -644,3 +644,10 @@ response.
 Pass if both the management client and root-owned broker reject responses above
 the one-MiB frame limit without returning success or retaining an unbounded
 buffer.
+
+## BF. Recovery export completeness
+
+Run the recovery API smoke tests with disk discovery and NAS identity failures.
+
+Pass if recovery export returns an error instead of creating a verified bundle
+when required stable-disk or appliance identity metadata is unavailable.

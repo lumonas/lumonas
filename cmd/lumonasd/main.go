@@ -1211,17 +1211,29 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "database backup failed: " + err.Error()})
 		return
 	}
-	disks, _ := s.diskFunc()
+	disks, err := s.diskFunc()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "disk identity export failed: " + err.Error()})
+		return
+	}
 	diskIDs := make([]string, 0, len(disks))
 	for _, disk := range disks {
 		diskIDs = append(diskIDs, disk.ID)
 	}
-	nasUUID, _ := s.store.Meta("nas_uuid")
+	nasUUID, hasNASUUID := s.store.Meta("nas_uuid")
+	if !hasNASUUID || strings.TrimSpace(nasUUID) == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "NAS identity is not configured"})
+		return
+	}
 	desired, _ := json.Marshal(map[string]any{"nasUuid": nasUUID, "configGeneration": s.currentGeneration(), "createdAt": time.Now().UTC()})
 	compose := map[string][]byte{}
 	stacks, stackErr := s.decoratedDockerStacks(ctx)
 	if stackErr != nil {
-		stacks, _ = s.dockerService.Stacks(ctx)
+		stacks, stackErr = s.dockerService.Stacks(ctx)
+		if stackErr != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Docker stack export failed: " + stackErr.Error()})
+			return
+		}
 	}
 	for _, stack := range stacks {
 		compose[stack.Name+"/compose.yaml"] = []byte(stack.ComposeYAML)
@@ -1277,12 +1289,15 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	manifest, _ := recovery.Verify(bundle, []byte(key))
+	manifest, err := recovery.Verify(bundle, []byte(key))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recovery bundle verification failed: " + err.Error()})
+		return
+	}
 	versioned := filepath.Join(directory, fmt.Sprintf("generation-%d-%s.mrb", manifest.Generation, time.Now().UTC().Format("20060102T150405Z")))
 	if err := os.WriteFile(versioned, bundle, 0o600); err != nil {
-		if s.log != nil {
-			s.log.Warn("versioned recovery copy failed", "error", err)
-		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "versioned recovery copy failed: " + err.Error()})
+		return
 	}
 	s.pruneRecoveryBundles(directory, 20)
 	s.publish("recovery.bundle.created", "info", nil, map[string]any{"generation": manifest.Generation})
