@@ -38,7 +38,10 @@ export function onboardingState(): OnboardingState {
       }
     })
   return {
-    completed,
+    // A real backend reports completed onboarding after it happened; the
+    // mock honours the same local flag the UI store uses so E2E tests can
+    // enter the authenticated shell directly.
+    completed: completed || localStorage.getItem('lumonas-onboarded') === '1',
     server: {
       name: server.name,
       hostname: server.hostname,

@@ -173,6 +173,12 @@ require_line "$ROOT/scripts/qemu-smoke.sh" 'device reorder did not change any tr
 require_line "$ROOT/scripts/qemu-smoke.sh" '"tmpfs"'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'lumonas-runtime.service'
 require_line "$ROOT/scripts/frontend-runtime-smoke.sh" 'production frontend bundle contains the MSW bootstrap'
+require_line "$ROOT/web/package.json" '"test:e2e": "playwright test"'
+require_line "$ROOT/web/playwright.config.ts" 'VITE_USE_MOCKS'
+require_line "$ROOT/web/e2e/smoke.spec.ts" 'lumonas-onboarded'
+require_line "$ROOT/.github/workflows/ci.yml" 'frontend-e2e:'
+require_line "$ROOT/.github/workflows/ci.yml" 'pnpm exec playwright install --with-deps chromium'
+require_line "$ROOT/Makefile" 'frontend-e2e:'
 for worker in storage network power general; do
   require_line "$ROOT/scripts/qemu-smoke.sh" "lumonas-privd-$worker.service"
 done

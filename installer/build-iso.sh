@@ -322,7 +322,7 @@ EOF
 	--debian-installer live \
 	--archive-areas "main contrib non-free-firmware" \
 	--apt-indices false \
-	--apt-options "-o Acquire::ForceIPv4=true -o Acquire::Retries=5" \
+	--apt-options "-o APT::Get::Assume-Yes=true -o Acquire::ForceIPv4=true -o Acquire::Retries=5" \
 	--firmware-binary false \
 	--firmware-chroot false)
 (cd "$WORK" && lb build)

@@ -43,6 +43,13 @@ the no-PID-1 fallback remains limited to image and chroot construction.
 
 ### Integration
 
+The frontend also has a browser-level smoke suite under `web/e2e/`. It runs
+against the production Vite application in explicit demo mode and covers first
+boot onboarding, the authenticated shell, and the Files, Docker, and Storage
+navigation paths. CI installs a pinned Chromium runtime and runs this suite as
+the `frontend-e2e` job; tagged publication depends on that job as well as the
+real-backend runtime smoke.
+
 Run system tools in containers/VMs where appropriate:
 
 - Samba config rendering/validation;

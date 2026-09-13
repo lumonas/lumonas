@@ -239,6 +239,11 @@ Pass if phone can:
 - acknowledge alert;
 - view active jobs.
 
+The browser smoke suite also covers first-boot onboarding and authenticated
+navigation against the production Vite bundle in explicit demo mode. It runs
+in the release-blocking `frontend-e2e` CI job and complements, rather than
+replaces, the real-backend appliance smoke.
+
 ## S. Config drift
 
 Modify supported service config externally.
