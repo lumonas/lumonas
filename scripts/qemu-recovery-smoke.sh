@@ -174,7 +174,7 @@ qemu-system-x86_64 \
 	-m 2048 \
 	-smp 2 \
 	-drive "file=$TARGET_IMAGE,if=virtio,format=qcow2,serial=LUMONAS-RECOVERED" \
-	-netdev user,id=n1,hostfwd=tcp::18084-:8081 \
+	-netdev user,id=n1,restrict=on,hostfwd=tcp::18084-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-nographic \
 	-serial mon:stdio \
@@ -184,7 +184,8 @@ recovered_ready=false
 for attempt in $(seq 1 120); do
 	if curl -kfsS https://127.0.0.1:18084/healthz >/dev/null 2>&1 && \
 		curl -kfsS https://127.0.0.1:18084/readyz >"$WORK/recovered-ready.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null; then
+		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/services >"$WORK/recovered-services.json" 2>/dev/null; then
 		recovered_ready=true
 		break
 	fi
@@ -200,4 +201,6 @@ done
 }
 grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
+grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
+grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
 echo "LumoNAS recovered replacement disk boot passed"

@@ -120,7 +120,8 @@ for marker in ("SOURCE_API=\"https://127.0.0.1:18083\"", "curl -kfsS \"$SOURCE_A
     if marker not in live_recovery_text:
         raise SystemExit(f"live recovery source is missing its HTTPS/auth contract: {marker}")
 for path in (qemu_smoke, qemu_recovery_smoke, iso_smoke, live_recovery_source):
-    if "restrict=on,hostfwd=" not in path.read_text(encoding="utf-8"):
+    text = path.read_text(encoding="utf-8")
+    if text.count("hostfwd=") != text.count("restrict=on,hostfwd="):
         raise SystemExit(f"QEMU appliance smoke is not isolated from guest egress: {path.name}")
 live_e2e = pathlib.Path(sys.argv[1]).parent.parent.parent / "web" / "e2e" / "live.spec.ts"
 live_e2e_text = live_e2e.read_text(encoding="utf-8")

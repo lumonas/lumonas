@@ -45,7 +45,8 @@ inside the disposable ISO workdir.
 
 The ISO and recovery QEMU smoke tests use restricted user networking: host port
 forwarding remains available for assertions, but the guest cannot reach an
-external network while proving the offline installer path.
+external network while proving the offline installer path. This applies to the
+source appliance, recovery environment, and final boot from the restored disk.
 
 Online security updates may be applied after installation.
 

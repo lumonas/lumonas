@@ -56,8 +56,11 @@ QEMU_PID=$!
 for attempt in $(seq 1 90); do
 	if curl -kfsS https://127.0.0.1:18081/healthz >/dev/null 2>&1 && \
 		curl -kfsS https://127.0.0.1:18081/readyz >"$LOG.ready" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18081/api/v1/server >/dev/null 2>&1; then
+		curl -kfsS https://127.0.0.1:18081/api/v1/server >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18081/api/v1/services >"$LOG.services" 2>/dev/null; then
 		grep -F '"privilegedBroker":true' "$LOG.ready" >/dev/null
+		grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running","user":"lumonas"' "$LOG.services" >/dev/null
+		grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$LOG.services" >/dev/null
 		echo "LumoNAS ISO smoke test passed (blank replacement disk booted)"
 		exit 0
 	fi

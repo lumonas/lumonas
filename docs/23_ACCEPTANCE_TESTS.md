@@ -303,7 +303,9 @@ release-blocking.
 
 ISO, recovery, and appliance QEMU smoke tests must retain only their local host
 forwarding and set QEMU user networking to `restrict=on`, so successful health
-and recovery assertions cannot depend on Internet access.
+and recovery assertions cannot depend on Internet access. The ISO and restored
+system checks must also report `lumonasd` and `lumonas-web` active as the
+unprivileged `lumonas` user.
 
 When recovery fails, the release job must retain the source-guest, ISO-guest,
 and replacement-boot logs before temporary files are removed. Successful runs
