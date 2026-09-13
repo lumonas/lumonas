@@ -386,7 +386,9 @@ The API, QEMU, and recovered-disk smoke tests validate the summary plus the
 container, image, and volume inventory response shapes. The QEMU and
 recovered-disk smoke tests also require the `/docker/summary` contract to
 report `available: true`, so an empty zero-valued response cannot hide a
-missing Docker daemon.
+missing Docker daemon. Container inventory enrichment uses read-only Engine
+inspect and one-shot stats requests for restart count, start time, memory, and
+CPU percentage; those mappings are covered by the Docker integration gate.
 
 The QEMU smoke exercises both documented SSE routes (`/api/v1/events/stream`
 and the compatibility alias `/api/v1/events`) and validates each captured

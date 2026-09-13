@@ -18,6 +18,10 @@ func TestEngineAPIReadOnlyCollectors(t *testing.T) {
 			return http.StatusOK, `{"Version":"27.0.0"}`
 		case "/containers/json":
 			return http.StatusOK, `[{"Id":"container-1","Names":["/media"],"Image":"example/media:latest","State":"running","Status":"Up 2 hours (unhealthy)","Labels":{"com.docker.compose.project":"media"},"Ports":[{"PublicPort":8096,"PrivatePort":8096,"Type":"tcp"}]}]`
+		case "/containers/container-1/json":
+			return http.StatusOK, `{"RestartCount":3,"State":{"StartedAt":"2026-09-13T10:00:00.000000000Z"}}`
+		case "/containers/container-1/stats":
+			return http.StatusOK, `{"memory_stats":{"usage":1048576},"cpu_stats":{"cpu_usage":{"total_usage":200,"percpu_usage":[100,100]},"system_cpu_usage":1000,"online_cpus":2},"precpu_stats":{"cpu_usage":{"total_usage":100},"system_cpu_usage":500}}`
 		case "/images/json":
 			payload, _ := json.Marshal([]map[string]any{{"Id": "image-1", "RepoTags": []string{"example/media:latest", "example/media:stable"}, "Size": uint64(1234), "Created": time.Now().Add(-48 * time.Hour).Unix()}})
 			return http.StatusOK, string(payload)
@@ -42,7 +46,7 @@ func TestEngineAPIReadOnlyCollectors(t *testing.T) {
 	if err != nil || len(containers) != 1 {
 		t.Fatalf("containers = %#v, err=%v", containers, err)
 	}
-	if containers[0].Name != "media" || containers[0].StackID != "media" || containers[0].State != "unhealthy" || len(containers[0].Ports) != 1 || containers[0].Ports[0].Host != 8096 {
+	if containers[0].Name != "media" || containers[0].StackID != "media" || containers[0].State != "unhealthy" || len(containers[0].Ports) != 1 || containers[0].Ports[0].Host != 8096 || containers[0].Restarts != 3 || containers[0].RAMUsedBytes != 1048576 || containers[0].CPUPercent != 40 || containers[0].StartedAt == nil || containers[0].StartedAt.Format(time.RFC3339) != "2026-09-13T10:00:00Z" {
 		t.Fatalf("unexpected container mapping: %#v", containers[0])
 	}
 	images, err := service.Images(context.Background())
@@ -75,6 +79,23 @@ func TestEngineAPIRejectsEngineErrors(t *testing.T) {
 	}
 	if err := client.get(context.Background(), "/version", nil); err == nil || !strings.Contains(err.Error(), "HTTP 500") {
 		t.Fatalf("expected bounded Engine HTTP error, got %v", err)
+	}
+}
+
+func TestContainerCPUPercent(t *testing.T) {
+	stats := containerStatsResponse{}
+	stats.CPUStats.CPUUsage.TotalUsage = 200
+	stats.CPUStats.SystemCPUUsage = 1000
+	stats.CPUStats.OnlineCPUs = 2
+	stats.PreCPUStats.CPUUsage.TotalUsage = 100
+	stats.PreCPUStats.SystemCPUUsage = 500
+	if got := containerCPUPercent(stats); got != 40 {
+		t.Fatalf("containerCPUPercent() = %v, want 40", got)
+	}
+
+	stats.CPUStats.SystemCPUUsage = stats.PreCPUStats.SystemCPUUsage
+	if got := containerCPUPercent(stats); got != 0 {
+		t.Fatalf("containerCPUPercent() with no system delta = %v, want 0", got)
 	}
 }
 

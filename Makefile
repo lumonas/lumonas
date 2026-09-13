@@ -64,7 +64,7 @@ package-dependency-parity:
 	bash scripts/package-dependency-parity-smoke.sh
 
 docker-engine-api:
-	$(GO_ENV) go test ./internal/docker -run 'TestEngineAPIReadOnlyCollectors|TestEngineAPIRejectsEngineErrors|TestSplitImageReference'
+	$(GO_ENV) go test ./internal/docker -run 'TestEngineAPIReadOnlyCollectors|TestEngineAPIRejectsEngineErrors|TestSplitImageReference|TestContainerCPUPercent'
 
 iso: package
 	LUMONAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" bash installer/build-iso.sh "$(VERSION)"

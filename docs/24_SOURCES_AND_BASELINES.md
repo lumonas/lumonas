@@ -16,6 +16,9 @@ management and status collection rather than parsing `docker ps` output. The
 socket is bounded by `LUMONAS_DOCKER_SOCKET` and defaults to
 `/var/run/docker.sock`; Compose remains a separately validated command
 boundary because the Engine API does not replace Compose project operations.
+Container resource status uses the read-only `/containers/{id}/json` inspect
+and `/containers/{id}/stats?stream=false` endpoints; failures in optional
+enrichment do not hide the base inventory.
 
 - https://docs.docker.com/reference/api/engine/
 - https://docs.docker.com/compose/

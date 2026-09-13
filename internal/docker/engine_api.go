@@ -124,12 +124,90 @@ func (c *engineClient) containers(ctx context.Context) ([]Container, error) {
 		for _, port := range row.Ports {
 			ports = append(ports, Port{Host: int(port.PublicPort), Container: int(port.PrivatePort), Label: port.Type})
 		}
-		result = append(result, Container{
+		container := Container{
 			ID: row.ID, Name: name, StackID: row.Labels["com.docker.compose.project"],
 			Image: row.Image, State: normalizeEngineState(row.State, row.Status), Ports: ports,
-		})
+		}
+		c.enrichContainer(ctx, &container)
+		result = append(result, container)
 	}
 	return result, nil
+}
+
+type containerInspectResponse struct {
+	RestartCount int `json:"RestartCount"`
+	State        struct {
+		StartedAt string `json:"StartedAt"`
+	} `json:"State"`
+}
+
+type containerStatsResponse struct {
+	MemoryStats struct {
+		Usage uint64 `json:"usage"`
+	} `json:"memory_stats"`
+	CPUStats struct {
+		CPUUsage struct {
+			TotalUsage uint64   `json:"total_usage"`
+			PerCPU     []uint64 `json:"percpu_usage"`
+		} `json:"cpu_usage"`
+		SystemCPUUsage uint64 `json:"system_cpu_usage"`
+		OnlineCPUs     uint64 `json:"online_cpus"`
+	} `json:"cpu_stats"`
+	PreCPUStats struct {
+		CPUUsage struct {
+			TotalUsage uint64 `json:"total_usage"`
+		} `json:"cpu_usage"`
+		SystemCPUUsage uint64 `json:"system_cpu_usage"`
+	} `json:"precpu_stats"`
+}
+
+// enrichContainer uses the Engine's machine-readable inspect and one-shot
+// stats endpoints. Inventory remains useful when either optional endpoint is
+// unavailable, so enrichment errors are intentionally best-effort and never
+// make the entire read-only container list fail.
+func (c *engineClient) enrichContainer(ctx context.Context, container *Container) {
+	if container == nil || container.ID == "" {
+		return
+	}
+	path := "/containers/" + url.PathEscape(container.ID)
+	var inspect containerInspectResponse
+	if err := c.get(ctx, path+"/json", &inspect); err == nil {
+		container.Restarts = maxInt(inspect.RestartCount, 0)
+		if startedAt, err := time.Parse(time.RFC3339Nano, inspect.State.StartedAt); err == nil && !startedAt.IsZero() {
+			container.StartedAt = &startedAt
+		}
+	}
+	var stats containerStatsResponse
+	if err := c.get(ctx, path+"/stats?stream=false", &stats); err == nil {
+		container.RAMUsedBytes = stats.MemoryStats.Usage
+		container.CPUPercent = containerCPUPercent(stats)
+	}
+}
+
+func maxInt(value, minimum int) int {
+	if value < minimum {
+		return minimum
+	}
+	return value
+}
+
+func containerCPUPercent(stats containerStatsResponse) float64 {
+	if stats.CPUStats.SystemCPUUsage <= stats.PreCPUStats.SystemCPUUsage || stats.CPUStats.CPUUsage.TotalUsage < stats.PreCPUStats.CPUUsage.TotalUsage {
+		return 0
+	}
+	cpuDelta := stats.CPUStats.CPUUsage.TotalUsage - stats.PreCPUStats.CPUUsage.TotalUsage
+	systemDelta := stats.CPUStats.SystemCPUUsage - stats.PreCPUStats.SystemCPUUsage
+	if cpuDelta == 0 || systemDelta == 0 {
+		return 0
+	}
+	onlineCPUs := stats.CPUStats.OnlineCPUs
+	if onlineCPUs == 0 {
+		onlineCPUs = uint64(len(stats.CPUStats.CPUUsage.PerCPU))
+	}
+	if onlineCPUs == 0 {
+		onlineCPUs = 1
+	}
+	return float64(cpuDelta) / float64(systemDelta) * float64(onlineCPUs) * 100
 }
 
 func (c *engineClient) images(ctx context.Context) ([]Image, error) {
