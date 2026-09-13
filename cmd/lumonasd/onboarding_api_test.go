@@ -27,6 +27,28 @@ func TestOnboardingStateClassifiesDisksWithoutMutatingThem(t *testing.T) {
 	}
 }
 
+func TestOnboardingProtectionWaitsForMountedDisks(t *testing.T) {
+	roles := map[string]string{"serial:data": "data", "serial:parity": "parity"}
+	disks := map[string]model.Disk{
+		"serial:data":   {ID: "serial:data", Mounted: true},
+		"serial:parity": {ID: "serial:parity", Mounted: true},
+	}
+	if !onboardingProtectionReady(roles, disks) {
+		t.Fatal("mounted protection disks should be ready for the initial sync")
+	}
+	disks["serial:parity"] = model.Disk{ID: "serial:parity", Mounted: false}
+	if onboardingProtectionReady(roles, disks) {
+		t.Fatal("unmounted protection disks must defer the initial sync")
+	}
+}
+
+func TestOnboardingProtectionRequiresCompleteLayout(t *testing.T) {
+	disks := map[string]model.Disk{"serial:data": {ID: "serial:data", Mounted: true}}
+	if onboardingProtectionReady(map[string]string{"serial:data": "data"}, disks) {
+		t.Fatal("a protection layout requires both data and parity disks")
+	}
+}
+
 func TestCompleteOnboardingPersistsSafeConfiguration(t *testing.T) {
 	server := testServer(t)
 	server.diskFunc = func() ([]model.Disk, error) {

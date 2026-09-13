@@ -110,5 +110,10 @@ live_e2e_text = live_e2e.read_text(encoding="utf-8")
 for marker in ("/api/v1/onboarding/complete", "/api/v1/events/stream", "snapraid.sync", "Overview"):
     if marker not in live_e2e_text:
         raise SystemExit(f"live browser smoke is missing real-runtime coverage: {marker}")
+onboarding = pathlib.Path(sys.argv[1]).parent.parent.parent / "cmd" / "lumonasd" / "onboarding_api.go"
+onboarding_text = onboarding.read_text(encoding="utf-8")
+for marker in ("onboardingProtectionReady", "Do not start SnapRAID while onboarding"):
+    if marker not in onboarding_text:
+        raise SystemExit(f"onboarding sync safety marker is missing: {marker}")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY

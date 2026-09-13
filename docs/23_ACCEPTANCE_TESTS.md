@@ -295,6 +295,10 @@ When recovery fails, the release job must retain the source-guest, ISO-guest,
 and replacement-boot logs before temporary files are removed. Successful runs
 may clean up the disposable recovery workspace.
 
+Onboarding must defer its automatic SnapRAID sync until every assigned data and
+parity disk is mounted. Blank or merely assigned disks must not be scanned while
+the storage workflow is still formatting or importing them.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.

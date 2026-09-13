@@ -154,7 +154,10 @@ func (s *apiServer) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	s.advanceGeneration("onboarding.complete")
 	s.publish("onboarding.completed", "info", &model.ResourceRef{Type: "server", ID: "server-1"}, nil)
 	initialSyncStarted := false
-	if protectionConfigured {
+	// Do not start SnapRAID while onboarding has only assigned roles to
+	// unmounted or blank disks. The storage workflow formats/imports and mounts
+	// those disks separately; starting the sync here would race that workflow.
+	if protectionConfigured && onboardingProtectionReady(input.Roles, known) {
 		for diskID, role := range input.Roles {
 			if role == "parity" && known[diskID].SizeBytes > 0 {
 				job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
@@ -186,6 +189,21 @@ func onboardingProtectionDisks(roles map[string]string) (string, []string) {
 		}
 	}
 	return parity, data
+}
+
+func onboardingProtectionReady(roles map[string]string, disks map[string]model.Disk) bool {
+	parity, data := onboardingProtectionDisks(roles)
+	if parity == "" || len(data) == 0 {
+		return false
+	}
+	protected := append(append([]string{}, data...), parity)
+	for _, diskID := range protected {
+		disk, ok := disks[diskID]
+		if !ok || !disk.Mounted {
+			return false
+		}
+	}
+	return true
 }
 
 func classifyOnboardingDisk(disk model.Disk) string {
