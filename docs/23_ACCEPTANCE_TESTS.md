@@ -651,3 +651,5 @@ Run the recovery API smoke tests with disk discovery and NAS identity failures.
 
 Pass if recovery export returns an error instead of creating a verified bundle
 when required stable-disk or appliance identity metadata is unavailable.
+The successful export path must also leave a separately named, checksum-verified
+generation copy that can be opened independently of `latest.mrb`.

@@ -56,6 +56,17 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	versioned, err := filepath.Glob(filepath.Join(recoveryDir, "generation-*.mrb"))
+	if err != nil || len(versioned) != 1 {
+		t.Fatalf("expected one versioned recovery bundle, got %v: %v", versioned, err)
+	}
+	versionedBundle, err := os.ReadFile(versioned[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := recovery.Verify(versionedBundle, []byte("configured-runtime-recovery-key")); err != nil {
+		t.Fatalf("versioned recovery bundle was not verifiable: %v", err)
+	}
 	plan, err := recovery.Plan(bundle, []byte("configured-runtime-recovery-key"))
 	if err != nil {
 		t.Fatal(err)
