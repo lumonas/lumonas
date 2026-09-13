@@ -101,10 +101,10 @@ share-protocol-smoke:
 iso-smoke:
 	LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_ISO_ASSERT=true bash scripts/iso-smoke.sh
 
-qemu-recovery-smoke: recovery-fixture
+qemu-recovery-smoke: iso recovery-fixture
 	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_RECOVERY_FIXTURE="$(CURDIR)/build/lumonas-recovery-fixture" LUMONAS_RECOVERY_ASSERT=true bash scripts/qemu-recovery-smoke.sh
 
-qemu-recovery-live:
+qemu-recovery-live: iso qemu-image
 	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_RECOVERY_SOURCE_IMAGE="$(LUMONAS_QEMU_IMAGE)" LUMONAS_RECOVERY_ASSERT=true bash scripts/qemu-recovery-smoke.sh
 
 security-smoke:
@@ -173,7 +173,7 @@ installer-signature-smoke:
 qemu-image: package
 	sudo LUMONAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh
 
-qemu-smoke:
+qemu-smoke: qemu-image
 	LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
 
 verify-release:

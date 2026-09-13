@@ -10,6 +10,15 @@ import re
 import sys
 
 workflow = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+makefile = pathlib.Path(sys.argv[1]).parent.parent.parent / "Makefile"
+makefile_text = makefile.read_text(encoding="utf-8")
+for target, dependency_text in (
+    ("qemu-smoke", "qemu-smoke: qemu-image"),
+    ("qemu-recovery-smoke", "qemu-recovery-smoke: iso recovery-fixture"),
+    ("qemu-recovery-live", "qemu-recovery-live: iso qemu-image"),
+):
+    if dependency_text not in makefile_text:
+        raise SystemExit(f"Makefile target {target} is missing its artifact dependency chain")
 match = re.search(r"(?ms)^  release:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?^    needs: \[([^\]]+)\]", workflow)
 if not match:
     raise SystemExit("release job needs list is missing")
