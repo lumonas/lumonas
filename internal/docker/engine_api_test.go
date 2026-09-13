@@ -30,6 +30,8 @@ func TestEngineAPIReadOnlyCollectors(t *testing.T) {
 			return http.StatusOK, string(payload)
 		case "/volumes":
 			return http.StatusOK, `{"Volumes":[{"Name":"media-data"}]}`
+		case "/system/df":
+			return http.StatusOK, `{"Volumes":[{"Id":"media-data","Names":["media-data"],"UsageData":{"Size":4096}}]}`
 		case "/containers/container-1/logs":
 			payload := []byte("2026-09-13T12:00:00.000000000Z warning message\n")
 			frame := make([]byte, 8+len(payload))
@@ -57,7 +59,7 @@ func TestEngineAPIReadOnlyCollectors(t *testing.T) {
 		t.Fatalf("unexpected image mapping: %#v, err=%v", images, err)
 	}
 	volumes, err := service.Volumes(context.Background())
-	if err != nil || len(volumes) != 1 || volumes[0].ID != "media-data" {
+	if err != nil || len(volumes) != 1 || volumes[0].ID != "media-data" || volumes[0].UsedBytes != 4096 {
 		t.Fatalf("unexpected volume mapping: %#v, err=%v", volumes, err)
 	}
 	logs, err := service.Logs(context.Background(), "container-1", 25)
@@ -89,6 +91,19 @@ func TestImageIDNormalization(t *testing.T) {
 	}
 	if imageInUse("sha256:image-2", "example/media:latest", nil, map[string]struct{}{"other:latest": {}}) {
 		t.Fatal("unrelated image reference was marked in use")
+	}
+}
+
+func TestVolumeUsageFailureKeepsInventory(t *testing.T) {
+	client := testEngineClient(func(path string) (int, string) {
+		if path == "/volumes" {
+			return http.StatusOK, `{"Volumes":[{"Name":"media-data"}]}`
+		}
+		return http.StatusNotFound, "not found"
+	})
+	volumes, err := (Service{engine: client}).Volumes(context.Background())
+	if err != nil || len(volumes) != 1 || volumes[0].Name != "media-data" || volumes[0].UsedBytes != 0 {
+		t.Fatalf("volume inventory was not preserved after accounting failure: %#v, err=%v", volumes, err)
 	}
 }
 

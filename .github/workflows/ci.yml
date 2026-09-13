@@ -119,7 +119,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
-      - run: go test -count=1 ./internal/docker -run 'TestEngineAPIReadOnlyCollectors|TestEngineAPIRejectsEngineErrors|TestSplitImageReference|TestContainerCPUPercent|TestImageUsageFallsBackToContainerReference|TestImageIDNormalization'
+      - run: go test -count=1 ./internal/docker -run 'TestEngineAPIReadOnlyCollectors|TestEngineAPIRejectsEngineErrors|TestSplitImageReference|TestContainerCPUPercent|TestImageUsageFallsBackToContainerReference|TestImageIDNormalization|TestVolumeUsageFailureKeepsInventory'
 
   share-integrations:
     runs-on: ubuntu-latest

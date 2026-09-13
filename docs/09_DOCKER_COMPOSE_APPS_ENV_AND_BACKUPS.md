@@ -9,6 +9,9 @@ and stack mutations remain behind the bounded Compose command runner.
 Image inventory derives `inUse` from the Engine's container image IDs, with a
 reference fallback for older daemons that omit those IDs. This keeps unused
 image cleanup conservative after tags are changed or containers are stopped.
+Volume inventory reads `usedBytes` from the Engine's `/system/df` accounting
+data; if an older daemon does not provide that endpoint, the volume itself is
+still reported with an unknown-sized (`0`) usage value.
 
 ## Principle
 

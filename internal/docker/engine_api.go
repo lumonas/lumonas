@@ -287,11 +287,46 @@ func (c *engineClient) volumes(ctx context.Context) ([]Volume, error) {
 	if err := c.get(ctx, "/volumes", &response); err != nil {
 		return nil, err
 	}
+	usage := c.volumeUsage(ctx)
 	result := make([]Volume, 0, len(response.Volumes))
 	for _, volume := range response.Volumes {
-		result = append(result, Volume{ID: volume.Name, Name: volume.Name})
+		result = append(result, Volume{ID: volume.Name, Name: volume.Name, UsedBytes: usage[volume.Name]})
 	}
 	return result, nil
+}
+
+// volumeUsage uses Docker's accounting endpoint rather than walking the
+// daemon's root directory. The endpoint is optional across older Engine
+// versions, so an unavailable or malformed accounting response must not hide
+// the otherwise valid volume inventory.
+func (c *engineClient) volumeUsage(ctx context.Context) map[string]uint64 {
+	var response struct {
+		Volumes []struct {
+			ID        string   `json:"Id"`
+			Names     []string `json:"Names"`
+			UsageData struct {
+				Size int64 `json:"Size"`
+			} `json:"UsageData"`
+		} `json:"Volumes"`
+	}
+	if err := c.get(ctx, "/system/df", &response); err != nil {
+		return map[string]uint64{}
+	}
+	usage := make(map[string]uint64, len(response.Volumes))
+	for _, volume := range response.Volumes {
+		if volume.UsageData.Size < 0 {
+			continue
+		}
+		if volume.ID != "" {
+			usage[volume.ID] = uint64(volume.UsageData.Size)
+		}
+		for _, name := range volume.Names {
+			if name != "" {
+				usage[name] = uint64(volume.UsageData.Size)
+			}
+		}
+	}
+	return usage
 }
 
 func (c *engineClient) logs(ctx context.Context, container string, tail int) ([]LogLine, error) {

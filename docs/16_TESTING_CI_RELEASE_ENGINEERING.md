@@ -394,7 +394,8 @@ missing Docker daemon. Container inventory enrichment uses read-only Engine
 inspect and one-shot stats requests for restart count, start time, memory, and
 CPU percentage; image inventory also correlates container image IDs and
 references to mark `inUse` conservatively. These mappings are covered by the
-Docker integration gate.
+Docker integration gate. Volume usage is collected from the Engine's bounded
+`/system/df` response and fails soft when the daemon does not support it.
 
 The QEMU smoke exercises both documented SSE routes (`/api/v1/events/stream`
 and the compatibility alias `/api/v1/events`) and validates each captured
