@@ -1,5 +1,15 @@
 # Networking, Remote Access and Firewall
 
+## Management UI binding
+
+The Debian package and appliance image bind `lumonas-web` to
+`0.0.0.0:8081` by default so a browser on the NAS LAN can reach the UI. The
+web service uses the locally provisioned TLS certificate, while `lumonasd`
+remains on loopback. Set `LUMONAS_WEB_LISTEN` in
+`/etc/lumonas/lumonas-web.env` to a specific management interface when the
+firewall policy requires narrower exposure. Do not expose the backend port
+`8080` directly.
+
 ## Backend
 
 Use NetworkManager as the canonical host network manager.

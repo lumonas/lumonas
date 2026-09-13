@@ -40,6 +40,11 @@ Use Go for system services:
 
 Build to static assets and embed/serve through `lumonas-web`.
 
+The packaged appliance binds `lumonas-web` to `0.0.0.0:8081` so the
+management UI is reachable from the NAS LAN. The package provisions a local
+TLS certificate and the firewall/authentication policy remains responsible for
+limiting access; `LUMONAS_WEB_LISTEN` can narrow the bind address.
+
 ## Process architecture
 
 ```text

@@ -99,3 +99,17 @@ func TestHandlerServesAssetsAndFallsBackToSPA(t *testing.T) {
 		}
 	}
 }
+
+func TestWebListenAddressDefaultsToApplianceLAN(t *testing.T) {
+	t.Setenv("LUMONAS_WEB_LISTEN", "")
+	if got := webListenAddress(); got != defaultWebListenAddress {
+		t.Fatalf("web listener default = %q, want %q", got, defaultWebListenAddress)
+	}
+}
+
+func TestWebListenAddressHonorsEnvironment(t *testing.T) {
+	t.Setenv("LUMONAS_WEB_LISTEN", "192.0.2.10:9443")
+	if got := webListenAddress(); got != "192.0.2.10:9443" {
+		t.Fatalf("web listener = %q, want environment override", got)
+	}
+}

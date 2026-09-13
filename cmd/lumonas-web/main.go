@@ -16,9 +16,11 @@ import (
 	"time"
 )
 
+const defaultWebListenAddress = "0.0.0.0:8081"
+
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	listen := flag.String("listen", envOr("LUMONAS_WEB_LISTEN", "127.0.0.1:8081"), "HTTP listen address")
+	listen := flag.String("listen", webListenAddress(), "HTTP listen address")
 	root := flag.String("root", envOr("LUMONAS_WEB_ROOT", "/usr/share/lumonas/web"), "compiled frontend root")
 	api := flag.String("api", envOr("LUMONAS_API_URL", "http://127.0.0.1:8080"), "backend URL")
 	cert := flag.String("tls-cert", envOr("LUMONAS_WEB_TLS_CERT", ""), "optional TLS certificate")
@@ -58,6 +60,10 @@ func main() {
 	if err := srv.Shutdown(ctx); err != nil {
 		logger.Error("shutdown error", "error", err)
 	}
+}
+
+func webListenAddress() string {
+	return envOr("LUMONAS_WEB_LISTEN", defaultWebListenAddress)
 }
 
 func newHandler(root string, target *url.URL) http.Handler {
