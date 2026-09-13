@@ -214,6 +214,9 @@ Record:
 - recovery.
 
 Audit record should be append-oriented.
+Audit records should also persist typed correlation, operation, plan, generation,
+resource type, and resource ID fields so an action can be traced without
+parsing free-form metadata.
 
 ## Security recommendations
 

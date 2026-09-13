@@ -365,7 +365,18 @@ func (s *apiServer) setGroupMembers(w http.ResponseWriter, r *http.Request, id s
 }
 
 func (s *apiServer) recordIdentityAudit(actor, action, id string, metadata map[string]any) {
-	_ = s.store.SaveAudit(store.AuditEntry{Actor: actor, Action: action, Outcome: "committed", Generation: s.currentGeneration(), ResourceType: "principal", ResourceID: id, Metadata: metadata})
+	generation := s.currentGeneration()
+	if metadata == nil {
+		metadata = make(map[string]any)
+	} else {
+		copy := make(map[string]any, len(metadata)+1)
+		for key, value := range metadata {
+			copy[key] = value
+		}
+		metadata = copy
+	}
+	metadata["generation"] = generation
+	_ = s.store.SaveAudit(store.AuditEntry{Actor: actor, Action: action, Outcome: "committed", Generation: generation, ResourceType: auditResourceType(action), ResourceID: id, Metadata: metadata})
 }
 
 func (s *apiServer) recordRequestAudit(r *http.Request, actor, action, id string, metadata map[string]any) {
@@ -380,6 +391,62 @@ func (s *apiServer) recordRequestAudit(r *http.Request, actor, action, id string
 	}
 	metadata["correlationId"] = requestCorrelationID(r)
 	s.recordIdentityAudit(actor, action, id, metadata)
+}
+
+func auditResourceType(action string) string {
+	switch {
+	case strings.HasPrefix(action, "identity.group"):
+		return "group"
+	case strings.HasPrefix(action, "identity."), strings.HasPrefix(action, "auth.passkey"):
+		return "principal"
+	case strings.HasPrefix(action, "network.connection"):
+		return "network-connection"
+	case strings.HasPrefix(action, "network.binding"):
+		return "network-binding"
+	case strings.HasPrefix(action, "network.firewall"):
+		return "firewall"
+	case strings.HasPrefix(action, "network."), strings.HasPrefix(action, "ups."):
+		return "network"
+	case strings.HasPrefix(action, "docker.stack"):
+		return "stack"
+	case strings.HasPrefix(action, "docker.container"):
+		return "container"
+	case strings.HasPrefix(action, "docker.image"):
+		return "image"
+	case strings.HasPrefix(action, "docker."):
+		return "docker"
+	case strings.HasPrefix(action, "storage.disk"):
+		return "disk"
+	case strings.HasPrefix(action, "storage.snapshot"):
+		return "snapshot"
+	case strings.HasPrefix(action, "file."), strings.HasPrefix(action, "share."):
+		return "share"
+	case strings.HasPrefix(action, "backup."):
+		return "backup"
+	case strings.HasPrefix(action, "notification.channel"):
+		return "notification-channel"
+	case strings.HasPrefix(action, "notification.rule"):
+		return "notification-rule"
+	case strings.HasPrefix(action, "schedule."):
+		return "schedule"
+	case strings.HasPrefix(action, "recovery."):
+		return "recovery"
+	case strings.HasPrefix(action, "update."):
+		return "update"
+	case strings.HasPrefix(action, "power."):
+		return "power"
+	case strings.HasPrefix(action, "acl."):
+		return "acl"
+	case strings.HasPrefix(action, "settings."):
+		return "settings"
+	case strings.HasPrefix(action, "onboarding."):
+		return "onboarding"
+	default:
+		if dot := strings.IndexByte(action, '.'); dot > 0 {
+			return action[:dot]
+		}
+		return "resource"
+	}
 }
 
 func statusForIdentityError(err error) int {

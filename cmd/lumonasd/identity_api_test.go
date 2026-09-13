@@ -8,7 +8,30 @@ import (
 	"testing"
 
 	"github.com/lumonas/lumonas/internal/identity"
+	"github.com/lumonas/lumonas/internal/trace"
 )
+
+func TestRequestAuditPersistsTypedObservabilityFields(t *testing.T) {
+	server := testServer(t)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/docker/stacks/stack-media/actions", nil)
+	request = request.WithContext(trace.WithCorrelationID(request.Context(), "corr-audit"))
+	server.recordRequestAudit(request, "operator", "docker.stack.action", "stack-media", map[string]any{
+		"operationId": "op-audit",
+		"planHash":    "plan-audit",
+		"generation":  7,
+	})
+	audits, err := server.store.Audit(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(audits) != 1 {
+		t.Fatalf("expected one audit record, got %#v", audits)
+	}
+	entry := audits[0]
+	if entry.CorrelationID != "corr-audit" || entry.OperationID != "op-audit" || entry.PlanHash != "plan-audit" || entry.Generation != server.currentGeneration() || entry.ResourceType != "stack" || entry.ResourceID != "stack-media" || entry.Metadata["generation"] != float64(server.currentGeneration()) {
+		t.Fatalf("audit observability fields were not persisted: %#v", entry)
+	}
+}
 
 func TestIdentityAPISeparatesFileAndManagementUsers(t *testing.T) {
 	server := testServer(t)
