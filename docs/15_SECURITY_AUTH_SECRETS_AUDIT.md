@@ -18,9 +18,11 @@ Implemented backend primitives:
 - single-use, expiring ceremony state and monotonic signature counters;
 - self-service passkey management with owner/admin delegation controls.
 
-The management UI currently exposes passkey sign-in; passkey enrollment UI and
-discoverable username-less sign-in remain follow-up work. Multiple admins and
-role-based permissions are supported by the existing management identity model.
+The management UI exposes both passkey sign-in (AuthGate) and self-service
+enrollment/revocation (settings → security → Passkeys). Discoverable
+username-less sign-in remains follow-up work; sign-in currently requires the
+username. Multiple admins and role-based permissions are supported by the
+existing management identity model.
 
 ## Management vs file users
 
