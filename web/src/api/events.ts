@@ -9,8 +9,10 @@ export interface EventSourceLike {
   close(): void
 }
 
+export const EVENT_STREAM_PATH = '/api/v1/events/stream'
+
 export function connectEventStream(): EventSourceLike {
-  const url = '/api/v1/events/stream'
+	const url = EVENT_STREAM_PATH
   if (useMocks) {
     return new MockEventSource(url)
   }

@@ -412,6 +412,9 @@ remain fixed to the device path rather than a shell expression.
 
 Run the event encoding test and resume an SSE client from `Last-Event-ID`.
 
+Both `/api/v1/events/stream` and the plan-level `/api/v1/events` compatibility
+route must deliver the same replay-safe SSE envelope.
+
 Pass if the JSON event preserves `correlationId`, `operationId`, `planHash`,
 `actor`, `generation`, resource identity, schema version, and payload data,
 and the frontend event type exposes the same optional metadata.

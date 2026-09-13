@@ -1151,6 +1151,19 @@ paths:
               schema:
                 type: string
 
+  /events:
+    get:
+      tags: [System]
+      summary: SSE event stream compatibility route
+      operationId: eventStreamCompatibility
+      responses:
+        '200':
+          description: Event stream. Last-Event-ID resumes strictly after the cursor.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
   /jobs:
     get:
       tags: [System]

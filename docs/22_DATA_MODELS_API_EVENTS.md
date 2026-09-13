@@ -251,6 +251,7 @@ PATCH /network/connections/{id}
 
 GET  /jobs/{id}
 GET  /events/stream
+GET  /events                 (compatibility alias)
 ```
 
 Dangerous API never accepts `/dev/sdb` as the only target identity.

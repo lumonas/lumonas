@@ -530,6 +530,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.restoreRecycleBin(w, r)
 	case r.Method == http.MethodPost && endpoint == "/files/recycle/purge":
 		s.purgeRecycleBin(w, r)
+	case r.Method == http.MethodGet && endpoint == "/events":
+		s.stream(w, r)
 	case r.Method == http.MethodGet && endpoint == "/events/stream":
 		s.stream(w, r)
 	case r.Method == http.MethodGet && endpoint == "/docker/summary":
