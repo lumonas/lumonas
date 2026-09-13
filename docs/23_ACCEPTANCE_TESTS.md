@@ -297,6 +297,10 @@ immutable input; builds must not silently fall back to a moving mirror. Any
 explicit mirror override must use HTTPS and otherwise be rejected before the
 builder mutates its work directory.
 
+The ISO builder must also reject broad or traversing workdir paths and cache
+sources inside the workdir before cleanup. The installer workdir policy smoke is
+release-blocking.
+
 When recovery fails, the release job must retain the source-guest, ISO-guest,
 and replacement-boot logs before temporary files are removed. Successful runs
 may clean up the disposable recovery workspace.

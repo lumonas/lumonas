@@ -39,6 +39,10 @@ Pin package versions per LumoNAS release so:
 
 > same ISO = same installed core system.
 
+The builder uses a dated Debian snapshot over HTTPS and validates its workdir
+and optional live-build cache source before cleanup. Cache data may not live
+inside the disposable ISO workdir.
+
 Online security updates may be applied after installation.
 
 The live ISO web console uses the same provisioned local TLS certificate as the

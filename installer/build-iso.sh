@@ -22,6 +22,32 @@ case "$DEBIAN_MIRROR" in
 	https://*) ;;
 	*) echo "LUMONAS_DEBIAN_MIRROR must use HTTPS" >&2; exit 1 ;;
 esac
+case "$WORK" in
+	/*) ;;
+	*) echo "LUMONAS_ISO_WORKDIR must be an absolute path" >&2; exit 1 ;;
+esac
+case "$WORK" in
+	/|"$ROOT"|"$ROOT/build"|/tmp) echo "LUMONAS_ISO_WORKDIR is too broad" >&2; exit 1 ;;
+esac
+case "$WORK" in
+	"$ROOT/build/"*|/tmp/lumonas-iso.*) ;;
+	*) echo "LUMONAS_ISO_WORKDIR must be inside build/ or a temporary ISO workdir" >&2; exit 1 ;;
+esac
+case "$WORK" in
+	*"/../"*|../*|*/..|.) echo "LUMONAS_ISO_WORKDIR must not contain parent traversal" >&2; exit 1 ;;
+esac
+if [ -n "$ISO_CACHE_SOURCE" ]; then
+	case "$ISO_CACHE_SOURCE" in
+		/*) ;;
+		*) echo "LUMONAS_ISO_CACHE_SOURCE must be an absolute path" >&2; exit 1 ;;
+	esac
+	case "$ISO_CACHE_SOURCE" in
+		*"/../"*|../*|*/..|.) echo "LUMONAS_ISO_CACHE_SOURCE must not contain parent traversal" >&2; exit 1 ;;
+	esac
+	case "$ISO_CACHE_SOURCE" in
+		"$WORK"|"$WORK"/*) echo "LUMONAS_ISO_CACHE_SOURCE must not be inside the ISO workdir" >&2; exit 1 ;;
+	esac
+fi
 if [ "${LUMONAS_REQUIRE_REPO_SIGNATURE:-false}" = "true" ] && [ -z "$REPO_SIGN_KEY" ]; then
 	echo "LUMONAS_REPO_SIGN_KEY is required for a signed offline repository" >&2
 	exit 1

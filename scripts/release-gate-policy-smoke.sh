@@ -92,6 +92,10 @@ for builder, markers in (
     for marker in markers:
         if marker not in builder_text:
             raise SystemExit(f"Debian appliance builder is missing reproducibility marker: {marker}")
+installer = pathlib.Path(sys.argv[1]).parent.parent.parent / "installer" / "build-iso.sh"
+for marker in ("LUMONAS_ISO_WORKDIR must be an absolute path", "LUMONAS_ISO_CACHE_SOURCE must not be inside the ISO workdir", 'rm -rf "$WORK"'):
+    if marker not in installer.read_text(encoding="utf-8"):
+        raise SystemExit(f"installer workdir safety marker is missing: {marker}")
 api_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "api-smoke.sh"
 api_smoke_text = api_smoke.read_text(encoding="utf-8")
 if "Last-Event-ID" not in api_smoke_text or "cursor event twice" not in api_smoke_text:
