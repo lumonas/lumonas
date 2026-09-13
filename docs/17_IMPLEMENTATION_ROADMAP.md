@@ -56,6 +56,8 @@ Deliver:
   generated artifacts are built from the same versioned `.deb`.
 - recovery bundles carry bounded, validated Docker appdata archives with
   fail-closed extraction targets.
+- offline recovery installs a bootable Debian runtime onto the replacement
+  system disk and verifies the restored disk boots independently of the ISO.
 - Docker Compose bind and named-volume appdata sources are resolved and
   exported through the declared stop-backup contract.
 - recovery export requires stable disk and NAS identity, verifies the bundle,

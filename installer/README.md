@@ -24,7 +24,7 @@ required signature also makes APT metadata refresh and package installation
 fail closed; direct `dpkg` fallback is available only for unsigned local
 development images.
 
-The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. CI publishes the ISO with checksums, SBOM, and release signatures. With `LUMONAS_ENABLE_RECOVERY_SMOKE=true`, the image also boots an offline recovery fixture against a blank replacement disk, starts `lumonasd` against the restored filesystem, verifies the restored SQLite state through the real principals/shares API, and then checks users, shares, ACLs, Compose stack, mergerfs/SnapRAID configuration, encrypted secret payload, and recovery result before powering off.
+The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. CI publishes the ISO with checksums, SBOM, and release signatures. With `LUMONAS_ENABLE_RECOVERY_SMOKE=true`, the image installs a bootable Debian runtime and bootloader onto a blank replacement disk, restores a verified recovery fixture, starts `lumonasd` against the restored filesystem, verifies the restored SQLite state through the real principals/shares API, and then boots the recovered disk without the ISO before the gate passes.
 
 The release storage gate separately installs `e2fsprogs`, `xfsprogs`, mergerfs,
 and SnapRAID and exercises disposable ext4/XFS branches, a real mergerfs pool,

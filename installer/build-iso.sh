@@ -103,6 +103,8 @@ mergerfs
 snapraid
 docker.io
 docker-compose
+rsync
+grub-pc-bin
 EOF
 cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<EOF
 #!/bin/sh
@@ -172,6 +174,52 @@ source_mode=false
 [ -f /mnt/lumonas-recovery/.lumonas-recovery-source ] && source_mode=true
 mkfs.ext4 -F "$target_device" >/dev/null
 mount "$target_device" /mnt/lumonas-target
+# The recovery medium is an installer, not only a payload extractor. Copy the
+# live Debian runtime onto the replacement filesystem while excluding live
+# mounts and mutable state that the verified bundle will restore below.
+rsync -aHAX --numeric-ids --one-file-system \
+	--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** --exclude=/run/** \
+	--exclude=/tmp/** --exclude=/mnt/** --exclude=/var/lib/lumonas/** \
+	--exclude=/srv/lumonas/** \
+	/ /mnt/lumonas-target/
+mkdir -p /mnt/lumonas-target/{dev,proc,sys,run,tmp,var/lib/lumonas,srv/lumonas}
+printf '%s\n' '/dev/vda / ext4 defaults 0 1' > /mnt/lumonas-target/etc/fstab
+printf '%s\n' 'lumonas-recovered' > /mnt/lumonas-target/etc/hostname
+mkdir -p /mnt/lumonas-target/etc/NetworkManager/system-connections
+cat >/mnt/lumonas-target/etc/NetworkManager/system-connections/recovery-ethernet.nmconnection <<'NETWORK'
+[connection]
+id=recovery-ethernet
+type=ethernet
+autoconnect=true
+autoconnect-retries=0
+
+[ipv4]
+method=auto
+
+[ipv6]
+method=auto
+NETWORK
+chmod 600 /mnt/lumonas-target/etc/NetworkManager/system-connections/recovery-ethernet.nmconnection
+grub-install --target=i386-pc --recheck --boot-directory=/mnt/lumonas-target/boot "$target_device"
+root_uuid=$(blkid -s UUID -o value "$target_device")
+kernel_path=$(find /mnt/lumonas-target/boot -maxdepth 1 -type f -name 'vmlinuz-*' | sort | tail -n 1)
+initrd_path=$(find /mnt/lumonas-target/boot -maxdepth 1 -type f -name 'initrd.img-*' | sort | tail -n 1)
+[ -n "$root_uuid" ] && [ -n "$kernel_path" ] && [ -n "$initrd_path" ]
+kernel_name=${kernel_path##*/}
+initrd_name=${initrd_path##*/}
+cat >/mnt/lumonas-target/boot/grub/grub.cfg <<GRUB
+insmod ext2
+search --no-floppy --fs-uuid --set=root $root_uuid
+set timeout=1
+set serial=0
+serial --unit=0 --speed=115200
+terminal_input console serial
+terminal_output console serial
+menuentry 'LumoNAS recovered appliance' {
+    linux /boot/$kernel_name root=UUID=$root_uuid ro quiet console=ttyS0,115200n8
+    initrd /boot/$initrd_name
+}
+GRUB
 /usr/lib/lumonas/lumonas-recover \
 	--bundle /mnt/lumonas-recovery/latest.mrb \
 	--key-file /mnt/lumonas-recovery/recovery.key \

@@ -159,3 +159,36 @@ else
 	grep -F '"interface":"eth0"' "$TARGET_MOUNT/restored-network.json" >/dev/null
 	echo "QEMU recovery smoke test passed (bundle checksums verified, offline ISO, blank replacement disk, users/shares/network/mounts/Compose/appdata/SnapRAID restored, API ready)"
 fi
+umount "$TARGET_MOUNT"
+QEMU_PID=""
+qemu-system-x86_64 \
+	-machine q35,accel=tcg \
+	-m 2048 \
+	-smp 2 \
+	-drive "file=$TARGET_IMAGE,if=virtio,format=qcow2,serial=LUMONAS-RECOVERED" \
+	-netdev user,id=n1,hostfwd=tcp::18084-:8081 \
+	-device virtio-net-pci,netdev=n1 \
+	-nographic \
+	-serial mon:stdio \
+	-no-reboot >"$WORK/recovered-boot.log" 2>&1 &
+QEMU_PID=$!
+recovered_ready=false
+for attempt in $(seq 1 120); do
+	if curl -kfsS https://127.0.0.1:18084/healthz >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18084/readyz >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null; then
+		recovered_ready=true
+		break
+	fi
+	if ! kill -0 "$QEMU_PID" 2>/dev/null; then
+		break
+	fi
+	sleep 2
+done
+[ "$recovered_ready" = true ] || {
+	echo "recovered replacement disk did not boot a healthy API" >&2
+	cat "$WORK/recovered-boot.log" >&2 || true
+	exit 1
+}
+grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
+echo "LumoNAS recovered replacement disk boot passed"

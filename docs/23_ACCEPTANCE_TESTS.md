@@ -168,6 +168,10 @@ source, persists its exported bundle, shuts it down cleanly, and performs the
 offline restore against a blank replacement disk. The fixture-only path is
 retained for local development but is not the release source of truth.
 
+After offline restore, detach the ISO and boot the replacement system disk by
+itself. Pass only if the recovered disk reaches health/readiness and serves the
+real server API; checking files while still running the live ISO is insufficient.
+
 ## M. Incomplete Docker backup
 
 One app has no appdata protection.
