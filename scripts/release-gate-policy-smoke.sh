@@ -343,10 +343,10 @@ if 'qemu-ab-smoke:' not in makefile_text or 'LUMONAS_AB_ASSERT="$${LUMONAS_AB_AS
     raise SystemExit("Makefile A/B smoke target does not preserve shell assertion defaults")
 uefi_ab_smoke = repo_root / "scripts" / "qemu-uefi-ab-smoke.sh"
 uefi_ab_text = uefi_ab_smoke.read_text(encoding="utf-8")
-for marker in ("LUMONAS_UEFI_AB_ASSERT", "OVMF_CODE", "if=pflash", "BootNext", "sgdisk -G /dev/vdb", "partx --update /dev/vdb", "/dev/vdb3"):
+for marker in ("LUMONAS_UEFI_AB_ASSERT", "OVMF_CODE", "if=pflash", "BootNext", "sgdisk -G \"$SLOT_B_DEVICE\"", "partx --update \"$SLOT_B_DEVICE\"", "/dev/disk/by-id/virtio-LUMONAS-SLOTB", "/dev/vdb3"):
     if marker not in uefi_ab_text:
         raise SystemExit(f"QEMU UEFI A/B smoke is missing {marker}")
-if uefi_ab_text.index("sgdisk -G /dev/vdb") > uefi_ab_text.index("-L LumoNAS-B"):
+if uefi_ab_text.index('sgdisk -G "$SLOT_B_DEVICE"') > uefi_ab_text.index("-L LumoNAS-B"):
     raise SystemExit("QEMU UEFI A/B smoke registers slot B before assigning its GPT identity")
 if "LUMONAS_UEFI_AB_ASSERT=true" not in workflow_text:
     raise SystemExit("QEMU release job does not run the UEFI A/B smoke")

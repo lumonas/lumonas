@@ -141,3 +141,20 @@ func TestValidateSlotBootEntry(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateSlotDevicePathRequiresPersistentAlias(t *testing.T) {
+	for _, path := range []string{"/dev/vdb", "/dev/sda", "/dev/disk/by-path/pci-0000", "/dev/disk/by-id/../vdb", ""} {
+		if err := ValidateSlotDevicePath(path); err == nil {
+			t.Fatalf("transient or unsafe slot path accepted: %q", path)
+		}
+	}
+	for _, path := range []string{
+		"/dev/disk/by-id/virtio-LUMONAS-SLOTB",
+		"/dev/disk/by-partlabel/lumonas-b",
+		"/dev/disk/by-partuuid/1234-ABCD",
+	} {
+		if err := ValidateSlotDevicePath(path); err != nil {
+			t.Fatalf("persistent slot path rejected: %q: %v", path, err)
+		}
+	}
+}

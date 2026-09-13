@@ -93,23 +93,27 @@ for attempt in $(seq 1 90); do
 done
 
 ssh_guest 'set -eu
+SLOT_B_DEVICE=/dev/disk/by-id/virtio-LUMONAS-SLOTB
+SLOT_B_ROOT="${SLOT_B_DEVICE}-part3"
+[ -b "$SLOT_B_DEVICE" ] && [ -b "$SLOT_B_ROOT" ]
+export SLOT_B_DEVICE SLOT_B_ROOT
 test "$(findmnt -n -o SOURCE /)" = /dev/vda3
 test "$(findmnt -n -o FSTYPE /boot/efi)" = vfat
 efibootmgr -c -d /dev/vda -p 2 -L LumoNAS-A -l "\EFI\BOOT\BOOTX64.EFI" >/dev/null
 # Give slot B a distinct GPT disk/partition identity before registering its
 # EFI entry. The firmware device path embeds that identity.
-sgdisk -G /dev/vdb >/dev/null
-partx --update /dev/vdb >/dev/null
-efibootmgr -c -d /dev/vdb -p 2 -L LumoNAS-B -l "\EFI\BOOT\BOOTX64.EFI" >/dev/null
+sgdisk -G "$SLOT_B_DEVICE" >/dev/null
+partx --update "$SLOT_B_DEVICE" >/dev/null
+efibootmgr -c -d "$SLOT_B_DEVICE" -p 2 -L LumoNAS-B -l "\EFI\BOOT\BOOTX64.EFI" >/dev/null
 sed -n "s/^Boot\\([0-9A-Fa-f]\\{4\\}\\).*LumoNAS-B.*/\\1/p" "$(efibootmgr)" | head -n1 >/run/lumonas-uefi-ab-entry
 test -s /run/lumonas-uefi-ab-entry
-old_uuid=$(blkid -s UUID -o value /dev/vdb3)
-umount /dev/vdb3 2>/dev/null || true
-tune2fs -U random /dev/vdb3 >/dev/null
-new_uuid=$(blkid -s UUID -o value /dev/vdb3)
+old_uuid=$(blkid -s UUID -o value "$SLOT_B_ROOT")
+umount "$SLOT_B_ROOT" 2>/dev/null || true
+tune2fs -U random "$SLOT_B_ROOT" >/dev/null
+new_uuid=$(blkid -s UUID -o value "$SLOT_B_ROOT")
 test -n "$new_uuid" && test "$new_uuid" != "$old_uuid"
 mkdir -p /mnt/lumonas-slot-b
-mount /dev/vdb3 /mnt/lumonas-slot-b
+mount "$SLOT_B_ROOT" /mnt/lumonas-slot-b
 sed -i "s/$old_uuid/$new_uuid/g" /mnt/lumonas-slot-b/etc/fstab /mnt/lumonas-slot-b/boot/grub/grub.cfg
 printf "uefi-slot-b\\n" >/mnt/lumonas-slot-b/etc/lumonas/uefi-slot-marker
 sync
@@ -117,12 +121,15 @@ umount /mnt/lumonas-slot-b
 mkfs.ext4 -F /dev/vdc >/dev/null
 mount /dev/vdc /var/lib/lumonas/updates
 mkdir -p /var/lib/lumonas/updates/slot-b
-dd if=/dev/vdb of=/var/lib/lumonas/updates/slot-b/image bs=16M status=none
+dd if="$SLOT_B_DEVICE" of=/var/lib/lumonas/updates/slot-b/image bs=16M status=none
 sync
 test "$(findmnt -n -o SOURCE /)" = /dev/vda3
 '
 
 ssh_guest 'set -eu
+SLOT_B_DEVICE=/dev/disk/by-id/virtio-LUMONAS-SLOTB
+[ -b "$SLOT_B_DEVICE" ]
+export SLOT_B_DEVICE
 python3 - <<PY
 import hashlib, json, socket
 path = "/var/lib/lumonas/updates/slot-b/image"
@@ -132,7 +139,7 @@ request = {
     "operationId": "uefi-ab-write",
     "planHash": digest,
     "confirmed": True,
-    "requestedState": {"imagePath": path, "targetDevice": "/dev/vdb", "expectedDigest": digest},
+    "requestedState": {"imagePath": path, "targetDevice": os.environ["SLOT_B_DEVICE"], "expectedDigest": digest},
 }
 client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 client.connect("/run/lumonas/storage.sock")

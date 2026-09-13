@@ -62,6 +62,15 @@ func (fakeBlockFileInfo) ModTime() time.Time { return time.Time{} }
 func (fakeBlockFileInfo) IsDir() bool        { return false }
 func (fakeBlockFileInfo) Sys() any           { return nil }
 
+type fakeCharDeviceFileInfo struct{}
+
+func (fakeCharDeviceFileInfo) Name() string       { return "slot-character-device" }
+func (fakeCharDeviceFileInfo) Size() int64        { return 0 }
+func (fakeCharDeviceFileInfo) Mode() os.FileMode  { return os.ModeDevice | os.ModeCharDevice }
+func (fakeCharDeviceFileInfo) ModTime() time.Time { return time.Time{} }
+func (fakeCharDeviceFileInfo) IsDir() bool        { return false }
+func (fakeCharDeviceFileInfo) Sys() any           { return nil }
+
 func allowFakeSlotBlockDevice(t *testing.T) {
 	t.Helper()
 	previous := slotTargetStat
@@ -94,7 +103,7 @@ func TestSlotWriteRejectsNonBlockTarget(t *testing.T) {
 	result := execute(slotWriteRequest(imagePath, target, digest), slotTestDiscover, func(string, ...string) ([]byte, error) {
 		return nil, nil
 	})
-	if result.OK || !strings.Contains(result.Error, "slot target") {
+	if result.OK || !strings.Contains(result.Error, "persistent") {
 		t.Fatalf("expected target rejection, got %#v", result)
 	}
 }
@@ -112,7 +121,7 @@ func TestSlotWriteVerifiesDigestBeforeWrite(t *testing.T) {
 		t.Fatalf("unexpected digest %s", digest)
 	}
 
-	result := execute(slotWriteRequest(imagePath, "/dev/vdb", strings.Repeat("0", 64)), slotTestDiscover, func(name string, _ ...string) ([]byte, error) {
+	result := execute(slotWriteRequest(imagePath, "/dev/disk/by-id/virtio-LUMONAS-SLOTB", strings.Repeat("0", 64)), slotTestDiscover, func(name string, _ ...string) ([]byte, error) {
 		// findmnt probe: target has no mounts.
 		return []byte(""), nil
 	})
@@ -127,7 +136,7 @@ func TestSlotWriteFailsClosedWhenMountStateUnknown(t *testing.T) {
 	}
 	imagePath, digest := stagedSlotImage(t, "payload")
 	allowFakeSlotBlockDevice(t)
-	result := execute(slotWriteRequest(imagePath, "/dev/vdb", digest), slotTestDiscover, func(name string, _ ...string) ([]byte, error) {
+	result := execute(slotWriteRequest(imagePath, "/dev/disk/by-id/virtio-LUMONAS-SLOTB", digest), slotTestDiscover, func(name string, _ ...string) ([]byte, error) {
 		if name == "findmnt" || name == "lsblk" {
 			return nil, fmt.Errorf("findmnt unavailable")
 		}
@@ -177,7 +186,10 @@ func TestSlotOperationsAreMutationsOnStorageWorker(t *testing.T) {
 
 func TestSlotWriteRejectsCharacterDevice(t *testing.T) {
 	imagePath, digest := stagedSlotImage(t, "payload")
-	result := execute(slotWriteRequest(imagePath, "/dev/null", digest), slotTestDiscover, func(string, ...string) ([]byte, error) {
+	previous := slotTargetStat
+	slotTargetStat = func(string) (os.FileInfo, error) { return fakeCharDeviceFileInfo{}, nil }
+	t.Cleanup(func() { slotTargetStat = previous })
+	result := execute(slotWriteRequest(imagePath, "/dev/disk/by-id/virtio-LUMONAS-SLOTB", digest), slotTestDiscover, func(string, ...string) ([]byte, error) {
 		return []byte(""), nil
 	})
 	if result.OK || !strings.Contains(result.Error, "slot target") {
@@ -198,7 +210,7 @@ func TestExecuteSlotWriteFailsClosedOnMountDiscovery(t *testing.T) {
 		ExpiresAt:        time.Now().UTC().Add(time.Minute),
 		ExpectedIdentity: map[string]string{"wwn": disk.WWN},
 		RequestedState: map[string]any{
-			"imagePath": imagePath, "targetDevice": "/dev/vdb", "expectedDigest": digest,
+			"imagePath": imagePath, "targetDevice": "/dev/disk/by-id/virtio-LUMONAS-SLOTB", "expectedDigest": digest,
 		},
 	}
 	result := execute(req, func(_ collector.CommandRunner) ([]model.Disk, error) {

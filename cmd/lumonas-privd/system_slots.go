@@ -67,8 +67,8 @@ func applySlotWrite(req request, run command) response {
 	// Write access to arbitrary devices is the point of this operation, so
 	// the target is checked as strictly as the image path: block device,
 	// not mounted, no loop leftovers.
-	if !strings.HasPrefix(target, "/dev/") || strings.Contains(target, "..") {
-		return response{Error: "slot target must be a device under /dev"}
+	if err := updates.ValidateSlotDevicePath(target); err != nil {
+		return response{Error: err.Error()}
 	}
 	if targetStat, statErr := slotTargetStat(target); statErr != nil || targetStat.Mode()&os.ModeDevice == 0 || targetStat.Mode()&os.ModeCharDevice != 0 {
 		return response{Error: "slot target is not a block device"}

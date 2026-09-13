@@ -147,3 +147,20 @@ func ValidateSlotBootEntry(entry string) error {
 	}
 	return nil
 }
+
+// ValidateSlotDevicePath accepts only persistent udev aliases for an OS slot.
+// Kernel names such as /dev/sda and /dev/vdb can change when disks are
+// reordered, so allowing them at the privileged image-writing boundary would
+// defeat the A/B safety contract.
+func ValidateSlotDevicePath(device string) error {
+	device = strings.TrimSpace(device)
+	if device == "" || filepath.Clean(device) != device || strings.Contains(device, "..") {
+		return errors.New("slot device path is invalid")
+	}
+	for _, prefix := range []string{"/dev/disk/by-id/", "/dev/disk/by-partlabel/", "/dev/disk/by-partuuid/"} {
+		if strings.HasPrefix(device, prefix) && len(device) > len(prefix) {
+			return nil
+		}
+	}
+	return errors.New("slot device must use a persistent /dev/disk/by-* alias")
+}

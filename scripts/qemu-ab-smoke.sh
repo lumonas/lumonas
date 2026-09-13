@@ -100,7 +100,7 @@ request = {
     "operationId": "ab-smoke-write",
     "planHash": digest,
     "confirmed": True,
-    "requestedState": {"imagePath": path, "targetDevice": "/dev/vdb", "expectedDigest": digest},
+    "requestedState": {"imagePath": path, "targetDevice": "/dev/disk/by-id/virtio-LUMONAS-SLOTB", "expectedDigest": digest},
 }
 client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 client.connect("/run/lumonas/storage.sock")
@@ -122,7 +122,7 @@ request = {
     "confirmed": True,
     "requestedState": {
         "imagePath": "/var/lib/lumonas/updates/slot-b/image",
-        "targetDevice": "/dev/vdb",
+        "targetDevice": "/dev/disk/by-id/virtio-LUMONAS-SLOTB",
         "expectedDigest": "0" * 64,
     },
 }

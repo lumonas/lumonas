@@ -27,6 +27,7 @@ func TestParseSlotDeviceMappingRejectsUnsafeAndDuplicateEntries(t *testing.T) {
 		t.Fatalf("valid slot mapping rejected: %#v %v", valid, err)
 	}
 	for _, value := range []string{
+		"a=/dev/vda:0001,b=/dev/vdb:0002",
 		"a=/tmp/lumonas-a:0001,b=/dev/lumonas-b:0002",
 		"a=/dev/lumonas-a:0001,a=/dev/lumonas-b:0002",
 		"a=/dev/lumonas-a/../other:0001,b=/dev/lumonas-b:0002",

@@ -46,7 +46,7 @@ func parseSlotDeviceMapping(raw string) (slotDeviceMapping, error) {
 		}
 		device, entry, ok := strings.Cut(rest, ":")
 		device = strings.TrimSpace(device)
-		if !ok || device == "" || !strings.HasPrefix(device, "/dev/") || strings.Contains(device, "..") {
+		if !ok || updates.ValidateSlotDevicePath(device) != nil {
 			return nil, errors.New("slot device mapping is invalid")
 		}
 		if err := updates.ValidateSlotBootEntry(strings.TrimSpace(entry)); err != nil {
