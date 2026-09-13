@@ -271,6 +271,8 @@ require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" 'import hashlib, json, os, so
 require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" "systemctl reboot' || true"
 require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" '/dev/vdb3'
 require_line "$ROOT/cmd/lumonas-privd/system_slots.go" 'could not verify slot target is a whole disk'
+require_line "$ROOT/.github/workflows/ci.yml" 'TestSlotWriteRejectsPartitionTarget'
+require_line "$ROOT/.github/workflows/ci.yml" 'TestValidateSlotDevicePathRequiresPersistentAlias'
 require_line "$ROOT/.github/workflows/ci.yml" 'qemu-uefi-ab-smoke.sh'
 require_line "$ROOT/Makefile" 'qemu-uefi-ab-smoke:'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'LUMONAS_QEMU_SSH_PUBLIC_KEY'

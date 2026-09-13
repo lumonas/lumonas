@@ -548,10 +548,12 @@ ordering and that `prerm` is included in the generated `.deb`.
 
 The A/B update safety gate also exercises immutable slot-image staging and the
 privileged writer. It verifies the staged digest before any device access,
-rejects character devices and mounted or unverifiable targets, requires typed
-operation IDs, durably syncs the staged image directory, and refuses to
-promote a slot when the reported health version does not match the pending
-version.
+rejects transient kernel device names, partition targets, character devices,
+and mounted or unverifiable targets, requires typed operation IDs, durably syncs
+the staged image directory, and refuses to promote a slot when the reported
+health version does not match the pending version. The release gate runs the
+stable-alias and whole-disk rejection tests explicitly so this fail-closed
+boundary cannot be covered only by the general Go test suite.
 
 Before that dependency graph is started, `postinst` runs the packaged
 `lumonas-migrate` binary as the unprivileged `lumonas` user. It reads only the

@@ -38,7 +38,8 @@ The core of this design is implemented behind the privileged broker:
 - `POST /updates/slot/activate` re-verifies the staged image (drift between
   staging and activation fails closed), writes it to the inactive slot device
   via the `system.slot.write` broker operation (digest-checked `dd`, target
-  must be an unmounted block device), and arms the bootloader through
+  must be a stable persistent whole-disk alias for an unmounted block device),
+  and arms the bootloader through
   `system.slot.bootnext` (`efibootmgr --bootnext`);
 - boot health and rollback reuse the existing `updates.Manager`
   boot-attempt machinery; `POST /updates/slot/confirm` commits the pending

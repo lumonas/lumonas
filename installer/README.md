@@ -52,7 +52,9 @@ partition. Its UEFI A/B smoke assigns the inactive disk a distinct GPT
 identity before creating the EFI entry, so firmware `BootNext` cannot resolve
 both slots to the same device.
 The smoke treats the SSH disconnect caused by the deliberate reboot as
-expected and requires the guest to return from the selected slot.
+expected and requires the guest to return from the selected slot. The release
+safety gate also rejects transient kernel names, partition targets, and any
+slot device that cannot be proven to be a whole disk.
 
 ## Browser-based installation
 
