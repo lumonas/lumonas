@@ -537,6 +537,11 @@ under `/usr/share/doc/lumonas/`, including the source commit, source epoch, and
 every installed package version, so an artifact can be audited after boot or
 offline inspection.
 
+Local artifact construction follows the same dependency chain as CI: `make
+iso` builds the matching Debian package before invoking `live-build`, and
+`make qemu-image` likewise depends on the package target. This prevents a
+stale or differently versioned `.deb` from being embedded in a test appliance.
+
 HTTP requests receive a generated `X-Request-ID` and carry the same
 correlation ID in context. API-created jobs persist it, and privileged calls
 inherit it; daemon-created jobs use their stable job ID as the fallback

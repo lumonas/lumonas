@@ -41,6 +41,8 @@ Deliver:
   the no-recommends QEMU appliance image, and the offline installer ISO.
 - Boot-critical resolver dependencies are explicit in both appliance images;
   `systemd-resolved` cannot be supplied only through an optional recommendation.
+- Local package, QEMU, and ISO targets share an explicit dependency chain so
+  generated artifacts are built from the same versioned `.deb`.
 - recovery bundles carry bounded, validated Docker appdata archives with
   fail-closed extraction targets.
 - Docker Compose bind and named-volume appdata sources are resolved and

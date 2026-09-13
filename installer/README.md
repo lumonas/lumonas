@@ -5,9 +5,13 @@
 Build prerequisites are Debian/Ubuntu `live-build`, `dpkg-deb`, and the package produced by `packaging/build-deb.sh`:
 
 ```sh
-make package
-bash installer/build-iso.sh 0.1.0-dev
+make iso VERSION=0.1.0-dev
 ```
+
+The Make target builds the matching `.deb` before invoking the ISO builder, so
+the package and media cannot accidentally come from different versions. The
+underlying script remains available for CI and for explicit artifact paths via
+`LUMONAS_DEB`.
 
 Tagged CI builds set `LUMONAS_REQUIRE_REPO_SIGNATURE=true` and provide the
 release-only `LUMONAS_REPO_SIGN_KEY` fingerprint and

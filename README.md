@@ -98,8 +98,12 @@ make package
 After the Debian package and QEMU smoke test are reliable, the offline installer can be built on Debian/Ubuntu with `live-build`:
 
 ```sh
-sudo LUMONAS_DEB="$PWD/lumonas_0.1.0-dev_amd64.deb" bash installer/build-iso.sh 0.1.0-dev
+make iso VERSION=0.1.0-dev
 ```
+
+The `iso` target builds the matching Debian package first and passes that exact
+artifact to the ISO builder. Use `LUMONAS_ISO_WORKDIR` to retain or relocate
+the live-build work directory when debugging an image build.
 
 Storage mutations now use immutable plans, stable disk identity revalidation, explicit safety unlock/reauthentication, and the typed `lumonas-privd` broker. Mount, unmount, format, and erase workers are allow-listed; SnapRAID jobs, NetworkManager checkpoints, ACL changes, scheduled backup/power policy, and explicit power actions are brokered with bounded confirmation. Automatic recovery remains an explicit staged operation.
 
