@@ -138,7 +138,8 @@ Each Debian package includes a verified build manifest with source, toolchain,
 lockfile, catalog, and dependency metadata.
 
 Release verification also hashes SBOM, signature, and Cosign bundle sidecars;
-tampering with release metadata fails verification.
+tampering with release metadata fails verification, and publication rejects
+sidecars that are not structured SPDX documents.
 
 Generated ISO and QEMU appliances also include versioned Debian package
 inventories with the source commit, reproducible epoch, and exact installed

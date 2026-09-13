@@ -65,6 +65,15 @@ for item in manifest.get("artifacts", []):
             raise SystemExit(f"release manifest {key} size mismatch: {sidecar['name']}")
         if sidecar.get("sha256") != hashlib.sha256(sidecar_path.read_bytes()).hexdigest():
             raise SystemExit(f"release manifest {key} checksum mismatch: {sidecar['name']}")
+        if key == "sbom":
+            try:
+                sbom = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise SystemExit(f"release SBOM is not valid JSON: {sidecar['name']}") from exc
+            if not isinstance(sbom, dict) or not isinstance(sbom.get("spdxVersion"), str) or not sbom["spdxVersion"].startswith("SPDX-"):
+                raise SystemExit(f"release SBOM has no SPDX version: {sidecar['name']}")
+            if not isinstance(sbom.get("creationInfo"), dict) or not isinstance(sbom.get("packages"), list):
+                raise SystemExit(f"release SBOM is missing SPDX document sections: {sidecar['name']}")
     expected[name] = item
 
 actual = sorted(path.name for pattern in ("*.deb", "*.iso", "*.qcow2", "*.raw") for path in release_dir.glob(pattern))
@@ -96,6 +105,23 @@ for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2
 	if [ "${LUMONAS_REQUIRE_SBOM:-false}" = "true" ] && [ ! -s "$artifact.sbom.json" ]; then
 		echo "SBOM is missing: $artifact.sbom.json" >&2
 		exit 1
+	fi
+	if [ -s "$artifact.sbom.json" ]; then
+		python3 - "$artifact.sbom.json" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+try:
+    document = json.loads(path.read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"release SBOM is not valid JSON: {path.name}") from exc
+if not isinstance(document, dict) or not isinstance(document.get("spdxVersion"), str) or not document["spdxVersion"].startswith("SPDX-"):
+    raise SystemExit(f"release SBOM has no SPDX version: {path.name}")
+if not isinstance(document.get("creationInfo"), dict) or not isinstance(document.get("packages"), list):
+    raise SystemExit(f"release SBOM is missing SPDX document sections: {path.name}")
+PY
 	fi
 	if [ "${LUMONAS_REQUIRE_SIGNATURES:-false}" = "true" ] && [ ! -s "$artifact.sig" ]; then
 		echo "signature is missing: $artifact.sig" >&2

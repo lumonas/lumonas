@@ -24,12 +24,19 @@ printf '%s\n' 'installer image' >"$WORK/lumonas_test.iso"
 LUMONAS_REQUIRE_SBOM=false sh "$ROOT/scripts/release-artifacts.sh" "$WORK"
 LUMONAS_REQUIRE_RELEASE_SET=true sh "$ROOT/scripts/verify-release.sh" "$WORK"
 
-printf '%s\n' '{"spdxVersion":"SPDX-2.3"}' >"$WORK/lumonas_test.deb.sbom.json"
+printf '%s\n' '{"spdxVersion":"SPDX-2.3","creationInfo":{},"packages":[]}' >"$WORK/lumonas_test.deb.sbom.json"
 LUMONAS_REQUIRE_SBOM=false sh "$ROOT/scripts/release-artifacts.sh" "$WORK"
 sh "$ROOT/scripts/verify-release.sh" "$WORK"
 printf '%s\n' tampered >>"$WORK/lumonas_test.deb.sbom.json"
 if sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
 	echo "tampered SBOM sidecar was accepted" >&2
+	exit 1
+fi
+
+printf '%s\n' '{"spdxVersion":"SPDX-2.3"}' >"$WORK/lumonas_test.deb.sbom.json"
+LUMONAS_REQUIRE_SBOM=false sh "$ROOT/scripts/release-artifacts.sh" "$WORK"
+if sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
+	echo "malformed SBOM sidecar was accepted" >&2
 	exit 1
 fi
 

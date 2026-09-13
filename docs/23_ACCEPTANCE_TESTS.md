@@ -555,6 +555,9 @@ the tagged GitHub revision, and an artifact added without regenerating the
 manifest is rejected.
 SBOM, signature, and Cosign bundle sidecars must also have recorded digests and
 sizes; modifying one without regenerating the release metadata must fail.
+Every SBOM sidecar must parse as an SPDX document with `spdxVersion`,
+`creationInfo`, and `packages`; a hash-valid placeholder or malformed JSON SBOM
+must be rejected.
 
 The generated ISO and QEMU images must also expose their versioned Debian
 package inventories under `/usr/share/doc/lumonas/`, including the source
