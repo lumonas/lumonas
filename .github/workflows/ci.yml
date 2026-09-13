@@ -211,8 +211,7 @@ jobs:
           version: 10
       - run: pnpm install --frozen-lockfile
         working-directory: web
-      - run: bash packaging/build-deb.sh "${GITHUB_SHA::12}"
-      - run: bash scripts/verify-deb.sh "$(find . -maxdepth 1 -type f -name '*.deb' -print -quit)"
+      - run: LUMONAS_GIT_COMMIT="$GITHUB_SHA" bash scripts/reproducible-package-smoke.sh "${GITHUB_SHA::12}"
       - uses: actions/upload-artifact@v4
         with:
           name: lumonas-deb

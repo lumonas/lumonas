@@ -211,6 +211,10 @@ require_line "$ROOT/Makefile" 'release-gate-policy:'
 [ -x "$ROOT/scripts/log-retention-smoke.sh" ] || { echo "log retention smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-recover'
 require_line "$ROOT/packaging/build-deb.sh" 'cmd/lumonas-migrate'
+require_line "$ROOT/packaging/build-deb.sh" 'touch -h --date="@$SOURCE_DATE_EPOCH"'
+require_line "$ROOT/scripts/reproducible-package-smoke.sh" 'repeated Debian package builds differ'
+require_line "$ROOT/.github/workflows/ci.yml" 'scripts/reproducible-package-smoke.sh'
+[ -x "$ROOT/scripts/reproducible-package-smoke.sh" ] || { echo "reproducible package smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-migrate'
 require_line "$ROOT/packaging/debian/postinst" 'runuser -u lumonas'
 require_line "$ROOT/packaging/debian/control" 'avahi-daemon'

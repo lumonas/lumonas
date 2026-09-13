@@ -217,6 +217,9 @@ on inbound frames.
 The release race/fuzz gate is centralized in `scripts/race-fuzz-smoke.sh`,
 which is used by both CI and the local Make target so the package set and fuzz
 harness cannot diverge.
+Debian packaging also normalizes package-entry mtimes and builds the artifact
+twice with the same source provenance. CI and `make package` fail if the two
+`.deb` files differ byte-for-byte.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the

@@ -41,8 +41,7 @@ build-web:
 	cd web && pnpm build
 
 package:
-	bash packaging/build-deb.sh $(VERSION)
-	bash scripts/verify-deb.sh lumonas_$(VERSION)_amd64.deb
+	bash scripts/reproducible-package-smoke.sh $(VERSION)
 
 recovery-fixture:
 	mkdir -p build

@@ -54,5 +54,9 @@ printf '%s\n' \
 cp "$ROOT/packaging/debian/postinst" "$OUT/DEBIAN/postinst"
 cp "$ROOT/packaging/debian/prerm" "$OUT/DEBIAN/prerm"
 chmod 0755 "$OUT/DEBIAN/postinst" "$OUT/DEBIAN/prerm" "$OUT/usr/lib/lumonas/"*
+# Normalize every package entry before dpkg-deb archives it. Together with
+# SOURCE_DATE_EPOCH this makes repeated builds from the same source produce
+# byte-identical artifacts instead of embedding checkout/build mtimes.
+find "$OUT" -exec touch -h --date="@$SOURCE_DATE_EPOCH" {} +
 dpkg-deb --root-owner-group --build "$OUT" "$ROOT/lumonas_${VERSION}_amd64.deb"
 echo "Created $ROOT/lumonas_${VERSION}_amd64.deb"
