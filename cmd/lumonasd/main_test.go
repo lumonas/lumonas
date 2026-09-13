@@ -116,6 +116,11 @@ func TestStoragePlanRequiresStableIdentityAndSafetyUnlock(t *testing.T) {
 
 func TestStorageCreatePlanValidatesRequestedStateAndSafety(t *testing.T) {
 	server := testServer(t)
+	missingFormatState := httptest.NewRecorder()
+	server.routes().ServeHTTP(missingFormatState, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test"}`)))
+	if missingFormatState.Code != http.StatusUnprocessableEntity || !strings.Contains(missingFormatState.Body.String(), "filesystem must be ext4 or xfs") {
+		t.Fatalf("expected 422 missing filesystem state rejection, got %d: %s", missingFormatState.Code, missingFormatState.Body.String())
+	}
 	invalidFormat := httptest.NewRecorder()
 	server.routes().ServeHTTP(invalidFormat, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test","requestedState":{"filesystem":"btrfs"}}`)))
 	if invalidFormat.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidFormat.Body.String(), "ext4 or xfs") {

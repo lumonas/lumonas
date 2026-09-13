@@ -1043,14 +1043,16 @@ func (s *apiServer) planStorageOperation(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	if input.RequestedState != nil {
-		if err := storage.ValidateRequestedState(input.Action, target.ID, input.RequestedState); err != nil {
-			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
-			return
-		}
-		plan.RequestedState = input.RequestedState
-		plan.PlanHash = storage.Hash(plan)
+	requestedState := input.RequestedState
+	if requestedState == nil {
+		requestedState = map[string]any{}
 	}
+	if err := storage.ValidateRequestedState(input.Action, target.ID, requestedState); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	plan.RequestedState = requestedState
+	plan.PlanHash = storage.Hash(plan)
 	if err := s.store.SavePlan(plan); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
