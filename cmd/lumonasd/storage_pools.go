@@ -50,6 +50,10 @@ func (s *apiServer) planStoragePoolSetup(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *apiServer) confirmStoragePoolSetup(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		OperationID           string `json:"operationId"`
 		PlanHash              string `json:"planHash"`
@@ -189,7 +193,7 @@ func (s *apiServer) confirmStoragePoolSetup(w http.ResponseWriter, r *http.Reque
 	if plan.ParityDiskID != "" {
 		protectionConfigured = s.applySnapraidConfiguration(plan.ParityDiskID, plan.DataDiskIDs)
 		if protectionConfigured {
-			job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+			job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
 			if err := s.store.SaveJob(job); err == nil {
 				s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 				go s.runProtectionJob(job)

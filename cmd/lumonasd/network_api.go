@@ -420,7 +420,8 @@ func (s *apiServer) activateFirewallRules(ctx context.Context, rules string) (fu
 }
 
 func (s *apiServer) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
-	if _, ok := s.identityActor(w, r, false); !ok {
+	actor, ok := s.identityActor(w, r, false)
+	if !ok {
 		return
 	}
 	idempotencyKey, err := requestIdempotencyKey(r)
@@ -449,7 +450,7 @@ func (s *apiServer) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
-	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: "network.diagnostic", Title: "Network " + input.Kind, ResourceID: input.Target, State: "queued", CreatedAt: time.Now().UTC()}
+	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: "network.diagnostic", Title: "Network " + input.Kind, ResourceID: input.Target, State: "queued", CreatedAt: time.Now().UTC()}
 	if err := s.store.SaveJob(job); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

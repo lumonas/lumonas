@@ -3151,6 +3151,8 @@ components:
           enum: [info, warning, critical]
         correlationId:
           type: string
+        actor:
+          type: string
           description: Correlation key shared by the originating request and asynchronous work.
         operationId:
           type: string

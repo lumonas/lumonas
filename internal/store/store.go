@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, resource_id TEXT,
   correlation_id TEXT,
+  actor TEXT,
   state TEXT NOT NULL, progress REAL, stage TEXT, created_at TEXT NOT NULL,
   started_at TEXT, finished_at TEXT, error TEXT
 );
@@ -339,7 +340,7 @@ func (s *Store) PruneAudit(keep int) error {
 }
 
 func (s *Store) Jobs() ([]model.Job, error) {
-	rows, err := s.db.Query(`SELECT id,type,title,COALESCE(resource_id,''),COALESCE(correlation_id,''),state,progress,COALESCE(stage,''),created_at,started_at,finished_at,COALESCE(error,'') FROM jobs ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT id,type,title,COALESCE(resource_id,''),COALESCE(correlation_id,''),COALESCE(actor,''),state,progress,COALESCE(stage,''),created_at,started_at,finished_at,COALESCE(error,'') FROM jobs ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +351,7 @@ func (s *Store) Jobs() ([]model.Job, error) {
 		var progress sql.NullFloat64
 		var created string
 		var started, finished sql.NullString
-		if err := rows.Scan(&j.ID, &j.Type, &j.Title, &j.ResourceID, &j.CorrelationID, &j.State, &progress, &j.Stage, &created, &started, &finished, &j.Error); err != nil {
+		if err := rows.Scan(&j.ID, &j.Type, &j.Title, &j.ResourceID, &j.CorrelationID, &j.Actor, &j.State, &progress, &j.Stage, &created, &started, &finished, &j.Error); err != nil {
 			return nil, err
 		}
 		j.CreatedAt, _ = parseTime(created)
@@ -375,7 +376,7 @@ func (s *Store) Job(id string) (model.Job, error) {
 	var progress sql.NullFloat64
 	var created string
 	var started, finished sql.NullString
-	err := s.db.QueryRow(`SELECT id,type,title,COALESCE(resource_id,''),COALESCE(correlation_id,''),state,progress,COALESCE(stage,''),created_at,started_at,finished_at,COALESCE(error,'') FROM jobs WHERE id = ?`, id).Scan(&job.ID, &job.Type, &job.Title, &job.ResourceID, &job.CorrelationID, &job.State, &progress, &job.Stage, &created, &started, &finished, &job.Error)
+	err := s.db.QueryRow(`SELECT id,type,title,COALESCE(resource_id,''),COALESCE(correlation_id,''),COALESCE(actor,''),state,progress,COALESCE(stage,''),created_at,started_at,finished_at,COALESCE(error,'') FROM jobs WHERE id = ?`, id).Scan(&job.ID, &job.Type, &job.Title, &job.ResourceID, &job.CorrelationID, &job.Actor, &job.State, &progress, &job.Stage, &created, &started, &finished, &job.Error)
 	if err != nil {
 		return model.Job{}, err
 	}
@@ -442,9 +443,9 @@ func (s *Store) SaveJob(j model.Job) error {
 	if j.CorrelationID == "" {
 		j.CorrelationID = j.ID
 	}
-	_, err := s.db.Exec(`INSERT INTO jobs(id,type,title,resource_id,correlation_id,state,progress,stage,created_at,started_at,finished_at,error)
-VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET correlation_id=excluded.correlation_id,state=excluded.state,progress=excluded.progress,stage=excluded.stage,started_at=excluded.started_at,finished_at=excluded.finished_at,error=excluded.error`,
-		j.ID, j.Type, j.Title, nullable(j.ResourceID), nullable(j.CorrelationID), j.State, nullableFloat(j.Progress), nullable(j.Stage), j.CreatedAt.Format(timeFormat), timeValue(j.StartedAt), timeValue(j.FinishedAt), nullable(j.Error))
+	_, err := s.db.Exec(`INSERT INTO jobs(id,type,title,resource_id,correlation_id,actor,state,progress,stage,created_at,started_at,finished_at,error)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET correlation_id=excluded.correlation_id,actor=excluded.actor,state=excluded.state,progress=excluded.progress,stage=excluded.stage,started_at=excluded.started_at,finished_at=excluded.finished_at,error=excluded.error`,
+		j.ID, j.Type, j.Title, nullable(j.ResourceID), nullable(j.CorrelationID), nullable(j.Actor), j.State, nullableFloat(j.Progress), nullable(j.Stage), j.CreatedAt.Format(timeFormat), timeValue(j.StartedAt), timeValue(j.FinishedAt), nullable(j.Error))
 	if err != nil {
 		return err
 	}

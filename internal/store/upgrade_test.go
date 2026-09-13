@@ -141,6 +141,10 @@ INSERT INTO network_connections(id,uuid,name,interface,enabled,config_json,creat
 	if err != nil || len(jobs) != 1 || jobs[0].CorrelationID != "" {
 		t.Fatalf("legacy jobs were not readable after migration: %#v err=%v", jobs, err)
 	}
+	var actorColumn int
+	if err := database.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name='actor'`).Scan(&actorColumn); err != nil || actorColumn != 1 {
+		t.Fatalf("legacy jobs did not receive actor column: count=%d err=%v", actorColumn, err)
+	}
 	audits, err := database.Audit(10)
 	if err != nil || len(audits) != 1 || audits[0].ID != "legacy-audit" {
 		t.Fatalf("legacy audit rows were not readable after migration: %#v err=%v", audits, err)

@@ -10,6 +10,7 @@ func (s *Store) ensureJobSchema() error {
 		return err
 	}
 	hasCorrelationID := false
+	hasActor := false
 	for rows.Next() {
 		var cid, notNull, primaryKey int
 		var name, dataType string
@@ -20,6 +21,9 @@ func (s *Store) ensureJobSchema() error {
 		}
 		if name == "correlation_id" {
 			hasCorrelationID = true
+		}
+		if name == "actor" {
+			hasActor = true
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -32,7 +36,12 @@ func (s *Store) ensureJobSchema() error {
 			return err
 		}
 	}
-	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, ?)`, time.Now().UTC().Format(timeFormat))
+	if !hasActor {
+		if _, err := s.db.Exec(`ALTER TABLE jobs ADD COLUMN actor TEXT`); err != nil {
+			return err
+		}
+	}
+	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, ?), (6, ?)`, time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat))
 	return err
 }
 

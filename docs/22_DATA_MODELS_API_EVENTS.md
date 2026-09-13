@@ -2,8 +2,11 @@
 
 This is a starting model, not a frozen database schema.
 
-Events and audit entries expose first-class `correlationId`, `operationId`,
-`planHash`, `actor`, and `generation` fields. Resource type and ID remain
+Jobs, events, and audit entries expose first-class `correlationId`,
+`operationId`, `planHash`, `actor`, and `generation` fields where applicable.
+Request-created jobs retain the authenticated actor through every queued state
+transition and chained recovery job; scheduled and daemon-created work uses
+`system`. Resource type and ID remain
 explicit fields; the original metadata/data payloads are retained for backward
 compatibility.
 

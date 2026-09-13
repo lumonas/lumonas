@@ -2656,7 +2656,11 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if input.Type == "snapraid.sync" || input.Type == "snapraid.scrub" {
-		job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: input.Type, Title: strings.ReplaceAll(input.Type, ".", " "), ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+		actor, ok := s.identityActor(w, r, true)
+		if !ok {
+			return
+		}
+		job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: input.Type, Title: strings.ReplaceAll(input.Type, ".", " "), ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
 		if err := s.admitJob(job); err != nil {
 			if isJobResourceBusy(err) {
 				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
@@ -2692,7 +2696,11 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "resourceId does not match a currently discovered stable disk identity"})
 		return
 	}
-	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Type: input.Type, Title: "SMART " + strings.TrimPrefix(input.Type, "smart.") + " validation", ResourceID: input.ResourceID, State: "queued", CreatedAt: time.Now().UTC()}
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: input.Type, Title: "SMART " + strings.TrimPrefix(input.Type, "smart.") + " validation", ResourceID: input.ResourceID, State: "queued", CreatedAt: time.Now().UTC()}
 	if err := s.admitJob(job); err != nil {
 		if isJobResourceBusy(err) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
@@ -2791,7 +2799,7 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 	if job.Type == "snapraid.fix" {
 		// Parity recovery restores the retired slot's content; follow it
 		// with a sync so the parity reflects the recovered data again.
-		syncJob := model.Job{ID: newID("job"), CorrelationID: job.CorrelationID, Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+		syncJob := model.Job{ID: newID("job"), CorrelationID: job.CorrelationID, Actor: job.Actor, Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
 		if err := s.admitJob(syncJob); err == nil {
 			s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: syncJob.ID}, map[string]any{"job": syncJob})
 			go s.runProtectionJob(syncJob)
@@ -2931,8 +2939,12 @@ func (s *apiServer) writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, e
 }
 
 func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, data map[string]any) {
-	event := model.Event{SchemaVersion: events.SchemaVersion, ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Actor: "system", Generation: s.currentGeneration(), Resource: resource, Data: data}
 	metadata := events.MetadataFromData(data)
+	actor := metadata.Actor
+	if actor == "" {
+		actor = "system"
+	}
+	event := model.Event{SchemaVersion: events.SchemaVersion, ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Actor: actor, Generation: s.currentGeneration(), Resource: resource, Data: data}
 	event.CorrelationID = metadata.CorrelationID
 	event.OperationID = metadata.OperationID
 	event.PlanHash = metadata.PlanHash

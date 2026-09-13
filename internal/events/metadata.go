@@ -10,6 +10,7 @@ type Metadata struct {
 	CorrelationID string
 	OperationID   string
 	PlanHash      string
+	Actor         string
 }
 
 func MetadataFromData(data map[string]any) Metadata {
@@ -17,6 +18,7 @@ func MetadataFromData(data map[string]any) Metadata {
 		CorrelationID: stringValue(data, "correlationId"),
 		OperationID:   stringValue(data, "operationId"),
 		PlanHash:      stringValue(data, "planHash"),
+		Actor:         stringValue(data, "actor"),
 	}
 	if job, ok := jobValue(data); ok {
 		if metadata.CorrelationID == "" {
@@ -24,6 +26,9 @@ func MetadataFromData(data map[string]any) Metadata {
 		}
 		if metadata.OperationID == "" {
 			metadata.OperationID = job.ID
+		}
+		if metadata.Actor == "" {
+			metadata.Actor = job.Actor
 		}
 	}
 	if metadata.OperationID == "" {

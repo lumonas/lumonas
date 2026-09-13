@@ -196,7 +196,7 @@ func (s *apiServer) deleteFiles(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]any{"error": "explicit confirmation is required before deleting Docker appdata", "dependencyWarning": warning})
 		return
 	}
-	job := s.queueFileJob("delete files", share.ID, func() (map[string]any, error) {
+	job := s.queueFileJob(actor, requestCorrelationID(r), "delete files", share.ID, func() (map[string]any, error) {
 		deleted, err := fileops.Delete(share.Path, share.ID, input.Path, input.Names)
 		if err == nil {
 			s.publish("file.changed", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"operation": "delete", "path": input.Path, "deleted": deleted})
@@ -264,7 +264,7 @@ func (s *apiServer) transferFiles(w http.ResponseWriter, r *http.Request) {
 			strategy = "copy-delete"
 		}
 	}
-	job := s.queueFileJob(input.Operation+" files", target.ID, func() (map[string]any, error) {
+	job := s.queueFileJob(actor, requestCorrelationID(r), input.Operation+" files", target.ID, func() (map[string]any, error) {
 		count, err := fileops.Transfer(taskInput)
 		return map[string]any{"transferred": count, "strategy": strategy}, err
 	})
@@ -313,7 +313,7 @@ func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 			writeFileError(w, err)
 			return
 		}
-		job := s.queueFileJob("upload file", share.ID, func() (map[string]any, error) { return map[string]any{"name": name, "sizeBytes": input.SizeBytes}, nil })
+		job := s.queueFileJob(actor, requestCorrelationID(r), "upload file", share.ID, func() (map[string]any, error) { return map[string]any{"name": name, "sizeBytes": input.SizeBytes}, nil })
 		s.recordRequestAudit(r, actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
 		s.rememberFileJob("file.upload", idempotencyKey, job.ID)
 		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "name": name})
@@ -335,7 +335,7 @@ func (s *apiServer) uploadFile(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
-	job := s.queueFileJob("upload file", share.ID, func() (map[string]any, error) {
+	job := s.queueFileJob(actor, requestCorrelationID(r), "upload file", share.ID, func() (map[string]any, error) {
 		return map[string]any{"name": name, "sizeBytes": input.SizeBytes}, nil
 	})
 	s.recordRequestAudit(r, actor, "file.upload.queued", share.ID, map[string]any{"jobId": job.ID, "name": name, "sizeBytes": input.SizeBytes})
@@ -473,9 +473,9 @@ func (s *apiServer) findRecycleShare(shareID, id string) (shares.ManagedShare, e
 	return shares.ManagedShare{}, os.ErrNotExist
 }
 
-func (s *apiServer) queueFileJob(title, resourceID string, task fileJobTask) model.Job {
+func (s *apiServer) queueFileJob(actor, correlationID, title, resourceID string, task fileJobTask) model.Job {
 	now := time.Now().UTC()
-	job := model.Job{ID: newID("job"), Type: "file.transfer", Title: title, ResourceID: resourceID, State: "queued", CreatedAt: now}
+	job := model.Job{ID: newID("job"), CorrelationID: correlationID, Actor: actor, Type: "file.transfer", Title: title, ResourceID: resourceID, State: "queued", CreatedAt: now}
 	if err := s.store.SaveJob(job); err != nil {
 		job.State, job.Error = "failed", err.Error()
 		return job

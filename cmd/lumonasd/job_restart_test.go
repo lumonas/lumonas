@@ -13,6 +13,7 @@ func TestEnsureRestartedJobsFailsClosedForInterruptedWork(t *testing.T) {
 	job := model.Job{
 		ID:            "job-restart",
 		CorrelationID: "corr-restart",
+		Actor:         "admin",
 		Type:          "snapraid.sync",
 		Title:         "SnapRAID sync",
 		State:         "running",
@@ -43,7 +44,7 @@ func TestEnsureRestartedJobsFailsClosedForInterruptedWork(t *testing.T) {
 			break
 		}
 	}
-	if restartEvent == nil || restartEvent.CorrelationID != job.CorrelationID || restartEvent.Data["reason"] != "daemon_restart" {
+	if restartEvent == nil || restartEvent.CorrelationID != job.CorrelationID || restartEvent.Actor != job.Actor || restartEvent.Data["reason"] != "daemon_restart" {
 		t.Fatalf("restart failure event lost tracing metadata: %#v", restartEvent)
 	}
 	server.ensureRestartedJobs()

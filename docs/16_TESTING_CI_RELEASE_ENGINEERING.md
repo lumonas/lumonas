@@ -593,10 +593,11 @@ iso` builds the matching Debian package before invoking `live-build`, and
 stale or differently versioned `.deb` from being embedded in a test appliance.
 
 HTTP requests receive a generated `X-Request-ID` and carry the same
-correlation ID in context. API-created jobs persist it, and privileged calls
-inherit it; daemon-created jobs use their stable job ID as the fallback
-correlation key. Events and audit rows persist first-class correlation,
-operation, plan-hash, actor, resource, and generation fields while preserving
+correlation ID in context. API-created jobs persist it and the authenticated
+actor, and privileged calls inherit it; daemon-created jobs use their stable
+job ID as the fallback correlation key and `system` as the actor. Events and
+audit rows persist first-class correlation, operation, plan-hash, actor,
+resource, and generation fields while preserving
 the original metadata payload for compatibility.
 
 Host integration commands use a shared bounded runner. Privileged commands,
