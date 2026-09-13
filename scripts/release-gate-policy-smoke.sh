@@ -59,6 +59,11 @@ qemu_job = re.search(r"(?ms)^  qemu-smoke:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [
 qemu_block = qemu_job.group(0) if qemu_job else ""
 if "actions/setup-go@v5" not in qemu_block or "./cmd/lumonas-update-fixture" not in qemu_block:
     raise SystemExit("QEMU smoke must provision Go and build the signed update fixture")
+safety_job = re.search(r"(?ms)^  safety-recovery:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+safety_block = safety_job.group(0) if safety_job else ""
+for marker in ("TestReplacementPlanRejectsUnstableReplacementIdentity", "TestReplacementPlanRejectsTamperedHash", "TestDiskReplacementPlanAndConfirmChain"):
+    if marker not in safety_block:
+        raise SystemExit(f"safety-recovery gate is missing replacement coverage: {marker}")
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", race_match.group(0), re.M):
     raise SystemExit("race-fuzz job is not running the centralized race/fuzz harness")
