@@ -246,6 +246,8 @@ done
 [ -x "$ROOT/scripts/privileged-storage-loopback-smoke.sh" ] || { echo "privileged storage loopback smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/disk-full-smoke.sh" ] || { echo "disk-full smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/disk-identity-smoke.sh" ] || { echo "disk-identity smoke test must be executable" >&2; exit 1; }
+require_line "$ROOT/scripts/disk-identity-smoke.sh" 'DisksPromoteMountedPartitionMetadata'
+require_line "$ROOT/internal/collector/disks.go" 'inheritFilesystemMetadata'
 [ -x "$ROOT/scripts/fuzz-smoke.sh" ] || { echo "fuzz smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/request-limits-smoke.sh" ] || { echo "request-limits smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/retention-smoke.sh" ] || { echo "retention smoke test must be executable" >&2; exit 1; }

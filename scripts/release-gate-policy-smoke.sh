@@ -87,6 +87,9 @@ for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollba
         raise SystemExit(f"QEMU smoke does not exercise signed update rollback: {marker}")
 if "if curl -kfsS -X POST -H" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU signed-update smoke must guard the apply request with a shell conditional")
+disk_identity_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "disk-identity-smoke.sh"
+if "DisksPromoteMountedPartitionMetadata" not in disk_identity_smoke.read_text(encoding="utf-8"):
+    raise SystemExit("disk identity smoke does not cover mounted partition metadata")
 qemu_builder = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-build-image.sh"
 for marker in ("LUMONAS_UPDATE_FIXTURE", "LUMONAS_UPDATE_PUBLIC_KEY", "update-fixture/package", "chown -R lumonas:lumonas /var/lib/lumonas/update-fixture"):
     if marker not in qemu_builder.read_text(encoding="utf-8"):

@@ -200,7 +200,10 @@ contract test verifies both the command field and the resulting `gptDiskGuid`.
 When `lsblk` leaves identity fields empty, the read-only collector enriches the
 record from `udevadm info --query=property --name <device>`. The disk identity
 smoke covers WWN, serial, model, filesystem UUID, partition-table UUID, bus,
-and preservation of authoritative `lsblk` values.
+and preservation of authoritative `lsblk` values. It also requests the lsblk
+device tree and promotes mounted partition filesystem UUID/type metadata to the
+physical-disk record, so a mounted `/dev/sda1` cannot be mistaken for an
+unmounted `/dev/sda` during a safety check.
 
 `check-api-contract.py` runs on every backend and installer-scripts job. It
 checks the stable Disk and LumoEvent field sets in OpenAPI and TypeScript,

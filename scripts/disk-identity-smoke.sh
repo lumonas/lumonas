@@ -7,5 +7,5 @@ GOPATH="${GOPATH:-/tmp/lumonas-gopath}"
 export GOCACHE GOPATH
 
 cd "$ROOT"
-go test -count=1 ./internal/collector -run 'Test(DisksUseStableIdentityAcrossDevicePathChanges|StableIDFallsBackInSafeOrder|ParseUdevPropertiesIgnoresMalformedLines|EnrichFromUdevFillsMissingStableIdentity|EnrichFromUdevPreservesLsblkIdentity)$'
+go test -count=1 ./internal/collector -run 'Test(DisksUseStableIdentityAcrossDevicePathChanges|DisksPromoteMountedPartitionMetadata|MountedPartitionWinsOverUnmountedFilesystemChild|StableIDFallsBackInSafeOrder|ParseUdevPropertiesIgnoresMalformedLines|EnrichFromUdevFillsMissingStableIdentity|EnrichFromUdevPreservesLsblkIdentity)$'
 echo "LumoNAS disk identity collector smoke checks passed"
