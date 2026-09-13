@@ -417,6 +417,12 @@ else
 	SERVER_PID=''
 	start_server
 	wait_for_status /healthz 200
+	RESTARTED_CSRF_PATH="$TEMP_DIR/restarted-csrf.json"
+	RESTARTED_CSRF_STATUS=$(curl -sS -o "$RESTARTED_CSRF_PATH" -w '%{http_code}' \
+		-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/auth/csrf")
+	[ "$RESTARTED_CSRF_STATUS" = 200 ] || { echo "CSRF token reissue failed after restart (HTTP $RESTARTED_CSRF_STATUS)" >&2; exit 1; }
+	CSRF_TOKEN=$(sed -n 's/.*"csrfToken":"\([^"]*\)".*/\1/p' "$RESTARTED_CSRF_PATH")
+	[ -n "$CSRF_TOKEN" ] || { echo "CSRF token reissue response did not contain csrfToken" >&2; exit 1; }
 	RESTARTED_JOB_PATH="$TEMP_DIR/restarted-job.json"
 	RESTARTED_JOB_STATUS=$(curl -sS -o "$RESTARTED_JOB_PATH" -w '%{http_code}' \
 	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/jobs/$JOB_ID")
