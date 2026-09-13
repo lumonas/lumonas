@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { SSHKeysDialog } from '@/features/settings/ssh-keys-dialog'
+import { PasskeysCard } from '@/features/settings/passkeys-card'
 import { timeAgo } from '@/lib/format'
 
 export function SecurityTab() {
@@ -16,6 +17,7 @@ export function SecurityTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <PasskeysCard />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-3">

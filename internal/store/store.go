@@ -113,6 +113,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate storage mount schema: %w", err)
 	}
+	if err := s.ensurePasskeysSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate passkey schema: %w", err)
+	}
 	return s, nil
 }
 
@@ -706,6 +710,21 @@ func (s *Store) DeleteSession(token string) error {
 func (s *Store) DeleteSessionsForUser(userID string) error {
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID)
 	return err
+}
+
+// UserIDBySession resolves the principal behind a live session token.
+func (s *Store) UserIDBySession(token string) (string, error) {
+	var userID, expires string
+	err := s.db.QueryRow(`SELECT user_id,expires_at FROM sessions WHERE token_digest = ?`, auth.TokenDigest(token)).Scan(&userID, &expires)
+	if err != nil {
+		return "", fmt.Errorf("invalid session")
+	}
+	when, err := parseTime(expires)
+	if err != nil || !time.Now().UTC().Before(when) {
+		_, _ = s.db.Exec(`DELETE FROM sessions WHERE token_digest = ?`, auth.TokenDigest(token))
+		return "", fmt.Errorf("invalid session")
+	}
+	return userID, nil
 }
 
 func newStoreID(prefix string) string { return fmt.Sprintf("%s-%d", prefix, time.Now().UnixNano()) }

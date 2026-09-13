@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { setCsrfToken } from '../../api/client'
+import { passkeysSupported, signInWithPasskey } from '@/lib/webauthn'
 
 type AuthStatus = { required: boolean; configured: boolean; authenticated: boolean }
 type TwoFactorChallenge = { challengeId: string }
@@ -89,6 +90,25 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <label className="block text-sm text-muted-foreground">Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-foreground" autoComplete="current-password" /></label>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <button type="submit" className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">Sign in</button>
+        {passkeysSupported() && (
+          <button
+            type="button"
+            className="w-full rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-accent"
+            onClick={async () => {
+              setError('')
+              try {
+                const result = await signInWithPasskey(username)
+                setCsrfToken(result.csrfToken)
+                setPassword('')
+                await load()
+              } catch (reason) {
+                setError(reason instanceof Error ? reason.message : 'Passkey sign-in failed')
+              }
+            }}
+          >
+            Sign in with a passkey
+          </button>
+        )}
       </form>
     </main>
   )

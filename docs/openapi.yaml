@@ -901,6 +901,86 @@ paths:
         '200':
           description: User list
 
+  /users/{id}/passkeys:
+    get:
+      tags: [Users]
+      summary: List registered passkeys
+      operationId: listUserPasskeys
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: Passkey metadata without private key material
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PasskeySummary'}
+        '403': {description: The caller cannot view another user's passkeys}
+
+  /users/{id}/passkeys/register/begin:
+    post:
+      tags: [Users]
+      summary: Begin passkey registration
+      operationId: beginUserPasskeyRegistration
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+      responses:
+        '200':
+          description: WebAuthn creation options
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebAuthnOptionsEnvelope'}
+        '403': {description: The caller cannot register for this user}
+
+  /users/{id}/passkeys/register/finish:
+    post:
+      tags: [Users]
+      summary: Finish passkey registration
+      operationId: finishUserPasskeyRegistration
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+        - in: query
+          name: name
+          required: false
+          schema: {type: string, maxLength: 64}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '201': {description: Passkey registered}
+        '409': {description: Ceremony expired or was already consumed}
+        '422': {description: WebAuthn attestation failed}
+
+  /users/{id}/passkeys/{credentialId}:
+    delete:
+      tags: [Users]
+      summary: Remove a passkey
+      operationId: deleteUserPasskey
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: string}
+        - in: path
+          name: credentialId
+          required: true
+          schema: {type: string}
+      responses:
+        '204': {description: Passkey removed}
+        '404': {description: Passkey not found}
+
   /users/{id}/2fa/setup:
     post:
       tags: [Users]
@@ -1069,6 +1149,48 @@ paths:
               schema:
                 type: integer
               description: Seconds to wait before retrying
+
+  /auth/passkeys/login/begin:
+    post:
+      tags: [Auth]
+      summary: Begin passkey login
+      operationId: authPasskeyLoginBegin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username: {type: string}
+      responses:
+        '200':
+          description: WebAuthn assertion options
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/WebAuthnOptionsEnvelope'}
+        '404': {description: No passkey is registered for the account}
+        '429': {description: Too many attempts}
+
+  /auth/passkeys/login/finish:
+    post:
+      tags: [Auth]
+      summary: Finish passkey login
+      operationId: authPasskeyLoginFinish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        '200':
+          description: Logged in using a verified passkey
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthSession'}
+        '401': {description: WebAuthn assertion failed}
+        '409': {description: Ceremony expired or was already consumed}
 
   /auth/csrf:
     get:
@@ -2916,6 +3038,28 @@ paths:
 
 components:
   schemas:
+    AuthSession:
+      type: object
+      required: [username, expiresAt, csrfToken]
+      properties:
+        username: {type: string}
+        expiresAt: {type: string, format: date-time}
+        csrfToken: {type: string}
+
+    PasskeySummary:
+      type: object
+      required: [id, name, createdAt, signCount]
+      properties:
+        id: {type: string, description: Raw credential ID encoded with base64url}
+        name: {type: string}
+        createdAt: {type: string, format: date-time}
+        signCount: {type: integer, format: int64}
+
+    WebAuthnOptionsEnvelope:
+      type: object
+      additionalProperties: true
+      description: WebAuthn JSON options returned by the relying-party library.
+
     Event:
       type: object
       required: [schemaVersion, id, type, timestamp, severity, data]

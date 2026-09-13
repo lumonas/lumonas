@@ -11,11 +11,16 @@ Initial:
 - rate limiting;
 - optional TOTP 2FA.
 
-Planned:
+Implemented backend primitives:
 
-- passkeys/WebAuthn;
-- multiple admins;
-- role-based permissions.
+- username-bound passkey/WebAuthn registration and sign-in ceremonies;
+- encrypted-at-rest-independent credential metadata persisted in SQLite;
+- single-use, expiring ceremony state and monotonic signature counters;
+- self-service passkey management with owner/admin delegation controls.
+
+The management UI currently exposes passkey sign-in; passkey enrollment UI and
+discoverable username-less sign-in remain follow-up work. Multiple admins and
+role-based permissions are supported by the existing management identity model.
 
 ## Management vs file users
 

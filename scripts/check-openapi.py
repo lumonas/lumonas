@@ -20,6 +20,7 @@ CASE_RE = re.compile(
 LITERAL_RE = re.compile(r'endpoint == "(?P<endpoint>[^"]+)"')
 PREFIX_RE = re.compile(r'strings\.HasPrefix\(endpoint, "(?P<prefix>[^"]+)"\)')
 SUFFIX_RE = re.compile(r'strings\.HasSuffix\(endpoint, "(?P<suffix>[^"]+)"\)')
+CONTAINS_RE = re.compile(r'strings\.Contains\(endpoint, "(?P<needle>[^"]+)"\)')
 PROTOCOLS_RE = re.compile(r'strings\.TrimPrefix\(endpoint, "(?P<prefix>[^"]+)"\), "(?P<marker>[^"]+)/"')
 
 METHODS = {"Get": "get", "Post": "post", "Patch": "patch", "Put": "put", "Delete": "delete"}
@@ -61,6 +62,7 @@ def routes_from_go(source: str) -> set[tuple[str, str]]:
         literal = LITERAL_RE.search(condition)
         prefix = PREFIX_RE.search(condition)
         suffix = SUFFIX_RE.search(condition)
+        contains = CONTAINS_RE.search(condition)
         protocols = PROTOCOLS_RE.search(condition)
         if literal:
             routes.add((method, literal.group("endpoint")))
@@ -71,6 +73,8 @@ def routes_from_go(source: str) -> set[tuple[str, str]]:
             routes.add((method, SPECIAL_PREFIX[(method, prefix.group("prefix"))]))
         elif prefix and suffix:
             routes.add((method, join_path(prefix.group("prefix"), suffix.group("suffix"))))
+        elif prefix and contains and contains.group("needle") == "/passkeys/":
+            routes.add((method, f"{prefix.group('prefix')}{{id}}/passkeys/{{credentialId}}"))
         elif prefix:
             routes.add((method, f"{prefix.group('prefix')}{{id}}"))
     return routes

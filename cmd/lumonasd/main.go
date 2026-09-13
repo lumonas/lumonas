@@ -70,6 +70,8 @@ type apiServer struct {
 	csrfMu                      sync.Mutex
 	fixStages                   map[string]string
 	fixStageMu                  sync.Mutex
+	passkeyCeremonies           map[string]passkeyCeremony
+	passkeyMu                   sync.Mutex
 	runtimeStateFunc            func() map[string]any
 	rateMu                      sync.Mutex
 	rateAttempts                map[string][]time.Time
@@ -241,6 +243,23 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.authLogout(w, r)
 	case r.Method == http.MethodGet && endpoint == "/auth/csrf":
 		s.csrfForSession(w, r)
+	case r.Method == http.MethodPost && endpoint == "/auth/passkeys/login/begin":
+		s.passkeyLoginBegin(w, r)
+	case r.Method == http.MethodPost && endpoint == "/auth/passkeys/login/finish":
+		s.passkeyLoginFinish(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/passkeys/register/begin"):
+		s.passkeyRegisterBegin(w, r, passkeyUserID(endpoint))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/passkeys/register/finish"):
+		s.passkeyRegisterFinish(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/users/") && strings.HasSuffix(endpoint, "/passkeys"):
+		s.listPasskeys(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/users/") && strings.Contains(endpoint, "/passkeys/"):
+		parts := strings.Split(strings.Trim(endpoint, "/"), "/")
+		if len(parts) == 4 {
+			s.deletePasskey(w, r, parts[1], parts[3])
+		} else {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "passkey not found"})
+		}
 	case r.Method == http.MethodGet && endpoint == "/users":
 		s.listUsers(w, r)
 	case r.Method == http.MethodGet && endpoint == "/principals":
@@ -709,7 +728,7 @@ func (s *apiServer) authLogout(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.authEnabled() || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/login/2fa" || r.URL.Path == "/api/v1/auth/logout" {
+		if !s.authEnabled() || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/login/2fa" || r.URL.Path == "/api/v1/auth/passkeys/login/begin" || r.URL.Path == "/api/v1/auth/passkeys/login/finish" || r.URL.Path == "/api/v1/auth/logout" {
 			next.ServeHTTP(w, r)
 			return
 		}
