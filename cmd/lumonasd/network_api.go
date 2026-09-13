@@ -253,7 +253,7 @@ func (s *apiServer) applyWiFiConnection(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	s.recordRequestAudit(r, actor, "network.connection.apply", id, map[string]any{"operationId": operationID, "type": "wifi"})
-	s.publish("network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"operationId": operationID, "state": "activating"})
+	s.publishActor(actor, "network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"operationId": operationID, "state": "activating"})
 	writeJSON(w, http.StatusAccepted, result)
 }
 
@@ -319,7 +319,7 @@ func (s *apiServer) updateNetworkBindings(w http.ResponseWriter, r *http.Request
 	}
 	s.recordRequestAudit(r, actor, "network.binding.update", "bindings", nil)
 	s.advanceGeneration("network.binding.update")
-	s.publish("network.binding.updated", "warning", nil, map[string]any{"requiresFirewallRegeneration": true})
+	s.publishActor(actor, "network.binding.updated", "warning", nil, map[string]any{"requiresFirewallRegeneration": true})
 	writeJSON(w, http.StatusOK, values)
 }
 
@@ -380,7 +380,7 @@ func (s *apiServer) updateNetworkFirewall(w http.ResponseWriter, r *http.Request
 	}
 	s.recordRequestAudit(r, actor, "network.firewall.update", "firewall", nil)
 	s.advanceGeneration("network.firewall.update")
-	s.publish("network.firewall.updated", "warning", nil, nil)
+	s.publishActor(actor, "network.firewall.updated", "warning", nil, nil)
 	writeJSON(w, http.StatusOK, value)
 }
 

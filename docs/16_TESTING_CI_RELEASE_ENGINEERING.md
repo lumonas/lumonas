@@ -597,7 +597,10 @@ correlation ID in context. API-created jobs persist it and the authenticated
 actor, and privileged calls inherit it; daemon-created jobs use their stable
 job ID as the fallback correlation key and `system` as the actor. Events and
 audit rows persist first-class correlation, operation, plan-hash, actor,
-resource, and generation fields while preserving
+resource, and generation fields. Request-originated mutation events are
+checked at the envelope level so actor attribution does not leak into payload
+data, while scheduled and daemon-originated events remain `system`.
+The original metadata payload is preserved
 the original metadata payload for compatibility.
 
 Host integration commands use a shared bounded runner. Privileged commands,

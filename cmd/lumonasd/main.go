@@ -359,7 +359,11 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && endpoint == "/recovery/restore/stage":
 		s.recoveryStage(w, r)
 	case r.Method == http.MethodPost && endpoint == "/recovery/export":
-		s.recoveryExport(w, r.Context())
+		actor, ok := s.identityActor(w, r, true)
+		if !ok {
+			return
+		}
+		s.recoveryExport(w, r.Context(), actor)
 	case r.Method == http.MethodGet && endpoint == "/backups/status":
 		s.backupStatus(w, r)
 	case r.Method == http.MethodGet && endpoint == "/backups/schedule":
@@ -1275,7 +1279,7 @@ func (s *apiServer) recoveryStatus(w http.ResponseWriter) {
 	writeJSON(w, http.StatusOK, status)
 }
 
-func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context) {
+func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context, actors ...string) {
 	key := s.recoveryKeyString()
 	if key == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "LUMONAS_RECOVERY_KEY is not configured"})
@@ -1339,7 +1343,11 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context) {
 		return
 	}
 	s.pruneRecoveryBundles(directory, 20)
-	s.publish("recovery.bundle.created", "info", nil, map[string]any{"generation": persisted.Manifest.Generation})
+	actor := "system"
+	if len(actors) > 0 && actors[0] != "" {
+		actor = actors[0]
+	}
+	s.publishActor(actor, "recovery.bundle.created", "info", nil, map[string]any{"generation": persisted.Manifest.Generation})
 	writeJSON(w, http.StatusCreated, map[string]any{"path": persisted.LatestPath, "manifest": persisted.Manifest, "verified": true, "appdataArchives": len(appdata.Payloads), "warnings": appdata.Warnings})
 }
 
@@ -1451,6 +1459,10 @@ func (s *apiServer) recoveryPlan(w http.ResponseWriter) {
 }
 
 func (s *apiServer) recoveryStage(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		Confirmed       bool `json:"confirmed"`
 		Reauthenticated bool `json:"reauthenticated"`
@@ -1481,7 +1493,7 @@ func (s *apiServer) recoveryStage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.pruneRecoveryStages(stagingDirectory, 3, result.Directory)
-	s.publish("recovery.restore.staged", "warning", nil, map[string]any{"directory": result.Directory, "files": len(result.Files), "generation": result.Manifest.Generation})
+	s.publishActor(actor, "recovery.restore.staged", "warning", nil, map[string]any{"directory": result.Directory, "files": len(result.Files), "generation": result.Manifest.Generation})
 	writeJSON(w, http.StatusAccepted, result)
 }
 
@@ -1545,6 +1557,10 @@ func (s *apiServer) networkWiFiScan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		ConnectionUUID  string            `json:"connectionUuid"`
 		ConnectionID    string            `json:"connectionId"`
@@ -1594,7 +1610,7 @@ func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.publish("network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
+	s.publishActor(actor, "network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
 	writeJSON(w, http.StatusAccepted, result)
 }
 
@@ -2497,7 +2513,7 @@ func (s *apiServer) dockerImagesCheckUpdates(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	s.recordRequestAudit(r, actor, "docker.images.check_updates", "docker", map[string]any{"updates": updates})
-	s.publish("docker.updates.checked", "info", nil, map[string]any{"updates": updates, "images": len(images)})
+	s.publishActor(actor, "docker.updates.checked", "info", nil, map[string]any{"updates": updates, "images": len(images)})
 	writeJSON(w, http.StatusOK, images)
 }
 

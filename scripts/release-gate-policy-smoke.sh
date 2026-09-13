@@ -66,6 +66,8 @@ for marker in ("TestPoolSetupPlanRejectsSanitizedBranchCollision", "TestRenderSn
         raise SystemExit(f"safety-recovery gate is missing replacement coverage: {marker}")
 if "TestEnsureRestartedJobsFailsClosedForInterruptedWork" not in safety_block:
     raise SystemExit("safety-recovery gate is missing restart job event coverage")
+if "TestPublishActorSetsEventEnvelopeWithoutPayloadMutation" not in safety_block:
+    raise SystemExit("safety-recovery gate is missing request actor event coverage")
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", race_match.group(0), re.M):
     raise SystemExit("race-fuzz job is not running the centralized race/fuzz harness")
