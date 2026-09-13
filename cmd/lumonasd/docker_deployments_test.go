@@ -74,3 +74,55 @@ func TestDockerDeploymentHistoryRoute(t *testing.T) {
 		t.Fatalf("unexpected deployment response: %#v", deployments)
 	}
 }
+
+func TestPendingUpdateRestoresImagesAfterDaemonRestart(t *testing.T) {
+	root := t.TempDir()
+	stackDir := filepath.Join(root, "media")
+	if err := os.MkdirAll(stackDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	before := "services:\n  media:\n    image: example/media:1\n"
+	if err := os.WriteFile(filepath.Join(stackDir, "compose.yaml"), []byte("services:\n  media:\n    image: example/media:2\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	server := testServer(t)
+	var commands []string
+	server.dockerService = dockerruntime.New(root, func(_ context.Context, name string, args ...string) ([]byte, error) {
+		commands = append(commands, strings.Join(append([]string{name}, args...), " "))
+		return nil, nil
+	})
+	if err := server.store.CreateDockerDeployment(model.DockerDeployment{
+		ID:              "deployment-restart",
+		StackName:       "media",
+		Kind:            "update",
+		ComposeBefore:   &before,
+		ComposeAfter:    "services:\n  media:\n    image: example/media:2\n",
+		ImageBeforeJSON: `[{"Repository":"example/media","Tag":"1","ID":"sha256:old"}]`,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server.reconcilePendingDeployments(context.Background())
+	restored, err := os.ReadFile(filepath.Join(stackDir, "compose.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(restored) != before {
+		t.Fatalf("pending update did not restore compose: %q", restored)
+	}
+	if !containsCommand(commands, "docker tag sha256:old example/media:1") || !containsCommand(commands, "--force-recreate") {
+		t.Fatalf("pending update did not restore image references: %v", commands)
+	}
+	history, err := server.store.DockerDeployments(10, "media")
+	if err != nil || len(history) != 1 || history[0].State != "rolled_back" {
+		t.Fatalf("unexpected restart recovery history: %#v err=%v", history, err)
+	}
+}
+
+func containsCommand(commands []string, fragment string) bool {
+	for _, command := range commands {
+		if strings.Contains(command, fragment) {
+			return true
+		}
+	}
+	return false
+}

@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
@@ -15,6 +16,7 @@ CREATE TABLE IF NOT EXISTS docker_deployments (
   state TEXT NOT NULL,
   compose_before TEXT,
   compose_after TEXT NOT NULL,
+  image_before_json TEXT NOT NULL DEFAULT '[]',
   error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -22,8 +24,18 @@ CREATE TABLE IF NOT EXISTS docker_deployments (
 CREATE INDEX IF NOT EXISTS docker_deployments_stack_idx ON docker_deployments(stack_name, state, updated_at);`
 
 func (s *Store) ensureDeploymentsSchema() error {
-	_, err := s.db.Exec(deploymentsSchema)
-	return err
+	if _, err := s.db.Exec(deploymentsSchema); err != nil {
+		return err
+	}
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('docker_deployments') WHERE name='image_before_json'`).Scan(&count); err != nil {
+		return err
+	}
+	if count == 0 {
+		_, err := s.db.Exec(`ALTER TABLE docker_deployments ADD COLUMN image_before_json TEXT NOT NULL DEFAULT '[]'`)
+		return err
+	}
+	return nil
 }
 
 // CreateDockerDeployment persists a new pending deployment record. Any still
@@ -34,11 +46,18 @@ func (s *Store) CreateDockerDeployment(deployment model.DockerDeployment) error 
 		return err
 	}
 	now := time.Now().UTC().Format(timeFormat)
+	imageBefore := deployment.ImageBeforeJSON
+	if imageBefore == "" {
+		imageBefore = "[]"
+	}
+	if !json.Valid([]byte(imageBefore)) {
+		return sql.ErrNoRows
+	}
 	if _, err := s.db.Exec(`UPDATE docker_deployments SET state='failed',error='superseded by a newer deployment',updated_at=? WHERE stack_name=? AND state='pending'`, now, deployment.StackName); err != nil {
 		return err
 	}
-	_, err := s.db.Exec(`INSERT INTO docker_deployments(id,stack_name,kind,state,compose_before,compose_after,error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
-		deployment.ID, deployment.StackName, deployment.Kind, "pending", nullableText(deployment.ComposeBefore), deployment.ComposeAfter, "", now, now)
+	_, err := s.db.Exec(`INSERT INTO docker_deployments(id,stack_name,kind,state,compose_before,compose_after,image_before_json,error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		deployment.ID, deployment.StackName, deployment.Kind, "pending", nullableText(deployment.ComposeBefore), deployment.ComposeAfter, imageBefore, "", now, now)
 	return err
 }
 
@@ -62,7 +81,7 @@ func (s *Store) PendingDockerDeployments() ([]model.DockerDeployment, error) {
 	if err := s.ensureDeploymentsSchema(); err != nil {
 		return nil, err
 	}
-	return s.scanDockerDeployments(`SELECT id,stack_name,kind,state,compose_before,compose_after,error,created_at,updated_at FROM docker_deployments WHERE state='pending' ORDER BY created_at ASC`)
+	return s.scanDockerDeployments(`SELECT id,stack_name,kind,state,compose_before,compose_after,image_before_json,error,created_at,updated_at FROM docker_deployments WHERE state='pending' ORDER BY created_at ASC`)
 }
 
 // DockerDeployments lists recent deployments, newest first, optionally scoped
@@ -74,7 +93,7 @@ func (s *Store) DockerDeployments(limit int, stackName string) ([]model.DockerDe
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	query := `SELECT id,stack_name,kind,state,compose_before,compose_after,error,created_at,updated_at FROM docker_deployments`
+	query := `SELECT id,stack_name,kind,state,compose_before,compose_after,image_before_json,error,created_at,updated_at FROM docker_deployments`
 	args := []any{}
 	if stackName != "" {
 		query += ` WHERE stack_name=?`
@@ -95,10 +114,12 @@ func (s *Store) scanDockerDeployments(query string, args ...any) ([]model.Docker
 	for rows.Next() {
 		var deployment model.DockerDeployment
 		var before sql.NullString
+		var imageBefore string
 		var created, updated string
-		if err := rows.Scan(&deployment.ID, &deployment.StackName, &deployment.Kind, &deployment.State, &before, &deployment.ComposeAfter, &deployment.Error, &created, &updated); err != nil {
+		if err := rows.Scan(&deployment.ID, &deployment.StackName, &deployment.Kind, &deployment.State, &before, &deployment.ComposeAfter, &imageBefore, &deployment.Error, &created, &updated); err != nil {
 			return nil, err
 		}
+		deployment.ImageBeforeJSON = imageBefore
 		if before.Valid {
 			value := before.String
 			deployment.ComposeBefore = &value

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -81,7 +82,15 @@ func (s *apiServer) runStackUpdateDeployment(ctx context.Context, stack dockerru
 	if composeAfter == "" && beforeErr == nil {
 		composeAfter = composeBefore
 	}
-	deployment := model.DockerDeployment{ID: newID("deploy"), StackName: stack.Name, Kind: "update", ComposeBefore: before, ComposeAfter: composeAfter}
+	imageBefore, imageErr := s.dockerService.SnapshotStackImages(ctx, stack)
+	if imageErr != nil {
+		return stack, imageErr
+	}
+	imageBeforeJSON, imageErr := json.Marshal(imageBefore)
+	if imageErr != nil {
+		return stack, imageErr
+	}
+	deployment := model.DockerDeployment{ID: newID("deploy"), StackName: stack.Name, Kind: "update", ComposeBefore: before, ComposeAfter: composeAfter, ImageBeforeJSON: string(imageBeforeJSON)}
 	if err := s.store.CreateDockerDeployment(deployment); err != nil {
 		return stack, err
 	}
@@ -98,7 +107,7 @@ func (s *apiServer) runStackUpdateDeployment(ctx context.Context, stack dockerru
 		stack = updated
 		s.advanceGeneration("docker.stack.compose.update")
 	}
-	result, updateErr := s.dockerService.UpdateStack(ctx, stack, probe, s.deploymentOptions.runtime())
+	result, updateErr := s.dockerService.UpdateStackWithSnapshot(ctx, stack, probe, s.deploymentOptions.runtime(), imageBefore)
 	if updateErr != nil {
 		state := "failed"
 		reason := result.Reason
@@ -157,12 +166,22 @@ func (s *apiServer) reconcilePendingDeployments(ctx context.Context) {
 				state = "failed"
 			}
 		case "update", "rollback":
-			if deployment.ComposeBefore != nil && *deployment.ComposeBefore != "" {
-				if err := s.dockerService.RestoreCompose(deployment.StackName, *deployment.ComposeBefore); err != nil {
-					if s.log != nil {
-						s.log.Warn("interrupted update could not be restored", "stack", deployment.StackName, "error", err)
-					}
-					reason += "; compose restore failed: " + err.Error()
+			if deployment.ComposeBefore == nil || *deployment.ComposeBefore == "" {
+				reason += "; previous compose snapshot is missing"
+				state = "failed"
+			} else if err := s.dockerService.RestoreCompose(deployment.StackName, *deployment.ComposeBefore); err != nil {
+				if s.log != nil {
+					s.log.Warn("interrupted update could not be restored", "stack", deployment.StackName, "error", err)
+				}
+				reason += "; compose restore failed: " + err.Error()
+				state = "failed"
+			} else {
+				var images []dockerruntime.ImageSnapshot
+				if err := json.Unmarshal([]byte(deployment.ImageBeforeJSON), &images); err != nil {
+					reason += "; image snapshot is invalid"
+					state = "failed"
+				} else if err := s.dockerService.RestoreStackImages(ctx, deployment.StackName, images); err != nil {
+					reason += "; image restore failed: " + err.Error()
 					state = "failed"
 				}
 			}

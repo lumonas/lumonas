@@ -15,11 +15,12 @@ func TestDockerDeploymentsPersistTransactionsAcrossQueries(t *testing.T) {
 
 	before := "services:\n  app:\n    image: example/app:1\n"
 	if err := database.CreateDockerDeployment(model.DockerDeployment{
-		ID:            "deployment-1",
-		StackName:     "media",
-		Kind:          "update",
-		ComposeBefore: &before,
-		ComposeAfter:  "services:\n  app:\n    image: example/app:2\n",
+		ID:              "deployment-1",
+		StackName:       "media",
+		Kind:            "update",
+		ComposeBefore:   &before,
+		ComposeAfter:    "services:\n  app:\n    image: example/app:2\n",
+		ImageBeforeJSON: `[{"Repository":"example/app","Tag":"1","ID":"sha256:old"}]`,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +28,7 @@ func TestDockerDeploymentsPersistTransactionsAcrossQueries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pending) != 1 || pending[0].State != "pending" || pending[0].ComposeBefore == nil {
+	if len(pending) != 1 || pending[0].State != "pending" || pending[0].ComposeBefore == nil || pending[0].ImageBeforeJSON == "" {
 		t.Fatalf("unexpected pending deployment: %#v", pending)
 	}
 	if err := database.UpdateDockerDeployment("deployment-1", "committed", ""); err != nil {

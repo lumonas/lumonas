@@ -147,6 +147,7 @@ compose_after
 error
 created_at
 updated_at
+image_before_json (internal recovery field)
 ```
 
 Docker stack installation and updates are recorded as transactions. The

@@ -52,15 +52,16 @@ func (f *UpdateFailure) Error() string { return f.err.Error() }
 
 func (f *UpdateFailure) Unwrap() error { return f.err }
 
-// imageSnapshot records the image ID a tag pointed at before an update so the
-// tag can be re-pointed back if the update fails its health gate.
-type imageSnapshot struct {
+// ImageSnapshot records the image ID a tag pointed at before an update so the
+// tag can be re-pointed back if the update fails its health gate or the daemon
+// restarts before the transaction reaches a terminal state.
+type ImageSnapshot struct {
 	Repository string `json:"Repository"`
 	Tag        string `json:"Tag"`
 	ID         string `json:"ID"`
 }
 
-func (i imageSnapshot) ref() string {
+func (i ImageSnapshot) ref() string {
 	return i.Repository + ":" + i.Tag
 }
 
@@ -71,6 +72,22 @@ func (i imageSnapshot) ref() string {
 // The probe callback is supplied by the caller so health semantics (running
 // state, restart counters, app-level checks) stay with the caller.
 func (s Service) UpdateStack(ctx context.Context, stack Stack, probe func(context.Context) error, options UpdateOptions) (UpdateResult, error) {
+	before, err := s.SnapshotStackImages(ctx, stack)
+	if err != nil {
+		return UpdateResult{}, &UpdateFailure{Result: UpdateResult{Reason: err.Error()}, err: err}
+	}
+	return s.updateStackWithSnapshot(ctx, stack, probe, options, before)
+}
+
+// UpdateStackWithSnapshot is the crash-safe variant used by the daemon
+// transaction layer. The snapshot is captured before Compose staging, so an
+// update that also changes image references can still roll back to the old
+// stack after the new file has been written.
+func (s Service) UpdateStackWithSnapshot(ctx context.Context, stack Stack, probe func(context.Context) error, options UpdateOptions, before []ImageSnapshot) (UpdateResult, error) {
+	return s.updateStackWithSnapshot(ctx, stack, probe, options, before)
+}
+
+func (s Service) updateStackWithSnapshot(ctx context.Context, stack Stack, probe func(context.Context) error, options UpdateOptions, before []ImageSnapshot) (UpdateResult, error) {
 	if probe == nil {
 		return UpdateResult{}, errors.New("health probe is required")
 	}
@@ -82,11 +99,6 @@ func (s Service) UpdateStack(ctx context.Context, stack Stack, probe func(contex
 		return UpdateResult{}, err
 	}
 	options = options.withDefaults()
-
-	before, err := s.composeImages(ctx, composePath)
-	if err != nil {
-		return UpdateResult{}, &UpdateFailure{Result: UpdateResult{Reason: err.Error()}, err: err}
-	}
 	refs := make([]string, 0, len(before))
 	for _, image := range before {
 		refs = append(refs, image.ref())
@@ -139,7 +151,33 @@ func (s Service) probeUntilHealthy(ctx context.Context, probe func(context.Conte
 
 // rollbackStack re-points each previously current tag at its old image ID and
 // recreates the stack from those images.
-func (s Service) rollbackStack(ctx context.Context, composePath string, before []imageSnapshot) error {
+// SnapshotStackImages records the current image IDs for a stack before a
+// mutating update. Callers can persist the returned values for crash recovery.
+func (s Service) SnapshotStackImages(ctx context.Context, stack Stack) ([]ImageSnapshot, error) {
+	if !validStackName(stack.Name) {
+		return nil, errors.New("invalid stack name")
+	}
+	composePath := filepath.Join(s.Root, stack.Name, "compose.yaml")
+	if _, err := os.Stat(composePath); err != nil {
+		return nil, err
+	}
+	return s.composeImages(ctx, composePath)
+}
+
+// RestoreStackImages re-points the recorded tags to their previous image IDs
+// and recreates the stack from the restored references.
+func (s Service) RestoreStackImages(ctx context.Context, stackName string, before []ImageSnapshot) error {
+	if !validStackName(stackName) {
+		return errors.New("invalid stack name")
+	}
+	composePath := filepath.Join(s.Root, stackName, "compose.yaml")
+	if _, err := os.Stat(composePath); err != nil {
+		return err
+	}
+	return s.rollbackStack(ctx, composePath, before)
+}
+
+func (s Service) rollbackStack(ctx context.Context, composePath string, before []ImageSnapshot) error {
 	for _, image := range before {
 		if image.Repository == "" || image.Tag == "" || image.ID == "" {
 			continue
@@ -152,17 +190,17 @@ func (s Service) rollbackStack(ctx context.Context, composePath string, before [
 	return err
 }
 
-func (s Service) composeImages(ctx context.Context, composePath string) ([]imageSnapshot, error) {
+func (s Service) composeImages(ctx context.Context, composePath string) ([]ImageSnapshot, error) {
 	out, err := s.Run(ctx, "docker", "compose", "-f", composePath, "images", "--format", "json")
 	if err != nil {
 		return nil, fmt.Errorf("compose images failed: %w", err)
 	}
-	snapshot := make([]imageSnapshot, 0)
+	snapshot := make([]ImageSnapshot, 0)
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		if line == "" {
 			continue
 		}
-		var image imageSnapshot
+		var image ImageSnapshot
 		if json.Unmarshal([]byte(line), &image) != nil {
 			continue
 		}

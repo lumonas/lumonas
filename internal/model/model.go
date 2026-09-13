@@ -188,15 +188,16 @@ type DockerSummary struct {
 }
 
 type DockerDeployment struct {
-	ID            string    `json:"id"`
-	StackName     string    `json:"stackName"`
-	Kind          string    `json:"kind"`
-	State         string    `json:"state"`
-	ComposeBefore *string   `json:"composeBefore,omitempty"`
-	ComposeAfter  string    `json:"composeAfter"`
-	Error         string    `json:"error,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID              string    `json:"id"`
+	StackName       string    `json:"stackName"`
+	Kind            string    `json:"kind"`
+	State           string    `json:"state"`
+	ComposeBefore   *string   `json:"composeBefore,omitempty"`
+	ComposeAfter    string    `json:"composeAfter"`
+	Error           string    `json:"error,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	ImageBeforeJSON string    `json:"-"`
 }
 
 type ActivityEvent struct {
