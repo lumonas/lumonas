@@ -63,6 +63,7 @@ type apiServer struct {
 	safetyMu                    sync.Mutex
 	safetyUntil                 time.Time
 	brokerExec                  func(ctx context.Context, request privileged.Request) error
+	upsDiscover                 func(context.Context, []string) []power.UPS
 	recordNetworkCheckpointFn   func(operationID, connectionID, state string) error
 	completeNetworkCheckpointFn func(operationID, state string) (string, error)
 	persistExecutedPlanFn       func(storage.Plan) error
@@ -1816,7 +1817,7 @@ func (s *apiServer) ups(w http.ResponseWriter, r *http.Request) {
 			names = append(names, trimmed)
 		}
 	}
-	writeJSON(w, http.StatusOK, power.Discover(ctx, names, nil))
+	writeJSON(w, http.StatusOK, s.discoverUPS(ctx, names))
 }
 
 func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {
@@ -2010,7 +2011,7 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	for _, unit := range power.Discover(ctx, s.configuredUPSNames(), nil) {
+	for _, unit := range s.discoverUPS(ctx, s.configuredUPSNames()) {
 		if !unit.OnBattery {
 			continue
 		}

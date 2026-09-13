@@ -104,14 +104,21 @@ func (s *apiServer) upsMonitorLoop() {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		for _, unit := range power.Discover(ctx, s.configuredUPSNames(), nil) {
-			if power.ShouldShutdown(unit, s.autoShutdownPolicy()) {
-				s.publish("ups.shutdown.pending", "critical", nil, map[string]any{"ups": unit.Name, "runtimeSec": unit.RuntimeSec, "chargePercent": unit.ChargePercent})
-				s.requestUPSShutdown(unit.Name)
-				break
-			}
-		}
+		s.checkUPSShutdown(ctx)
 		cancel()
+	}
+}
+
+func (s *apiServer) checkUPSShutdown(ctx context.Context) {
+	if s.maintenanceModeEnabled() || !s.autoShutdownPolicy().Enabled {
+		return
+	}
+	for _, unit := range s.discoverUPS(ctx, s.configuredUPSNames()) {
+		if power.ShouldShutdown(unit, s.autoShutdownPolicy()) {
+			s.publish("ups.shutdown.pending", "critical", nil, map[string]any{"ups": unit.Name, "runtimeSec": unit.RuntimeSec, "chargePercent": unit.ChargePercent})
+			s.requestUPSShutdown(unit.Name)
+			break
+		}
 	}
 }
 
@@ -219,4 +226,11 @@ func (s *apiServer) configuredUPSNames() []string {
 		return names
 	}
 	return nil
+}
+
+func (s *apiServer) discoverUPS(ctx context.Context, names []string) []power.UPS {
+	if s.upsDiscover != nil {
+		return s.upsDiscover(ctx, names)
+	}
+	return power.Discover(ctx, names, nil)
 }

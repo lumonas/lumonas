@@ -99,6 +99,29 @@ func TestUPSConfigIsPersistedAndValidated(t *testing.T) {
 	}
 }
 
+func TestUPSMonitorTriggersOrderedPrivilegedShutdown(t *testing.T) {
+	server := testServer(t)
+	runtime := 30.0
+	if err := server.store.SetMeta("ups_shutdown_policy", `{"enabled":true,"minimumRuntimeSec":60,"minimumCharge":10}`); err != nil {
+		t.Fatal(err)
+	}
+	server.upsDiscover = func(_ context.Context, names []string) []power.UPS {
+		if len(names) != 0 {
+			t.Fatalf("expected auto-discovery with no configured names, got %v", names)
+		}
+		return []power.UPS{{Name: "ups-a", Status: "OB", OnBattery: true, RuntimeSec: &runtime}}
+	}
+	var request privileged.Request
+	server.brokerExec = func(_ context.Context, value privileged.Request) error {
+		request = value
+		return nil
+	}
+	server.checkUPSShutdown(context.Background())
+	if request.Operation != "power.shutdown" || request.OperationID == "" || request.RequestedState["action"] != "poweroff" {
+		t.Fatalf("expected ordered privileged shutdown request, got %#v", request)
+	}
+}
+
 func TestPowerActionRequiresAdministrativeIdentity(t *testing.T) {
 	server := testServer(t)
 	server.authRequired = true

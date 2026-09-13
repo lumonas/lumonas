@@ -425,7 +425,7 @@ func defaultSettings(s *apiServer) map[string]any {
 	cancelWOL()
 	ups := make([]any, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	for _, unit := range power.Discover(ctx, s.configuredUPSNames(), nil) {
+	for _, unit := range s.discoverUPS(ctx, s.configuredUPSNames()) {
 		ups = append(ups, map[string]any{"name": unit.Name, "status": unit.Status, "chargePercent": unit.ChargePercent, "runtimeSec": unit.RuntimeSec, "onBattery": unit.OnBattery})
 	}
 	cancel()
