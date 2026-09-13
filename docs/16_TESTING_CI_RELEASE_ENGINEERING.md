@@ -68,6 +68,9 @@ File-identity provisioning and ACL changes are also operation-scoped at the
 privileged boundary. System-user, Samba-user, and ACL mutations carry a
 non-empty operation ID before the worker can execute them; the safety gate
 checks rejection of unscoped requests.
+The same release-blocking check covers NetworkManager checkpoints, Wi-Fi
+connection changes, Wake-on-LAN, service reloads, and power actions so no
+mutating worker path can be invoked without an operation scope.
 
 ### QEMU end-to-end
 

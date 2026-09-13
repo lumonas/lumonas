@@ -194,7 +194,7 @@ func TestExecuteSnapraidUsesAllowListedConfigAndPercent(t *testing.T) {
 
 func TestExecutePowerActionIsAllowListed(t *testing.T) {
 	command := ""
-	result := execute(request{Operation: "power.action", PlanHash: "power-1", RequestedState: map[string]any{"action": "reboot"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
+	result := execute(request{Operation: "power.action", OperationID: "power-1", PlanHash: "power-1", RequestedState: map[string]any{"action": "reboot"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, nil, func(name string, args ...string) ([]byte, error) {
 		command = name + " " + strings.Join(args, " ")
 		return nil, nil
 	})
@@ -321,6 +321,23 @@ func TestShareActivationRequiresOperationID(t *testing.T) {
 			})
 			if result.OK || !strings.Contains(result.Error, "operationId is required") {
 				t.Fatalf("share mutation without an operation ID was accepted: %#v", result)
+			}
+		})
+	}
+}
+
+func TestRemainingMutationsRequireOperationID(t *testing.T) {
+	for _, operation := range []string{
+		"network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback",
+		"network.wifi.connect", "network.wol.set", "service.reload", "power.action", "power.shutdown",
+	} {
+		t.Run(operation, func(t *testing.T) {
+			result := execute(request{Operation: operation, PlanHash: "mutation-plan", Confirmed: true}, nil, func(string, ...string) ([]byte, error) {
+				t.Fatal("mutation command ran without an operation ID")
+				return nil, nil
+			})
+			if result.OK || !strings.Contains(result.Error, "operationId is required") {
+				t.Fatalf("mutation without an operation ID was accepted: %#v", result)
 			}
 		})
 	}

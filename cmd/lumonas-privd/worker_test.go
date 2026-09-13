@@ -15,7 +15,7 @@ func TestBrokerRequiresConfirmationBeforeForwarding(t *testing.T) {
 }
 
 func TestWorkerRejectsOperationsOutsideItsCapabilityDomain(t *testing.T) {
-	result := executeWorker(request{Operation: "power.action", PlanHash: "plan-1", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute)}, "storage")
+	result := executeWorker(request{Operation: "power.action", OperationID: "power-1", PlanHash: "plan-1", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute)}, "storage")
 	if result.OK || result.Error != "operation is not allow-listed for this worker" {
 		t.Fatalf("unexpected worker response: %#v", result)
 	}
@@ -40,7 +40,7 @@ func TestBrokerForwardsConfirmedOperationToRootOnlyWorker(t *testing.T) {
 		}
 		done <- json.NewEncoder(server).Encode(response{OK: true})
 	}()
-	result := executeBroker(request{Operation: "power.action", PlanHash: "plan-1", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute)})
+	result := executeBroker(request{Operation: "power.action", OperationID: "power-1", PlanHash: "plan-1", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute)})
 	if !result.OK {
 		t.Fatalf("expected worker response, got %#v", result)
 	}

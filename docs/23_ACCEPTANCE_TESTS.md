@@ -625,3 +625,5 @@ ruleset unchanged.
 
 Pass if system-user, Samba-user, and ACL mutations are rejected without an
 operation ID and production provisioning requests include operation IDs.
+The same invariant applies to network checkpoint/Wi-Fi/WOL changes, service
+reloads, and power actions.
