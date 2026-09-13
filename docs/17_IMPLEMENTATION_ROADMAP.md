@@ -16,6 +16,7 @@ Deliver:
 - typed `lumonas-privd` IPC;
 - common resource IDs.
 - OpenAPI and frontend response-contract parity checks.
+- Named frontend response types are required to have OpenAPI component schemas.
 - bounded journald retention policy checks.
 - typed bounded network diagnostic command runner.
 - GPT disk GUID and partition UUID revalidation across destructive plans.

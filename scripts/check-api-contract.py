@@ -25,6 +25,7 @@ FRONTEND_METHODS = {
     "Delete": "delete",
     "Multipart": "post",
 }
+IGNORED_GENERIC_NAMES = {"Record"}
 
 
 def between(source: str, start: str, end: str) -> str:
@@ -53,6 +54,24 @@ def frontend_routes(source: str) -> set[tuple[str, str]]:
     return routes
 
 
+def frontend_response_types(source: str) -> set[str]:
+    """Return named response types used by frontend API calls."""
+    names: set[str] = set()
+    for match in re.finditer(r"\bapi(?:Get|Post|Patch|Put|Delete|Multipart)<([^>\n]+)>", source):
+        for name in re.findall(r"\b[A-Z][A-Za-z0-9_]*\b", match.group(1)):
+            if name not in IGNORED_GENERIC_NAMES:
+                names.add(name)
+    return names
+
+
+def declared_types(source: str) -> set[str]:
+    return set(re.findall(r"\b(?:export\s+)?(?:interface|type)\s+([A-Z][A-Za-z0-9_]*)", source))
+
+
+def openapi_schemas(source: str) -> set[str]:
+    return set(re.findall(r"^    ([A-Z][A-Za-z0-9_]*):$", source, re.MULTILINE))
+
+
 def route_matches(pattern: str, actual: str) -> bool:
     pattern_parts = [part for part in pattern.strip("/").split("/") if part]
     actual_parts = [part for part in actual.strip("/").split("/") if part]
@@ -68,6 +87,14 @@ def main() -> int:
     openapi = OPENAPI.read_text(encoding="utf-8")
     types = TYPES.read_text(encoding="utf-8")
     queries = QUERIES.read_text(encoding="utf-8")
+
+    response_types = frontend_response_types(queries)
+    missing_frontend_types = sorted(response_types - declared_types(types + "\n" + queries))
+    if missing_frontend_types:
+        raise SystemExit("frontend response types are not declared: " + ", ".join(missing_frontend_types))
+    missing_openapi_schemas = sorted(response_types - openapi_schemas(openapi))
+    if missing_openapi_schemas:
+        raise SystemExit("frontend response types are missing from OpenAPI schemas: " + ", ".join(missing_openapi_schemas))
 
     disk_fields = [
         "id", "name", "currentPath", "model", "serial", "wwn", "gptDiskGuid",
@@ -105,7 +132,7 @@ def main() -> int:
         details = ", ".join(f"{method.upper()} {path}" for method, path in missing_routes)
         raise SystemExit(f"frontend API calls are missing from OpenAPI/router contract: {details}")
 
-    print(f"API contract parity ok — Disk/Event fields and {len(frontend_routes(queries))} frontend API routes match OpenAPI")
+    print(f"API contract parity ok — {len(response_types)} named response types, Disk/Event fields, and {len(frontend_routes(queries))} frontend API routes match OpenAPI")
     return 0
 
 

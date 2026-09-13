@@ -220,6 +220,7 @@ require_line "$ROOT/scripts/log-identity-smoke.sh" 'SyslogIdentifier='
 require_line "$ROOT/.github/workflows/ci.yml" 'scripts/log-identity-smoke.sh'
 [ -x "$ROOT/scripts/log-identity-smoke.sh" ] || { echo "log identity smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'check-api-contract:'
+require_line "$ROOT/scripts/check-api-contract.py" 'frontend response types are missing from OpenAPI schemas'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
 require_line "$ROOT/Makefile" 'race-fuzz:'
 require_line "$ROOT/Makefile" 'upgrade-compatibility:'

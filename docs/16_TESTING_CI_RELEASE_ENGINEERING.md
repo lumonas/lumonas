@@ -162,8 +162,10 @@ timestamp. OpenAPI and frontend types are kept aligned with that response.
 
 The API contract checker also extracts every typed frontend API call from
 `web/src/api/queries.ts`, normalizes template parameters, and requires a
-matching documented/backend route. A frontend query cannot silently drift to
-an undocumented endpoint.
+matching documented/backend route. It also requires every named frontend
+response type to exist in both the shared TypeScript declarations and
+`docs/openapi.yaml`; inline response objects remain local to their query. A
+frontend query cannot silently drift to an undocumented endpoint or schema.
 
 Disk collection requests `PTUUID` from `lsblk` and uses the partition-table
 UUID as a stable fallback between serial and filesystem UUID. The collector
@@ -175,8 +177,9 @@ smoke covers WWN, serial, model, filesystem UUID, partition-table UUID, bus,
 and preservation of authoritative `lsblk` values.
 
 `check-api-contract.py` runs on every backend and installer-scripts job. It
-checks the stable Disk and LumoEvent field sets in OpenAPI and TypeScript, so
-route parity alone cannot hide a response-shape regression.
+checks the stable Disk and LumoEvent field sets in OpenAPI and TypeScript,
+requires all 56 named frontend response types to have OpenAPI components, and
+checks route parity so a response-shape or endpoint regression cannot hide.
 
 The black-box API smoke test additionally validates live JSON from the server,
 disk, metrics, and jobs endpoints, plus the JSON envelope of streamed SSE

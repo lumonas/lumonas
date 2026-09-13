@@ -395,6 +395,8 @@ frontend types, including correlation and operation metadata.
 
 It also checks that all frontend query and mutation paths resolve to documented
 backend routes after normalizing dynamic path parameters.
+Named frontend response types must also be declared in the shared TypeScript
+types and represented by OpenAPI component schemas.
 
 Run `scripts/disk-identity-smoke.sh`.
 

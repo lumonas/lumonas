@@ -3753,3 +3753,386 @@ components:
                   type: string
         security:
           type: object
+
+    ActivityEvent:
+      type: object
+      required: [id, timestamp, category, title]
+      properties:
+        id: {type: string}
+        timestamp: {type: string, format: date-time}
+        category: {type: string}
+        title: {type: string}
+        description: {type: string}
+        resource:
+          $ref: '#/components/schemas/ResourceRef'
+
+    AlertRule:
+      type: object
+      required: [id, name, condition, severity, routes, enabled]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        condition: {type: string}
+        severity: {$ref: '#/components/schemas/HealthState'}
+        routes: {type: array, items: {type: string}}
+        enabled: {type: boolean}
+        lastTriggeredAt: {type: string, format: date-time}
+
+    BackupJob:
+      type: object
+      required: [id, name, source, destinationId, schedule, strategy, jobType, enabled]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        source: {type: string}
+        destinationId: {type: string}
+        schedule: {type: string}
+        strategy: {type: string}
+        jobType: {type: string}
+        enabled: {type: boolean}
+        lastRun:
+          type: object
+          properties:
+            status: {$ref: '#/components/schemas/HealthState'}
+            at: {type: string, format: date-time}
+            detail: {type: string}
+
+    CapacityForecast:
+      type: object
+      required: [resourceId, totalBytes, usedBytes, sampleCount, windowDays, growthBytesPerDay, available]
+      properties:
+        resourceId: {type: string}
+        totalBytes: {type: integer, format: int64}
+        usedBytes: {type: integer, format: int64}
+        sampleCount: {type: integer}
+        windowDays: {type: integer}
+        growthBytesPerDay: {type: number, format: double}
+        daysToNinetyPercent: {type: number, nullable: true}
+        available: {type: boolean}
+        message: {type: string}
+
+    CatalogApp:
+      type: object
+      required: [id, name, category, tagline, description, accent, upstream, image, ports, form]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        category: {type: string}
+        tagline: {type: string}
+        description: {type: string}
+        accent: {type: string}
+        upstream: {type: string}
+        image: {type: string}
+        ports: {type: array, items: {type: integer}}
+        form:
+          type: array
+          items:
+            type: object
+            required: [id, label, type]
+            properties:
+              id: {type: string}
+              label: {type: string}
+              type: {type: string}
+              required: {type: boolean}
+              defaultValue: {type: string}
+              description: {type: string}
+              containerPath: {type: string}
+              defaultResource: {type: string}
+        popular: {type: boolean}
+        recovery: {$ref: '#/components/schemas/RecoveryContract'}
+        appdataPaths: {type: array, items: {type: string}}
+        dbDumpContainer: {type: string}
+
+    Checkpoint:
+      type: object
+      required: [operationId]
+      properties:
+        operationId: {type: string}
+        expiresAt: {type: string, format: date-time}
+        status: {type: string}
+
+    DockerVolume:
+      type: object
+      required: [id, name, usedBytes]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        stackId: {type: string}
+        stackName: {type: string}
+        usedBytes: {type: integer, format: int64}
+        bindPath: {type: string}
+
+    FileUser:
+      type: object
+      required: [id, username, type, groups, enabled]
+      properties:
+        id: {type: string}
+        username: {type: string}
+        fullName: {type: string}
+        type: {type: string, enum: [user, service]}
+        groups: {type: array, items: {type: string}}
+        enabled: {type: boolean}
+        uid: {type: integer}
+
+    JobSchedule:
+      type: object
+      required: [id, name, jobType, kind, timeOfDay, enabled, schedule, next]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        jobType: {type: string}
+        kind: {type: string, enum: [daily, weekly, event]}
+        timeOfDay: {type: string}
+        weekday: {type: string}
+        enabled: {type: boolean}
+        lastStartedAt: {type: string, format: date-time}
+        nextDueAt: {type: string, format: date-time}
+        schedule: {type: string}
+        next: {type: string}
+
+    LogLine:
+      type: object
+      required: [container, ts, level, message]
+      properties:
+        container: {type: string}
+        ts: {type: string, format: date-time}
+        level: {type: string, enum: [info, warn, error]}
+        message: {type: string}
+
+    ManagementUser:
+      type: object
+      required: [id, username, role, twoFactor, enabled]
+      properties:
+        id: {type: string}
+        username: {type: string}
+        fullName: {type: string}
+        role: {type: string, enum: [owner, operator, readonly]}
+        twoFactor: {type: boolean}
+        lastLoginAt: {type: string, format: date-time}
+        enabled: {type: boolean}
+
+    NotificationChannel:
+      type: object
+      required: [id, type, label, configured, enabled]
+      properties:
+        id: {type: string}
+        type: {type: string}
+        label: {type: string}
+        target: {type: string}
+        configured: {type: boolean}
+        enabled: {type: boolean}
+
+    NotificationDelivery:
+      type: object
+      required: [id, channelId, eventType, state, attemptedAt]
+      properties:
+        id: {type: string}
+        channelId: {type: string}
+        eventType: {type: string}
+        state: {type: string}
+        attemptedAt: {type: string, format: date-time}
+        error: {type: string}
+
+    OnboardingState:
+      type: object
+      required: [completed, server, hardware, disks]
+      properties:
+        completed: {type: boolean}
+        server:
+          type: object
+          required: [name, hostname, timezone, ip, sshEnabled]
+          properties:
+            name: {type: string}
+            hostname: {type: string}
+            timezone: {type: string}
+            ip: {type: string}
+            sshEnabled: {type: boolean}
+        hardware:
+          type: object
+          required: [cpu, ramBytes, diskCount]
+          properties:
+            cpu: {type: string}
+            ramBytes: {type: integer, format: int64}
+            diskCount: {type: integer}
+        disks: {type: array, items: {type: object}}
+
+    PoolPlan:
+      type: object
+      required: [operationId, name, mountPath, policy, members, configGeneration, expiresAt, planHash, status]
+      properties:
+        operationId: {type: string}
+        name: {type: string}
+        mountPath: {type: string}
+        policy: {type: string}
+        members: {type: array, items: {type: object}}
+        configGeneration: {type: integer}
+        expiresAt: {type: string, format: date-time}
+        planHash: {type: string}
+        status: {type: string}
+
+    PoolUnmountPlan:
+      type: object
+      required: [operationId, poolId, name, mountPath, configGeneration, expiresAt, planHash, status]
+      properties:
+        operationId: {type: string}
+        poolId: {type: string}
+        name: {type: string}
+        mountPath: {type: string}
+        configGeneration: {type: integer}
+        expiresAt: {type: string, format: date-time}
+        planHash: {type: string}
+        status: {type: string}
+
+    Principal:
+      type: object
+      required: [id, name, type]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        type: {type: string, enum: [user, group, service]}
+
+    ProtectionConfig:
+      type: object
+      required: [configPath, configured, parityDiskIds, dataDiskIds]
+      properties:
+        configPath: {type: string}
+        configured: {type: boolean}
+        parityDiskIds: {type: array, items: {type: string}}
+        dataDiskIds: {type: array, nullable: true, items: {type: string}}
+
+    RecoveryExportResponse:
+      type: object
+      required: [path, manifest, verified, appdataArchives, warnings]
+      properties:
+        path: {type: string}
+        manifest: {$ref: '#/components/schemas/RecoveryManifest'}
+        verified: {type: boolean}
+        appdataArchives: {type: integer}
+        warnings: {type: array, items: {type: string}}
+
+    RecoveryStatus:
+      type: object
+      required: [configured, latestPath, verified]
+      properties:
+        configured: {type: boolean}
+        latestPath: {type: string}
+        verified: {type: boolean}
+        manifest: {$ref: '#/components/schemas/RecoveryManifest'}
+        warnings: {type: array, items: {type: string}}
+
+    RecycleEntry:
+      type: object
+      required: [id, shareId, name, originalPath, deletedAt, sizeBytes]
+      properties:
+        id: {type: string}
+        shareId: {type: string}
+        name: {type: string}
+        originalPath: {type: string}
+        deletedAt: {type: string, format: date-time}
+        sizeBytes: {type: integer, format: int64}
+
+    RestorePlan:
+      type: object
+      required: [generationId, interfaces, apps, dataDisksNote]
+      properties:
+        generationId: {type: integer}
+        interfaces: {type: array, items: {type: object}}
+        apps: {type: array, items: {type: object}}
+        dataDisksNote: {type: string}
+
+    SSHKey:
+      type: object
+      required: [id, publicKey]
+      properties:
+        id: {type: string}
+        publicKey: {type: string}
+        comment: {type: string}
+
+    StorageMount:
+      type: object
+      required: [kind, targetId, mountPath, fstype, source, options, enabled]
+      properties:
+        kind: {type: string, enum: [disk, pool]}
+        targetId: {type: string}
+        mountPath: {type: string}
+        fstype: {type: string}
+        source: {type: string}
+        options: {type: string}
+        enabled: {type: boolean}
+
+    StorageOperationPlan:
+      type: object
+      required: [operationId, action, target, requestedState, dependencySnapshot, configGeneration, expiresAt, planHash, status]
+      properties:
+        operationId: {type: string}
+        action: {type: string}
+        target: {type: object}
+        requestedState: {type: object, additionalProperties: true}
+        dependencySnapshot: {type: array, items: {type: string}}
+        configGeneration: {type: integer}
+        expiresAt: {type: string, format: date-time}
+        planHash: {type: string}
+        status: {type: string}
+
+    StorageSafety:
+      type: object
+      required: [state, unlockedUntil]
+      properties:
+        state: {type: string, enum: [locked, unlocked]}
+        unlockedUntil: {type: string, format: date-time, nullable: true}
+
+    TwoFactorSetup:
+      type: object
+      required: [secret, otpauthUri, recoveryCodes]
+      properties:
+        secret: {type: string}
+        otpauthUri: {type: string}
+        recoveryCodes: {type: array, items: {type: string}}
+
+    UPSPolicy:
+      type: object
+      required: [enabled, minimumRuntimeSec, minimumCharge]
+      properties:
+        enabled: {type: boolean}
+        minimumRuntimeSec: {type: integer}
+        minimumCharge: {type: number}
+
+    UPSStatus:
+      type: object
+      required: [name, status, onBattery]
+      properties:
+        name: {type: string}
+        status: {type: string}
+        manufacturer: {type: string}
+        model: {type: string}
+        serial: {type: string}
+        chargePercent: {type: number}
+        loadPercent: {type: number}
+        runtimeSec: {type: number}
+        onBattery: {type: boolean}
+
+    UserGroup:
+      type: object
+      required: [id, name, members]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        members: {type: array, items: {type: string}}
+
+    WiFiScanResult:
+      type: object
+      required: [available, networks]
+      properties:
+        available: {type: boolean}
+        networks:
+          type: array
+          items:
+            type: object
+            required: [ssid, signal, channel, security, secure]
+            properties:
+              ssid: {type: string}
+              signal: {type: number}
+              channel: {type: integer}
+              band: {type: string}
+              security: {type: string}
+              secure: {type: boolean}
