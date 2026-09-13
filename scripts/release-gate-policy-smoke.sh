@@ -72,7 +72,7 @@ for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollba
     if marker not in qemu_smoke.read_text(encoding="utf-8"):
         raise SystemExit(f"QEMU smoke does not exercise signed update rollback: {marker}")
 qemu_builder = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-build-image.sh"
-for marker in ("LUMONAS_UPDATE_FIXTURE", "LUMONAS_UPDATE_PUBLIC_KEY", "update-fixture/package"):
+for marker in ("LUMONAS_UPDATE_FIXTURE", "LUMONAS_UPDATE_PUBLIC_KEY", "update-fixture/package", "chown -R lumonas:lumonas /var/lib/lumonas/update-fixture"):
     if marker not in qemu_builder.read_text(encoding="utf-8"):
         raise SystemExit(f"QEMU builder does not stage the signed update fixture: {marker}")
 api_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "api-smoke.sh"

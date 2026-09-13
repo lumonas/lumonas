@@ -87,6 +87,10 @@ apt-get install -y --no-install-recommends \
   avahi-daemon nftables
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
+if [ -d /var/lib/lumonas/update-fixture ]; then
+  chown -R lumonas:lumonas /var/lib/lumonas/update-fixture
+  chmod 0640 /var/lib/lumonas/update-fixture/package
+fi
 mkdir -p /usr/share/doc/lumonas
 {
   echo "formatVersion=1"
@@ -138,9 +142,6 @@ if [ -n "$UPDATE_FIXTURE" ]; then
 	cat >>"$WORK/mnt/etc/lumonas/lumonasd.env" <<ENV
 LUMONAS_UPDATE_PUBLIC_KEY=$UPDATE_PUBLIC_KEY
 ENV
-	chown root:lumonas "$WORK/mnt/etc/lumonas/lumonasd.env"
-	chmod 0640 "$WORK/mnt/etc/lumonas/lumonasd.env"
-	chown -R lumonas:lumonas "$WORK/mnt/var/lib/lumonas/update-fixture"
 fi
 
 echo "Created Debian 13 QEMU image: $OUTPUT"
