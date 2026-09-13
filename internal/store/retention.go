@@ -20,6 +20,12 @@ WHERE id NOT IN (SELECT id FROM notification_deliveries ORDER BY attempted_at DE
 	return err
 }
 
+// PruneExpiredSessions removes only sessions that can no longer authenticate.
+func (s *Store) PruneExpiredSessions(now time.Time) error {
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE expires_at <= ?`, now.UTC().Format(timeFormat))
+	return err
+}
+
 // PruneBackupRuns removes only finished runs outside the retained history.
 // Cascading foreign keys remove their copies and verification records.
 func (s *Store) PruneBackupRuns(keep int) error {
@@ -66,9 +72,27 @@ WHERE state NOT IN ('pending','active')
 	return err
 }
 
+// PruneGeneratedAlerts bounds resolved alert history while preserving alerts
+// that are still visible to operators or awaiting resolution.
+func (s *Store) PruneGeneratedAlerts(keep int) error {
+	keep = retentionLimit(keep)
+	_, err := s.db.Exec(`DELETE FROM generated_alerts
+WHERE state NOT IN ('firing','acknowledged')
+  AND id NOT IN (
+    SELECT id FROM generated_alerts
+    WHERE state NOT IN ('firing','acknowledged')
+    ORDER BY updated_at DESC
+    LIMIT ?
+  )`, keep)
+	return err
+}
+
 // PruneOperationalHistory applies one bounded policy to operational tables.
 // It is safe to call at startup and periodically while the daemon is running.
 func (s *Store) PruneOperationalHistory(now time.Time) error {
+	if err := s.PruneExpiredSessions(now); err != nil {
+		return err
+	}
 	if err := s.PruneNotificationDeliveries(defaultOperationalRetention); err != nil {
 		return err
 	}
@@ -78,5 +102,8 @@ func (s *Store) PruneOperationalHistory(now time.Time) error {
 	if err := s.PruneStorageOperations(now, defaultOperationalRetention); err != nil {
 		return err
 	}
-	return s.PruneNetworkCheckpoints(defaultOperationalRetention)
+	if err := s.PruneNetworkCheckpoints(defaultOperationalRetention); err != nil {
+		return err
+	}
+	return s.PruneGeneratedAlerts(defaultOperationalRetention)
 }

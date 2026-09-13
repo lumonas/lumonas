@@ -128,6 +128,51 @@ func TestPruneOperationalHistoryRunsWithDefaultPolicy(t *testing.T) {
 	}
 }
 
+func TestOperationalRetentionPrunesExpiredSessionsAndResolvedAlerts(t *testing.T) {
+	database, err := Open(t.TempDir() + "/lumonas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if err := database.EnsureAdmin("admin", "a-long-development-password"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := database.CreateSession("admin", "a-long-development-password", -time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := database.CreateSession("admin", "a-long-development-password", time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.PruneExpiredSessions(time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(t, database, "sessions", 1)
+
+	now := time.Now().UTC()
+	for index := 0; index < 105; index++ {
+		id := fmt.Sprintf("alert-%03d", index)
+		alert := model.Alert{ID: id, Severity: "warning", Title: "test", Description: "test", State: "firing", StartedAt: now.Add(-time.Duration(index) * time.Minute)}
+		alert.Resource = &model.ResourceRef{Type: "disk", ID: id}
+		opened, err := database.OpenGeneratedAlert(alert, "rule-retention")
+		if err != nil || !opened {
+			t.Fatalf("open alert %s: opened=%v err=%v", id, opened, err)
+		}
+		if _, err := database.ResolveGeneratedAlerts("rule-retention", id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	active := model.Alert{ID: "alert-active", Severity: "critical", Title: "active", Description: "active", State: "firing", StartedAt: now}
+	active.Resource = &model.ResourceRef{Type: "disk", ID: "active"}
+	if opened, err := database.OpenGeneratedAlert(active, "rule-retention"); err != nil || !opened {
+		t.Fatalf("open active alert: opened=%v err=%v", opened, err)
+	}
+	if err := database.PruneGeneratedAlerts(100); err != nil {
+		t.Fatal(err)
+	}
+	assertCount(t, database, "generated_alerts", 101)
+	assertExists(t, database, "generated_alerts", "alert-active")
+}
+
 func assertCount(t *testing.T, database *Store, table string, want int) {
 	t.Helper()
 	var got int
