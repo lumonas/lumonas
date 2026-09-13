@@ -171,6 +171,11 @@ and preservation of authoritative `lsblk` values.
 checks the stable Disk and LumoEvent field sets in OpenAPI and TypeScript, so
 route parity alone cannot hide a response-shape regression.
 
+The black-box API smoke test additionally validates live JSON from the server,
+disk, metrics, and jobs endpoints, plus the JSON envelope of streamed SSE
+events. This catches runtime serialization regressions that static route and
+type checks cannot see.
+
 The SSE envelope test round-trips an event containing correlation, operation,
 plan, actor, generation, resource, and payload data. This keeps the fields
 needed to trace a destructive operation from the initiating request through

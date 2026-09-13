@@ -55,6 +55,10 @@ if [ ! -x "$LUMONASD_BIN" ]; then
 	exit 1
 fi
 
+validate_response() {
+	python3 "$ROOT_DIR/scripts/validate-api-response.py" "$1" "$2"
+}
+
 start_server() {
 	LUMONAS_DB_PATH="$DB_PATH" \
 	LUMONAS_AUTH_REQUIRED=true \
@@ -183,6 +187,7 @@ if [ "$status" != 200 ] || ! grep -F '"nasUuid"' "$TEMP_DIR/server.json" >/dev/n
 	sed -n '1,120p' "$TEMP_DIR/server.json" >&2
 	exit 1
 fi
+validate_response server "$TEMP_DIR/server.json"
 
 status=$(curl -sS -o "$TEMP_DIR/disks.json" -w '%{http_code}' \
 	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/disks")
@@ -191,6 +196,17 @@ if [ "$status" != 200 ] || ! head -c 1 "$TEMP_DIR/disks.json" | grep '\[' >/dev/
 	sed -n '1,120p' "$TEMP_DIR/disks.json" >&2
 	exit 1
 fi
+validate_response disks "$TEMP_DIR/disks.json"
+
+status=$(curl -sS -o "$TEMP_DIR/metrics.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/system/metrics")
+[ "$status" = 200 ] || { echo "authenticated metrics request failed (HTTP $status)" >&2; exit 1; }
+validate_response metrics "$TEMP_DIR/metrics.json"
+
+status=$(curl -sS -o "$TEMP_DIR/jobs.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/jobs")
+[ "$status" = 200 ] || { echo "authenticated jobs request failed (HTTP $status)" >&2; exit 1; }
+validate_response jobs "$TEMP_DIR/jobs.json"
 
 assert_authenticated_status_and_body GET /api/v1/settings 200 '"runtime"'
 assert_authenticated_status_and_body POST /api/v1/recovery/key 200 '"key"'
@@ -208,6 +224,28 @@ if ! grep -F 'retry: 3000' "$SSE_PATH" >/dev/null 2>&1 || ! grep -F 'system.metr
 	sed -n '1,80p' "$SSE_PATH" >&2
 	exit 1
 fi
+awk '
+	/^data: / {
+		payload=$0
+		sub(/^data: /, "", payload)
+		print payload
+	}
+' "$SSE_PATH" >"$TEMP_DIR/events.jsonl"
+python3 - "$TEMP_DIR/events.jsonl" <<'PY'
+import json
+import sys
+
+events = []
+with open(sys.argv[1], encoding="utf-8") as handle:
+    for line in handle:
+        if line.strip():
+            events.append(json.loads(line))
+if not events:
+    raise SystemExit("SSE stream contained no JSON events")
+with open(sys.argv[1] + ".json", "w", encoding="utf-8") as handle:
+    json.dump(events, handle)
+PY
+validate_response events "$TEMP_DIR/events.jsonl.json"
 
 # Restart the real daemon against the same SQLite state. The metrics event is
 # the replay cursor; the short SMART job is deliberately interrupted while it
