@@ -55,7 +55,7 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 		configs = append(configs, struct {
 			path, content string
 			validate      func(string) error
-		}{envOr("LUMONAS_NFS_EXPORTS", "/var/lib/lumonas/generated/exports"), content, validateGeneratedConfig})
+		}{envOr("LUMONAS_NFS_EXPORTS", "/var/lib/lumonas/generated/exports"), content, shares.ValidateNFSExports})
 	}
 	if protocols["sftp"] {
 		content, err := shares.RenderSFTP(values)
@@ -65,7 +65,7 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 		configs = append(configs, struct {
 			path, content string
 			validate      func(string) error
-		}{envOr("LUMONAS_SFTP_CONFIG", "/var/lib/lumonas/generated/sshd-sftp.conf"), content, validateGeneratedConfig})
+		}{envOr("LUMONAS_SFTP_CONFIG", "/var/lib/lumonas/generated/sshd-sftp.conf"), content, shares.ValidateSFTPConfig})
 	}
 	staleFTPUsers := make([]preparedShareConfig, 0)
 	if protocols["ftp"] || protocols["ftps"] {
@@ -77,7 +77,7 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 		configs = append(configs, struct {
 			path, content string
 			validate      func(string) error
-		}{envOr("LUMONAS_FTP_CONFIG", "/var/lib/lumonas/generated/ftp.conf"), ftp.Main, validateGeneratedConfig})
+		}{envOr("LUMONAS_FTP_CONFIG", "/var/lib/lumonas/generated/ftp.conf"), ftp.Main, shares.ValidateFTPConfig})
 		for username, content := range ftp.Users {
 			if !validFTPUserName(username) {
 				return nil, fmt.Errorf("FTP principal name %q is invalid", username)
@@ -85,7 +85,7 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 			configs = append(configs, struct {
 				path, content string
 				validate      func(string) error
-			}{filepath.Join(userDirectory, username), content, validateGeneratedConfig})
+			}{filepath.Join(userDirectory, username), content, shares.ValidateFTPUserConfig})
 		}
 		if entries, readErr := os.ReadDir(userDirectory); readErr == nil {
 			for _, entry := range entries {
@@ -112,7 +112,7 @@ func (s *apiServer) prepareShareConfigs(values []shares.ManagedShare) ([]prepare
 		configs = append(configs, struct {
 			path, content string
 			validate      func(string) error
-		}{envOr("LUMONAS_RSYNC_CONFIG", "/var/lib/lumonas/generated/rsync.conf"), content, validateGeneratedConfig})
+		}{envOr("LUMONAS_RSYNC_CONFIG", "/var/lib/lumonas/generated/rsync.conf"), content, shares.ValidateRsyncConfig})
 	}
 	prepared := make([]preparedShareConfig, 0, len(configs)+len(staleFTPUsers))
 	prepared = append(prepared, staleFTPUsers...)
@@ -268,17 +268,6 @@ func cleanupShareConfigs(values []preparedShareConfig) {
 	for _, value := range values {
 		_ = os.Remove(value.temporary)
 	}
-}
-
-func validateGeneratedConfig(path string) error {
-	info, err := os.Stat(path)
-	if err != nil {
-		return err
-	}
-	if info.Size() > 1<<20 {
-		return fmt.Errorf("generated configuration is too large")
-	}
-	return nil
 }
 
 func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.ManagedShare) error {

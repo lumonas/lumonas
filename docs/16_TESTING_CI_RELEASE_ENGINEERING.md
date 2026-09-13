@@ -46,6 +46,10 @@ Run system tools in containers/VMs where appropriate:
 Share integration tests also verify that generated Samba, rsync, and vsftpd
 paths are consumed by systemd drop-ins, while NFS and SFTP activation remains
 confined to typed privileged configuration targets.
+Generated NFS, SFTP, FTP/FTPS, and rsync files are also parsed by
+protocol-specific validators before atomic activation; malformed or unsafe
+paths fail closed without changing the active configuration. The dedicated
+validator smoke runs in the release-blocking share integration job.
 The FTPS renderer is also checked against the certificate paths provisioned by
 the Debian package, so an enabled FTPS share cannot point at stale TLS names.
 The dedicated share-integration CI gate runs these production-path tests

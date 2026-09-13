@@ -584,3 +584,13 @@ available. Expired sessions and resolved alert history must be removed. The
 daemon must bound committed configuration generations while preserving
 pending generations, and run the same policy at startup and periodically
 while serving requests.
+
+## AY. Generated share protocol validation
+
+Run `scripts/share-protocol-smoke.sh` and `scripts/share-config-smoke.sh`.
+
+Pass if generated NFS, SFTP, FTP/FTPS, and rsync configuration is parsed by
+protocol-specific validators before activation, unsafe paths and malformed
+directives fail closed, and the active configuration remains unchanged after a
+validation failure. The validator smoke must run in the release-blocking share
+integration job.
