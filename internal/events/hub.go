@@ -46,6 +46,10 @@ func (h *Hub) Publish(event model.Event) {
 		select {
 		case ch <- event:
 		default:
+			// Never silently lose a live event. The stream will reconnect and
+			// replay persisted events from its Last-Event-ID cursor.
+			delete(h.clients, ch)
+			close(ch)
 		}
 	}
 	h.mu.Unlock()

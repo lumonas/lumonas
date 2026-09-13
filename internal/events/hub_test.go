@@ -25,6 +25,21 @@ func TestUnsubscribeClosesClientAndFuturePublishRemainsSafe(t *testing.T) {
 	hub.Publish(model.Event{Type: "after-unsubscribe", Timestamp: time.Now().UTC(), Data: map[string]any{}})
 }
 
+func TestPublishClosesSlowSubscriberForReplay(t *testing.T) {
+	hub := NewHub()
+	channel, unsubscribe := hub.Subscribe()
+	defer unsubscribe()
+	for index := 0; index < 33; index++ {
+		hub.Publish(model.Event{ID: "evt", Type: "queued", Timestamp: time.Now().UTC(), Data: map[string]any{"index": index}})
+	}
+
+	for event := range channel {
+		if event.Type != "queued" {
+			t.Fatalf("unexpected buffered event %#v", event)
+		}
+	}
+}
+
 func TestHubPublishesToSubscribers(t *testing.T) {
 	hub := NewHub()
 	channel, unsubscribe := hub.Subscribe()
