@@ -169,7 +169,12 @@ Read-only host integrations include `lsblk`/SMART disk identity, mergerfs mount 
 
 Pool capacity is sampled once per UTC day into SQLite, retained for 180 days, and exposed through the read-only `/api/v1/capacity/forecast` endpoint. A forecast is withheld until at least three samples span a full day.
 
-Set both `LUMONAS_WEB_TLS_CERT` and `LUMONAS_WEB_TLS_KEY` in `/etc/lumonas/lumonas-web.env` to serve the web listener over local HTTPS. The package provisions an opt-in self-signed certificate at `/etc/lumonas/tls/` when OpenSSL is available; replace it with a certificate issued by your local CA for trusted clients and protect the private key.
+The package serves the web listener over local HTTPS by default using a
+self-signed certificate provisioned at `/etc/lumonas/tls/`. Replace it with a
+certificate issued by your local CA for trusted clients and protect the
+private key. Set both `LUMONAS_WEB_TLS_CERT` and `LUMONAS_WEB_TLS_KEY` in
+`/etc/lumonas/lumonas-web.env` to use a different certificate pair; clear both
+values only when an explicitly isolated HTTP setup is intended.
 
 ## Security Features
 
