@@ -61,7 +61,7 @@ if "actions/setup-go@v5" not in qemu_block or "./cmd/lumonas-update-fixture" not
     raise SystemExit("QEMU smoke must provision Go and build the signed update fixture")
 safety_job = re.search(r"(?ms)^  safety-recovery:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 safety_block = safety_job.group(0) if safety_job else ""
-for marker in ("TestReplacementPlanRejectsUnstableReplacementIdentity", "TestReplacementPlanRejectsTamperedHash", "TestDiskReplacementPlanAndConfirmChain"):
+for marker in ("TestRenderSnapraidConfigRejectsUnstableOrCollidingIdentities", "TestValidateSnapraidConfigRejectsBranchCollisions", "TestReplacementPlanRejectsUnstableReplacementIdentity", "TestReplacementPlanRejectsAmbiguousSanitizedBranch", "TestReplacementPlanRejectsTamperedHash", "TestDiskReplacementPlanAndConfirmChain"):
     if marker not in safety_block:
         raise SystemExit(f"safety-recovery gate is missing replacement coverage: {marker}")
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)

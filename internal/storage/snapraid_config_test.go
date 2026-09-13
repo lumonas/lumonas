@@ -52,6 +52,27 @@ func TestRenderSnapraidConfigRejectsUnsafeLayouts(t *testing.T) {
 	}
 }
 
+func TestRenderSnapraidConfigRejectsUnstableOrCollidingIdentities(t *testing.T) {
+	cases := []struct {
+		name   string
+		parity string
+		data   []string
+		want   string
+	}{
+		{name: "unstable data", parity: "wwn:p", data: []string{"path:/dev/sda"}, want: "stable identity"},
+		{name: "unstable parity", parity: "path:/dev/sdp", data: []string{"wwn:a"}, want: "stable identity"},
+		{name: "data branch collision", parity: "wwn:p", data: []string{"serial:a:b", "serial:a_b"}, want: "same branch path"},
+		{name: "parity branch collision", parity: "serial:a:b", data: []string{"serial:a_b"}, want: "same branch path"},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, err := RenderSnapraidConfig(testCase.parity, testCase.data); err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("expected %q, got %v", testCase.want, err)
+			}
+		})
+	}
+}
+
 func TestValidateSnapraidConfigRejectsUnmanagedDirectives(t *testing.T) {
 	valid, err := RenderSnapraidConfig("wwn:p", []string{"wwn:a"})
 	if err != nil {
@@ -62,6 +83,18 @@ func TestValidateSnapraidConfigRejectsUnmanagedDirectives(t *testing.T) {
 	}
 	if err := ValidateSnapraidConfig("data d1 /srv/disks/wwn_a\nexec rm -rf /\n"); err == nil {
 		t.Fatal("expected unmanaged directive rejection")
+	}
+}
+
+func TestValidateSnapraidConfigRejectsBranchCollisions(t *testing.T) {
+	cases := []string{
+		"parity /srv/disks/serial_a_b/snapraid.parity\ncontent /var/lib/lumonas/snapraid.content\ncontent /srv/disks/serial_a_b/snapraid.content\ndata d1 /srv/disks/serial_a_b\n",
+		"content /var/lib/lumonas/snapraid.content\ncontent /srv/disks/serial_a/snapraid.content\ndata d1 /srv/disks/serial_a/../serial_b\ndata d2 /srv/disks/serial_b\n",
+	}
+	for _, config := range cases {
+		if err := ValidateSnapraidConfig(config); err == nil {
+			t.Fatalf("unsafe SnapRAID branch layout was accepted: %q", config)
+		}
 	}
 }
 

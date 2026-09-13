@@ -331,7 +331,8 @@ its transient `/dev/loopN` path.
 
 Replacement planning must resolve sanitized SnapRAID parity/data branch paths
 back to live stable disk IDs and include the parity identity in the privileged
-revalidation request.
+revalidation request. SnapRAID config generation must reject path-only disk
+identities and collisions where distinct IDs sanitize to the same branch.
 
 ## U. Dependency and image security
 

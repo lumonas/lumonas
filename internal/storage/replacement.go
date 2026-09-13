@@ -109,6 +109,9 @@ func RenderSnapraidConfigPinned(parityDiskID string, slots []DataSlot) (string, 
 		names[slot.Name] = true
 		paths[branch] = true
 	}
+	if parityDiskID != "" && paths[DiskBranchPath(parityDiskID)] {
+		return "", fmt.Errorf("parity disk %q resolves to a data branch path", parityDiskID)
+	}
 	ordered := append([]DataSlot(nil), slots...)
 	sort.Slice(ordered, func(i, j int) bool {
 		if numericSuffix(ordered[i].Name) == numericSuffix(ordered[j].Name) {
@@ -194,12 +197,16 @@ func NewReplacementPlan(id, retiredDiskID, replacementDiskID string, currentConf
 		return ReplacementPlan{}, fmt.Errorf("retired disk %q is not part of the protected set", retiredDiskID)
 	}
 	resolveBranch := func(branch string) (string, bool) {
+		resolved := ""
 		for _, disk := range disks {
 			if model.HasStableDiskIdentity(disk.ID) && DiskBranchPath(disk.ID) == branch {
-				return disk.ID, true
+				if resolved != "" {
+					return "", false
+				}
+				resolved = disk.ID
 			}
 		}
-		return "", false
+		return resolved, resolved != ""
 	}
 	if parity != "" {
 		resolvedParity, ok := resolveBranch(DiskBranchPath(parity))

@@ -97,9 +97,10 @@ func TestDiskReplacementPlanAndConfirmChain(t *testing.T) {
 		t.Fatalf("replacement SnapRAID request omitted resolved parity identity: %#v", requests[1].ExpectedDisks)
 	}
 	var result struct {
-		OK   bool   `json:"ok"`
-		Slot string `json:"slot"`
-		Next string `json:"next"`
+		OK    bool   `json:"ok"`
+		JobID string `json:"jobId"`
+		Slot  string `json:"slot"`
+		Next  string `json:"next"`
 	}
 	if err := json.NewDecoder(confirm.Body).Decode(&result); err != nil {
 		t.Fatal(err)
@@ -107,24 +108,32 @@ func TestDiskReplacementPlanAndConfirmChain(t *testing.T) {
 	if !result.OK || result.Slot != "d3" {
 		t.Fatalf("unexpected confirm result: %#v", result)
 	}
-	// A queued fix job must exist and carry the recovery slot.
-	jobs, err := server.store.Jobs()
-	if err != nil {
-		t.Fatal(err)
+	if result.JobID == "" {
+		t.Fatal("replacement confirmation did not return a recovery job")
 	}
-	fixFound := false
-	for _, job := range jobs {
-		if job.Type == "snapraid.fix" {
-			fixFound = true
-			// The job runs async, so any lifecycle state is acceptable here;
-			// what matters is that it was persisted with the recovery slot.
-			if job.State != "queued" && job.State != "preparing" && job.State != "running" && job.State != "successful" && job.State != "failed" {
-				t.Fatalf("unexpected fix job state %q", job.State)
+	// A queued fix job must exist and carry the recovery slot.
+	var fixJob model.Job
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		jobs, err := server.store.Jobs()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, job := range jobs {
+			if job.ID == result.JobID {
+				fixJob = job
 			}
 		}
+		if fixJob.ID != "" && (fixJob.State == "successful" || fixJob.State == "failed") {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	if !fixFound {
+	if fixJob.ID == "" {
 		t.Fatal("no persisted snapraid.fix job after replacement confirm")
+	}
+	if fixJob.Type != "snapraid.fix" || (fixJob.State != "successful" && fixJob.State != "failed") {
+		t.Fatalf("replacement recovery job did not reach a terminal state: %#v", fixJob)
 	}
 
 	// Bad hash is rejected even with everything else valid.

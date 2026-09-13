@@ -67,6 +67,19 @@ func TestReplacementPlanRejectsUnstableReplacementIdentity(t *testing.T) {
 	}
 }
 
+func TestReplacementPlanRejectsAmbiguousSanitizedBranch(t *testing.T) {
+	disks := []model.Disk{
+		replacementDisk("serial:A", "data"),
+		replacementDisk("serial:B", "data"),
+		replacementDisk("serial:P", "parity"),
+		replacementDisk("serial_P", "parity"),
+		replacementDisk("serial:NEW", "data"),
+	}
+	if _, err := NewReplacementPlan("op-ambiguous", "serial:DEAD", "serial:NEW", replacementConfig, disks, 7, time.Now()); err == nil || !contains(err.Error(), "no longer discovered") {
+		t.Fatalf("ambiguous sanitized parity branch was accepted: %v", err)
+	}
+}
+
 func TestReplacementPlanRejectsImpossibleReplacements(t *testing.T) {
 	live := []model.Disk{replacementDisk("serial:A", "data"), replacementDisk("serial:B", "data"), replacementDisk("serial:P", "parity"), replacementDisk("serial:DEAD", "data")}
 	cases := []struct {

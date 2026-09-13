@@ -455,6 +455,8 @@ require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'no stable ide
 require_line "$ROOT/internal/storage/replacement.go" 'callers must resolve it against the live inventory'
 require_line "$ROOT/internal/storage/replacement.go" 'replacement disks require stable identities'
 require_line "$ROOT/cmd/lumonasd/replacement_api_test.go" 'resolved parity identity'
+require_line "$ROOT/internal/storage/snapraid_config.go" 'has no stable identity'
+require_line "$ROOT/internal/storage/snapraid_config.go" 'same branch path'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONASD_LISTEN=127.0.0.1:18083'
 require_line "$ROOT/installer/build-iso.sh" 'restored-principals.json'
 require_line "$ROOT/installer/build-iso.sh" 'restored-shares.json'

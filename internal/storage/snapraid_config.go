@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/lumonas/lumonas/internal/model"
 )
 
 // SnapRAID configuration paths are canonical: parity and content files live
@@ -25,24 +27,34 @@ const (
 func RenderSnapraidConfig(parityDiskID string, dataDiskIDs []string) (string, error) {
 	ids := make([]string, 0, len(dataDiskIDs))
 	seen := make(map[string]bool, len(dataDiskIDs))
+	branches := make(map[string]string, len(dataDiskIDs)+1)
+	if parityDiskID != "" {
+		if !model.HasStableDiskIdentity(parityDiskID) {
+			return "", fmt.Errorf("parity disk %q has no stable identity", parityDiskID)
+		}
+		branches[DiskBranchPath(parityDiskID)] = parityDiskID
+	}
 	for _, id := range dataDiskIDs {
-		if id == "" {
-			return "", fmt.Errorf("data disk identity is empty")
+		if !model.HasStableDiskIdentity(id) {
+			return "", fmt.Errorf("data disk %q has no stable identity", id)
 		}
 		if seen[id] {
 			return "", fmt.Errorf("data disk %q is listed more than once", id)
 		}
+		if parityDiskID != "" && id == parityDiskID {
+			return "", fmt.Errorf("parity disk %q cannot also be a protected data disk", parityDiskID)
+		}
+		branch := DiskBranchPath(id)
+		if previous, exists := branches[branch]; exists {
+			return "", fmt.Errorf("disk identities %q and %q resolve to the same branch path %q", previous, id, branch)
+		}
+		branches[branch] = id
 		seen[id] = true
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	if len(ids) == 0 {
 		return "", fmt.Errorf("at least one protected data disk is required")
-	}
-	if parityDiskID != "" {
-		if seen[parityDiskID] {
-			return "", fmt.Errorf("parity disk %q cannot also be a protected data disk", parityDiskID)
-		}
 	}
 	var builder strings.Builder
 	builder.WriteString("# " + UnitDirectoryHint + "\n")
@@ -72,6 +84,8 @@ func ValidateSnapraidConfig(content string) error {
 	contentCopies := 0
 	dataNames := make(map[string]bool)
 	usedPaths := make(map[string]bool)
+	dataBranches := make(map[string]bool)
+	parityBranch := ""
 	for _, raw := range strings.Split(content, "\n") {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -95,6 +109,13 @@ func ValidateSnapraidConfig(content string) error {
 			if len(fields) != 2 {
 				return fmt.Errorf("parity line %q is invalid", line)
 			}
+			if !strings.HasSuffix(path, "/"+ParityFileName) {
+				return fmt.Errorf("parity path %q is not canonical", path)
+			}
+			parityBranch = strings.TrimSuffix(path, "/"+ParityFileName)
+			if _, ok := managedDiskBranch(parityBranch); !ok {
+				return fmt.Errorf("parity path %q is not canonical", path)
+			}
 		case "content":
 			contentCopies++
 			if len(fields) != 2 {
@@ -107,6 +128,13 @@ func ValidateSnapraidConfig(content string) error {
 			if !validSnapraidName(fields[1]) {
 				return fmt.Errorf("data name %q is invalid", fields[1])
 			}
+			if _, ok := managedDiskBranch(path); !ok {
+				return fmt.Errorf("data path %q is not canonical", path)
+			}
+			if dataBranches[path] {
+				return fmt.Errorf("data branch path %q is used more than once", path)
+			}
+			dataBranches[path] = true
 			if dataNames[fields[1]] {
 				return fmt.Errorf("data name %q is duplicated", fields[1])
 			}
@@ -124,6 +152,9 @@ func ValidateSnapraidConfig(content string) error {
 	if contentCopies < 2 {
 		return errors.New("at least two content copies are required")
 	}
+	if parityBranch != "" && dataBranches[parityBranch] {
+		return fmt.Errorf("parity branch path %q is also assigned as a data branch", parityBranch)
+	}
 	return nil
 }
 
@@ -132,8 +163,28 @@ func safeManagedPath(value string) bool {
 	if clean == SystemContentDir || strings.HasPrefix(clean, SystemContentDir+"/") {
 		return true
 	}
+	if _, found := managedDiskBranch(clean); found {
+		return true
+	}
+	for _, filename := range []string{ParityFileName, ContentFileName} {
+		if strings.HasSuffix(clean, "/"+filename) {
+			_, found := managedDiskBranch(strings.TrimSuffix(clean, "/"+filename))
+			return found
+		}
+	}
+	return false
+}
+
+func managedDiskBranch(value string) (string, bool) {
+	clean := filepath.Clean(value)
+	if clean != value {
+		return "", false
+	}
 	segment, found := strings.CutPrefix(clean, "/srv/disks/")
-	return found && segment != "" && !strings.Contains(segment, "..")
+	if !found || !validUnitSegment(segment) {
+		return "", false
+	}
+	return clean, true
 }
 
 func validSnapraidName(value string) bool {

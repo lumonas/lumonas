@@ -70,7 +70,9 @@ device path is unchanged.
 
 SnapRAID configuration branch names are treated as references, not identities:
 their sanitized path segments must be resolved against the live disk inventory
-before a replacement or configuration mutation can proceed.
+before a replacement or configuration mutation can proceed. Rendered configs
+must also reject unstable path-only identities and any parity/data identities
+that sanitize to the same branch path.
 
 WireGuard and SFTP integrations also use the bounded command runner for
 stdin-bearing operations. Command names and arguments remain typed, while
