@@ -430,6 +430,9 @@ The privileged storage loopback harness must also exercise the real
 read-only mounting and rejection of mounted, stale, expired, and operation-ID
 missing requests before erase.
 
+The planner must also reject unsupported filesystems, non-canonical mount paths,
+and non-empty erase state before creating a confirmable operation plan.
+
 ## AI. Network diagnostic command boundary
 
 Run the network diagnostic command-module tests.

@@ -104,6 +104,7 @@ Deliver:
 - dependency graph;
 - Storage Safety Lock;
 - Class D operation planner;
+- planner-time validation for every filesystem mutation state;
 - SMART jobs.
 
 Exit:

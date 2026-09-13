@@ -131,23 +131,58 @@ func Validate(plan Plan, actual model.Disk, now time.Time, currentGeneration int
 	return nil
 }
 
-// ValidateRequestedState checks the requestedState payload of a
-// filesystem.create operation: filesystem type, canonical branch mount path,
-// and optional filesystem label (12 characters fits ext4 and xfs limits).
+// ValidateRequestedState checks every filesystem operation before a plan is
+// shown to an administrator. The privileged worker repeats these checks at
+// execution time, but invalid state must never appear as a confirmable plan.
 func ValidateRequestedState(action Action, diskID string, requested map[string]any) error {
-	if action != ActionCreate {
-		return nil
+	if requested == nil {
+		requested = map[string]any{}
 	}
 	filesystem, _ := requested["filesystem"].(string)
-	if filesystem != "ext4" && filesystem != "xfs" {
-		return errors.New("filesystem must be ext4 or xfs")
+	validateFilesystem := func(required bool) error {
+		if filesystem == "" && !required {
+			return nil
+		}
+		if filesystem != "ext4" && filesystem != "xfs" {
+			return errors.New("filesystem must be ext4 or xfs")
+		}
+		return nil
 	}
-	mountPath, _ := requested["mountPath"].(string)
-	if filepath.Clean(mountPath) != DiskBranchPath(diskID) {
-		return errors.New("mountPath must be the canonical /srv/disks/<disk-id> branch path")
+	validateMountPath := func(required bool) error {
+		mountPath, _ := requested["mountPath"].(string)
+		if mountPath == "" && !required {
+			return nil
+		}
+		if filepath.Clean(mountPath) != DiskBranchPath(diskID) {
+			return errors.New("mountPath must be the canonical /srv/disks/<disk-id> branch path")
+		}
+		return nil
 	}
-	if label, _ := requested["label"].(string); label != "" && !ValidFilesystemLabel(label) {
-		return errors.New("filesystem label must be 1-12 alphanumeric, dot, underscore, or hyphen characters")
+
+	switch action {
+	case ActionCreate:
+		if err := validateFilesystem(true); err != nil {
+			return err
+		}
+		if err := validateMountPath(true); err != nil {
+			return err
+		}
+		if label, _ := requested["label"].(string); label != "" && !ValidFilesystemLabel(label) {
+			return errors.New("filesystem label must be 1-12 alphanumeric, dot, underscore, or hyphen characters")
+		}
+	case ActionFormat:
+		return validateFilesystem(true)
+	case ActionMount:
+		if err := validateFilesystem(true); err != nil {
+			return err
+		}
+		return validateMountPath(true)
+	case ActionUnmount:
+		return validateMountPath(true)
+	case ActionErase:
+		if len(requested) != 0 {
+			return errors.New("disk.erase does not accept requested state")
+		}
 	}
 	return nil
 }

@@ -82,8 +82,32 @@ func TestCreatePlanValidatesRequestedState(t *testing.T) {
 	if err := ValidateRequestedState(ActionCreate, plan.Target.DiskID, map[string]any{"filesystem": "ext4", "mountPath": DiskBranchPath(plan.Target.DiskID), "label": "thirteenchars"}); err == nil {
 		t.Fatal("overlong label should fail")
 	}
-	if err := ValidateRequestedState(ActionMount, "x", map[string]any{"anything": true}); err != nil {
-		t.Fatalf("non-create actions skip requested-state validation: %v", err)
+	branch := DiskBranchPath(plan.Target.DiskID)
+	validStates := map[Action]map[string]any{
+		ActionFormat:  {"filesystem": "xfs"},
+		ActionMount:   {"filesystem": "ext4", "mountPath": branch},
+		ActionUnmount: {"mountPath": branch},
+		ActionErase:   {},
+	}
+	for action, state := range validStates {
+		if err := ValidateRequestedState(action, plan.Target.DiskID, state); err != nil {
+			t.Fatalf("valid %s state rejected: %v", action, err)
+		}
+	}
+	invalidStates := []struct {
+		action Action
+		state  map[string]any
+	}{
+		{ActionFormat, map[string]any{}},
+		{ActionMount, map[string]any{"filesystem": "btrfs", "mountPath": branch}},
+		{ActionMount, map[string]any{"filesystem": "ext4", "mountPath": "/srv/pools/media"}},
+		{ActionUnmount, map[string]any{"mountPath": "/srv/disks/other"}},
+		{ActionErase, map[string]any{"reason": "unsafe"}},
+	}
+	for _, testCase := range invalidStates {
+		if err := ValidateRequestedState(testCase.action, plan.Target.DiskID, testCase.state); err == nil {
+			t.Fatalf("invalid %s state was accepted: %#v", testCase.action, testCase.state)
+		}
 	}
 	mounted := testDisk()
 	mounted.Mounted = true

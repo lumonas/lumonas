@@ -194,6 +194,8 @@ done
 [ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-security-smoke.sh" ] || { echo "systemd security smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/Makefile" 'storage-loopback:'
+require_line "$ROOT/internal/storage/plans.go" 'invalid state must never appear as a confirmable plan'
+require_line "$ROOT/internal/storage/plans.go" 'disk.erase does not accept requested state'
 require_line "$ROOT/Makefile" 'disk-full-smoke:'
 require_line "$ROOT/Makefile" 'disk-identity-smoke:'
 require_line "$ROOT/Makefile" 'fuzz-smoke:'

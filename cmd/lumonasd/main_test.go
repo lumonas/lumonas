@@ -93,7 +93,7 @@ func TestSnapraidJobIsQueuedAndFailsThroughUnavailableBroker(t *testing.T) {
 
 func TestStoragePlanRequiresStableIdentityAndSafetyUnlock(t *testing.T) {
 	server := testServer(t)
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test"}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test","requestedState":{"filesystem":"ext4"}}`))
 	response := httptest.NewRecorder()
 	server.routes().ServeHTTP(response, request)
 	if response.Code != http.StatusCreated {
@@ -116,6 +116,11 @@ func TestStoragePlanRequiresStableIdentityAndSafetyUnlock(t *testing.T) {
 
 func TestStorageCreatePlanValidatesRequestedStateAndSafety(t *testing.T) {
 	server := testServer(t)
+	invalidFormat := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalidFormat, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test","requestedState":{"filesystem":"btrfs"}}`)))
+	if invalidFormat.Code != http.StatusUnprocessableEntity || !strings.Contains(invalidFormat.Body.String(), "ext4 or xfs") {
+		t.Fatalf("expected 422 filesystem rejection, got %d: %s", invalidFormat.Code, invalidFormat.Body.String())
+	}
 	invalid := httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.create","diskId":"wwn:test","requestedState":{"filesystem":"ext4","mountPath":"/mnt/other"}}`))
 	invalidResponse := httptest.NewRecorder()
 	server.routes().ServeHTTP(invalidResponse, invalid)
@@ -146,7 +151,7 @@ func TestStorageCreatePlanValidatesRequestedStateAndSafety(t *testing.T) {
 func TestStorageConfirmationReportsPlanPersistenceFailure(t *testing.T) {
 	server := testServer(t)
 	planResponse := httptest.NewRecorder()
-	server.routes().ServeHTTP(planResponse, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test"}`)))
+	server.routes().ServeHTTP(planResponse, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test","requestedState":{"filesystem":"ext4"}}`)))
 	if planResponse.Code != http.StatusCreated {
 		t.Fatalf("plan creation failed: %d %s", planResponse.Code, planResponse.Body.String())
 	}
