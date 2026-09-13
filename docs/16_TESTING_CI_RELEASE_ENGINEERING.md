@@ -202,6 +202,12 @@ Tailscale connect, disconnect, and exit-node changes use the same worker
 boundary, operation IDs, expiries, authorization, and audit path; their
 command runners are injected in tests so missing binaries cannot turn into a
 false-positive mutation.
+The Tailscale connect test also verifies that an auth key is staged in a
+mode-0600 temporary file and is never included in command arguments. The file
+must be gone when the bounded command returns.
+Power actions and scheduled/UPS shutdowns use the same daemon broker seam, so
+the API cannot silently bypass the typed privileged boundary in production or
+tests.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -84,8 +85,26 @@ func TailscaleUpWithRunner(ctx context.Context, hostname string, authKey string,
 		run = runner.CombinedOutputContext
 	}
 	args := []string{"up", "--hostname=" + hostname}
+	var authFile *os.File
 	if authKey != "" {
-		args = append(args, "--authkey="+authKey)
+		// Keep the secret out of process arguments and structured command logs.
+		// Tailscale accepts auth keys through its file: form.
+		var err error
+		authFile, err = os.CreateTemp("", "lumonas-tailscale-auth-")
+		if err != nil {
+			return fmt.Errorf("tailscale auth key staging: %w", err)
+		}
+		defer func() {
+			_ = authFile.Close()
+			_ = os.Remove(authFile.Name())
+		}()
+		if _, err := authFile.WriteString(authKey); err != nil {
+			return fmt.Errorf("tailscale auth key staging: %w", err)
+		}
+		if err := authFile.Close(); err != nil {
+			return fmt.Errorf("tailscale auth key staging: %w", err)
+		}
+		args = append(args, "--authkey=file:"+authFile.Name())
 	}
 	if out, err := run(ctx, "tailscale", args...); err != nil {
 		return fmt.Errorf("tailscale up: %s: %w", strings.TrimSpace(string(out)), err)

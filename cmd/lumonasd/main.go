@@ -1828,7 +1828,7 @@ func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	operationID := newID("power")
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "power.shutdown", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": input.Action}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "power.shutdown", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": input.Action}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return

@@ -7,7 +7,7 @@ SYSTEMD="$ROOT/packaging/systemd"
 require_line() {
 	file=$1
 	pattern=$2
-	if ! grep -F "$pattern" "$file" >/dev/null 2>&1; then
+	if ! grep -F -- "$pattern" "$file" >/dev/null 2>&1; then
 		echo "missing '$pattern' in $file" >&2
 		exit 1
 	fi
@@ -101,6 +101,9 @@ require_line "$ROOT/cmd/lumonasd/main.go" 'network.tailscale.up'
 require_line "$ROOT/cmd/lumonas-privd/main.go" 'network.tailscale.exit-node'
 require_line "$ROOT/cmd/lumonas-privd/worker_test.go" 'TestTailscaleMutationUsesNetworkWorker'
 require_line "$ROOT/cmd/lumonasd/network_api_test.go" 'TestTailscaleUpUsesPrivilegedBroker'
+require_line "$ROOT/internal/network/tailscale.go" '--authkey=file:'
+require_line "$ROOT/internal/network/tailscale_test.go" 'staged auth key still exists'
+require_line "$ROOT/cmd/lumonasd/shutdown_api_test.go" 'TestShutdownPowerUsesPrivilegedBroker'
 require_line "$ROOT/scripts/security-smoke.sh" 'TestNetworkCheckpointRollsBackWhenPersistenceFails'
 if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1 || grep -F '/etc/lumonas/tls/tls.key' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1; then
 	echo "share configuration still references obsolete FTPS certificate paths" >&2

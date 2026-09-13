@@ -2,14 +2,37 @@ package network
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 )
 
 func TestTailscaleMutationsUseInjectedBoundedRunner(t *testing.T) {
 	var commands []string
+	var stagedAuthKey string
 	run := func(_ context.Context, name string, args ...string) ([]byte, error) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
+		for _, arg := range args {
+			if !strings.HasPrefix(arg, "--authkey=file:") {
+				continue
+			}
+			path := strings.TrimPrefix(arg, "--authkey=file:")
+			contents, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read staged auth key: %v", err)
+			}
+			stagedAuthKey = string(contents)
+			if strings.Contains(strings.Join(args, " "), "auth-secret") {
+				t.Fatal("auth key must not appear in process arguments")
+			}
+			info, err := os.Stat(path)
+			if err != nil {
+				t.Fatalf("stat staged auth key: %v", err)
+			}
+			if info.Mode().Perm() != 0o600 {
+				t.Fatalf("staged auth key mode = %o, want 600", info.Mode().Perm())
+			}
+		}
 		return nil, nil
 	}
 	if err := TailscaleUpWithRunner(context.Background(), "lumonas", "auth-secret", run); err != nil {
@@ -24,8 +47,15 @@ func TestTailscaleMutationsUseInjectedBoundedRunner(t *testing.T) {
 	if err := TailscaleClearExitNodeWithRunner(context.Background(), run); err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 4 || !strings.HasPrefix(commands[0], "tailscale up") || commands[1] != "tailscale down" || commands[2] != "tailscale set --exit-node=100.64.0.2" || commands[3] != "tailscale set --exit-node=none" {
+	if stagedAuthKey != "auth-secret" {
+		t.Fatalf("staged auth key = %q", stagedAuthKey)
+	}
+	if len(commands) != 4 || !strings.HasPrefix(commands[0], "tailscale up") || strings.Contains(commands[0], "auth-secret") || commands[1] != "tailscale down" || commands[2] != "tailscale set --exit-node=100.64.0.2" || commands[3] != "tailscale set --exit-node=none" {
 		t.Fatalf("unexpected tailscale command sequence: %#v", commands)
+	}
+	path := strings.TrimPrefix(strings.Split(commands[0], "--authkey=file:")[1], "")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("staged auth key still exists after command: %q (%v)", path, err)
 	}
 }
 

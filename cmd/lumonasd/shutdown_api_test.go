@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/lumonas/lumonas/internal/privileged"
 )
 
 func TestShutdownPlanIsExplicitAndRequiresReauthentication(t *testing.T) {
@@ -63,5 +66,39 @@ func TestPowerActionRequiresAdministrativeIdentity(t *testing.T) {
 	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/power/action", strings.NewReader(`{"action":"reboot","reauthenticated":true}`)))
 	if response.Code != http.StatusUnauthorized {
 		t.Fatalf("expected power action auth gate, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestPowerActionUsesPrivilegedBroker(t *testing.T) {
+	server := testServer(t)
+	var request privileged.Request
+	server.brokerExec = func(_ context.Context, value privileged.Request) error {
+		request = value
+		return nil
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/power/action", strings.NewReader(`{"action":"reboot","reauthenticated":true}`)))
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected power action to be accepted, got %d: %s", response.Code, response.Body.String())
+	}
+	if request.Operation != "power.shutdown" || request.OperationID == "" || request.RequestedState["action"] != "reboot" {
+		t.Fatalf("unexpected privileged power request: %#v", request)
+	}
+}
+
+func TestShutdownPowerUsesPrivilegedBroker(t *testing.T) {
+	server := testServer(t)
+	var request privileged.Request
+	server.brokerExec = func(_ context.Context, value privileged.Request) error {
+		request = value
+		return nil
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/power/shutdown", strings.NewReader(`{"action":"poweroff","reauthenticated":true}`)))
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected shutdown to be accepted, got %d: %s", response.Code, response.Body.String())
+	}
+	if request.Operation != "power.shutdown" || request.OperationID == "" || request.RequestedState["action"] != "poweroff" {
+		t.Fatalf("unexpected privileged shutdown request: %#v", request)
 	}
 }

@@ -96,7 +96,7 @@ func (s *apiServer) maintenanceModeEnabled() bool {
 
 func (s *apiServer) requestUPSShutdown(upsName string) {
 	operationID := newID("ups-shutdown")
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(context.Background(), privileged.Request{Operation: "power.shutdown", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": "poweroff"}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
+	result, err := s.executePrivileged(context.Background(), privileged.Request{Operation: "power.shutdown", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": "poweroff"}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
 	if err != nil || !result.OK {
 		if s.log != nil {
 			s.log.Error("UPS shutdown sequence failed", "ups", upsName, "error", err)
@@ -144,7 +144,7 @@ func (s *apiServer) shutdownPower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	operationID := newID("shutdown")
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "power.shutdown", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": input.Action}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "power.shutdown", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": input.Action}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return

@@ -64,6 +64,7 @@ Store encrypted:
 - Slack webhook;
 - S3 credentials;
 - WireGuard private keys;
+- Tailscale auth keys;
 - SMTP passwords;
 - ACME account/private keys as applicable.
 
@@ -74,6 +75,11 @@ Never emit secrets into:
 - normal API responses;
 - UI event stream;
 - exports by default.
+
+Tailscale authentication keys are staged in a mode-0600 temporary file and
+passed to `tailscale up` using its `file:` auth-key form. This keeps the key
+out of process arguments and structured command logs; the file is removed when
+the bounded command returns.
 
 Release CI adds a high-confidence credential-format scan over tracked files and
 executes canary redaction plus privileged-operation rejection tests. This is a
