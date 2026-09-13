@@ -45,6 +45,11 @@ for job in ("qemu-smoke", "package-permissions"):
     job_match = re.search(rf"(?ms)^  {job}:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
     if not job_match or not re.search(r"^    needs: \[package, deb-verify\]$", job_match.group(0), re.M):
         raise SystemExit(f"{job} must wait for the Debian manifest gate")
+for job, artifact in (("qemu-smoke", "lumonas-qemu"), ("iso", "lumonas-iso-smoke")):
+    job_match = re.search(rf"(?ms)^  {job}:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+    block = job_match.group(0) if job_match else ""
+    if "uses: actions/upload-artifact@v4" not in block or "if: always()" not in block or artifact not in block:
+        raise SystemExit(f"{job} must retain appliance diagnostics when the gate fails")
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", race_match.group(0), re.M):
     raise SystemExit("race-fuzz job is not running the centralized race/fuzz harness")

@@ -279,12 +279,13 @@ jobs:
       - run: sudo LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh
       - run: LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_LOG="$PWD/build/qemu/qemu-smoke.log" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: lumonas-qemu
           path: |
             build/qemu/lumonas-debian13.raw
             build/qemu/qemu-smoke.log*
-          if-no-files-found: error
+          if-no-files-found: warn
 
   package-permissions:
     runs-on: ubuntu-latest
@@ -356,6 +357,7 @@ jobs:
           name: lumonas-iso
           path: build/releases/*
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: lumonas-iso-smoke
           path: |

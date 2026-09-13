@@ -139,6 +139,11 @@ passes that binary explicitly rather than relying on a development `go run`.
 This is release-blocking and exercises the offline system-disk replacement path
 end to end.
 
+The QEMU and ISO smoke jobs upload their appliance logs with `if: always()`, so
+a failed boot remains diagnosable. These diagnostic uploads do not satisfy the
+release artifact gates; publication still requires the corresponding jobs to
+pass.
+
 The separate `recovery-api` gate exercises the production export path before
 the ISO job: it creates a management user, network connection, managed SMB/NFS
 share, Compose stack, encrypted secret payload, and configuration generation
