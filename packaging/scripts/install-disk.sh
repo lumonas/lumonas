@@ -34,13 +34,9 @@ case "$MOUNT" in
 esac
 
 command -v readlink >/dev/null 2>&1 || die "readlink is required"
-command -v sfdisk >/dev/null 2>&1 || die "sfdisk is required"
-command -v rsync >/dev/null 2>&1 || die "rsync is required"
-command -v findmnt >/dev/null 2>&1 || die "findmnt is required"
-command -v lsblk >/dev/null 2>&1 || die "lsblk is required"
-command -v partx >/dev/null 2>&1 || die "partx is required"
-command -v udevadm >/dev/null 2>&1 || die "udevadm is required"
-command -v base64 >/dev/null 2>&1 || die "base64 is required"
+for command in sfdisk rsync findmnt lsblk partx udevadm base64 wipefs blkid mount umount chroot grub-install update-initramfs update-grub; do
+	command -v "$command" >/dev/null 2>&1 || die "$command is required"
+done
 command -v "mkfs.$FILESYSTEM" >/dev/null 2>&1 || die "mkfs.$FILESYSTEM is required"
 [ "$BOOT_MODE" != "uefi" ] || command -v mkfs.vfat >/dev/null 2>&1 || die "mkfs.vfat is required"
 
@@ -84,7 +80,7 @@ else
 	PARTS
 fi
 
-partx --update "$DEVICE" >/dev/null 2>&1 || true
+partx --update "$DEVICE" >/dev/null 2>&1 || die "could not refresh the partition table"
 udevadm settle --timeout=10
 
 partition_path() {
@@ -147,11 +143,13 @@ if ! grep -Eq '^[[:space:]]*127\.0\.1\.1[[:space:]]' "$MOUNT/etc/hosts"; then
 fi
 
 root_uuid="$(blkid -s UUID -o value "$PART_ROOT")"
+[ -n "$root_uuid" ] || die "root filesystem UUID is missing"
 printf 'UUID=%s / %s errors=remount-ro 0 1\n' "$root_uuid" "$FILESYSTEM" >"$MOUNT/etc/fstab"
 if [ "$BOOT_MODE" = "uefi" ]; then
 	mkdir -p "$MOUNT/boot/efi"
 	mount "$PART_ESP" "$MOUNT/boot/efi"
 	esp_uuid="$(blkid -s UUID -o value "$PART_ESP")"
+	[ -n "$esp_uuid" ] || die "EFI filesystem UUID is missing"
 	printf 'UUID=%s /boot/efi vfat umask=0077 0 1\n' "$esp_uuid" >>"$MOUNT/etc/fstab"
 fi
 
@@ -173,7 +171,7 @@ chroot "$MOUNT" /bin/sh -s -- "$ADMIN_NAME" <<-'CHROOT'
 	set -eu
 	admin_name="$1"
 	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
-	update-initramfs -u -k all >/dev/null 2>&1 || true
+	update-initramfs -u -k all >/dev/null 2>&1
 	if [ "$admin_name" = "root" ]; then
 		echo "administrator name may not be root" >&2
 		exit 1
@@ -185,7 +183,7 @@ if [ "$BOOT_MODE" = "uefi" ]; then
 else
 	chroot "$MOUNT" grub-install --target=i386-pc "$DEVICE" >/dev/null
 fi
-chroot "$MOUNT" update-grub >/dev/null 2>&1 || true
+chroot "$MOUNT" update-grub >/dev/null 2>&1
 
 sync
 log "installation complete on $DEVICE_INPUT"
