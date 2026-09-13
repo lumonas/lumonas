@@ -10,6 +10,7 @@ REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY:-}"
 DEBIAN_MIRROR="${LUMONAS_DEBIAN_MIRROR:-http://deb.debian.org/debian}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || date +%s)}"
 SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
+INSTALL_PASSWORD="${LUMONAS_INSTALL_PASSWORD:-}"
 case "$SOURCE_DATE_EPOCH" in
 	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
 esac
@@ -31,8 +32,9 @@ command -v apt-ftparchive >/dev/null 2>&1 || { echo "apt-ftparchive (apt-utils) 
 [ -f "$DEB" ] || { echo "Build the Debian package first: $DEB" >&2; exit 1; }
 
 rm -rf "$WORK"
-mkdir -p "$WORK/config/package-lists" "$WORK/config/hooks/live" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas" "$WORK/config/includes.chroot/usr/share/doc/lumonas" "$WORK/config/includes.chroot/etc/apt/preferences.d"
+mkdir -p "$WORK/config/package-lists" "$WORK/config/hooks/live" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas" "$WORK/config/includes.chroot/usr/share/doc/lumonas" "$WORK/config/includes.chroot/etc/apt/preferences.d" "$WORK/config/includes.binary/opt/lumonas-repo/pool/main/l/lumonas"
 cp "$DEB" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb"
+cp "$DEB" "$WORK/config/includes.binary/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb"
 REPO_DIR="$WORK/config/includes.chroot/opt/lumonas-repo"
 (cd "$REPO_DIR" && dpkg-scanpackages --multiversion pool /dev/null > Packages && gzip -9c Packages > Packages.gz)
 cd "$REPO_DIR"
@@ -316,7 +318,46 @@ Source date epoch: $SOURCE_DATE_EPOCH
 Source commit: $SOURCE_COMMIT
 EOF
 
-(cd "$WORK" && lb config \
+# The default Debian Installer entry installs a fresh Debian target rather
+# than copying the live filesystem. When an installer password is supplied,
+# carry the appliance package on the ISO itself and install it into that
+# target with a preseed late command. Development builds can exercise the
+# real-disk installer path without baking credentials into the repository.
+if [ -n "$INSTALL_PASSWORD" ]; then
+	mkdir -p "$WORK/config/includes.binary/etc/lumonas"
+	cat > "$WORK/config/includes.binary/etc/lumonas/lumonas-web.env" <<'ENV'
+LUMONAS_WEB_LISTEN=0.0.0.0:8081
+LUMONAS_WEB_ROOT=/usr/share/lumonas/web
+LUMONAS_API_URL=http://127.0.0.1:8080
+LUMONAS_WEB_TLS_CERT=/etc/lumonas/tls/server.crt
+LUMONAS_WEB_TLS_KEY=/etc/lumonas/tls/server.key
+LUMONAS_COOKIE_SECURE=true
+ENV
+	chmod 0640 "$WORK/config/includes.binary/etc/lumonas/lumonas-web.env"
+	cat > "$WORK/config/includes.binary/preseed.cfg" <<EOF
+d-i passwd/root-login boolean false
+d-i passwd/user-fullname string Dawidof
+d-i passwd/username string dawidof
+d-i passwd/user-password password $INSTALL_PASSWORD
+d-i passwd/user-password-again password $INSTALL_PASSWORD
+d-i netcfg/hostname string lumonas-iso-test
+d-i partman-auto/disk string /dev/vda
+d-i partman-auto/method string regular
+d-i partman-auto/choose_recipe select atomic
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/with_other_os boolean true
+d-i grub-installer/bootdev string /dev/vda
+d-i preseed/late_command string cp /cdrom/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb /target/tmp/lumonas.deb; in-target dpkg -i /tmp/lumonas.deb; cp /cdrom/etc/lumonas/lumonas-web.env /target/etc/lumonas/lumonas-web.env; in-target systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
+EOF
+	chmod 0600 "$WORK/config/includes.binary/preseed.cfg"
+fi
+
+lb_config() {
+	lb config \
 	--distribution trixie \
 	--architectures amd64 \
 	--mirror-bootstrap "$DEBIAN_MIRROR" \
@@ -329,7 +370,14 @@ EOF
 	--apt-indices false \
 	--apt-options "-o APT::Get::Assume-Yes=true -o Acquire::ForceIPv4=true -o Acquire::Retries=5" \
 	--firmware-binary false \
-	--firmware-chroot false)
+	--firmware-chroot false \
+	"$@"
+}
+if [ -n "$INSTALL_PASSWORD" ]; then
+	(cd "$WORK" && lb_config --bootappend-install "auto=true priority=critical preseed/file=/cdrom/preseed.cfg")
+else
+	(cd "$WORK" && lb_config)
+fi
 (cd "$WORK" && lb build)
 mkdir -p "$ROOT/build/releases"
 cp "$WORK"/live-image-amd64.hybrid.iso "$ROOT/build/releases/lumonas-$VERSION-amd64.iso"
