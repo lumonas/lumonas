@@ -34,6 +34,9 @@ The dedicated generation-retention smoke test is also release-blocking.
 The package post-install policy is release-blocking as well: live systemd
 hosts fail the transaction when an enabled LumoNAS unit cannot start, while
 chroot/image builds retain their explicit no-PID-1 compatibility path.
+The matching `prerm` path fails a live upgrade if any ordered dependent or
+privileged provider cannot stop, preventing mixed old/new service binaries;
+the no-PID-1 fallback remains limited to image and chroot construction.
 
 ### Integration
 

@@ -1,14 +1,20 @@
 #!/bin/sh
 set -eu
 
-# Stop dependents before their providers during upgrades and removal. This
-# makes an in-place package upgrade load the new binaries on the next start,
-# while tolerating dpkg/container environments without a running systemd.
+# Stop dependents before their providers during upgrades and removal. A live
+# systemd host must not continue an upgrade while an old service is still
+# running; image/chroot environments without PID 1 retain a tolerant path.
 case "${1:-}" in
 	upgrade|remove|deconfigure)
-		for unit in lumonas-web.service lumonasd.service lumonas-runtime.service lumonas-privd-general.service lumonas-privd-power.service lumonas-privd-network.service lumonas-privd-storage.service lumonas-privd.service; do
-			systemctl stop "$unit" || true
-		done
+		if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+			for unit in lumonas-web.service lumonasd.service lumonas-runtime.service lumonas-privd-general.service lumonas-privd-power.service lumonas-privd-network.service lumonas-privd-storage.service lumonas-privd.service; do
+				systemctl stop "$unit"
+			done
+		else
+			for unit in lumonas-web.service lumonasd.service lumonas-runtime.service lumonas-privd-general.service lumonas-privd-power.service lumonas-privd-network.service lumonas-privd-storage.service lumonas-privd.service; do
+				systemctl stop "$unit" || true
+			done
+		fi
 		;;
 esac
 exit 0

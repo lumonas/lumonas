@@ -77,6 +77,8 @@ require_line "$ROOT/scripts/release-gate-policy-smoke.sh" 'upgrade-compatibility
 require_line "$ROOT/scripts/installer-signature-policy-smoke.sh" 'LUMONAS_REPO_SIGN_KEY is required'
 require_line "$ROOT/scripts/postinst-policy-smoke.sh" 'live systemd postinst still ignores service start failures'
 require_line "$ROOT/Makefile" 'postinst-policy-smoke:'
+require_line "$ROOT/packaging/debian/prerm" 'systemd host must not continue an upgrade'
+require_line "$ROOT/packaging/debian/prerm" 'systemctl stop "$unit"'
 require_line "$ROOT/scripts/permission-smoke.sh" '/etc/lumonas/runtime.env'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'lumonas-runtime.service'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'qemu-package-manifest.txt'

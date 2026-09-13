@@ -34,6 +34,11 @@ assert_order(postinst, [
     "lumonas-privd-general.service", "lumonasd.service",
     "lumonas-web.service",
 ], "upgrade start")
+live_prerm = prerm.split('if [ -d /run/systemd/system ]', 1)[1].split('else', 1)[0]
+if 'systemctl stop "$unit" || true' in live_prerm:
+    raise SystemExit("live systemd upgrade stop still ignores service failures")
+if 'systemctl stop "$unit"' not in live_prerm:
+    raise SystemExit("live systemd upgrade stop path is missing")
 if 'cp "$ROOT/packaging/debian/prerm" "$OUT/DEBIAN/prerm"' not in build_deb:
     raise SystemExit("Debian build does not package prerm")
 PY

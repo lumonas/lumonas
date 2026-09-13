@@ -3,6 +3,7 @@ set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 POSTINST="$ROOT/packaging/debian/postinst"
+PRERM="$ROOT/packaging/debian/prerm"
 
 grep -F 'if [ -d /run/systemd/system ] && command -v systemctl' "$POSTINST" >/dev/null
 grep -F 'systemctl start "$unit"' "$POSTINST" >/dev/null
@@ -22,4 +23,17 @@ if 'systemctl start "$unit" || true' in live:
 if 'systemctl enable ' not in live or 'systemctl daemon-reload' not in live:
     raise SystemExit("live systemd postinst does not reload and enable the service graph")
 print("LumoNAS postinst systemd failure policy passed")
+PY
+
+python3 - "$PRERM" <<'PY'
+import pathlib
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+live = text.split('if [ -d /run/systemd/system ]', 1)[1].split('else', 1)[0]
+if 'systemctl stop "$unit" || true' in live:
+    raise SystemExit("live systemd prerm still ignores service stop failures")
+if 'systemctl stop "$unit"' not in live:
+    raise SystemExit("live systemd prerm does not stop the ordered service graph")
+print("LumoNAS prerm systemd failure policy passed")
 PY

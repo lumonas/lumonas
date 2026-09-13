@@ -233,6 +233,8 @@ Deliver:
 
 Deliver:
 
+- fail-closed live-systemd package start/stop transactions with an explicit
+  tolerant path only for chroots and image construction;
 - signed update channel;
 - pre-update recovery verification;
 - rollback strategy;
