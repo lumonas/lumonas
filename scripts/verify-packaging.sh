@@ -86,6 +86,11 @@ require_line "$ROOT/scripts/qemu-build-image.sh" 'dpkg-query -W'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'sourceCommit=$LUMONAS_SOURCE_COMMIT'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.crt'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" '/etc/lumonas/tls/server.key'
+require_line "$ROOT/cmd/lumonasd/identity_provisioning.go" 'func (s *apiServer) rollbackNetworkCheckpoint'
+require_line "$ROOT/cmd/lumonasd/main.go" 'recordNetworkCheckpointFn'
+require_line "$ROOT/cmd/lumonasd/network_api.go" 'checkpoint persistence failed; checkpoint rolled back'
+require_line "$ROOT/cmd/lumonasd/network_api_test.go" 'TestNetworkCheckpointRollsBackWhenPersistenceFails'
+require_line "$ROOT/scripts/security-smoke.sh" 'TestNetworkCheckpointRollsBackWhenPersistenceFails'
 if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1 || grep -F '/etc/lumonas/tls/tls.key' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1; then
 	echo "share configuration still references obsolete FTPS certificate paths" >&2
 	exit 1

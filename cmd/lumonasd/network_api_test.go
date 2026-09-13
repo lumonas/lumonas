@@ -1,13 +1,38 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lumonas/lumonas/internal/privileged"
 )
+
+func TestNetworkCheckpointRollsBackWhenPersistenceFails(t *testing.T) {
+	server := testServer(t)
+	server.recordNetworkCheckpointFn = func(string, string, string) error {
+		return errors.New("checkpoint database unavailable")
+	}
+	var operations []string
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		operations = append(operations, request.Operation)
+		return nil
+	}
+
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/network/checkpoints", strings.NewReader(`{"connectionId":"lan","timeoutSeconds":30,"reauthenticated":true}`)))
+	if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "checkpoint rolled back") {
+		t.Fatalf("expected rolled-back persistence failure, got %d: %s", response.Code, response.Body.String())
+	}
+	if len(operations) != 2 || operations[0] != "network.checkpoint.begin" || operations[1] != "network.checkpoint.rollback" {
+		t.Fatalf("unexpected privileged operation sequence: %#v", operations)
+	}
+}
 
 func TestNetworkConfigurationAPIRequiresReauthenticationAndPersistsTypedState(t *testing.T) {
 	server := testServer(t)
@@ -137,6 +162,7 @@ func TestApplyWiFiConnectionRequiresPassword(t *testing.T) {
 	if apply.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected 422 for weak password, got %d %s", apply.Code, apply.Body.String())
 	}
+	server.brokerExec = nil
 	apply = httptest.NewRecorder()
 	server.routes().ServeHTTP(apply, httptest.NewRequest(http.MethodPost, "/api/v1/network/connections/"+created.ID+"/apply", strings.NewReader(`{"reauthenticated":true,"wifiPassword":"correct horse battery staple"}`)))
 	if apply.Code != http.StatusServiceUnavailable {

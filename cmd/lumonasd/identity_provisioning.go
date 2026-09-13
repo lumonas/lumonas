@@ -31,12 +31,33 @@ func fileIdentityGID() int {
 }
 
 func (s *apiServer) brokerExecute(ctx context.Context, request privileged.Request) error {
-	// brokerExec is a test seam; production leaves it nil so requests go to
-	// the real privileged broker over the unix socket.
-	if s.brokerExec != nil {
-		return s.brokerExec(ctx, request)
+	result, err := s.executePrivileged(ctx, request)
+	if err != nil {
+		return err
 	}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(ctx, request)
+	if !result.OK {
+		return fmt.Errorf("%s", result.Error)
+	}
+	return nil
+}
+
+func (s *apiServer) executePrivileged(ctx context.Context, request privileged.Request) (privileged.Response, error) {
+	// brokerExec is a test seam; production leaves it nil so requests go to
+	// the real privileged broker over the Unix socket. Returning a typed OK
+	// response keeps the seam usable for operations that need response data.
+	if s.brokerExec != nil {
+		if err := s.brokerExec(ctx, request); err != nil {
+			return privileged.Response{}, err
+		}
+		return privileged.Response{OK: true}, nil
+	}
+	return (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(ctx, request)
+}
+
+func (s *apiServer) rollbackNetworkCheckpoint(operationID string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	result, err := s.executePrivileged(ctx, privileged.Request{Operation: "network.checkpoint.rollback", OperationID: operationID, PlanHash: operationID, Confirmed: true, ExpiresAt: time.Now().UTC().Add(2 * time.Minute)})
 	if err != nil {
 		return err
 	}

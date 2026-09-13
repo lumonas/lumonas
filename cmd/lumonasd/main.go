@@ -42,34 +42,35 @@ import (
 )
 
 type apiServer struct {
-	store                *store.Store
-	hub                  *events.Hub
-	log                  *slog.Logger
-	jobsMu               sync.Mutex
-	version              string
-	diskFunc             func() ([]model.Disk, error)
-	authRequired         bool
-	dynamicAuth          bool
-	dockerService        dockerruntime.Service
-	catalogFile          string
-	notificationMu       sync.Mutex
-	notificationFailures map[string]notificationFailureState
-	notificationClient   *http.Client
-	updateHTTPClient     *http.Client
-	totpMu               sync.Mutex
-	totpChallenges       map[string]totpChallenge
-	safetyMu             sync.Mutex
-	safetyUntil          time.Time
-	brokerExec           func(ctx context.Context, request privileged.Request) error
-	corsOrigins          []string
-	csrfTokens           map[string]csrfBinding
-	csrfMu               sync.Mutex
-	fixStages            map[string]string
-	fixStageMu           sync.Mutex
-	runtimeStateFunc     func() map[string]any
-	rateMu               sync.Mutex
-	rateAttempts         map[string][]time.Time
-	clock                func() time.Time
+	store                     *store.Store
+	hub                       *events.Hub
+	log                       *slog.Logger
+	jobsMu                    sync.Mutex
+	version                   string
+	diskFunc                  func() ([]model.Disk, error)
+	authRequired              bool
+	dynamicAuth               bool
+	dockerService             dockerruntime.Service
+	catalogFile               string
+	notificationMu            sync.Mutex
+	notificationFailures      map[string]notificationFailureState
+	notificationClient        *http.Client
+	updateHTTPClient          *http.Client
+	totpMu                    sync.Mutex
+	totpChallenges            map[string]totpChallenge
+	safetyMu                  sync.Mutex
+	safetyUntil               time.Time
+	brokerExec                func(ctx context.Context, request privileged.Request) error
+	recordNetworkCheckpointFn func(operationID, connectionID, state string) error
+	corsOrigins               []string
+	csrfTokens                map[string]csrfBinding
+	csrfMu                    sync.Mutex
+	fixStages                 map[string]string
+	fixStageMu                sync.Mutex
+	runtimeStateFunc          func() map[string]any
+	rateMu                    sync.Mutex
+	rateAttempts              map[string][]time.Time
+	clock                     func() time.Time
 }
 
 var version = "0.1.0-dev"
@@ -1531,7 +1532,7 @@ func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
 	}
 	requested := map[string]any{"connectionUuid": input.ConnectionUUID, "devices": input.Devices, "changes": changes, "timeoutSeconds": input.TimeoutSeconds}
 	operationID := newID("net")
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "network.checkpoint.begin", OperationID: operationID, PlanHash: operationID, RequestedState: requested, ExpiresAt: time.Now().UTC().Add(time.Duration(input.TimeoutSeconds+60) * time.Second), Confirmed: true})
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "network.checkpoint.begin", OperationID: operationID, PlanHash: operationID, RequestedState: requested, ExpiresAt: time.Now().UTC().Add(time.Duration(input.TimeoutSeconds+60) * time.Second), Confirmed: true})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -1540,10 +1541,22 @@ func (s *apiServer) networkCheckpoint(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": result.Error})
 		return
 	}
-	s.publish("network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
 	if input.ConnectionID != "" {
-		_ = s.store.RecordNetworkCheckpoint(operationID, input.ConnectionID, "pending")
+		record := s.recordNetworkCheckpointFn
+		if record == nil {
+			record = s.store.RecordNetworkCheckpoint
+		}
+		if recordErr := record(operationID, input.ConnectionID, "pending"); recordErr != nil {
+			rollbackErr := s.rollbackNetworkCheckpoint(operationID)
+			if rollbackErr != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network checkpoint persistence failed and rollback failed: " + rollbackErr.Error()})
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network checkpoint persistence failed; checkpoint rolled back: " + recordErr.Error()})
+			return
+		}
 	}
+	s.publish("network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-checkpoint", ID: operationID}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
 	writeJSON(w, http.StatusAccepted, result)
 }
 
@@ -1567,7 +1580,7 @@ func (s *apiServer) networkCheckpointAction(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	operationID := parts[2]
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "network.checkpoint." + parts[3], OperationID: operationID, PlanHash: operationID, Confirmed: true})
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "network.checkpoint." + parts[3], OperationID: operationID, PlanHash: operationID, Confirmed: true})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return

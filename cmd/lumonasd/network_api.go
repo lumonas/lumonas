@@ -166,7 +166,7 @@ func (s *apiServer) applyNetworkConnection(w http.ResponseWriter, r *http.Reques
 	}
 	operationID := newID("net")
 	requested := map[string]any{"connectionUuid": connection.UUID, "connectionId": id, "devices": input.Devices, "changes": changes, "timeoutSeconds": input.TimeoutSeconds}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "network.checkpoint.begin", OperationID: operationID, PlanHash: operationID, RequestedState: requested, ExpiresAt: time.Now().UTC().Add(time.Duration(input.TimeoutSeconds+60) * time.Second), Confirmed: true})
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "network.checkpoint.begin", OperationID: operationID, PlanHash: operationID, RequestedState: requested, ExpiresAt: time.Now().UTC().Add(time.Duration(input.TimeoutSeconds+60) * time.Second), Confirmed: true})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -175,13 +175,40 @@ func (s *apiServer) applyNetworkConnection(w http.ResponseWriter, r *http.Reques
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": result.Error})
 		return
 	}
+	previousStatus := connection.Status
 	connection.Status = "checkpoint-pending"
 	if _, err := s.store.UpsertNetworkConnection(connection); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		rollbackErr := s.rollbackNetworkCheckpoint(operationID)
+		if rollbackErr != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network connection persistence failed and rollback failed: " + rollbackErr.Error()})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network connection persistence failed; checkpoint rolled back: " + err.Error()})
 		return
 	}
-	if err := s.store.RecordNetworkCheckpoint(operationID, id, "pending"); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	record := s.recordNetworkCheckpointFn
+	if record == nil {
+		record = s.store.RecordNetworkCheckpoint
+	}
+	if recordErr := record(operationID, id, "pending"); recordErr != nil {
+		connection.Status = previousStatus
+		restoreErr := error(nil)
+		if _, err := s.store.UpsertNetworkConnection(connection); err != nil {
+			restoreErr = err
+		}
+		rollbackErr := s.rollbackNetworkCheckpoint(operationID)
+		if rollbackErr != nil || restoreErr != nil {
+			detail := ""
+			if rollbackErr != nil {
+				detail += " checkpoint rollback: " + rollbackErr.Error()
+			}
+			if restoreErr != nil {
+				detail += " connection restore: " + restoreErr.Error()
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network checkpoint persistence failed and rollback was incomplete:" + detail})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "network checkpoint persistence failed; checkpoint rolled back: " + recordErr.Error()})
 		return
 	}
 	s.recordRequestAudit(r, actor, "network.connection.apply", id, map[string]any{"operationId": operationID})
@@ -211,7 +238,7 @@ func (s *apiServer) applyWiFiConnection(w http.ResponseWriter, r *http.Request, 
 	if !connection.WiFiOpen {
 		requested["psk"] = password
 	}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "network.wifi.connect", OperationID: operationID, PlanHash: operationID, RequestedState: requested, ExpiresAt: time.Now().UTC().Add(time.Duration(timeoutSeconds+60) * time.Second), Confirmed: true})
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "network.wifi.connect", OperationID: operationID, PlanHash: operationID, RequestedState: requested, ExpiresAt: time.Now().UTC().Add(time.Duration(timeoutSeconds+60) * time.Second), Confirmed: true})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -374,11 +401,10 @@ func (s *apiServer) activateFirewallRules(ctx context.Context, rules string) (fu
 			_ = os.Remove(path)
 		}
 	}
-	socket := envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")
 	operationID := newID("firewall")
 	hash := sha256.Sum256([]byte(rules))
 	planHash := fmt.Sprintf("%x", hash[:])
-	result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
+	result, err := s.executePrivileged(ctx, privileged.Request{
 		Operation: "firewall.apply", OperationID: operationID, PlanHash: planHash,
 		RequestedState: map[string]any{"configPath": path}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true,
 	})

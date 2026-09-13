@@ -676,3 +676,12 @@ Pass if a sanitized `failed` delivery row is persisted and the channel enters
 the existing bounded suppression policy without exposing credential details.
 The first two consecutive failures must remain eligible for delivery, while
 the third activates the cooldown and later success clears it.
+
+## BJ. Network checkpoint persistence rollback
+
+Run the network checkpoint persistence safety test.
+
+Pass if a failure to persist a pending NetworkManager checkpoint invokes the
+typed privileged rollback operation, restores the prior connection state, and
+returns an error. A checkpoint must not remain active without a durable
+rollback record.

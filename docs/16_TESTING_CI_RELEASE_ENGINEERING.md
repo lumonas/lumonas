@@ -184,6 +184,10 @@ wedged utility, including descendants that inherit its pipes, cannot keep a
 privileged request, job, or release smoke test alive indefinitely. The
 interactive NetworkManager checkpoint path is covered separately because it
 keeps a confirmation pipe open while the checkpoint is pending.
+The network checkpoint safety test also forces persistence of the pending
+checkpoint record to fail and requires the daemon to invoke the typed rollback
+operation before returning an error. A checkpoint is never considered safely
+created unless both the privileged state and its durable rollback record exist.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the

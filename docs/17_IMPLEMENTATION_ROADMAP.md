@@ -170,6 +170,7 @@ Deliver:
 
 - DHCP/static/DNS;
 - checkpoints;
+- checkpoint persistence rollback when the durable pending record cannot be written;
 - interfaces;
 - diagnostics;
 - Tailscale;
