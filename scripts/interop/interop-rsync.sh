@@ -13,15 +13,23 @@ printf 'lumonas rsync interop payload\n' > "$LUMONAS_INTEROP_WORKDIR/$payload"
 
 mode="${LUMONAS_INTEROP_RSYNC_MODE:-module}"
 rsync_flags=(-c)
-if [ "$mode" = "module" ]; then
+case "$mode" in
+module)
 	require_port "$LUMONAS_INTEROP_HOST" "${LUMONAS_INTEROP_RSYNC_PORT:-873}" "$NAME"
 	require_credentials "$NAME"
 	destination="rsync://$LUMONAS_INTEROP_USER@$LUMONAS_INTEROP_HOST:${LUMONAS_INTEROP_RSYNC_PORT:-873}/${LUMONAS_INTEROP_RSYNC_MODULE:-$LUMONAS_INTEROP_SHARE}/"
-else
+	;;
+ssh)
 	require_port "$LUMONAS_INTEROP_HOST" 22 "$NAME"
+	require_user "$NAME"
 	destination="$LUMONAS_INTEROP_USER@$LUMONAS_INTEROP_HOST:/srv/$LUMONAS_INTEROP_SHARE/"
 	rsync_flags+=(-e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null")
-fi
+	;;
+*)
+	interop_result skip "$NAME" "unsupported LUMONAS_INTEROP_RSYNC_MODE: $mode"
+	exit 0
+	;;
+esac
 
 if ! rsync "${rsync_flags[@]}" "$LUMONAS_INTEROP_WORKDIR/$payload" "$destination" >/dev/null 2>&1; then
 	interop_result fail "$NAME" "rsync upload failed (mode: $mode)"

@@ -44,6 +44,7 @@ Individual checks can be run directly, e.g. `bash scripts/interop/interop-smb.sh
 | Variable | Default | Used by |
 |---|---|---|
 | `LUMONAS_INTEROP_SFTP_PORT` | `22` | sftp |
+| `LUMONAS_INTEROP_SSH_KEY` | unset | sftp; private key used for non-interactive authentication (otherwise ssh-agent) |
 | `LUMONAS_INTEROP_FTP_PORT` | `21` | ftp/ftps |
 | `LUMONAS_INTEROP_RSYNC_MODE` | `module` | rsync (`module` or `ssh`) |
 | `LUMONAS_INTEROP_RSYNC_PORT` | `873` | rsync module mode |

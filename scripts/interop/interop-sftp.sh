@@ -8,7 +8,20 @@ set -u
 NAME="sftp roundtrip"
 require_tool sftp "$NAME"
 require_port "$LUMONAS_INTEROP_HOST" 22 "$NAME"
-require_credentials "$NAME"
+require_user "$NAME"
+
+if [ -n "${LUMONAS_INTEROP_SSH_KEY:-}" ]; then
+	[ -f "$LUMONAS_INTEROP_SSH_KEY" ] || {
+		interop_result skip "$NAME" "LUMONAS_INTEROP_SSH_KEY does not point to a file"
+		exit 0
+	}
+	ssh_options=(-i "$LUMONAS_INTEROP_SSH_KEY")
+else
+	# OpenSSH sftp has no safe password argument. BatchMode keeps a hardware
+	# acceptance run from hanging on an interactive prompt; use an ssh-agent or
+	# set LUMONAS_INTEROP_SSH_KEY for non-interactive authentication.
+	ssh_options=(-oBatchMode=yes)
+fi
 
 payload="lumonas-interop-$(date +%s).txt"
 printf 'lumonas sftp interop payload\n' > "$LUMONAS_INTEROP_WORKDIR/$payload"
@@ -22,19 +35,16 @@ batch="$LUMONAS_INTEROP_WORKDIR/batch.sftp"
 	printf 'rm %s\n' "$payload"
 } > "$batch"
 
-if sftp -oBatchMode=no -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null \
+if sftp "${ssh_options[@]}" -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null \
 	-P "${LUMONAS_INTEROP_SFTP_PORT:-22}" \
-	"$LUMONAS_INTEROP_USER@$LUMONAS_INTEROP_HOST" -b "$batch" -- "$LUMONAS_INTEROP_PASSWORD" >/dev/null 2>&1 ||
-	sftp -oBatchMode=no -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null \
-		-P "${LUMONAS_INTEROP_SFTP_PORT:-22}" \
-		"$LUMONAS_INTEROP_USER@$LUMONAS_INTEROP_HOST" -b "$batch" >/dev/null 2>&1; then
+	"$LUMONAS_INTEROP_USER@$LUMONAS_INTEROP_HOST" -b "$batch" >/dev/null 2>&1; then
 	if grep -q 'lumonas sftp interop payload' "$LUMONAS_INTEROP_WORKDIR/downloaded-$payload" 2>/dev/null; then
 		interop_result pass "$NAME"
 	else
 		interop_result fail "$NAME" "downloaded content mismatch"
 	fi
 else
-	interop_result fail "$NAME" "sftp batch failed (interactive password prompts are unsupported; configure an SSH key)"
+	interop_result fail "$NAME" "sftp batch failed; configure an SSH key or ssh-agent"
 fi
 
 interop_summary

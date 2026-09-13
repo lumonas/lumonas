@@ -77,6 +77,14 @@ require_credentials() {
 	fi
 }
 
+require_user() {
+	local name="$1"
+	if [ -z "$LUMONAS_INTEROP_USER" ]; then
+		interop_result skip "$name" "LUMONAS_INTEROP_USER not set"
+		exit 0
+	fi
+}
+
 interop_summary() {
 	printf '\n%d passed, %d skipped, %d failed\n' "$INTEROP_PASS" "$INTEROP_SKIP" "$INTEROP_FAIL"
 	[ "$INTEROP_FAIL" -eq 0 ]
