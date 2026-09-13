@@ -185,6 +185,11 @@ promotion, atomically rename it into place, and sync the containing directory.
 Downloads are synced before close as well, so a successful local backup copy
 has an explicit durability boundary in addition to checksum verification.
 
+The A/B update manager applies the same boundary to staged packages, manifests,
+and slot state: package bytes are synced before close, atomic renames are
+followed by a parent-directory sync, and activation is reported only after the
+durable state write succeeds.
+
 The SSE envelope test round-trips an event containing correlation, operation,
 plan, actor, generation, resource, and payload data. This keeps the fields
 needed to trace a destructive operation from the initiating request through

@@ -63,6 +63,10 @@ func TestUpdateAPIRequiresVerifiedRecoveryAndSupportsABHealthRollback(t *testing
 	if applyResponse.Code != http.StatusAccepted {
 		t.Fatalf("apply status %d: %s", applyResponse.Code, applyResponse.Body.String())
 	}
+	staged, err := os.ReadFile(filepath.Join(updateRoot, "slot-b", "package"))
+	if err != nil || string(staged) != string(packageData) {
+		t.Fatalf("API activation did not persist the staged package: %q %v", staged, err)
+	}
 
 	health := httptest.NewRecorder()
 	server.routes().ServeHTTP(health, httptest.NewRequest(http.MethodPost, "/api/v1/updates/health", strings.NewReader(`{"healthy":true,"version":"0.2.0"}`)))

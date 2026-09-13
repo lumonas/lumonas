@@ -33,7 +33,8 @@ func fmtDigest(value []byte) string {
 func TestSignedManifestAndPackageVerification(t *testing.T) {
 	root := t.TempDir()
 	packagePath := filepath.Join(root, "update.pkg")
-	if err := os.WriteFile(packagePath, []byte("signed package"), 0o600); err != nil {
+	packageData := []byte("signed package")
+	if err := os.WriteFile(packagePath, packageData, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	manifest := testManifest(t, packagePath)
@@ -60,7 +61,8 @@ func TestSignedManifestAndPackageVerification(t *testing.T) {
 func TestABManagerStagesAndRollsBackAtomically(t *testing.T) {
 	root := t.TempDir()
 	packagePath := filepath.Join(root, "update.pkg")
-	if err := os.WriteFile(packagePath, []byte("signed package"), 0o600); err != nil {
+	packageData := []byte("signed package")
+	if err := os.WriteFile(packagePath, packageData, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	manifest := testManifest(t, packagePath)
@@ -73,6 +75,13 @@ func TestABManagerStagesAndRollsBackAtomically(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "state", "slot-b", "package")); err != nil {
 		t.Fatal(err)
+	}
+	staged, err := os.ReadFile(filepath.Join(root, "state", "slot-b", "package"))
+	if err != nil || string(staged) != string(packageData) {
+		t.Fatalf("staged package is not durable/readable: %q %v", staged, err)
+	}
+	if info, err := os.Stat(filepath.Join(root, "state", "slot-b", "package")); err != nil || info.Mode().Perm() != 0o640 {
+		t.Fatalf("unexpected staged package mode: info=%v err=%v", info, err)
 	}
 	healthy, err := manager.MarkHealthy(manifest.Version)
 	if err != nil || healthy.ActiveSlot != "b" || healthy.PendingSlot != "" {

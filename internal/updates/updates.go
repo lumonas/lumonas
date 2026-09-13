@@ -336,7 +336,10 @@ func atomicWrite(path string, data []byte, mode os.FileMode) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	return os.Rename(temporaryPath, path)
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
 }
 
 func copyFile(source, target string) error {
@@ -353,7 +356,20 @@ func copyFile(source, target string) error {
 		_ = output.Close()
 		return err
 	}
+	if err := output.Sync(); err != nil {
+		_ = output.Close()
+		return err
+	}
 	return output.Close()
+}
+
+func syncDirectory(directory string) error {
+	handle, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer handle.Close()
+	return handle.Sync()
 }
 
 func mustDecodeDigest(value string) []byte {
