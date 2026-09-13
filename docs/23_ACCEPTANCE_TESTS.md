@@ -233,6 +233,9 @@ Pass if:
 - containers stop;
 - clean shutdown occurs.
 
+The status query must use the configured NUT device names after a configuration
+restart; an empty configuration may use NUT auto-discovery.
+
 ## O. Notification routing
 
 Trigger disk temperature test alert.

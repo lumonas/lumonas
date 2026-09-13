@@ -1947,13 +1947,7 @@ func (s *apiServer) services(w http.ResponseWriter, r *http.Request) {
 func (s *apiServer) ups(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	var names []string
-	for _, name := range strings.Split(os.Getenv("LUMONAS_UPS_NAMES"), ",") {
-		if trimmed := strings.TrimSpace(name); trimmed != "" {
-			names = append(names, trimmed)
-		}
-	}
-	writeJSON(w, http.StatusOK, s.discoverUPS(ctx, names))
+	writeJSON(w, http.StatusOK, s.discoverUPS(ctx, s.configuredUPSNames()))
 }
 
 func (s *apiServer) powerAction(w http.ResponseWriter, r *http.Request) {

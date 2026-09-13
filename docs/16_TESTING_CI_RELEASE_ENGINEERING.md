@@ -305,6 +305,9 @@ must be gone when the bounded command returns.
 Power actions and scheduled/UPS shutdowns use the same daemon broker seam, so
 the API cannot silently bypass the typed privileged boundary in production or
 tests.
+The UPS status endpoint reads the persisted NUT device configuration used by
+the shutdown monitor, while an empty configuration retains safe NUT
+auto-discovery behavior.
 All other `lumonasd` privileged calls use that same execution helper as well,
 including storage mounts/pools, SnapRAID, ACL jobs, runtime provisioning, and
 live runtime status.

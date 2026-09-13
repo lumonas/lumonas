@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -96,6 +97,27 @@ func TestUPSConfigIsPersistedAndValidated(t *testing.T) {
 	server.routes().ServeHTTP(invalid, httptest.NewRequest(http.MethodPatch, "/api/v1/ups/config", strings.NewReader(`{"names":["bad name"]}`)))
 	if invalid.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected invalid UPS config rejection, got %d: %s", invalid.Code, invalid.Body.String())
+	}
+}
+
+func TestUPSStatusUsesPersistedConfiguredNames(t *testing.T) {
+	server := testServer(t)
+	server.upsDiscover = func(_ context.Context, names []string) []power.UPS {
+		want := []string{"local-ups", "ups@host:3493"}
+		if !reflect.DeepEqual(names, want) {
+			t.Fatalf("status discovery received %v, want %v", names, want)
+		}
+		return []power.UPS{{Name: names[0], Status: "OL"}, {Name: names[1], Status: "OB", OnBattery: true}}
+	}
+	updated := httptest.NewRecorder()
+	server.routes().ServeHTTP(updated, httptest.NewRequest(http.MethodPatch, "/api/v1/ups/config", strings.NewReader(`{"names":["ups@host:3493","local-ups"]}`)))
+	if updated.Code != http.StatusOK {
+		t.Fatalf("expected UPS config update, got %d: %s", updated.Code, updated.Body.String())
+	}
+	status := httptest.NewRecorder()
+	server.routes().ServeHTTP(status, httptest.NewRequest(http.MethodGet, "/api/v1/ups/status", nil))
+	if status.Code != http.StatusOK || !strings.Contains(status.Body.String(), `"name":"ups@host:3493"`) || !strings.Contains(status.Body.String(), `"onBattery":true`) {
+		t.Fatalf("unexpected configured UPS status %d: %s", status.Code, status.Body.String())
 	}
 }
 

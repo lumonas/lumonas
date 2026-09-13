@@ -3351,6 +3351,7 @@ paths:
     get:
       tags: [Settings]
       summary: Get UPS
+      description: Reads the persisted NUT device configuration; when no devices are configured, NUT auto-discovery is used.
       operationId: get-ups-status
       responses:
         '200':

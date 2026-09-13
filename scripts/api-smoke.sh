@@ -374,6 +374,7 @@ done
 assert_authenticated_status_and_body GET /api/v1/settings 200 '"runtime"'
 assert_authenticated_status_and_body GET /api/v1/ups/config 200 '"names":[]'
 assert_authenticated_status_and_body PATCH /api/v1/ups/config 200 '"names":[]' '{"names":[]}'
+assert_authenticated_status_and_body GET /api/v1/ups/status 200 '['
 assert_authenticated_status_and_body POST /api/v1/recovery/key 200 '"key"'
 assert_authenticated_status_and_body POST /api/v1/recovery/export 201 '"verified":true'
 status=$(curl -sS -o "$TEMP_DIR/recovery-status.json" -w '%{http_code}' \

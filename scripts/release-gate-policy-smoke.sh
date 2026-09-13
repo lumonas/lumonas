@@ -222,6 +222,8 @@ if "Last-Event-ID" not in api_smoke_text or "cursor event twice" not in api_smok
     raise SystemExit("API smoke does not enforce non-duplicating SSE replay")
 if "/api/v1/ups/config" not in api_smoke_text or '"names":[]' not in api_smoke_text:
     raise SystemExit("API smoke does not exercise persisted UPS configuration")
+if "/api/v1/ups/status" not in api_smoke_text:
+    raise SystemExit("API smoke does not exercise configured UPS status")
 if "/api/v1/system/metrics/history" not in api_smoke_text:
     raise SystemExit("API smoke does not exercise persisted system metrics")
 for marker in ("start_privileged_stack()", 'LUMONAS_PRIVD_SOCKET="$PRIVD_DIR/privd.sock"', "-worker \"$worker\""):

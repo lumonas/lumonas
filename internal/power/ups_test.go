@@ -37,6 +37,21 @@ func TestDiscoverListsUPSWhenNamesOmitted(t *testing.T) {
 	}
 }
 
+func TestDiscoverPreservesConfiguredNamesForStatusQueries(t *testing.T) {
+	var calls [][]string
+	runner := func(_ context.Context, command string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{command}, args...))
+		return []byte("ups.status: OL\n"), nil
+	}
+	items := Discover(context.Background(), []string{"ups-a", "ups-b"}, runner)
+	if len(items) != 2 || items[0].Name != "ups-a" || items[1].Name != "ups-b" {
+		t.Fatalf("unexpected configured UPS inventory: %#v", items)
+	}
+	if len(calls) != 2 || calls[0][0] != "upsc" || calls[0][1] != "ups-a" || calls[1][1] != "ups-b" {
+		t.Fatalf("configured names were not queried directly: %#v", calls)
+	}
+}
+
 func TestNormalizeNamesValidatesAndSortsNUTDevices(t *testing.T) {
 	names, err := NormalizeNames([]string{"ups@host:3493", " local-ups ", "ups@host:3493"})
 	if err != nil {
