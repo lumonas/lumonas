@@ -438,6 +438,9 @@ The QEMU smoke exercises both documented SSE routes (`/api/v1/events/stream`
 and the compatibility alias `/api/v1/events`) and validates each captured
 envelope. The blank-disk ISO and recovered-disk boots additionally assert that
 the daemon, unprivileged web service, and privileged broker service are active.
+The recovery ISO and independently booted replacement disk also validate the
+readiness, server, disks, metrics, jobs, health, services, and SSE response
+contracts, so recovery cannot pass from filesystem artifacts alone.
 
 Expected result: fail closed.
 

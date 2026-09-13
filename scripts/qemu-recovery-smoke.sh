@@ -97,7 +97,11 @@ API_READY=false
 for attempt in $(seq 1 120); do
 	if curl -kfsS https://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
 		curl -kfsS https://127.0.0.1:18082/readyz >"$WORK/ready.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/api/v1/server >"$WORK/server.json" 2>/dev/null; then
+		curl -kfsS https://127.0.0.1:18082/api/v1/server >"$WORK/server.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18082/api/v1/disks >"$WORK/disks.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18082/api/v1/system/metrics >"$WORK/metrics.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18082/api/v1/jobs >"$WORK/jobs.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18082/api/v1/services >"$WORK/services.json" 2>/dev/null; then
 		API_READY=true
 	fi
 	if ! kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -109,6 +113,10 @@ done
 grep -F '"privilegedBroker":true' "$WORK/ready.json" >/dev/null
 python3 "$ROOT/scripts/validate-api-response.py" readiness "$WORK/ready.json"
 python3 "$ROOT/scripts/validate-api-response.py" server "$WORK/server.json"
+python3 "$ROOT/scripts/validate-api-response.py" disks "$WORK/disks.json"
+python3 "$ROOT/scripts/validate-api-response.py" metrics "$WORK/metrics.json"
+python3 "$ROOT/scripts/validate-api-response.py" jobs "$WORK/jobs.json"
+python3 "$ROOT/scripts/validate-api-response.py" services "$WORK/services.json"
 
 guest_exited=false
 for attempt in $(seq 1 90); do
@@ -188,6 +196,9 @@ for attempt in $(seq 1 120); do
 	if curl -kfsS https://127.0.0.1:18084/healthz >/dev/null 2>&1 && \
 		curl -kfsS https://127.0.0.1:18084/readyz >"$WORK/recovered-ready.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/disks >"$WORK/recovered-disks.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/system/metrics >"$WORK/recovered-metrics.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/jobs >"$WORK/recovered-jobs.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/health/components >"$WORK/recovered-health.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/docker/summary >"$WORK/recovered-docker-summary.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/docker/containers >"$WORK/recovered-docker-containers.json" 2>/dev/null && \
@@ -211,6 +222,9 @@ grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
 python3 "$ROOT/scripts/validate-api-response.py" readiness "$WORK/recovered-ready.json"
 python3 "$ROOT/scripts/validate-api-response.py" server "$WORK/recovered-server.json"
+python3 "$ROOT/scripts/validate-api-response.py" disks "$WORK/recovered-disks.json"
+python3 "$ROOT/scripts/validate-api-response.py" metrics "$WORK/recovered-metrics.json"
+python3 "$ROOT/scripts/validate-api-response.py" jobs "$WORK/recovered-jobs.json"
 python3 "$ROOT/scripts/validate-api-response.py" health "$WORK/recovered-health.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-summary "$WORK/recovered-docker-summary.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$WORK/recovered-docker-containers.json"

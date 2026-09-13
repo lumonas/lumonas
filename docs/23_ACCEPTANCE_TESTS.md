@@ -200,6 +200,9 @@ services, frontend, and SSE contracts before the installer gate passes.
 All ISO, appliance, recovery-source, and recovered-disk boots must validate the
 complete service-status response against the API contract; checking only that
 one or two expected units are present is insufficient.
+The recovery ISO and independently booted replacement disk must additionally
+validate readiness, server, disks, metrics, jobs, health, services, and SSE
+responses before the recovery gate can pass.
 
 ## M. Incomplete Docker backup
 

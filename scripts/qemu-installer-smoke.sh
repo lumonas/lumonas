@@ -206,6 +206,7 @@ done
 	exit 1
 }
 grep -F '"privilegedBroker":true' "$WORK/installed-ready.json" >/dev/null
+python3 "$ROOT/scripts/validate-api-response.py" readiness "$WORK/installed-ready.json"
 grep -F '"configured":true' "$WORK/auth-status.json" >/dev/null
 
 printf '%s\n' '{"username":"admin","password":"a-very-strong-test-password"}' >"$WORK/login.json"

@@ -267,6 +267,13 @@ for path in (qemu_smoke, qemu_recovery_smoke, iso_smoke, live_recovery_source):
     text = path.read_text(encoding="utf-8")
     if text.count("hostfwd=") != text.count("restrict=on,hostfwd="):
         raise SystemExit(f"QEMU appliance smoke is not isolated from guest egress: {path.name}")
+recovery_text = qemu_recovery_smoke.read_text(encoding="utf-8")
+for marker in ("recovered-disks.json", "recovered-metrics.json", "recovered-jobs.json", "validate-api-response.py\" services"):
+    if marker not in recovery_text:
+        raise SystemExit(f"recovery smoke is missing full runtime contract coverage: {marker}")
+iso_text = iso_smoke.read_text(encoding="utf-8")
+if "LOG.disks" not in iso_text or "validate-api-response.py\" disks" not in iso_text:
+    raise SystemExit("ISO smoke is missing disk response contract validation")
 live_e2e = pathlib.Path(sys.argv[1]).parent.parent.parent / "web" / "e2e" / "live.spec.ts"
 live_e2e_text = live_e2e.read_text(encoding="utf-8")
 for marker in ("/api/v1/onboarding/complete", "/api/v1/events/stream", "snapraid.sync", "Overview"):
