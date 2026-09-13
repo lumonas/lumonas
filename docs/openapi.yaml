@@ -269,6 +269,100 @@ paths:
         '200':
           description: Persisted disk and pool mount state
 
+  /storage/snapshots:
+    get:
+      tags: [Storage]
+      summary: List storage snapshots
+      operationId: listStorageSnapshots
+      parameters:
+        - name: source
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: Snapshot records, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StorageSnapshot'
+        '400':
+          description: Invalid limit
+    post:
+      tags: [Storage]
+      summary: Create a read-only storage snapshot
+      operationId: createStorageSnapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, source]
+              properties:
+                kind:
+                  type: string
+                  enum: [btrfs, zfs]
+                source:
+                  type: string
+                  description: Absolute subvolume path (btrfs) or dataset name (zfs)
+                label:
+                  type: string
+      responses:
+        '201':
+          description: Snapshot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StorageSnapshot'
+        '422':
+          description: Invalid snapshot request or broker rejection
+        '503':
+          description: Privileged broker unavailable
+
+  /storage/snapshots/{id}:
+    delete:
+      tags: [Storage]
+      summary: Delete a storage snapshot
+      operationId: deleteStorageSnapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reauthenticated, storageSafetyUnlocked]
+              properties:
+                reauthenticated: {type: boolean}
+                storageSafetyUnlocked: {type: boolean}
+      responses:
+        '200':
+          description: Snapshot deleted
+        '404':
+          description: Snapshot not found
+        '423':
+          description: Reauthentication and Storage Safety unlock required
+        '422':
+          description: Privileged deletion failed
+        '503':
+          description: Privileged broker unavailable
+
   /storage/safety:
     get:
       tags: [Storage]
@@ -4475,6 +4569,17 @@ components:
         source: {type: string}
         options: {type: string}
         enabled: {type: boolean}
+
+    StorageSnapshot:
+      type: object
+      required: [id, kind, source, name, createdAt]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [btrfs, zfs]}
+        source: {type: string}
+        name: {type: string}
+        label: {type: string}
+        createdAt: {type: string, format: date-time}
 
     StorageOperationPlan:
       type: object

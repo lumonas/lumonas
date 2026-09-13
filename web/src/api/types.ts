@@ -437,6 +437,15 @@ export interface StorageMount {
   enabled: boolean
 }
 
+export interface StorageSnapshot {
+  id: string
+  kind: 'btrfs' | 'zfs'
+  source: string
+  name: string
+  label?: string
+  createdAt: string
+}
+
 export interface StorageSafety {
   state: 'locked' | 'unlocked'
   unlockedUntil: string | null

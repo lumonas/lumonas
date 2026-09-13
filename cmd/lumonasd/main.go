@@ -339,6 +339,12 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.updateProtectionConfig(w, r)
 	case r.Method == http.MethodGet && endpoint == "/storage/mounts":
 		s.storageMounts(w)
+	case r.Method == http.MethodGet && endpoint == "/storage/snapshots":
+		s.storageSnapshots(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/snapshots":
+		s.createStorageSnapshot(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/storage/snapshots/"):
+		s.deleteStorageSnapshot(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/storage/safety":
 		s.storageSafety(w)
 	case r.Method == http.MethodPost && endpoint == "/storage/safety/unlock":

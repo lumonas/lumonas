@@ -51,6 +51,7 @@ import type {
   StorageMount,
   StorageOperationPlan,
   StorageSafety,
+  StorageSnapshot,
   SystemMetrics,
   UPSStatus,
   UPSConfig,
@@ -1039,6 +1040,40 @@ export function useStorageMounts() {
     queryKey: queryKeys.storageMounts,
     queryFn: () => apiGet<{ entries: StorageMount[] }>('/storage/mounts'),
     select: (data) => data.entries,
+  })
+}
+
+export function useStorageSnapshots(source?: string) {
+  const query = source ? `?source=${encodeURIComponent(source)}` : ''
+  return useQuery({
+    queryKey: ['storage', 'snapshots', source ?? 'all'],
+    queryFn: () => apiGet<StorageSnapshot[]>(`/storage/snapshots${query}`),
+    throwOnError: false,
+  })
+}
+
+export function useCreateStorageSnapshot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { kind: 'btrfs' | 'zfs'; source: string; label?: string }) =>
+      apiPost<StorageSnapshot>('/storage/snapshots', input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['storage', 'snapshots'] })
+    },
+  })
+}
+
+export function useDeleteStorageSnapshot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiDelete<{ status: string }>(`/storage/snapshots/${id}`, {
+        reauthenticated: true,
+        storageSafetyUnlocked: true,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['storage', 'snapshots'] })
+    },
   })
 }
 

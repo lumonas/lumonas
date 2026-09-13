@@ -11,6 +11,7 @@ import {
   pushActivity,
   runtime,
   server,
+  storageSnapshots,
 } from '@/mocks/db'
 import {
   catalog,
@@ -269,6 +270,46 @@ export const handlers = [
   http.get(`${BASE}/storage/safety`, () =>
     HttpResponse.json({ state: 'locked', unlockedUntil: null }),
   ),
+
+  http.get(`${BASE}/storage/snapshots`, ({ request }) => {
+    const source = new URL(request.url).searchParams.get('source')
+    const list = source ? storageSnapshots.filter((s) => s.source === source) : storageSnapshots
+    return HttpResponse.json(list)
+  }),
+
+  http.post(`${BASE}/storage/snapshots`, async ({ request }) => {
+    const body = (await request.json()) as { kind?: string; source?: string; label?: string }
+    if (!body.kind || !body.source) return new HttpResponse(null, { status: 422 })
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')
+    const snapshot = {
+      id: `snap-${++runtime.snapshotCounter}`,
+      kind: body.kind as 'btrfs' | 'zfs',
+      source: body.source,
+      name: body.label ? `${body.label}-${stamp}` : stamp,
+      label: body.label,
+      createdAt: new Date().toISOString(),
+    }
+    storageSnapshots.unshift(snapshot)
+    pushActivity({
+      category: 'storage',
+      title: `Snapshot created — ${snapshot.name}`,
+      description: `${body.kind} · ${body.source}`,
+      resource: { type: 'snapshot', id: snapshot.id, label: snapshot.name },
+    })
+    return HttpResponse.json(snapshot, { status: 201 })
+  }),
+
+  http.delete(`${BASE}/storage/snapshots/:id`, ({ params }) => {
+    const index = storageSnapshots.findIndex((s) => s.id === params.id)
+    if (index < 0) return new HttpResponse(null, { status: 404 })
+    const [removed] = storageSnapshots.splice(index, 1)
+    pushActivity({
+      category: 'storage',
+      title: `Snapshot deleted — ${removed.name}`,
+      description: `${removed.kind} · ${removed.source}`,
+    })
+    return HttpResponse.json({ status: 'deleted' })
+  }),
 
   http.post(`${BASE}/storage/safety/unlock`, () =>
     HttpResponse.json({ state: 'unlocked', unlockedUntil: new Date(Date.now() + 15 * 60_000).toISOString() }),

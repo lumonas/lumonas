@@ -6,6 +6,7 @@ import type {
   Pool,
   Protection,
   ServerInfo,
+  StorageSnapshot,
 } from '@/api/types'
 
 const now = Date.now()
@@ -226,6 +227,24 @@ export const protection: Protection = {
   syncRunning: true,
 }
 
+export const storageSnapshots: StorageSnapshot[] = [
+  {
+    id: 'snap-1001',
+    kind: 'btrfs',
+    source: '/srv/pools/main',
+    name: 'nightly-20260912T020000Z',
+    label: 'nightly',
+    createdAt: daysAgo(1),
+  },
+  {
+    id: 'snap-1002',
+    kind: 'btrfs',
+    source: '/srv/pools/main',
+    name: '20260911T120000Z',
+    createdAt: daysAgo(2),
+  },
+]
+
 export const jobs: Job[] = [
   {
     id: 'job-1',
@@ -387,6 +406,7 @@ export const runtime = {
   eventCounter: 0,
   activityCounter: 100,
   stackCounter: 100,
+  snapshotCounter: 100,
   uptimeStartedAt: now - (14 * 86_400 + 3 * 3_600) * 1000,
   metrics: {
     cpuPercent: 9,

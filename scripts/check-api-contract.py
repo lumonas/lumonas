@@ -48,6 +48,9 @@ def frontend_routes(source: str) -> set[tuple[str, str]]:
     routes: set[tuple[str, str]] = set()
     for match in FRONTEND_CALL_RE.finditer(source):
         path = next(value for value in (match.group("single"), match.group("double"), match.group("template")) if value is not None)
+        # A template suffix used only to append an encoded query string is
+        # not a path parameter. Keep route parity focused on the endpoint.
+        path = re.sub(r"\$\{query\}$", "", path)
         path = path.split("?", 1)[0]
         path = re.sub(r"\$\{[^}]+\}", "{param}", path)
         routes.add((FRONTEND_METHODS[match.group("method")], path))
