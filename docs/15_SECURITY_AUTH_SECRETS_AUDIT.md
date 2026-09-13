@@ -19,10 +19,9 @@ Implemented backend primitives:
 - self-service passkey management with owner/admin delegation controls.
 
 The management UI exposes both passkey sign-in (AuthGate) and self-service
-enrollment/revocation (settings → security → Passkeys). Discoverable
-username-less sign-in remains follow-up work; sign-in currently requires the
-username. Multiple admins and role-based permissions are supported by the
-existing management identity model.
+enrollment/revocation (settings → security → Passkeys). The API supports both
+username-bound and discoverable username-less ceremonies. Multiple admins and
+role-based permissions are supported by the existing management identity model.
 
 ## Management vs file users
 

@@ -84,12 +84,15 @@ func TestPasskeyRegistrationBeginUsesStableTargetAndAllowsSelfService(t *testing
 	}
 }
 
-func TestPasskeyLoginBeginIsPublicButRequiresUsername(t *testing.T) {
+func TestPasskeyLoginBeginSupportsDiscoverableLogin(t *testing.T) {
 	server := testServer(t)
 	server.authRequired = true
 	response := httptest.NewRecorder()
 	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkeys/login/begin", strings.NewReader("{}")))
-	if response.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("expected public passkey endpoint to validate username, got %d: %s", response.Code, response.Body.String())
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected public discoverable passkey endpoint, got %d: %s", response.Code, response.Body.String())
+	}
+	if !strings.Contains(response.Body.String(), `"rpId"`) {
+		t.Fatalf("discoverable options did not contain rpId: %s", response.Body.String())
 	}
 }

@@ -2,8 +2,10 @@ package main
 
 import (
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"os"
@@ -269,8 +271,24 @@ func (s *apiServer) passkeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	username := strings.TrimSpace(input.Username)
+	instance, err := webauthnInstance(r)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
 	if username == "" {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "username is required for passkey sign-in"})
+		options, session, err := instance.BeginDiscoverableLogin(webAuthnLoginOptions()...)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		token := s.storePasskeyCeremony("login", "", "", session)
+		if token == "" {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "ceremony state could not be created"})
+			return
+		}
+		setPasskeyCeremonyCookie(w, token)
+		writeJSON(w, http.StatusOK, options)
 		return
 	}
 	principal, err := s.store.PrincipalByName(username)
@@ -288,13 +306,8 @@ func (s *apiServer) passkeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no passkey sign-in available for this account"})
 		return
 	}
-	instance, err := webauthnInstance(r)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
 	user := passkeyUser{id: passkeyHandle(principal.ID), name: principal.Name, creds: storedToWebauthnCredentials(records)}
-	options, session, err := instance.BeginLogin(user, webauthn.WithUserVerification(protocol.VerificationPreferred))
+	options, session, err := instance.BeginLogin(user, webAuthnLoginOptions()...)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -306,6 +319,10 @@ func (s *apiServer) passkeyLoginBegin(w http.ResponseWriter, r *http.Request) {
 	}
 	setPasskeyCeremonyCookie(w, token)
 	writeJSON(w, http.StatusOK, options)
+}
+
+func webAuthnLoginOptions() []webauthn.LoginOption {
+	return []webauthn.LoginOption{webauthn.WithUserVerification(protocol.VerificationPreferred)}
 }
 
 func (s *apiServer) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
@@ -325,24 +342,56 @@ func (s *apiServer) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "passkey sign-in ceremony expired; start again"})
 		return
 	}
-	principal, err := s.store.Principal(ceremony.PrincipalID)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no passkey sign-in available for this account"})
-		return
-	}
 	instance, err := webauthnInstance(r)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	records, err := s.store.PasskeyCredentials(principal.ID)
+	var principal identity.Principal
+	var credential *webauthn.Credential
+	if ceremony.PrincipalID != "" {
+		principal, err = s.store.Principal(ceremony.PrincipalID)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "no passkey sign-in available for this account"})
+			return
+		}
+		records, err := s.store.PasskeyCredentials(principal.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		user := passkeyUser{id: passkeyHandle(principal.ID), name: principal.Name, creds: storedToWebauthnCredentials(records)}
+		credential, err = instance.FinishLogin(user, *ceremony.Session, r)
+	} else {
+		_, credential, err = instance.FinishPasskeyLogin(func(rawID, userHandle []byte) (webauthn.User, error) {
+			record, lookupErr := s.store.PasskeyCredential(rawID)
+			if lookupErr != nil || subtle.ConstantTimeCompare(passkeyHandle(record.UserID), userHandle) != 1 {
+				return nil, errors.New("passkey user handle is not recognized")
+			}
+			owner, lookupErr := s.store.Principal(record.UserID)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
+			credentials, lookupErr := s.store.PasskeyCredentials(owner.ID)
+			if lookupErr != nil {
+				return nil, lookupErr
+			}
+			return passkeyUser{id: passkeyHandle(owner.ID), name: owner.Name, creds: storedToWebauthnCredentials(credentials)}, nil
+		}, *ceremony.Session, r)
+		if err == nil && credential != nil {
+			record, lookupErr := s.store.PasskeyCredential(credential.ID)
+			if lookupErr != nil {
+				err = lookupErr
+			} else {
+				principal, err = s.store.Principal(record.UserID)
+			}
+		}
+	}
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "passkey verification failed"})
 		return
 	}
-	user := passkeyUser{id: passkeyHandle(principal.ID), name: principal.Name, creds: storedToWebauthnCredentials(records)}
-	credential, err := instance.FinishLogin(user, *ceremony.Session, r)
-	if err != nil {
+	if credential == nil || principal.ID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "passkey verification failed"})
 		return
 	}
