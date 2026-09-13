@@ -15,7 +15,7 @@ if not match:
     raise SystemExit("release job needs list is missing")
 
 needed = {
-    "package", "package-permissions", "qemu-smoke", "iso", "installer-scripts", "frontend-e2e", "frontend-live-e2e",
+    "package", "package-permissions", "deb-verify", "qemu-smoke", "iso", "installer-scripts", "frontend-e2e", "frontend-live-e2e",
     "safety-recovery", "recovery-api", "storage-loopback",
     "privileged-storage-loopback", "disk-full", "share-integrations", "compose-validation",
     "security-controls", "dependency-controls", "race-fuzz", "upgrade-compatibility",

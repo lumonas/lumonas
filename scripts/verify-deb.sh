@@ -60,9 +60,32 @@ for unit in \
 	lumonas-privd-network.service \
 	lumonas-privd-power.service \
 	lumonas-privd-general.service \
-	lumonas-runtime.service; do
+	lumonas-runtime.service \
+	lumonas-jobs.target \
+	lumonas-services.target \
+	lumonas-storage.target; do
 	require_path "./lib/systemd/system/$unit"
 done
+
+for dropin in \
+	docker.service.d/lumonas.conf \
+	nfs-server.service.d/lumonas.conf \
+	ssh.service.d/lumonas.conf \
+	avahi-daemon.service.d/lumonas.conf \
+	smbd.service.d/lumonas.conf \
+	rsync.service.d/lumonas.conf \
+	vsftpd.service.d/lumonas.conf; do
+	require_path "./lib/systemd/system/$dropin"
+	grep -F 'PartOf=lumonas-services.target' "$DATA_DIR/lib/systemd/system/$dropin" >/dev/null 2>&1 || {
+		echo "$dropin does not propagate service shutdown" >&2
+		exit 1
+	}
+done
+
+grep -F 'PartOf=lumonas-jobs.target' "$DATA_DIR/lib/systemd/system/lumonasd.service" >/dev/null 2>&1 || {
+	echo "lumonasd.service is not attached to the jobs lifecycle target" >&2
+	exit 1
+}
 
 [ -f "$DATA_DIR/etc/docker/daemon.json.lumonas" ] || {
 	echo "Docker logging baseline is missing from the package" >&2

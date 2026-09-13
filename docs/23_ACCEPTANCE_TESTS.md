@@ -303,7 +303,9 @@ active/running, and `lumonas-web.service` reports `user: lumonas`.
 
 ## X. Package manifest
 
-Inspect the generated `.deb` with `verify-deb.sh`.
+The release-blocking `deb-verify` job inspects the generated `.deb` with
+`verify-deb.sh`, including the lifecycle targets and service drop-ins used by
+safe shutdown.
 
 Pass if the embedded build manifest matches the package version, architecture,
 and exact Debian dependency fields, and contains non-empty source/toolchain and

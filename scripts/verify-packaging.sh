@@ -134,6 +134,8 @@ fi
 require_line "$ROOT/packaging/debian/prerm" 'lumonas-web.service'
 require_line "$ROOT/packaging/debian/prerm" 'lumonas-storage.target'
 require_line "$ROOT/packaging/build-deb.sh" 'DEBIAN/prerm'
+require_line "$ROOT/scripts/verify-deb.sh" 'lumonas-jobs.target'
+require_line "$ROOT/scripts/verify-deb.sh" 'docker.service.d/lumonas.conf'
 require_line "$ROOT/scripts/api-smoke.sh" 'start_server()'
 require_line "$ROOT/scripts/api-smoke.sh" 'daemon restarted before the job completed'
 require_line "$ROOT/scripts/api-smoke.sh" 'Last-Event-ID'
