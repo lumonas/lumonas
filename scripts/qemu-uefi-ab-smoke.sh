@@ -37,6 +37,7 @@ fi
 
 DATA_DIR="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-uefi-ab.XXXXXX")"
 SSH_PORT="${LUMONAS_UEFI_AB_SSH_PORT:-18024}"
+WEB_PORT="${LUMONAS_UEFI_AB_WEB_PORT:-18025}"
 QEMU_PID=""
 cleanup() {
 	status=$?
@@ -67,7 +68,7 @@ start_guest() {
 		-drive "file=$IMAGE,if=virtio,format=raw,serial=LUMONAS-SLOTA" \
 		-drive "file=$DATA_DIR/slot-b.qcow2,if=virtio,format=qcow2,serial=LUMONAS-SLOTB" \
 		-drive "file=$DATA_DIR/stage.qcow2,if=virtio,format=qcow2,serial=LUMONAS-STAGE" \
-		-netdev user,id=n1,restrict=on,hostfwd=tcp::"$SSH_PORT"-:22 \
+		-netdev user,id=n1,restrict=on,hostfwd=tcp::"$SSH_PORT"-:22,hostfwd=tcp::"$WEB_PORT"-:8081 \
 		-device virtio-net-pci,netdev=n1 \
 		-nographic \
 		-serial mon:stdio >"$DATA_DIR/qemu.log" 2>&1 &
@@ -81,7 +82,7 @@ ssh_guest() {
 
 start_guest
 for attempt in $(seq 1 90); do
-	if curl -kfsS "https://127.0.0.1:$SSH_PORT/healthz" >/dev/null 2>&1 && ssh_guest true >/dev/null 2>&1; then
+	if curl -kfsS "https://127.0.0.1:$WEB_PORT/healthz" >/dev/null 2>&1 && ssh_guest true >/dev/null 2>&1; then
 		break
 	fi
 	if [ "$attempt" = 90 ]; then
@@ -167,7 +168,7 @@ systemctl reboot' || true
 # The firmware reboot is expected to drop SSH. Wait for the same guest to
 # return and prove that the root filesystem came from the inactive disk.
 for attempt in $(seq 1 120); do
-	if curl -kfsS "https://127.0.0.1:$SSH_PORT/healthz" >/dev/null 2>&1 && \
+	if curl -kfsS "https://127.0.0.1:$WEB_PORT/healthz" >/dev/null 2>&1 && \
 		ssh_guest 'test "$(findmnt -n -o SOURCE /)" = /dev/vdb3 && test -f /etc/lumonas/uefi-slot-marker' >/dev/null 2>&1; then
 		echo "LumoNAS UEFI A/B boot flip passed"
 		exit 0

@@ -79,7 +79,7 @@ qemu-ab-smoke:
 	LUMONAS_AB_ASSERT="$${LUMONAS_AB_ASSERT:-false}" LUMONAS_QEMU_IMAGE="$(LUMONAS_QEMU_IMAGE)" LUMONAS_QEMU_SSH_KEY="$${LUMONAS_QEMU_SSH_KEY:-}" bash scripts/qemu-ab-smoke.sh
 
 qemu-uefi-ab-smoke:
-	LUMONAS_UEFI_AB_ASSERT="$${LUMONAS_UEFI_AB_ASSERT:-false}" LUMONAS_QEMU_IMAGE="$(LUMONAS_QEMU_IMAGE)" LUMONAS_QEMU_SSH_KEY="$${LUMONAS_QEMU_SSH_KEY:-}" bash scripts/qemu-uefi-ab-smoke.sh
+	LUMONAS_UEFI_AB_ASSERT="$${LUMONAS_UEFI_AB_ASSERT:-false}" LUMONAS_QEMU_IMAGE="$(LUMONAS_QEMU_IMAGE)" LUMONAS_QEMU_SSH_KEY="$${LUMONAS_QEMU_SSH_KEY:-}" LUMONAS_UEFI_AB_SSH_PORT="$${LUMONAS_UEFI_AB_SSH_PORT:-18024}" LUMONAS_UEFI_AB_WEB_PORT="$${LUMONAS_UEFI_AB_WEB_PORT:-18025}" bash scripts/qemu-uefi-ab-smoke.sh
 
 package-dependency-parity:
 	bash scripts/package-dependency-parity-smoke.sh

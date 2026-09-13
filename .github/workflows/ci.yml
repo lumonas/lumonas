@@ -346,7 +346,7 @@ jobs:
           RUNNER_TEMP: ${{ runner.temp }}
       - run: LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_PRIVATE_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_QEMU_SSH_ASSERT=true LUMONAS_QEMU_UPDATE_FIXTURE="$RUNNER_TEMP/lumonas-update-fixture.json" LUMONAS_QEMU_UPDATE_ASSERT=true LUMONAS_QEMU_LOG="$PWD/build/qemu/qemu-smoke.log" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
       - run: LUMONAS_AB_ASSERT=true LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_AB_SSH_PORT=18023 bash scripts/qemu-ab-smoke.sh
-      - run: LUMONAS_UEFI_AB_ASSERT=true LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_UEFI_AB_SSH_PORT=18024 bash scripts/qemu-uefi-ab-smoke.sh
+      - run: LUMONAS_UEFI_AB_ASSERT=true LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_UEFI_AB_SSH_PORT=18024 LUMONAS_UEFI_AB_WEB_PORT=18025 bash scripts/qemu-uefi-ab-smoke.sh
       - name: Remove ephemeral QEMU SSH access
         if: always()
         run: |

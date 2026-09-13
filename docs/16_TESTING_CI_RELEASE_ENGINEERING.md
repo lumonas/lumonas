@@ -480,7 +480,9 @@ that confirming without a pending slot returns a conflict. The same job then
 runs `scripts/qemu-uefi-ab-smoke.sh` with OVMF: it assigns slot B a distinct
 GPT identity before registering the EFI entry, rewrites the inactive disk,
 arms `BootNext`, requests a reboot while tolerating the expected SSH
-disconnect, and requires the recovered root source to be the written slot.
+disconnect, and requires the recovered root source to be the written slot. The
+harness uses separate host forwards for SSH and the HTTPS web health check, so
+a successful SSH connection cannot mask a missing web listener.
 Repeated failed
 health boots additionally arm the known-good EFI entry and request a reboot;
 the focused daemon test verifies both privileged calls share one operation ID

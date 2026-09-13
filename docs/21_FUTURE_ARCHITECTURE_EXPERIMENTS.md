@@ -54,7 +54,9 @@ EFI system partition. `scripts/qemu-uefi-ab-smoke.sh`
 (`LUMONAS_UEFI_AB_ASSERT=true`) boots it through OVMF, registers both slot
 entries against distinct GPT identities, rewrites the inactive whole disk
 through the broker, arms `BootNext`, tolerates the expected SSH disconnect,
-and verifies after a real reboot that the root filesystem came from slot B.
+and verifies after a real reboot that the root filesystem came from slot B. Its
+SSH and HTTPS health probes use separate QEMU host forwards, preventing a
+working SSH control channel from hiding a failed web listener.
 
 ### Remaining for full immutable A/B
 
