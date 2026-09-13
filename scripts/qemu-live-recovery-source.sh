@@ -60,7 +60,7 @@ SOURCE_PID=$!
 source_ready=false
 for attempt in $(seq 1 120); do
 	if curl -fsS http://127.0.0.1:18083/healthz >/dev/null 2>&1 && \
-		curl -fsS http://127.0.0.1:18083/readyz >/dev/null 2>&1 && \
+		curl -fsS http://127.0.0.1:18083/readyz >"$WORK/source-ready.json" 2>/dev/null && \
 		curl -fsS http://127.0.0.1:18083/api/v1/server >/dev/null 2>&1; then
 		source_ready=true
 		break
@@ -71,6 +71,7 @@ for attempt in $(seq 1 120); do
 	sleep 2
 done
 [ "$source_ready" = true ] || { echo "live recovery source appliance never became ready" >&2; cat "$SOURCE_LOG" >&2 || true; exit 1; }
+grep -F '"privilegedBroker":true' "$WORK/source-ready.json" >/dev/null
 
 curl -fsS -X POST http://127.0.0.1:18083/api/v1/recovery/key >"$WORK/source-key.json"
 python3 -c 'import json,sys; value=json.load(open(sys.argv[1],encoding="utf-8")).get("key","").strip(); assert value; open(sys.argv[2],"w",encoding="utf-8").write(value+"\n")' "$WORK/source-key.json" "$WORK/recovery.key"

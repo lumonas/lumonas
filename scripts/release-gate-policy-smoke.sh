@@ -70,7 +70,9 @@ if "Last-Event-ID" not in api_smoke_text or "cursor event twice" not in api_smok
 if "/api/v1/ups/config" not in api_smoke_text or '"names":[]' not in api_smoke_text:
     raise SystemExit("API smoke does not exercise persisted UPS configuration")
 qemu_recovery_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-recovery-smoke.sh"
-if '"privilegedBroker":true' not in qemu_smoke.read_text(encoding="utf-8") or '"privilegedBroker":true' not in qemu_recovery_smoke.read_text(encoding="utf-8"):
+iso_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "iso-smoke.sh"
+live_recovery_source = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-live-recovery-source.sh"
+if any('"privilegedBroker":true' not in path.read_text(encoding="utf-8") for path in (qemu_smoke, qemu_recovery_smoke, iso_smoke, live_recovery_source)):
     raise SystemExit("QEMU smoke does not assert the privileged broker readiness contract")
 live_e2e = pathlib.Path(sys.argv[1]).parent.parent.parent / "web" / "e2e" / "live.spec.ts"
 live_e2e_text = live_e2e.read_text(encoding="utf-8")
