@@ -48,6 +48,7 @@ Individual checks can be run directly, e.g. `bash scripts/interop/interop-smb.sh
 | `LUMONAS_INTEROP_RSYNC_MODE` | `module` | rsync (`module` or `ssh`) |
 | `LUMONAS_INTEROP_RSYNC_PORT` | `873` | rsync module mode |
 | `LUMONAS_INTEROP_RSYNC_MODULE` | share name | rsync module mode |
+| `LUMONAS_INTEROP_REQUIRE_ADVERTISEMENTS` | `false` | Time Machine/Avahi; fail when SMB mDNS advertisement is absent |
 | `LUMONAS_INTEROP_WORKDIR` | `mktemp -d` | scratch space |
 
 ## Hardware acceptance context
@@ -57,3 +58,8 @@ document defines what must be verified before Stable, and this directory makes
 the client-interop rows executable wherever the matching hardware and clients
 exist (CI runners cannot provide SMB/NFS clients, so they are intentionally
 absent from the release gates and belong to hardware acceptance runs).
+
+For ordinary workstation checks, missing mDNS advertisements are skipped just
+like other unavailable services. Hardware acceptance runs should set
+`LUMONAS_INTEROP_REQUIRE_ADVERTISEMENTS=true` so an appliance that is not
+advertising SMB is reported as a failure.

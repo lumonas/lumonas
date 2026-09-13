@@ -14,6 +14,10 @@ LUMONAS_INTEROP_SHARE="${LUMONAS_INTEROP_SHARE:-media}"
 LUMONAS_INTEROP_USER="${LUMONAS_INTEROP_USER:-}"
 LUMONAS_INTEROP_PASSWORD="${LUMONAS_INTEROP_PASSWORD:-}"
 LUMONAS_INTEROP_WORKDIR="${LUMONAS_INTEROP_WORKDIR:-$(mktemp -d /tmp/lumonas-interop.XXXXXX)}"
+# Set this for hardware acceptance runs where the appliance must advertise
+# its services on the test network. Normal workstation runs remain tolerant
+# of isolated networks and skip missing mDNS advertisements.
+LUMONAS_INTEROP_REQUIRE_ADVERTISEMENTS="${LUMONAS_INTEROP_REQUIRE_ADVERTISEMENTS:-false}"
 
 INTEROP_PASS=0
 INTEROP_SKIP=0

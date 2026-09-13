@@ -89,6 +89,10 @@ SFTP, FTP/FTPS, rsync, Time Machine/Avahi) against a running appliance.
 Missing tooling or unreachable services skip; only protocol roundtrip
 failures fail the run. See `scripts/interop/README.md` for the environment
 variables. Run it on hardware during acceptance; CI has no such clients.
+Hardware acceptance runs additionally set
+`LUMONAS_INTEROP_REQUIRE_ADVERTISEMENTS=true` so missing SMB mDNS discovery is
+release-blocking; ordinary workstation runs keep the default skip behavior for
+isolated networks.
 
 ## H. Simple Docker
 

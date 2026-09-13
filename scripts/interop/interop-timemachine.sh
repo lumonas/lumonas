@@ -17,7 +17,11 @@ smb_found=$(browse _smb._tcp | grep -c "IPv4" || true)
 adisk_found=$(browse _adisk._tcp | grep -c "IPv4" || true)
 
 if [ "$smb_found" -eq 0 ]; then
-	interop_result fail "$NAME" "no _smb._tcp advertisement discovered"
+	if [ "$LUMONAS_INTEROP_REQUIRE_ADVERTISEMENTS" = "true" ]; then
+		interop_result fail "$NAME" "no _smb._tcp advertisement discovered"
+	else
+		interop_result skip "$NAME" "no _smb._tcp advertisement discovered"
+	fi
 else
 	interop_result pass "_smb._tcp advertisement ($smb_found instance(s))"
 fi
