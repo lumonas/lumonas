@@ -20,7 +20,7 @@ type Interface struct {
 func Interfaces() ([]Interface, error) {
 	items, err := net.Interfaces()
 	if err != nil {
-		return nil, err
+		return fallbackInterfaces(err)
 	}
 	result := make([]Interface, 0, len(items))
 	for _, item := range items {
