@@ -32,16 +32,6 @@ if [ "${LUMONAS_SIGN_ARTIFACTS:-false}" = "true" ]; then
   done
 fi
 
-# Generate checksums after SBOMs and signatures so the release checksum file
-# covers every published payload and its verification metadata.
-(
-	cd "$RELEASE_DIR"
-	for artifact in *.deb *.iso *.qcow2 *.raw *.sbom.json *.sig *.bundle; do
-		[ -f "$artifact" ] || continue
-		sha256sum "$artifact"
-	done
-) > "$RELEASE_DIR/SHA256SUMS"
-
 python3 - "$RELEASE_DIR" "$SOURCE_COMMIT" "$SOURCE_DATE_EPOCH" <<'PY'
 import hashlib
 import json
@@ -86,3 +76,13 @@ manifest = {
     json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
 )
 PY
+
+# Generate checksums after the manifest so the release checksum file covers
+# every published payload, verification sidecar, and the manifest itself.
+(
+	cd "$RELEASE_DIR"
+	for artifact in *.deb *.iso *.qcow2 *.raw *.sbom.json *.sig *.bundle RELEASE-MANIFEST.json; do
+		[ -f "$artifact" ] || continue
+		sha256sum "$artifact"
+	done
+) > "$RELEASE_DIR/SHA256SUMS"

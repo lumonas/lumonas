@@ -14,6 +14,10 @@ if [ "${LUMONAS_REQUIRE_RELEASE_SET:-false}" = "true" ] && [ ! -s "$MANIFEST" ];
 fi
 
 if [ -s "$MANIFEST" ]; then
+	grep -F '  RELEASE-MANIFEST.json' "$CHECKSUMS" >/dev/null 2>&1 || {
+		echo "release manifest is not covered by SHA256SUMS" >&2
+		exit 1
+	}
 	python3 - "$RELEASE_DIR" "$MANIFEST" "${LUMONAS_EXPECTED_SOURCE_COMMIT:-}" "${LUMONAS_EXPECTED_SOURCE_DATE_EPOCH:-}" <<'PY'
 import hashlib
 import json

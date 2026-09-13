@@ -29,6 +29,9 @@ signature
 release notes
 ```
 
+`SHA256SUMS` covers the package, ISO, machine image, SBOM/signature
+sidecars, and `RELEASE-MANIFEST.json` itself.
+
 Future artifacts may include qcow2/raw images.
 
 ## Baseline

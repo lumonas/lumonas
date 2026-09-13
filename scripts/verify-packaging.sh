@@ -81,6 +81,7 @@ require_line "$ROOT/packaging/debian/lumonas-web.env.example" 'LUMONAS_WEB_LISTE
 require_line "$ROOT/scripts/upgrade-service-order-smoke.sh" 'lumonas-runtime.service'
 require_line "$ROOT/scripts/release-artifacts.sh" 'sha256sum "$artifact"'
 require_line "$ROOT/scripts/release-artifacts.sh" 'RELEASE-MANIFEST.json'
+require_line "$ROOT/scripts/release-artifacts.sh" 'RELEASE-MANIFEST.json; do'
 require_line "$ROOT/scripts/release-artifacts.sh" 'sidecar(path.with_name'
 require_line "$ROOT/scripts/verify-release.sh" 'release manifest {key} checksum mismatch'
 require_line "$ROOT/scripts/verify-release.sh" 'release SBOM is missing SPDX document sections'

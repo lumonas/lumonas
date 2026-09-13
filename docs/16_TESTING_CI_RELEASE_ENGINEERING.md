@@ -583,9 +583,10 @@ verification requires this manifest, compares its source commit with
 `github.sha` and its source epoch with that commit's timestamp. It also
 rejects any artifact added or removed without regenerating the manifest.
 The manifest also records SHA-256 digests and sizes for each generated SBOM,
-signature, and Cosign bundle, while `SHA256SUMS` covers those sidecars after
-they are generated. Release verification therefore fails if provenance or
-verification metadata is tampered with independently of the main artifact.
+signature, and Cosign bundle, while `SHA256SUMS` covers those sidecars and the
+manifest after they are generated. Release verification therefore fails if
+provenance or verification metadata is tampered with independently of the
+main artifact.
 
 The generated ISO and QEMU images embed versioned Debian package inventories
 under `/usr/share/doc/lumonas/`, including the source commit, source epoch, and

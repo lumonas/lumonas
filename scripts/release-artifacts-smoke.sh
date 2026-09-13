@@ -43,6 +43,7 @@ fi
 grep -F 'lumonas_test.deb' "$WORK/SHA256SUMS" >/dev/null
 grep -F 'lumonas_test.iso' "$WORK/SHA256SUMS" >/dev/null
 grep -F 'lumonas_test.raw' "$WORK/SHA256SUMS" >/dev/null
+grep -F 'RELEASE-MANIFEST.json' "$WORK/SHA256SUMS" >/dev/null
 grep -F '"sourceDateEpoch"' "$WORK/RELEASE-MANIFEST.json" >/dev/null
 grep -F '"lumonas_test.iso"' "$WORK/RELEASE-MANIFEST.json" >/dev/null
 if LUMONAS_REQUIRE_RELEASE_SET=true LUMONAS_EXPECTED_SOURCE_COMMIT=wrong sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
@@ -58,4 +59,12 @@ if LUMONAS_REQUIRE_RELEASE_SET=true sh "$ROOT/scripts/verify-release.sh" "$WORK"
 	echo "release manifest accepted an unlisted artifact" >&2
 	exit 1
 fi
+rm -f "$WORK/unlisted.raw"
+cp "$WORK/RELEASE-MANIFEST.json" "$WORK/RELEASE-MANIFEST.json.backup"
+printf '%s\n' 'tampered' >>"$WORK/RELEASE-MANIFEST.json"
+if sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
+	echo "tampered release manifest was accepted" >&2
+	exit 1
+fi
+mv "$WORK/RELEASE-MANIFEST.json.backup" "$WORK/RELEASE-MANIFEST.json"
 echo "LumoNAS release artifact checksum smoke test passed"
