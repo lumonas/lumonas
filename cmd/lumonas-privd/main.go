@@ -77,6 +77,8 @@ var workerDial = func(socket string) (net.Conn, error) {
 
 var networkCheckpointCommand = exec.Command
 
+var wireGuardApply = network.ApplyWireGuardConfigWithRunner
+
 func main() {
 	socket := flag.String("socket", "/run/lumonas/privd.sock", "Unix socket path")
 	worker := flag.String("worker", "", "run as a restricted operation worker (storage, network, power, or general)")
@@ -239,7 +241,7 @@ func operationWorker(operation string) string {
 	switch operation {
 	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply":
 		return "storage"
-	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wol.set", "firewall.apply":
+	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.wol.set", "firewall.apply":
 		return "network"
 	case "power.action", "power.shutdown":
 		return "power"
@@ -404,6 +406,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return finishNetworkCheckpoint(req)
 	case "network.wifi.connect":
 		return connectWiFi(req, stdinCommandRunner)
+	case "network.wireguard.apply":
+		return applyWireGuard(req)
 	case "network.wol.set":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -449,7 +453,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 
 func requiresOperationID(operation string) bool {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wol.set", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.wol.set", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply":
 		return true
 	default:
 		return false
@@ -604,6 +608,40 @@ func connectWiFi(req request, run stdinRunner) response {
 		return response{Error: "wifi connect failed"}
 	}
 	return response{OK: true, Data: map[string]any{"operationId": req.OperationID, "ssid": ssid, "state": "activating"}}
+}
+
+func applyWireGuard(req request) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	iface := requestedString(req.RequestedState, "interface")
+	if !validDeviceName(iface) {
+		return response{Error: "wireguard interface name is invalid"}
+	}
+	raw, ok := req.RequestedState["config"]
+	if !ok {
+		return response{Error: "wireguard config is required"}
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return response{Error: "wireguard config is invalid"}
+	}
+	var config network.WireGuardConfig
+	if err := json.Unmarshal(encoded, &config); err != nil {
+		return response{Error: "wireguard config is invalid"}
+	}
+	if config.Interface == "" {
+		config.Interface = iface
+	}
+	if config.Interface != iface {
+		return response{Error: "wireguard interface does not match the requested target"}
+	}
+	if err := wireGuardApply(context.Background(), iface, config, func(ctx context.Context, stdin io.Reader, name string, args ...string) ([]byte, error) {
+		return commandrunner.CombinedOutputContextWithStdin(ctx, stdin, name, args...)
+	}); err != nil {
+		return response{Error: err.Error()}
+	}
+	return response{OK: true, Data: map[string]any{"operationId": req.OperationID, "interface": iface, "state": "applied"}}
 }
 
 func deviceHasMounts(path string, run command) bool {

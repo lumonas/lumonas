@@ -1640,6 +1640,10 @@ func (s *apiServer) wireguardStatus(w http.ResponseWriter) {
 }
 
 func (s *apiServer) applyWireGuard(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input network.WireGuardConfig
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -1650,13 +1654,24 @@ func (s *apiServer) applyWireGuard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	iface := envOr("LUMONAS_WG_INTERFACE", "wg0")
-	if err := network.ApplyWireGuardConfig(r.Context(), iface, input); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	operationID := newID("wireguard")
+	result, err := s.executePrivileged(r.Context(), privileged.Request{
+		Operation: "network.wireguard.apply", OperationID: operationID, PlanHash: operationID,
+		RequestedState: map[string]any{"interface": iface, "config": input},
+		ExpiresAt:      time.Now().UTC().Add(2 * time.Minute), Confirmed: true,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
+	if !result.OK {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
+		return
+	}
+	s.recordRequestAudit(r, actor, "network.wireguard.apply", iface, map[string]any{"operationId": operationID})
 	s.advanceGeneration("network.wireguard.apply")
-	s.publish("network.wireguard.applied", "info", &model.ResourceRef{Type: "wireguard", ID: iface}, nil)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "applied"})
+	s.publish("network.wireguard.applied", "info", &model.ResourceRef{Type: "wireguard", ID: iface}, map[string]any{"operationId": operationID})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *apiServer) wireguardKeygen(w http.ResponseWriter) {

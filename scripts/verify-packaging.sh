@@ -93,6 +93,10 @@ require_line "$ROOT/cmd/lumonasd/network_api_test.go" 'TestNetworkCheckpointRoll
 require_line "$ROOT/cmd/lumonasd/network_api_test.go" 'TestNetworkCheckpointActionReportsCompletionPersistenceFailure'
 require_line "$ROOT/cmd/lumonasd/main_test.go" 'TestStorageConfirmationReportsPlanPersistenceFailure'
 require_line "$ROOT/.github/workflows/ci.yml" 'TestStorageConfirmationReportsPlanPersistenceFailure'
+require_line "$ROOT/cmd/lumonasd/main.go" 'network.wireguard.apply'
+require_line "$ROOT/cmd/lumonas-privd/main.go" 'network.wireguard.apply'
+require_line "$ROOT/cmd/lumonas-privd/worker_test.go" 'TestWireGuardMutationUsesNetworkWorkerAndTypedConfig'
+require_line "$ROOT/cmd/lumonasd/network_api_test.go" 'TestWireGuardApplyUsesPrivilegedBroker'
 require_line "$ROOT/scripts/security-smoke.sh" 'TestNetworkCheckpointRollsBackWhenPersistenceFails'
 if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1 || grep -F '/etc/lumonas/tls/tls.key' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1; then
 	echo "share configuration still references obsolete FTPS certificate paths" >&2

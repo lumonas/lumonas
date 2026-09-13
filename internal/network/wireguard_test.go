@@ -27,6 +27,21 @@ func TestApplyWireGuardConfigUsesBoundedCommandRunner(t *testing.T) {
 	}
 }
 
+func TestApplyWireGuardConfigWithRunnerPreservesPrivateKeyOnStdin(t *testing.T) {
+	var gotStdin string
+	err := ApplyWireGuardConfigWithRunner(context.Background(), "wg0", WireGuardConfig{PrivateKey: "private", Address: []string{"10.0.0.1/24"}}, func(_ context.Context, stdin io.Reader, _ string, _ ...string) ([]byte, error) {
+		data, _ := io.ReadAll(stdin)
+		gotStdin = string(data)
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotStdin != "private" {
+		t.Fatalf("private key was not sent through stdin: %q", gotStdin)
+	}
+}
+
 func TestValidateWireGuardConfigRejectsMissingPrivateKey(t *testing.T) {
 	cfg := WireGuardConfig{
 		Address:    []string{"10.0.0.1/24"},

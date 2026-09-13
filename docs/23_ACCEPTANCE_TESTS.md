@@ -696,3 +696,12 @@ Pass if a destructive storage command is never reported as fully successful
 when its executed-plan state cannot be persisted. The API must identify the
 operation as completed with incomplete persistence and must not emit a normal
 success event.
+
+## BL. Privileged WireGuard mutation
+
+Run the WireGuard worker and API broker tests.
+
+Pass if the unprivileged daemon never invokes `wg set` directly, the request
+requires an operation ID and expiry, the network worker validates the typed
+configuration, and the private key is supplied through bounded stdin rather
+than command arguments or logs.

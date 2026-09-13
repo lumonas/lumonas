@@ -41,6 +41,11 @@ type wireGuardCommandRunner func(context.Context, io.Reader, string, ...string) 
 
 var runWireGuardCommand wireGuardCommandRunner = runner.CombinedOutputContextWithStdin
 
+// WireGuardApplyRunner is the bounded command boundary used by the privileged
+// network worker. Keeping the runner injectable lets the worker enforce its
+// own timeout and keeps private keys on stdin rather than argv.
+type WireGuardApplyRunner func(context.Context, io.Reader, string, ...string) ([]byte, error)
+
 func GenerateWireGuardKeyPair() (string, string, error) {
 	privKey, err := runner.Output("wg", "genkey")
 	if err != nil {
@@ -141,10 +146,17 @@ func ValidateWireGuardConfig(cfg WireGuardConfig) error {
 }
 
 func ApplyWireGuardConfig(ctx context.Context, iface string, cfg WireGuardConfig) error {
+	return ApplyWireGuardConfigWithRunner(ctx, iface, cfg, WireGuardApplyRunner(runWireGuardCommand))
+}
+
+func ApplyWireGuardConfigWithRunner(ctx context.Context, iface string, cfg WireGuardConfig, run WireGuardApplyRunner) error {
 	if err := ValidateWireGuardConfig(cfg); err != nil {
 		return err
 	}
-	if out, err := runWireGuardCommand(ctx, strings.NewReader(cfg.PrivateKey), "wg", "set", iface, "private-key", "/dev/stdin"); err != nil {
+	if run == nil {
+		run = runner.CombinedOutputContextWithStdin
+	}
+	if out, err := run(ctx, strings.NewReader(cfg.PrivateKey), "wg", "set", iface, "private-key", "/dev/stdin"); err != nil {
 		return fmt.Errorf("wg set: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil

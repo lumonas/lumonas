@@ -195,6 +195,9 @@ The storage confirmation safety test applies the same rule after a destructive
 operation: if the executed plan cannot be persisted, the API reports the
 operation as completed but state persistence incomplete and emits no success
 event.
+WireGuard mutation is covered by the privileged-worker gate as well: the API
+must send a typed, operation-scoped request to the network worker, and the
+private key must cross the final command boundary on stdin only.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the

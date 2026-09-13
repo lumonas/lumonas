@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/privileged"
 )
 
@@ -21,6 +23,28 @@ func TestWorkerRejectsOperationsOutsideItsCapabilityDomain(t *testing.T) {
 	result := executeWorker(request{Operation: "power.action", OperationID: "power-1", PlanHash: "plan-1", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute)}, "storage")
 	if result.OK || result.Error != "operation is not allow-listed for this worker" {
 		t.Fatalf("unexpected worker response: %#v", result)
+	}
+}
+
+func TestWireGuardMutationUsesNetworkWorkerAndTypedConfig(t *testing.T) {
+	previous := wireGuardApply
+	t.Cleanup(func() { wireGuardApply = previous })
+	var gotInterface string
+	var gotKey string
+	wireGuardApply = func(_ context.Context, iface string, config network.WireGuardConfig, _ network.WireGuardApplyRunner) error {
+		gotInterface, gotKey = iface, config.PrivateKey
+		return nil
+	}
+	result := executeWorker(request{
+		Operation: "network.wireguard.apply", OperationID: "wireguard-1", PlanHash: "wireguard-plan", Confirmed: true,
+		ExpiresAt: time.Now().UTC().Add(time.Minute),
+		RequestedState: map[string]any{
+			"interface": "wg0",
+			"config":    map[string]any{"interface": "wg0", "privateKey": "secret", "address": []any{"10.0.0.1/24"}},
+		},
+	}, "network")
+	if !result.OK || gotInterface != "wg0" || gotKey != "secret" {
+		t.Fatalf("unexpected WireGuard worker result: %#v interface=%q key=%q", result, gotInterface, gotKey)
 	}
 }
 

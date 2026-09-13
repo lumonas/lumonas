@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/privileged"
 )
 
@@ -55,6 +56,27 @@ func TestNetworkCheckpointActionReportsCompletionPersistenceFailure(t *testing.T
 	}
 	if len(operations) != 1 || operations[0] != "network.checkpoint.commit" {
 		t.Fatalf("unexpected privileged operation sequence: %#v", operations)
+	}
+}
+
+func TestWireGuardApplyUsesPrivilegedBroker(t *testing.T) {
+	server := testServer(t)
+	var request privileged.Request
+	server.brokerExec = func(_ context.Context, value privileged.Request) error {
+		request = value
+		return nil
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/network/wireguard/apply", strings.NewReader(`{"interface":"wg0","privateKey":"secret","address":["10.0.0.1/24"],"listenPort":51820,"peers":[]}`)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected privileged WireGuard apply to succeed, got %d: %s", response.Code, response.Body.String())
+	}
+	if request.Operation != "network.wireguard.apply" || request.OperationID == "" || request.RequestedState["interface"] != "wg0" {
+		t.Fatalf("unexpected privileged request: %#v", request)
+	}
+	config, ok := request.RequestedState["config"].(network.WireGuardConfig)
+	if !ok || config.PrivateKey != "secret" {
+		t.Fatalf("wireguard config was not typed in request: %#v", request.RequestedState["config"])
 	}
 }
 
