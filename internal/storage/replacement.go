@@ -67,7 +67,9 @@ func ParseSnapraidDataMapping(content string) (parityDiskID string, slots []Data
 	return parityDiskID, slots, nil
 }
 
-// DiskIDFromBranchPath converts /srv/disks/<id> back to <id>.
+// DiskIDFromBranchPath returns the sanitized branch segment from
+// /srv/disks/<segment>. The segment is not necessarily the original disk ID;
+// callers must resolve it against the live inventory before mutating state.
 func DiskIDFromBranchPath(branchPath string) (string, error) {
 	const prefix = "/srv/disks/"
 	if !strings.HasPrefix(branchPath, prefix) || len(branchPath) <= len(prefix) {
@@ -82,6 +84,9 @@ func RenderSnapraidConfigPinned(parityDiskID string, slots []DataSlot) (string, 
 	if len(slots) == 0 {
 		return "", errors.New("at least one protected data disk is required")
 	}
+	if parityDiskID != "" && !model.HasStableDiskIdentity(parityDiskID) {
+		return "", fmt.Errorf("parity disk %q has no stable identity", parityDiskID)
+	}
 	names := make(map[string]bool, len(slots))
 	paths := make(map[string]bool, len(slots))
 	for _, slot := range slots {
@@ -91,8 +96,8 @@ func RenderSnapraidConfigPinned(parityDiskID string, slots []DataSlot) (string, 
 		if names[slot.Name] {
 			return "", fmt.Errorf("data name %q is duplicated", slot.Name)
 		}
-		if slot.DiskID == "" {
-			return "", errors.New("data disk identity is empty")
+		if !model.HasStableDiskIdentity(slot.DiskID) {
+			return "", fmt.Errorf("data disk %q has no stable identity", slot.DiskID)
 		}
 		branch := DiskBranchPath(slot.DiskID)
 		if paths[branch] {
@@ -164,6 +169,9 @@ func NewReplacementPlan(id, retiredDiskID, replacementDiskID string, currentConf
 	if id == "" {
 		return ReplacementPlan{}, errors.New("operation id is required")
 	}
+	if !model.HasStableDiskIdentity(retiredDiskID) || !model.HasStableDiskIdentity(replacementDiskID) {
+		return ReplacementPlan{}, errors.New("replacement disks require stable identities")
+	}
 	parity, slots, err := ParseSnapraidDataMapping(currentConfig)
 	if err != nil {
 		return ReplacementPlan{}, fmt.Errorf("current SnapRAID configuration is not readable as managed config: %w", err)
@@ -184,6 +192,21 @@ func NewReplacementPlan(id, retiredDiskID, replacementDiskID string, currentConf
 	}
 	if !found {
 		return ReplacementPlan{}, fmt.Errorf("retired disk %q is not part of the protected set", retiredDiskID)
+	}
+	resolveBranch := func(branch string) (string, bool) {
+		for _, disk := range disks {
+			if model.HasStableDiskIdentity(disk.ID) && DiskBranchPath(disk.ID) == branch {
+				return disk.ID, true
+			}
+		}
+		return "", false
+	}
+	if parity != "" {
+		resolvedParity, ok := resolveBranch(DiskBranchPath(parity))
+		if !ok {
+			return ReplacementPlan{}, fmt.Errorf("parity disk branch %q is no longer discovered", DiskBranchPath(parity))
+		}
+		parity = resolvedParity
 	}
 	replacement, ok := byID[replacementDiskID]
 	if !ok {
@@ -207,13 +230,7 @@ func NewReplacementPlan(id, retiredDiskID, replacementDiskID string, currentConf
 			slots[index].DiskID = replacementDiskID
 			continue
 		}
-		mappedID := ""
-		for _, disk := range disks {
-			if DiskBranchPath(disk.ID) == branch {
-				mappedID = disk.ID
-				break
-			}
-		}
+		mappedID, _ := resolveBranch(branch)
 		if mappedID == "" {
 			return ReplacementPlan{}, fmt.Errorf("protected disk branch %q is no longer discovered", branch)
 		}
@@ -261,6 +278,12 @@ func ValidateReplacementPlan(plan ReplacementPlan, actual []model.Disk, now time
 	}
 	if plan.ConfigGeneration != generation {
 		return errors.New("configuration generation changed after planning")
+	}
+	if !model.HasStableDiskIdentity(plan.ReplacementDiskID) || !model.HasStableDiskIdentity(plan.ExpectedDisk.DiskID) {
+		return errors.New("replacement plan targets an unstable disk identity")
+	}
+	if plan.ParityDiskID != "" && !model.HasStableDiskIdentity(plan.ParityDiskID) {
+		return errors.New("replacement plan targets an unstable parity identity")
 	}
 	for _, disk := range actual {
 		if disk.ID != plan.ReplacementDiskID {

@@ -23,7 +23,7 @@ func replacementDisk(id, role string) model.Disk {
 }
 
 func TestReplacementPlanPreservesRetiredSlotName(t *testing.T) {
-	disks := []model.Disk{replacementDisk("serial:A", "data"), replacementDisk("serial:B", "data"), replacementDisk("serial:NEW", "data")}
+	disks := []model.Disk{replacementDisk("serial:A", "data"), replacementDisk("serial:B", "data"), replacementDisk("serial:P", "parity"), replacementDisk("serial:NEW", "data")}
 	plan, err := NewReplacementPlan("op-1", "serial:DEAD", "serial:NEW", replacementConfig, disks, 7, time.Now())
 	if err != nil {
 		t.Fatal(err)
@@ -31,7 +31,7 @@ func TestReplacementPlanPreservesRetiredSlotName(t *testing.T) {
 	if plan.RetiredDataName != "d3" {
 		t.Fatalf("retired slot = %q, want d3", plan.RetiredDataName)
 	}
-	if plan.ParityDiskID != "serial_P" {
+	if plan.ParityDiskID != "serial:P" {
 		t.Fatalf("parity = %q", plan.ParityDiskID)
 	}
 	// The replacement must occupy the retired d3 slot (branch-sanitized).
@@ -52,11 +52,18 @@ func TestReplacementPlanPreservesRetiredSlotName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parity2 != plan.ParityDiskID || len(slots2) != 3 {
+	if DiskBranchPath(parity2) != DiskBranchPath(plan.ParityDiskID) || len(slots2) != 3 {
 		t.Fatalf("round-trip mismatch: parity=%q slots=%#v", parity2, slots2)
 	}
 	if err := ValidateSnapraidConfig(rendered); err != nil {
 		t.Fatalf("pinned render failed managed validation: %v", err)
+	}
+}
+
+func TestReplacementPlanRejectsUnstableReplacementIdentity(t *testing.T) {
+	disks := []model.Disk{replacementDisk("path:/dev/sda", "data")}
+	if _, err := NewReplacementPlan("op-path", "serial:DEAD", "path:/dev/sda", replacementConfig, disks, 7, time.Now()); err == nil || !contains(err.Error(), "stable identities") {
+		t.Fatalf("unstable replacement identity was accepted: %v", err)
 	}
 }
 
@@ -84,7 +91,7 @@ func contains(haystack, needle string) bool {
 }
 
 func TestReplacementPlanRejectsTamperedHash(t *testing.T) {
-	disks := []model.Disk{replacementDisk("serial:A", "data"), replacementDisk("serial:B", "data"), replacementDisk("serial:NEW", "data")}
+	disks := []model.Disk{replacementDisk("serial:A", "data"), replacementDisk("serial:B", "data"), replacementDisk("serial:P", "parity"), replacementDisk("serial:NEW", "data")}
 	config := strings.Replace(replacementConfig, "data d3 /srv/disks/serial_DEAD\n", "", 1)
 	plan, err := NewReplacementPlan("op-1", "serial:B", "serial:NEW", config, disks, 7, time.Now())
 	if err != nil {
@@ -94,7 +101,7 @@ func TestReplacementPlanRejectsTamperedHash(t *testing.T) {
 		t.Fatalf("fresh plan should validate: %v", err)
 	}
 	changed := append([]model.Disk(nil), disks...)
-	changed[2].Serial = "changed"
+	changed[3].Serial = "changed"
 	if err := ValidateReplacementPlan(plan, changed, time.Now().Add(time.Minute), 7); err == nil || !contains(err.Error(), "identity changed") {
 		t.Fatalf("replacement identity change accepted: %v", err)
 	}

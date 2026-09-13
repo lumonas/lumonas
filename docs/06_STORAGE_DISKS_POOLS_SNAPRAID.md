@@ -199,6 +199,11 @@ When disk disappears:
 
 Do not silently run recovery.
 
+SnapRAID branch paths are sanitized for filesystem-safe mount names and are not
+the authoritative disk IDs. Replacement planning must resolve every parity and
+surviving data branch back to the currently discovered stable identity before
+the privileged broker revalidates or rewrites the configuration.
+
 Likewise, onboarding may persist a requested parity/data layout as intent, but
 it must not queue the initial sync when configuration activation or identity
 validation fails.

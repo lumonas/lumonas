@@ -329,6 +329,10 @@ The same smoke must use a GPT-backed identity for the disposable format
 fixture and must reject an unpartitioned loop device whose only identity is
 its transient `/dev/loopN` path.
 
+Replacement planning must resolve sanitized SnapRAID parity/data branch paths
+back to live stable disk IDs and include the parity identity in the privileged
+revalidation request.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.

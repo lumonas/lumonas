@@ -68,6 +68,10 @@ revalidate those values in addition to WWN, serial, capacity, and filesystem
 UUID, so a replacement device cannot inherit a stale plan merely because its
 device path is unchanged.
 
+SnapRAID configuration branch names are treated as references, not identities:
+their sanitized path segments must be resolved against the live disk inventory
+before a replacement or configuration mutation can proceed.
+
 WireGuard and SFTP integrations also use the bounded command runner for
 stdin-bearing operations. Command names and arguments remain typed, while
 private keys and transfer instructions are passed through stdin without shell

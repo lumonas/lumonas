@@ -66,8 +66,10 @@ func TestDiskReplacementPlanAndConfirmChain(t *testing.T) {
 
 	server.safetyUntil = time.Now().UTC().Add(time.Minute)
 	var operations []string
+	var requests []privileged.Request
 	server.brokerExec = func(_ context.Context, request privileged.Request) error {
 		operations = append(operations, request.Operation)
+		requests = append(requests, request)
 		return nil
 	}
 	confirm := httptest.NewRecorder()
@@ -81,6 +83,18 @@ func TestDiskReplacementPlanAndConfirmChain(t *testing.T) {
 	// the filesystem creation and managed config activation.
 	if len(operations) < 2 || operations[0] != "filesystem.create" || operations[1] != "snapraid.config.apply" {
 		t.Fatalf("unexpected broker chain: %#v", operations)
+	}
+	if len(requests) < 2 {
+		t.Fatalf("expected synchronous replacement broker requests: %#v", requests)
+	}
+	parityFound := false
+	for _, disk := range requests[1].ExpectedDisks {
+		if disk.ID == "serial:P" {
+			parityFound = true
+		}
+	}
+	if !parityFound {
+		t.Fatalf("replacement SnapRAID request omitted resolved parity identity: %#v", requests[1].ExpectedDisks)
 	}
 	var result struct {
 		OK   bool   `json:"ok"`
