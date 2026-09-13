@@ -28,7 +28,7 @@ field() {
 }
 
 [ "$(field Package)" = "lumonas" ] || { echo "unexpected package name" >&2; exit 1; }
-[ "$(field Architecture)" = "amd64" ] || { echo "unexpected package architecture" >&2; exit 1; }
+[ "$(field Architecture)" = "${LUMONAS_DEB_ARCH:-amd64}" ] || { echo "unexpected package architecture" >&2; exit 1; }
 [ -n "$(field Version)" ] || { echo "package version is empty" >&2; exit 1; }
 
 CONTENTS=$(dpkg-deb -c "$PACKAGE")
@@ -46,10 +46,13 @@ for binary in lumonasd lumonas-web lumonas-privd lumonas-recover lumonas-migrate
 		echo "$binary is not executable in the package" >&2
 		exit 1
 	}
-	file "$DATA_DIR/usr/lib/lumonas/$binary" | grep -E 'ELF 64-bit.*x86-64' >/dev/null 2>&1 || {
-		echo "$binary is not a Linux amd64 executable" >&2
+	case "$(file "$DATA_DIR/usr/lib/lumonas/$binary")" in
+	*ELF*64-bit*x86-64*|*ELF*64-bit*aarch64*) ;;
+	*)
+		echo "$binary is not a Linux ${LUMONAS_DEB_ARCH:-amd64} executable" >&2
 		exit 1
-	}
+		;;
+	esac
 done
 
 for unit in \
@@ -93,6 +96,7 @@ grep -F 'PartOf=lumonas-jobs.target' "$DATA_DIR/lib/systemd/system/lumonasd.serv
 }
 python3 - "$DATA_DIR/etc/docker/daemon.json.lumonas" <<'PY'
 import json
+import os
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as handle:
@@ -117,6 +121,7 @@ fi
 
 python3 - "$DATA_DIR/usr/share/lumonas/build-manifest.json" "$(field Version)" "$(field Depends)" "$(field Recommends)" <<'PY'
 import json
+import os
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as handle:
@@ -126,7 +131,7 @@ if manifest.get("package") != "lumonas":
     raise SystemExit("manifest package mismatch")
 if manifest.get("version") != sys.argv[2]:
     raise SystemExit("manifest version mismatch")
-if manifest.get("architecture") != "amd64":
+if manifest.get("architecture") != os.environ.get("LUMONAS_DEB_ARCH", "amd64"):
     raise SystemExit("manifest architecture mismatch")
 if manifest.get("debianDepends") != sys.argv[3]:
     raise SystemExit("manifest Depends mismatch")

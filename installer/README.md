@@ -2,6 +2,21 @@
 
 `build-iso.sh` builds an amd64 Debian 13 live installer with the LumoNAS `.deb` and a local APT repository embedded in the image. The image includes the core NAS packages and enables the LumoNAS systemd services during the live-build hook.
 
+## Architecture variants
+
+- `make package` builds the amd64 Debian package (the release default).
+- `make package-arm64` builds the arm64 Debian package; the build pipeline
+  (`packaging/build-deb.sh`, `scripts/verify-deb.sh`) is architecture
+  parameterized via `LUMONAS_DEB_ARCH`/`LUMONAS_GOARCH`.
+- `make arm64-image` builds a generic arm64 UEFI disk image with
+  `installer/build-arm64.sh` (mmdebstrap + the arm64 package). It requires an
+  arm64-capable Debian host or `qemu-user-static` and is exercised in CI with
+  `make arm64-image-smoke` (`LUMONAS_ARM64_ASSERT=true` for the full build).
+- `make netboot` extracts kernel/initrd/squashfs from the offline ISO into a
+  PXE bundle with GRUB and iPXE snippets (`installer/build-netboot.sh`),
+  verified by `make netboot-smoke` (`LUMONAS_NETBOOT_ASSERT=true` requires a
+  built ISO).
+
 Build prerequisites are Debian/Ubuntu `live-build`, `dpkg-deb`, and the package produced by `packaging/build-deb.sh`:
 
 ```sh

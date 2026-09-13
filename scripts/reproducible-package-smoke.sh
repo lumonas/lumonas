@@ -2,10 +2,11 @@
 set -eu
 
 VERSION="${1:-0.1.0-dev}"
+DEB_ARCH="${LUMONAS_DEB_ARCH:-amd64}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct)}"
 GIT_COMMIT="${LUMONAS_GIT_COMMIT:-$(git -C "$ROOT" rev-parse HEAD)}"
-PACKAGE="$ROOT/lumonas_${VERSION}_amd64.deb"
+PACKAGE="$ROOT/lumonas_${VERSION}_${DEB_ARCH}.deb"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-reproducible-package.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT INT TERM
 
