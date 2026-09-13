@@ -13,7 +13,10 @@ func TestEnsureRestartedJobsFailsClosedForInterruptedWork(t *testing.T) {
 	job := model.Job{
 		ID:            "job-restart",
 		CorrelationID: "corr-restart",
+		OperationID:   "op-restart",
+		PlanHash:      "plan-restart",
 		Actor:         "admin",
+		Generation:    7,
 		Type:          "snapraid.sync",
 		Title:         "SnapRAID sync",
 		State:         "running",
@@ -39,12 +42,12 @@ func TestEnsureRestartedJobsFailsClosedForInterruptedWork(t *testing.T) {
 	}
 	var restartEvent *model.Event
 	for index := range events {
-		if events[index].Type == "job.state_changed" && events[index].OperationID == job.ID {
+		if events[index].Type == "job.state_changed" && events[index].OperationID == job.OperationID {
 			restartEvent = &events[index]
 			break
 		}
 	}
-	if restartEvent == nil || restartEvent.CorrelationID != job.CorrelationID || restartEvent.Actor != job.Actor || restartEvent.Data["reason"] != "daemon_restart" {
+	if restartEvent == nil || restartEvent.CorrelationID != job.CorrelationID || restartEvent.OperationID != job.OperationID || restartEvent.PlanHash != job.PlanHash || restartEvent.Generation != job.Generation || restartEvent.Actor != job.Actor || restartEvent.Data["reason"] != "daemon_restart" {
 		t.Fatalf("restart failure event lost tracing metadata: %#v", restartEvent)
 	}
 	server.ensureRestartedJobs()
@@ -54,7 +57,7 @@ func TestEnsureRestartedJobsFailsClosedForInterruptedWork(t *testing.T) {
 	}
 	count := 0
 	for _, event := range events {
-		if event.Type == "job.state_changed" && event.OperationID == job.ID {
+		if event.Type == "job.state_changed" && event.OperationID == job.OperationID {
 			count++
 		}
 	}

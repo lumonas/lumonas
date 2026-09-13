@@ -22,7 +22,7 @@ def load_response_validator():
 def main(argv: list[str]) -> int:
     if len(argv) == 2 and argv[1] == "--self-test":
         validator = load_response_validator()
-        validator.validate_events([{"schemaVersion": 1, "id": "evt-1", "type": "system.metrics", "timestamp": "now", "severity": "info", "data": {}}])
+        validator.validate_events([{"schemaVersion": 1, "id": "evt-1", "type": "system.metrics", "timestamp": "now", "severity": "info", "operationId": "op-1", "planHash": "plan-1", "generation": 7, "data": {}}])
         print("SSE response validator self-test passed")
         return 0
     if len(argv) not in (2, 3):

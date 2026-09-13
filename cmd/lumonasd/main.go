@@ -3069,7 +3069,11 @@ func (s *apiServer) publishWithActor(actor, kind, severity string, resource *mod
 	if actor == "" {
 		actor = "system"
 	}
-	event := model.Event{SchemaVersion: events.SchemaVersion, ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Actor: actor, Generation: s.currentGeneration(), Resource: resource, Data: data}
+	generation := s.currentGeneration()
+	if metadata.Generation != 0 {
+		generation = metadata.Generation
+	}
+	event := model.Event{SchemaVersion: events.SchemaVersion, ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Actor: actor, Generation: generation, Resource: resource, Data: data}
 	event.CorrelationID = metadata.CorrelationID
 	event.OperationID = metadata.OperationID
 	event.PlanHash = metadata.PlanHash

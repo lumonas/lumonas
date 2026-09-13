@@ -215,6 +215,17 @@ def validate_events(value: Any) -> None:
             fail(f"{label}.schemaVersion must be a positive integer")
         for field in ("id", "type", "timestamp", "severity"):
             string_field(obj, field, label)
+        for field in ("correlationId", "operationId", "planHash", "actor"):
+            if field in obj:
+                string_field(obj, field, label)
+        if "generation" in obj:
+            if not isinstance(obj["generation"], int) or isinstance(obj["generation"], bool) or obj["generation"] < 0:
+                fail(f"{label}.generation must be a non-negative integer")
+        if "resource" in obj:
+            resource = object_value(obj["resource"], f"{label}.resource")
+            required(resource, ("type", "id"), f"{label}.resource")
+            string_field(resource, "type", f"{label}.resource")
+            string_field(resource, "id", f"{label}.resource")
         object_value(obj["data"], f"{label}.data")
 
 
@@ -266,7 +277,7 @@ def self_test() -> None:
     validate_docker_images([])
     validate_docker_volumes([])
     validate_health({"status": "healthy", "score": 100, "components": []})
-    validate_events([{"schemaVersion": 1, "id": "evt-1", "type": "system.metrics", "timestamp": "now", "severity": "info", "data": {}}])
+    validate_events([{"schemaVersion": 1, "id": "evt-1", "type": "system.metrics", "timestamp": "now", "severity": "info", "correlationId": "corr-1", "operationId": "op-1", "planHash": "plan-1", "actor": "admin", "generation": 7, "resource": {"type": "disk", "id": "disk-1"}, "data": {}}])
     validate_audit([{
         "id": "audit-1", "timestamp": "now", "actor": "admin", "action": "disk.plan",
         "outcome": "committed", "correlationId": "corr-1", "operationId": "op-1",
