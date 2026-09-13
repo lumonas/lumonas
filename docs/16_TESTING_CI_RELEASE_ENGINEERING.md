@@ -234,6 +234,12 @@ an explicit skip when the host sandbox forbids AF_UNIX binds, while CI and
 `make api-smoke-strict` fail closed instead of weakening the privileged-worker
 assertion.
 
+Linux broker tests also exercise the kernel peer-credential boundary directly:
+the accepted Unix peer must be root or the configured `lumonas` service group,
+and a peer presented with a different configured group is rejected. Socket
+filesystem mode remains a first gate, while `SO_PEERCRED` is the runtime
+identity check used by `lumonas-privd` for defense in depth.
+
 The Debian 13 QEMU smoke reuses those same validators against the appliance's
 live responses and event stream, so release gating checks runtime shape and
 reachability together rather than relying on string probes alone.

@@ -48,3 +48,37 @@ func TestPeerAllowedAcceptsCurrentUnixPeer(t *testing.T) {
 		t.Fatal("current Unix peer should pass its service-group check")
 	}
 }
+
+func TestPeerAllowedRejectsUnixPeerOutsideServiceGroup(t *testing.T) {
+	socketPath := t.TempDir() + "/privd.sock"
+	listener, err := net.Listen("unix", socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		connection, acceptErr := listener.Accept()
+		if acceptErr == nil {
+			accepted <- connection
+			return
+		}
+		close(accepted)
+	}()
+	client, err := net.Dial("unix", socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	server, ok := <-accepted
+	if !ok {
+		t.Fatal("listener failed to accept Unix peer")
+	}
+	defer server.Close()
+
+	wrongGID := os.Getgid() + 1
+	if peerAllowed(server, wrongGID) {
+		t.Fatalf("Unix peer with gid %d must not pass configured gid %d", os.Getgid(), wrongGID)
+	}
+}
