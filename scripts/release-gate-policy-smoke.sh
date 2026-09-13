@@ -26,8 +26,11 @@ missing = sorted(needed - actual)
 if missing:
     raise SystemExit("release job is missing blocking gates: " + ", ".join(missing))
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
-if not race_match or not re.search(r"^\s+- run: .*scripts/fuzz-smoke\.sh", race_match.group(0), re.M):
-    raise SystemExit("race-fuzz job is not running the bounded fuzz harness")
+if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", race_match.group(0), re.M):
+    raise SystemExit("race-fuzz job is not running the centralized race/fuzz harness")
+race_script = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "race-fuzz-smoke.sh"
+if "scripts/fuzz-smoke.sh" not in race_script.read_text(encoding="utf-8"):
+    raise SystemExit("race/fuzz harness does not delegate to the bounded fuzz suite")
 installer = pathlib.Path(sys.argv[1]).parent.parent.parent / "installer" / "build-iso.sh"
 installer_text = installer.read_text(encoding="utf-8")
 for marker in (
