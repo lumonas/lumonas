@@ -88,7 +88,7 @@ QEMU_PID=$!
 API_READY=false
 for attempt in $(seq 1 120); do
 	if curl -kfsS https://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
-		curl -kfsS https://127.0.0.1:18082/readyz >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18082/readyz >"$WORK/ready.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18082/api/v1/server >/dev/null 2>&1; then
 		API_READY=true
 	fi
@@ -98,6 +98,7 @@ for attempt in $(seq 1 120); do
 	sleep 2
 done
 [ "$API_READY" = true ] || { echo "recovery ISO API never became ready" >&2; cat "$LOG" >&2 || true; exit 1; }
+grep -F '"privilegedBroker":true' "$WORK/ready.json" >/dev/null
 
 guest_exited=false
 for attempt in $(seq 1 90); do
@@ -175,7 +176,7 @@ QEMU_PID=$!
 recovered_ready=false
 for attempt in $(seq 1 120); do
 	if curl -kfsS https://127.0.0.1:18084/healthz >/dev/null 2>&1 && \
-		curl -kfsS https://127.0.0.1:18084/readyz >/dev/null 2>&1 && \
+		curl -kfsS https://127.0.0.1:18084/readyz >"$WORK/recovered-ready.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null; then
 		recovered_ready=true
 		break
@@ -190,5 +191,6 @@ done
 	cat "$WORK/recovered-boot.log" >&2 || true
 	exit 1
 }
+grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
 echo "LumoNAS recovered replacement disk boot passed"

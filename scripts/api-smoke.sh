@@ -210,6 +210,8 @@ status=$(curl -sS -o "$TEMP_DIR/jobs.json" -w '%{http_code}' \
 validate_response jobs "$TEMP_DIR/jobs.json"
 
 assert_authenticated_status_and_body GET /api/v1/settings 200 '"runtime"'
+assert_authenticated_status_and_body GET /api/v1/ups/config 200 '"names":[]'
+assert_authenticated_status_and_body PATCH /api/v1/ups/config 200 '"names":[]' '{"names":[]}'
 assert_authenticated_status_and_body POST /api/v1/recovery/key 200 '"key"'
 assert_authenticated_status_and_body POST /api/v1/recovery/export 201 '"verified":true'
 assert_authenticated_status_and_body GET /api/v1/recovery/status 200 '"verified":true'

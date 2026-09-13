@@ -104,7 +104,7 @@ trap cleanup EXIT
 
 for attempt in $(seq 1 60); do
   if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
-     curl -kfsS https://127.0.0.1:18080/readyz >/dev/null 2>&1 && \
+     curl -kfsS https://127.0.0.1:18080/readyz >"$LOG.ready" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/server >"$LOG.server" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
@@ -113,6 +113,11 @@ for attempt in $(seq 1 60); do
      curl -kfsS https://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
      curl -kfsS https://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
+    grep -F '"privilegedBroker":true' "$LOG.ready" >/dev/null 2>&1 || {
+      echo "QEMU readiness response did not confirm the privileged broker" >&2
+      cat "$LOG.ready" >&2 || true
+      exit 1
+    }
     disk_count=$(grep -o '"id"' "$LOG.disks" | wc -l | tr -d ' ')
     if [ "$disk_count" -ge 5 ] && \
        grep -F 'serial:LUMONAS-DATA1' "$LOG.disks" >/dev/null 2>&1 && \

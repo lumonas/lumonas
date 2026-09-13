@@ -25,6 +25,10 @@ actual = {item.strip() for item in match.group(1).split(",") if item.strip()}
 missing = sorted(needed - actual)
 if missing:
     raise SystemExit("release job is missing blocking gates: " + ", ".join(missing))
+for job in ("qemu-smoke", "package-permissions"):
+    job_match = re.search(rf"(?ms)^  {job}:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+    if not job_match or not re.search(r"^    needs: \[package, deb-verify\]$", job_match.group(0), re.M):
+        raise SystemExit(f"{job} must wait for the Debian manifest gate")
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", race_match.group(0), re.M):
     raise SystemExit("race-fuzz job is not running the centralized race/fuzz harness")
@@ -44,8 +48,14 @@ qemu_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-
 if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "validate-sse.py" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU smoke does not validate live API and SSE response contracts")
 api_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "api-smoke.sh"
-if "Last-Event-ID" not in api_smoke.read_text(encoding="utf-8") or "cursor event twice" not in api_smoke.read_text(encoding="utf-8"):
+api_smoke_text = api_smoke.read_text(encoding="utf-8")
+if "Last-Event-ID" not in api_smoke_text or "cursor event twice" not in api_smoke_text:
     raise SystemExit("API smoke does not enforce non-duplicating SSE replay")
+if "/api/v1/ups/config" not in api_smoke_text or '"names":[]' not in api_smoke_text:
+    raise SystemExit("API smoke does not exercise persisted UPS configuration")
+qemu_recovery_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-recovery-smoke.sh"
+if '"privilegedBroker":true' not in qemu_smoke.read_text(encoding="utf-8") or '"privilegedBroker":true' not in qemu_recovery_smoke.read_text(encoding="utf-8"):
+    raise SystemExit("QEMU smoke does not assert the privileged broker readiness contract")
 live_e2e = pathlib.Path(sys.argv[1]).parent.parent.parent / "web" / "e2e" / "live.spec.ts"
 live_e2e_text = live_e2e.read_text(encoding="utf-8")
 for marker in ("/api/v1/onboarding/complete", "/api/v1/events/stream", "snapraid.sync", "Overview"):
