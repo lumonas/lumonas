@@ -97,7 +97,7 @@ API_READY=false
 for attempt in $(seq 1 120); do
 	if curl -kfsS https://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
 		curl -kfsS https://127.0.0.1:18082/readyz >"$WORK/ready.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/api/v1/server >/dev/null 2>&1; then
+		curl -kfsS https://127.0.0.1:18082/api/v1/server >"$WORK/server.json" 2>/dev/null; then
 		API_READY=true
 	fi
 	if ! kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -108,6 +108,7 @@ done
 [ "$API_READY" = true ] || { echo "recovery ISO API never became ready" >&2; cat "$LOG" >&2 || true; exit 1; }
 grep -F '"privilegedBroker":true' "$WORK/ready.json" >/dev/null
 python3 "$ROOT/scripts/validate-api-response.py" readiness "$WORK/ready.json"
+python3 "$ROOT/scripts/validate-api-response.py" server "$WORK/server.json"
 
 guest_exited=false
 for attempt in $(seq 1 90); do
@@ -209,6 +210,7 @@ done
 grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
 python3 "$ROOT/scripts/validate-api-response.py" readiness "$WORK/recovered-ready.json"
+python3 "$ROOT/scripts/validate-api-response.py" server "$WORK/recovered-server.json"
 python3 "$ROOT/scripts/validate-api-response.py" health "$WORK/recovered-health.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-summary "$WORK/recovered-docker-summary.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$WORK/recovered-docker-containers.json"

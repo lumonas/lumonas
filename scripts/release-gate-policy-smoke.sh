@@ -123,8 +123,8 @@ for marker in ("validate-api-response.py\" recovery-status", "validate-api-respo
 if "validate-api-response.py\" lan-hosts" not in qemu_contract or "validate-api-response.py\" readiness" not in qemu_contract:
     raise SystemExit("QEMU smoke is missing LAN/readiness response validation")
 for script, markers in (
-    ("scripts/iso-smoke.sh", ("validate-api-response.py", "readiness")),
-    ("scripts/qemu-recovery-smoke.sh", ("recovery-plan", "readiness")),
+    ("scripts/iso-smoke.sh", ("validate-api-response.py", "readiness", "server")),
+    ("scripts/qemu-recovery-smoke.sh", ("recovery-plan", "readiness", "server")),
 ):
     script_text = (repo_root / script).read_text(encoding="utf-8")
     if any(marker not in script_text for marker in markers):
