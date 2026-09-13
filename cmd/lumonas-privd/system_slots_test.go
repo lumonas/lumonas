@@ -71,6 +71,15 @@ func (fakeCharDeviceFileInfo) ModTime() time.Time { return time.Time{} }
 func (fakeCharDeviceFileInfo) IsDir() bool        { return false }
 func (fakeCharDeviceFileInfo) Sys() any           { return nil }
 
+type fakeRegularFileInfo struct{}
+
+func (fakeRegularFileInfo) Name() string       { return "slot-regular-file" }
+func (fakeRegularFileInfo) Size() int64        { return 0 }
+func (fakeRegularFileInfo) Mode() os.FileMode  { return 0 }
+func (fakeRegularFileInfo) ModTime() time.Time { return time.Time{} }
+func (fakeRegularFileInfo) IsDir() bool        { return false }
+func (fakeRegularFileInfo) Sys() any           { return nil }
+
 func allowFakeSlotBlockDevice(t *testing.T) {
 	t.Helper()
 	previous := slotTargetStat
@@ -96,14 +105,13 @@ func TestSlotWriteRejectsOutsideUpdateRoot(t *testing.T) {
 
 func TestSlotWriteRejectsNonBlockTarget(t *testing.T) {
 	imagePath, digest := stagedSlotImage(t, "payload")
-	target := filepath.Join(t.TempDir(), "not-a-device")
-	if err := os.WriteFile(target, []byte(""), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	result := execute(slotWriteRequest(imagePath, target, digest), slotTestDiscover, func(string, ...string) ([]byte, error) {
+	previous := slotTargetStat
+	slotTargetStat = func(string) (os.FileInfo, error) { return fakeRegularFileInfo{}, nil }
+	t.Cleanup(func() { slotTargetStat = previous })
+	result := execute(slotWriteRequest(imagePath, "/dev/disk/by-id/virtio-LUMONAS-SLOTB", digest), slotTestDiscover, func(string, ...string) ([]byte, error) {
 		return nil, nil
 	})
-	if result.OK || !strings.Contains(result.Error, "persistent") {
+	if result.OK || !strings.Contains(result.Error, "block device") {
 		t.Fatalf("expected target rejection, got %#v", result)
 	}
 }
