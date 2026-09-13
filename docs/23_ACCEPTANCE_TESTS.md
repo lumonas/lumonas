@@ -501,7 +501,9 @@ route must deliver the same replay-safe SSE envelope.
 
 Pass if the JSON event preserves `correlationId`, `operationId`, `planHash`,
 `actor`, `generation`, resource identity, schema version, and payload data,
-and the frontend event type exposes the same optional metadata.
+and the frontend event type exposes the same optional metadata. Restart
+reconciliation must emit only one persisted failure event per interrupted job,
+including the job correlation and operation IDs.
 
 The daemon must also emit one structured HTTP request log per request with the
 method, URL path, response status, response bytes, duration, and correlation

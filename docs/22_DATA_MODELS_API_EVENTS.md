@@ -293,6 +293,11 @@ POST /operations/{plan_id}/confirm
 
 Plan response contains dependencies and warnings.
 
+When the daemon restarts, any queued, preparing, or running job is failed
+closed and emits one persisted `job.state_changed` event with
+`reason: "daemon_restart"`. Clients reconnecting with `Last-Event-ID` can
+therefore observe the same terminal transition as clients that were online.
+
 ## Realtime event envelope
 
 ```json

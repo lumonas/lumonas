@@ -2809,7 +2809,13 @@ func (s *apiServer) ensureRestartedJobs() {
 			job.State, job.Error = "failed", "daemon restarted before the job completed"
 			now := time.Now().UTC()
 			job.FinishedAt = &now
-			_ = s.store.SaveJob(job)
+			if err := s.store.SaveJob(job); err != nil {
+				if s.log != nil {
+					s.log.Warn("persist restarted job failure failed", "job", job.ID, "error", err)
+				}
+				continue
+			}
+			s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "reason": "daemon_restart"})
 		}
 	}
 }
