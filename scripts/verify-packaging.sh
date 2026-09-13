@@ -434,6 +434,7 @@ require_line "$ROOT/cmd/lumonas-privd/main.go" 'could not verify target mount st
 require_line "$ROOT/cmd/lumonas-privd/main.go" 'MOUNTPOINT'
 require_line "$ROOT/cmd/lumonas-privd/storage_safety_contract_test.go" 'TestDestructiveStorageExecutionDetectsMountedPartitionWithLsblk'
 require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'sfdisk --no-reread'
+require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'partx --update'
 require_line "$ROOT/scripts/privileged-storage-loopback-smoke.sh" 'partition-mounted'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONASD_LISTEN=127.0.0.1:18083'
 require_line "$ROOT/installer/build-iso.sh" 'restored-principals.json'

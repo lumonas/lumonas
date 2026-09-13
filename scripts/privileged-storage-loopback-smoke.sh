@@ -11,7 +11,7 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 0
 fi
 
-for command in go lsblk losetup mount umount mkfs.ext4 wipefs findmnt blkid mktemp python3 truncate sfdisk partprobe; do
+for command in go lsblk losetup mount umount mkfs.ext4 wipefs findmnt blkid mktemp python3 truncate sfdisk partx; do
 	command -v "$command" >/dev/null 2>&1 || {
 		echo "$command is required for privileged storage loopback assertions" >&2
 		exit 1
@@ -58,7 +58,8 @@ LOOP="$(losetup --find --show "$IMAGE")"
 truncate -s 128M "$PARTITION_IMAGE"
 PARTITION_LOOP="$(losetup --find --show --partscan "$PARTITION_IMAGE")"
 printf 'label: gpt\n,96M,L\n' | sfdisk --no-reread "$PARTITION_LOOP" >/dev/null
-partprobe "$PARTITION_LOOP" || true
+partx --update "$PARTITION_LOOP" 2>/dev/null || true
+partx --add "$PARTITION_LOOP" 2>/dev/null || true
 PARTITION_DEVICE="${PARTITION_LOOP}p1"
 for attempt in $(seq 1 10); do
 	[ -b "$PARTITION_DEVICE" ] && break

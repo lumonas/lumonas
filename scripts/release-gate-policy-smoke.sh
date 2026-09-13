@@ -130,7 +130,7 @@ for marker in ("could not verify target mount state", '"lsblk", "-nrpo", "MOUNTP
         raise SystemExit(f"privileged mount-state safety marker is missing: {marker}")
 privileged_loopback = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "privileged-storage-loopback-smoke.sh"
 privileged_loopback_text = privileged_loopback.read_text(encoding="utf-8")
-for marker in ("sfdisk", "--partscan", "partition-mounted", "mounted-partition rejection"):
+for marker in ("sfdisk", "partx --update", "partition-mounted", "mounted-partition rejection"):
     if marker not in privileged_loopback_text:
         raise SystemExit(f"privileged loopback smoke is missing partition coverage: {marker}")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")

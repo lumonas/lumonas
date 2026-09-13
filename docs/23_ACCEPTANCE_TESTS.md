@@ -310,7 +310,8 @@ command.
 
 The privileged loopback smoke must exercise this with a real partitioned
 loopback disk: mounting its partition must block an erase request targeting the
-parent disk.
+parent disk. The test must refresh the loop partition map with the baseline
+`partx` utility rather than relying on an undeclared package.
 
 ## U. Dependency and image security
 
