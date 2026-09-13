@@ -341,7 +341,15 @@ assert_authenticated_status_and_body GET /api/v1/ups/config 200 '"names":[]'
 assert_authenticated_status_and_body PATCH /api/v1/ups/config 200 '"names":[]' '{"names":[]}'
 assert_authenticated_status_and_body POST /api/v1/recovery/key 200 '"key"'
 assert_authenticated_status_and_body POST /api/v1/recovery/export 201 '"verified":true'
-assert_authenticated_status_and_body GET /api/v1/recovery/status 200 '"verified":true'
+status=$(curl -sS -o "$TEMP_DIR/recovery-status.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/recovery/status")
+[ "$status" = 200 ] || { echo "authenticated recovery status request failed (HTTP $status)" >&2; exit 1; }
+validate_response recovery-status "$TEMP_DIR/recovery-status.json"
+grep -F '"verified":true' "$TEMP_DIR/recovery-status.json" >/dev/null 2>&1 || { echo "recovery status is not verified" >&2; exit 1; }
+status=$(curl -sS -o "$TEMP_DIR/recovery-plan.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/recovery/plan")
+[ "$status" = 200 ] || { echo "authenticated recovery plan request failed (HTTP $status)" >&2; exit 1; }
+validate_response recovery-plan "$TEMP_DIR/recovery-plan.json"
 UPDATE_REQUEST_BODY=$(python3 - "$UPDATE_FIXTURE_PATH" "$TEMP_DIR/recovery/latest.mrb" <<'PY'
 import json
 import sys
@@ -358,7 +366,11 @@ PY
 assert_authenticated_status_and_body POST /api/v1/updates/apply 202 '"pendingSlot":"b"' "$UPDATE_REQUEST_BODY"
 assert_authenticated_status_and_body POST /api/v1/updates/health 200 '"activeSlot":"b"' "{\"healthy\":true,\"version\":\"$LUMONAS_UPDATE_VERSION\"}"
 assert_authenticated_status_and_body POST /api/v1/updates/rollback 200 '"activeSlot":"a"' '{"reason":"api smoke rollback"}'
-assert_authenticated_status_and_body GET /api/v1/updates/status 200 '"activeSlot":"a"'
+status=$(curl -sS -o "$TEMP_DIR/updates-status.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/updates/status")
+[ "$status" = 200 ] || { echo "authenticated updates status request failed (HTTP $status)" >&2; exit 1; }
+validate_response updates-status "$TEMP_DIR/updates-status.json"
+grep -F '"activeSlot":"a"' "$TEMP_DIR/updates-status.json" >/dev/null 2>&1 || { echo "updates status did not return slot a" >&2; exit 1; }
 assert_authenticated_status_and_body GET '/api/v1/power/shutdown/plan?action=poweroff' 200 '"name":"stop-jobs"'
 assert_authenticated_status_and_body POST /api/v1/updates/check 202 '"type":"updates.check"'
 

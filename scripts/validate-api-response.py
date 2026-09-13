@@ -249,6 +249,73 @@ def validate_audit(value: Any) -> None:
             object_value(obj["metadata"], f"{label}.metadata")
 
 
+def validate_recovery_manifest(value: Any, label: str = "recovery.manifest") -> None:
+    obj = object_value(value, label)
+    required(obj, ("formatVersion", "configSchema", "lumonasVersion", "nasUuid", "generation", "createdAt", "diskIds", "checksums"), label)
+    for field in ("formatVersion", "configSchema", "generation"):
+        if not isinstance(obj[field], int) or isinstance(obj[field], bool) or obj[field] < 0:
+            fail(f"{label}.{field} must be a non-negative integer")
+    for field in ("lumonasVersion", "nasUuid", "createdAt"):
+        string_field(obj, field, label)
+    if not isinstance(obj["diskIds"], list) or not all(isinstance(item, str) for item in obj["diskIds"]):
+        fail(f"{label}.diskIds must be an array of strings")
+    checksums = object_value(obj["checksums"], f"{label}.checksums")
+    if not all(isinstance(key, str) and isinstance(item, str) for key, item in checksums.items()):
+        fail(f"{label}.checksums must map strings to strings")
+
+
+def validate_recovery_status(value: Any) -> None:
+    obj = object_value(value, "recovery-status")
+    required(obj, ("configured", "latestPath", "verified"), "recovery-status")
+    for field in ("configured", "verified"):
+        if not isinstance(obj[field], bool):
+            fail(f"recovery-status.{field} must be a boolean")
+    string_field(obj, "latestPath", "recovery-status")
+    if "manifest" in obj:
+        validate_recovery_manifest(obj["manifest"], "recovery-status.manifest")
+    if "warnings" in obj and (not isinstance(obj["warnings"], list) or not all(isinstance(item, str) for item in obj["warnings"])):
+        fail("recovery-status.warnings must be an array of strings")
+
+
+def validate_recovery_plan(value: Any) -> None:
+    obj = object_value(value, "recovery-plan")
+    required(obj, ("manifest", "files", "verified", "databaseValid", "desiredStateValid", "composeValid", "encryptedSecrets"), "recovery-plan")
+    validate_recovery_manifest(obj["manifest"], "recovery-plan.manifest")
+    if not isinstance(obj["files"], list) or not all(isinstance(item, str) for item in obj["files"]):
+        fail("recovery-plan.files must be an array of strings")
+    for field in ("verified", "databaseValid", "desiredStateValid", "composeValid", "encryptedSecrets"):
+        if not isinstance(obj[field], bool):
+            fail(f"recovery-plan.{field} must be a boolean")
+    if "warnings" in obj and (not isinstance(obj["warnings"], list) or not all(isinstance(item, str) for item in obj["warnings"])):
+        fail("recovery-plan.warnings must be an array of strings")
+    if "appdata" in obj:
+        if not isinstance(obj["appdata"], list):
+            fail("recovery-plan.appdata must be an array")
+        for index, record in enumerate(obj["appdata"]):
+            label = f"recovery-plan.appdata[{index}]"
+            item = object_value(record, label)
+            required(item, ("stack", "containerPath", "hostPath", "archivePath", "archiveBytes"), label)
+            for field in ("stack", "containerPath", "hostPath", "archivePath"):
+                string_field(item, field, label)
+            if not isinstance(item["archiveBytes"], int) or isinstance(item["archiveBytes"], bool) or item["archiveBytes"] < 0:
+                fail(f"{label}.archiveBytes must be a non-negative integer")
+
+
+def validate_updates_status(value: Any) -> None:
+    obj = object_value(value, "updates-status")
+    required(obj, ("activeSlot", "activeVersion", "bootAttempts", "updatedAt"), "updates-status")
+    string_field(obj, "activeSlot", "updates-status")
+    string_field(obj, "activeVersion", "updates-status")
+    string_field(obj, "updatedAt", "updates-status")
+    if obj["activeSlot"] not in ("a", "b"):
+        fail("updates-status.activeSlot must be a or b")
+    if not isinstance(obj["bootAttempts"], int) or isinstance(obj["bootAttempts"], bool) or obj["bootAttempts"] < 0:
+        fail("updates-status.bootAttempts must be a non-negative integer")
+    for field in ("previousSlot", "pendingSlot", "pendingVersion", "lastError"):
+        if field in obj:
+            string_field(obj, field, "updates-status")
+
+
 def self_test() -> None:
     validate_server({field: "value" for field in ("id", "name", "hostname", "version", "nasUuid", "timezone", "health", "ip")})
     validate_disks([{
@@ -284,6 +351,13 @@ def self_test() -> None:
         "planHash": "sha256:plan", "generation": 7, "resourceType": "disk",
         "resourceId": "wwn-1", "metadata": {"confirmed": True},
     }])
+    manifest = {
+        "formatVersion": 1, "configSchema": 1, "lumonasVersion": "0.1.0", "nasUuid": "nas-1",
+        "generation": 7, "createdAt": "2026-01-02T00:00:00Z", "diskIds": ["wwn-1"], "checksums": {},
+    }
+    validate_recovery_status({"configured": True, "latestPath": "/var/lib/lumonas/recovery/latest.mrb", "verified": True, "manifest": manifest, "warnings": []})
+    validate_recovery_plan({"manifest": manifest, "files": ["manifest.json"], "verified": True, "databaseValid": True, "desiredStateValid": True, "composeValid": True, "encryptedSecrets": False, "warnings": []})
+    validate_updates_status({"activeSlot": "a", "activeVersion": "0.1.0", "bootAttempts": 0, "updatedAt": "2026-01-02T00:00:00Z"})
 
 
 VALIDATORS = {
@@ -299,6 +373,9 @@ VALIDATORS = {
     "health": validate_health,
     "events": validate_events,
     "audit": validate_audit,
+    "recovery-status": validate_recovery_status,
+    "recovery-plan": validate_recovery_plan,
+    "updates-status": validate_updates_status,
 }
 
 

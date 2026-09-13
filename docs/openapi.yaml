@@ -1358,6 +1358,10 @@ paths:
       responses:
         '200':
           description: Update status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateSlotState'
 
   /updates/health:
     post:
@@ -2773,7 +2777,11 @@ paths:
       operationId: get-recovery-status
       responses:
         '200':
-          description: OK
+          description: Recovery bundle status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryStatus'
         '202':
           description: Accepted (async job queued)
         '4XX':
@@ -4573,6 +4581,19 @@ components:
         verified: {type: boolean}
         manifest: {$ref: '#/components/schemas/RecoveryManifest'}
         warnings: {type: array, items: {type: string}}
+
+    UpdateSlotState:
+      type: object
+      required: [activeSlot, activeVersion, bootAttempts, updatedAt]
+      properties:
+        activeSlot: {type: string, enum: [a, b]}
+        previousSlot: {type: string, enum: [a, b]}
+        pendingSlot: {type: string, enum: [a, b]}
+        activeVersion: {type: string}
+        pendingVersion: {type: string}
+        bootAttempts: {type: integer, minimum: 0}
+        lastError: {type: string}
+        updatedAt: {type: string, format: date-time}
 
     RecycleEntry:
       type: object

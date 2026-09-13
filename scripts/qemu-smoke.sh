@@ -186,6 +186,8 @@ for attempt in $(seq 1 60); do
          grep -F '"verified":true' "$RECOVERY_STATUS_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_PLAN_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_STAGE_LOG" >/dev/null 2>&1; then
+        python3 "$ROOT/scripts/validate-api-response.py" recovery-status "$RECOVERY_STATUS_LOG"
+        python3 "$ROOT/scripts/validate-api-response.py" recovery-plan "$RECOVERY_PLAN_LOG"
         if [ "$UPDATE_ASSERT" = "true" ]; then
           UPDATE_REQUEST_LOG="$LOG.update-request"
           UPDATE_HEALTH_LOG="$LOG.update-health"
@@ -212,6 +214,7 @@ PY
           grep -F '"activeSlot":"a"' "$UPDATE_ROLLBACK_LOG" >/dev/null 2>&1 && \
           curl -kfsS https://127.0.0.1:18080/api/v1/updates/status >"$UPDATE_STATUS_LOG" 2>/dev/null && \
           grep -F '"activeSlot":"a"' "$UPDATE_STATUS_LOG" >/dev/null 2>&1; then
+            python3 "$ROOT/scripts/validate-api-response.py" updates-status "$UPDATE_STATUS_LOG"
             echo "QEMU signed update promotion and rollback verified"
           else
             echo "QEMU signed update promotion and rollback failed" >&2
