@@ -79,9 +79,30 @@ if [ ! -x "$LUMONAS_PRIVD_BIN" ]; then
 	exit 1
 fi
 
+if [ -n "${LUMONAS_API_SMOKE_UPDATE_BIN:-}" ]; then
+	LUMONAS_UPDATE_FIXTURE_BIN=$LUMONAS_API_SMOKE_UPDATE_BIN
+else
+	LUMONAS_UPDATE_FIXTURE_BIN="$TEMP_DIR/lumonas-update-fixture"
+	(
+		cd "$ROOT_DIR"
+		GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" \
+		GOPATH="${GOPATH:-/tmp/lumonas-gopath}" \
+			go build -trimpath -o "$LUMONAS_UPDATE_FIXTURE_BIN" ./cmd/lumonas-update-fixture
+	)
+fi
+
+if [ ! -x "$LUMONAS_UPDATE_FIXTURE_BIN" ]; then
+	echo "update fixture binary is not executable: $LUMONAS_UPDATE_FIXTURE_BIN" >&2
+	exit 1
+fi
+
 PRIVD_DIR="$TEMP_DIR/privd"
 PRIVD_LOG_DIR="$TEMP_DIR/privd-logs"
 mkdir -p "$PRIVD_DIR" "$PRIVD_LOG_DIR"
+UPDATE_FIXTURE_PATH="$TEMP_DIR/update-fixture.json"
+"$LUMONAS_UPDATE_FIXTURE_BIN" -dir "$TEMP_DIR/update" -output "$UPDATE_FIXTURE_PATH"
+LUMONAS_UPDATE_PUBLIC_KEY=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["publicKey"])' "$UPDATE_FIXTURE_PATH")
+LUMONAS_UPDATE_VERSION=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["manifest"]["version"])' "$UPDATE_FIXTURE_PATH")
 
 start_privileged_stack() {
 	for worker in storage network power general; do
@@ -134,6 +155,8 @@ start_server() {
 	LUMONAS_STACK_ROOT="$TEMP_DIR/stacks" \
 	LUMONAS_RECOVERY_DIR="$TEMP_DIR/recovery" \
 	LUMONAS_PRIVD_SOCKET="$PRIVD_DIR/privd.sock" \
+	LUMONAS_UPDATE_ROOT="$TEMP_DIR/updates" \
+	LUMONAS_UPDATE_PUBLIC_KEY="$LUMONAS_UPDATE_PUBLIC_KEY" \
 	"$LUMONASD_BIN" -listen "$LISTEN_ADDR" >"$LOG_PATH" 2>&1 &
 	SERVER_PID=$!
 }
@@ -284,6 +307,23 @@ assert_authenticated_status_and_body PATCH /api/v1/ups/config 200 '"names":[]' '
 assert_authenticated_status_and_body POST /api/v1/recovery/key 200 '"key"'
 assert_authenticated_status_and_body POST /api/v1/recovery/export 201 '"verified":true'
 assert_authenticated_status_and_body GET /api/v1/recovery/status 200 '"verified":true'
+UPDATE_REQUEST_BODY=$(python3 - "$UPDATE_FIXTURE_PATH" "$TEMP_DIR/recovery/latest.mrb" <<'PY'
+import json
+import sys
+
+fixture = json.load(open(sys.argv[1], encoding="utf-8"))
+print(json.dumps({
+    "manifest": fixture["manifest"],
+    "signature": fixture["signature"],
+    "packagePath": fixture["packagePath"],
+    "backupPath": sys.argv[2],
+}, separators=(",", ":")))
+PY
+)
+assert_authenticated_status_and_body POST /api/v1/updates/apply 202 '"pendingSlot":"b"' "$UPDATE_REQUEST_BODY"
+assert_authenticated_status_and_body POST /api/v1/updates/health 200 '"activeSlot":"b"' "{\"healthy\":true,\"version\":\"$LUMONAS_UPDATE_VERSION\"}"
+assert_authenticated_status_and_body POST /api/v1/updates/rollback 200 '"activeSlot":"a"' '{"reason":"api smoke rollback"}'
+assert_authenticated_status_and_body GET /api/v1/updates/status 200 '"activeSlot":"a"'
 assert_authenticated_status_and_body GET '/api/v1/power/shutdown/plan?action=poweroff' 200 '"name":"stop-jobs"'
 assert_authenticated_status_and_body POST /api/v1/updates/check 202 '"type":"updates.check"'
 

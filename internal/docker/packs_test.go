@@ -68,11 +68,11 @@ func TestLoadImagePackValidatesManifestAndArchives(t *testing.T) {
 func TestLoadImagePackRejectsUnsafeEntries(t *testing.T) {
 	root := t.TempDir()
 	cases := map[string]string{
-		"path traversal":  `{"name":"pack","images":[{"file":"../escape.tar","sha256":"` + strings.Repeat("a", 64) + `"}]}`,
-		"missing digest":  `{"name":"pack","images":[{"file":"app.tar","sha256":"nothex"}]}`,
-		"no images":       `{"name":"pack","images":[]}`,
-		"absolute file":   `{"name":"pack","images":[{"file":"/etc/passwd","sha256":"` + strings.Repeat("a", 64) + `"}]}`,
-		"invalid name":    `{"name":"Bad Name!","images":[{"file":"app.tar","sha256":"` + strings.Repeat("a", 64) + `"}]}`,
+		"path traversal": `{"name":"pack","images":[{"file":"../escape.tar","sha256":"` + strings.Repeat("a", 64) + `"}]}`,
+		"missing digest": `{"name":"pack","images":[{"file":"app.tar","sha256":"nothex"}]}`,
+		"no images":      `{"name":"pack","images":[]}`,
+		"absolute file":  `{"name":"pack","images":[{"file":"/etc/passwd","sha256":"` + strings.Repeat("a", 64) + `"}]}`,
+		"invalid name":   `{"name":"Bad Name!","images":[{"file":"app.tar","sha256":"` + strings.Repeat("a", 64) + `"}]}`,
 	}
 	for label, manifest := range cases {
 		dir := writeImagePack(t, root, "unsafe-pack", manifest, nil)

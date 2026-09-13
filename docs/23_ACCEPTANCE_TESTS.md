@@ -265,6 +265,10 @@ Pass if:
 - data/share/Docker configuration remains valid;
 - recovery bundle from old version can migrate.
 
+The real-daemon API smoke also stages a deterministic Ed25519-signed update
+against its verified recovery bundle, confirms candidate health, rolls back to
+the previous slot, and reads the persisted slot state after the rollback.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.
