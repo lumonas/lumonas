@@ -117,6 +117,41 @@ severity TEXT NOT NULL, resource_type TEXT, resource_id TEXT, data_json TEXT NOT
 	}
 }
 
+func TestOpenMigratesLegacyJobObservabilitySchema(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "legacy-jobs.db")
+	legacy, err := sql.Open("sqlite3", databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`CREATE TABLE jobs (
+id TEXT PRIMARY KEY, type TEXT NOT NULL, title TEXT NOT NULL, resource_id TEXT,
+state TEXT NOT NULL, progress REAL, stage TEXT, created_at TEXT NOT NULL,
+started_at TEXT, finished_at TEXT, error TEXT
+); INSERT INTO jobs(id,type,title,state,created_at) VALUES('legacy-job','smart.short','legacy SMART','queued',?)`, time.Now().UTC().Format(timeFormat)); err != nil {
+		legacy.Close()
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	database, err := Open(databasePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	job, err := database.Job("legacy-job")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.ID != "legacy-job" || job.Type != "smart.short" || job.Generation == 0 {
+		t.Fatalf("legacy job migration lost state or generation: %#v", job)
+	}
+	if _, err := database.db.Exec(`SELECT operation_id,plan_hash,actor,generation FROM jobs WHERE id='legacy-job'`); err != nil {
+		t.Fatalf("job observability columns were not added: %v", err)
+	}
+}
+
 func TestOpenMigratesLegacyRuntimeSchemaAsOneUpgrade(t *testing.T) {
 	databasePath := filepath.Join(t.TempDir(), "legacy-runtime.db")
 	legacy, err := sql.Open("sqlite3", databasePath)

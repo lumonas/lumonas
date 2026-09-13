@@ -108,7 +108,7 @@ if "dockerruntime.New(\"\", nil)" not in collector_text or "DockerSummaryFromSer
 if "docker ps" in collector_text or "exec.LookPath" in collector_text:
     raise SystemExit("legacy Docker collector still parses direct CLI output")
 upgrade_job = re.search(r"(?ms)^  upgrade-compatibility:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
-if not upgrade_job or "TestStorageSnapshotMigrationAddsOriginAndPreservesRows" not in upgrade_job.group(0):
+if not upgrade_job or "TestStorageSnapshotMigrationAddsOriginAndPreservesRows" not in upgrade_job.group(0) or "TestOpenMigratesLegacyJobObservabilitySchema" not in upgrade_job.group(0):
     raise SystemExit("upgrade-compatibility gate is missing snapshot migration coverage")
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", race_match.group(0), re.M):

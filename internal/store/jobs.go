@@ -36,6 +36,9 @@ func (s *Store) ensureJobSchema() error {
 			return err
 		}
 	}
+	if _, err := s.db.Exec(`UPDATE jobs SET generation=COALESCE((SELECT CAST(value AS INTEGER) FROM meta WHERE key='config_generation'),1) WHERE generation=0`); err != nil {
+		return err
+	}
 	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, ?), (6, ?), (11, ?)`, time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat))
 	return err
 }
