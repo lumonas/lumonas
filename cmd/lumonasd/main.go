@@ -2702,7 +2702,7 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 		return
 	}
 	request := privileged.Request{Operation: job.Type, OperationID: job.ID, CorrelationID: job.CorrelationID, PlanHash: job.ID, RequestedState: requested, ExpiresAt: now.Add(30 * time.Minute), Confirmed: true}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(context.Background(), request)
+	result, err := s.executePrivileged(context.Background(), request)
 	if err != nil || !result.OK {
 		job.State, job.Stage, job.Error, job.FinishedAt = "failed", "SnapRAID operation failed", "", &now
 		if err != nil {

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/privileged"
 )
 
 func TestProtectionConfigEndpointReportsUnconfiguredState(t *testing.T) {
@@ -55,6 +58,7 @@ func TestProtectionConfigEndpointUsesReadOnlySnapraidCollector(t *testing.T) {
 
 func TestProtectionConfigUpdateValidatesDisksAndBroker(t *testing.T) {
 	server := testServer(t)
+	server.brokerExec = func(context.Context, privileged.Request) error { return errors.New("broker unavailable") }
 	unknown := httptest.NewRecorder()
 	server.routes().ServeHTTP(unknown, httptest.NewRequest(http.MethodPut, "/api/v1/storage/protection/config", strings.NewReader(`{"parityDiskId":"wwn:ghost","dataDiskIds":["wwn:test"]}`)))
 	if unknown.Code != http.StatusUnprocessableEntity || !strings.Contains(unknown.Body.String(), "wwn:ghost") {
@@ -90,6 +94,7 @@ func TestProtectionConfigUpdateValidatesDisksAndBroker(t *testing.T) {
 
 func TestOnboardingAppliesProtectionLayoutAndSchedules(t *testing.T) {
 	server := testServer(t)
+	server.brokerExec = func(context.Context, privileged.Request) error { return errors.New("broker unavailable") }
 	server.diskFunc = func() ([]model.Disk, error) {
 		return []model.Disk{
 			{ID: "serial:data", Serial: "data", SizeBytes: 200, Health: model.Healthy},

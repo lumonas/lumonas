@@ -61,6 +61,7 @@ func TestRuntimePatchUnknownKeyStillRejected(t *testing.T) {
 
 func TestRuntimePatchUsesTypedBrokerAndPreservesOtherComponent(t *testing.T) {
 	server := testServer(t)
+	server.runtimeStateFunc = func() map[string]any { return nil }
 	requests := make([]privileged.Request, 0)
 	server.brokerExec = func(_ context.Context, request privileged.Request) error {
 		requests = append(requests, request)

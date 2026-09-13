@@ -304,7 +304,7 @@ func (s *apiServer) confirmStoragePool(w http.ResponseWriter, r *http.Request, o
 		branches = append(branches, member.BranchPath)
 	}
 	request := privileged.Request{Operation: "pool.mount", OperationID: plan.OperationID, PlanHash: plan.PlanHash, ExpectedDisks: expected, RequestedState: map[string]any{"mountPath": plan.MountPath, "branches": branches, "policy": plan.Policy}, ExpiresAt: plan.ExpiresAt, Confirmed: true}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), request)
+	result, err := s.executePrivileged(r.Context(), request)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -394,7 +394,7 @@ func (s *apiServer) confirmStoragePoolUnmount(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "pool unmount plan revalidation failed: " + err.Error()})
 		return
 	}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), privileged.Request{Operation: "pool.unmount", OperationID: plan.OperationID, PlanHash: plan.PlanHash, RequestedState: map[string]any{"mountPath": plan.MountPath}, ExpiresAt: plan.ExpiresAt, Confirmed: true})
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "pool.unmount", OperationID: plan.OperationID, PlanHash: plan.PlanHash, RequestedState: map[string]any{"mountPath": plan.MountPath}, ExpiresAt: plan.ExpiresAt, Confirmed: true})
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return

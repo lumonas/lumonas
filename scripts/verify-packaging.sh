@@ -104,6 +104,10 @@ require_line "$ROOT/cmd/lumonasd/network_api_test.go" 'TestTailscaleUpUsesPrivil
 require_line "$ROOT/internal/network/tailscale.go" '--authkey=file:'
 require_line "$ROOT/internal/network/tailscale_test.go" 'staged auth key still exists'
 require_line "$ROOT/cmd/lumonasd/shutdown_api_test.go" 'TestShutdownPowerUsesPrivilegedBroker'
+if rg -n 'privileged\.Client\{.*\}\.Execute' "$ROOT/cmd/lumonasd" --glob '*.go' --glob '!identity_provisioning.go' --glob '!*_test.go' >/dev/null 2>&1; then
+	echo "lumonasd domain code must use executePrivileged instead of direct socket clients" >&2
+	exit 1
+fi
 require_line "$ROOT/scripts/security-smoke.sh" 'TestNetworkCheckpointRollsBackWhenPersistenceFails'
 if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1 || grep -F '/etc/lumonas/tls/tls.key' "$ROOT/cmd/lumonasd/share_configs.go" >/dev/null 2>&1; then
 	echo "share configuration still references obsolete FTPS certificate paths" >&2

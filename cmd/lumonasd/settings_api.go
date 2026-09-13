@@ -242,7 +242,7 @@ func (s *apiServer) runtimeState() map[string]any {
 		return s.runtimeStateFunc()
 	}
 	request := privileged.Request{Operation: "runtime.status", PlanHash: "runtime-status", ExpiresAt: time.Now().UTC().Add(10 * time.Second), Confirmed: true}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(context.Background(), request)
+	result, err := s.executePrivileged(context.Background(), request)
 	if err != nil || !result.OK {
 		return nil
 	}

@@ -208,6 +208,9 @@ must be gone when the bounded command returns.
 Power actions and scheduled/UPS shutdowns use the same daemon broker seam, so
 the API cannot silently bypass the typed privileged boundary in production or
 tests.
+All other `lumonasd` privileged calls use that same execution helper as well,
+including storage mounts/pools, SnapRAID, ACL jobs, runtime provisioning, and
+live runtime status.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the

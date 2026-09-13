@@ -111,7 +111,7 @@ func (s *apiServer) runACLJob(job model.Job, input aclJobRequest, actor string) 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(ctx, privileged.Request{Operation: "acl.apply", OperationID: job.ID, PlanHash: job.ID, RequestedState: map[string]any{"path": input.Path, "entries": entries, "recursive": input.Recursive}, Confirmed: true})
+	result, err := s.executePrivileged(ctx, privileged.Request{Operation: "acl.apply", OperationID: job.ID, PlanHash: job.ID, RequestedState: map[string]any{"path": input.Path, "entries": entries, "recursive": input.Recursive}, Confirmed: true})
 	now = time.Now().UTC()
 	progress = 100
 	job.FinishedAt, job.Progress = &now, &progress

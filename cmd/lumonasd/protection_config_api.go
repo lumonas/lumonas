@@ -82,7 +82,7 @@ func (s *apiServer) updateProtectionConfig(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	request := privileged.Request{Operation: "snapraid.config.apply", OperationID: newID("snapraid-config"), PlanHash: snapraidPlanHash(rendered), ExpectedDisks: expected, RequestedState: map[string]any{"configPath": s.snapraidConfigPath(), "parityDiskId": input.ParityDiskID, "dataDiskIds": stringsToAny(input.DataDiskIDs)}, ExpiresAt: time.Now().UTC().Add(5 * time.Minute), Confirmed: true}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(r.Context(), request)
+	result, err := s.executePrivileged(r.Context(), request)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -117,7 +117,7 @@ func (s *apiServer) applySnapraidConfiguration(parityDiskID string, dataDiskIDs 
 		return false
 	}
 	request := privileged.Request{Operation: "snapraid.config.apply", OperationID: newID("snapraid-config"), PlanHash: snapraidPlanHash(rendered), ExpectedDisks: expected, RequestedState: map[string]any{"configPath": s.snapraidConfigPath(), "parityDiskId": parityDiskID, "dataDiskIds": stringsToAny(dataDiskIDs)}, ExpiresAt: time.Now().UTC().Add(5 * time.Minute), Confirmed: true}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(context.Background(), request)
+	result, err := s.executePrivileged(context.Background(), request)
 	if err != nil {
 		s.warnProtectionConfig(err)
 		return false

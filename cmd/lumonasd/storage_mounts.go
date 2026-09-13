@@ -101,7 +101,7 @@ func (s *apiServer) applyMountPersistence(ctx context.Context, entries []storage
 		encoded = append(encoded, map[string]any{"kind": entry.Kind, "targetId": entry.TargetID, "mountPath": entry.MountPath, "fstype": entry.FSType, "source": entry.Source, "options": entry.Options, "enabled": entry.Enabled})
 	}
 	request := privileged.Request{Operation: "storage.mountpersist.apply", OperationID: newID("mountpersist"), PlanHash: "mountpersist-" + fmt.Sprint(s.currentGeneration()), ExpectedDisks: expected, RequestedState: map[string]any{"entries": encoded}, ExpiresAt: time.Now().UTC().Add(5 * time.Minute), Confirmed: true}
-	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(ctx, request)
+	result, err := s.executePrivileged(ctx, request)
 	if err != nil {
 		return err
 	}

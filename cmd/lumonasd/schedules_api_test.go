@@ -124,6 +124,7 @@ func TestRunDueSchedulesSkipsWhenJobActive(t *testing.T) {
 
 func TestScheduledPowerRunsOnlyOncePerMinute(t *testing.T) {
 	server := testServer(t)
+	server.runtimeStateFunc = func() map[string]any { return nil }
 	fixed := time.Date(2026, time.January, 5, 3, 15, 0, 0, time.Local)
 	server.clock = func() time.Time { return fixed }
 	var requests []privileged.Request
