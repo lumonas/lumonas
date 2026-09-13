@@ -299,6 +299,11 @@ Onboarding must defer its automatic SnapRAID sync until every assigned data and
 parity disk is mounted. Blank or merely assigned disks must not be scanned while
 the storage workflow is still formatting or importing them.
 
+Destructive storage confirmation must inspect the target disk and its
+partitions for active mounts. If mount-state discovery cannot be completed, the
+privileged operation must fail closed before invoking a formatting or erase
+command.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.

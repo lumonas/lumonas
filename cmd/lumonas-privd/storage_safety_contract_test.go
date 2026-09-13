@@ -63,3 +63,16 @@ func TestDestructiveStorageExecutionFailsClosedWhenFindmntReportsMount(t *testin
 		t.Fatalf("destructive command ran before mount safety check: %#v", commands)
 	}
 }
+
+func TestDestructiveStorageExecutionDetectsMountedPartitionWithLsblk(t *testing.T) {
+	disk := model.Disk{ID: "serial:SERIAL-1", Serial: "SERIAL-1", SizeBytes: 100, CurrentPath: "/dev/sda"}
+	result := execute(storageSafetyRequest(disk.ID), func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, _ ...string) ([]byte, error) {
+		if name == "lsblk" {
+			return []byte("\n/srv/pools/main\n"), nil
+		}
+		return nil, nil
+	})
+	if result.OK || !strings.Contains(result.Error, "device or one of its partitions is mounted") {
+		t.Fatalf("mounted partition was not rejected by lsblk fallback: %#v", result)
+	}
+}

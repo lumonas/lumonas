@@ -327,8 +327,14 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		if (req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase") && (target.Mounted || target.PoolID != "") {
 			return response{Error: "target disk is mounted or assigned to a pool"}
 		}
-		if (req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase") && deviceHasMounts(target.CurrentPath, run) {
-			return response{Error: "target device or one of its partitions is mounted"}
+		if req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase" {
+			mounted, mountErr := deviceHasMounts(target.CurrentPath, run)
+			if mountErr != nil {
+				return response{Error: "could not verify target mount state"}
+			}
+			if mounted {
+				return response{Error: "target device or one of its partitions is mounted"}
+			}
 		}
 		return executeStorage(req, *target, run)
 	case "pool.mount":
@@ -693,12 +699,28 @@ func applyTailscale(req request) response {
 	}
 }
 
-func deviceHasMounts(path string, run command) bool {
+func deviceHasMounts(path string, run command) (bool, error) {
 	if path == "" {
-		return true
+		return true, nil
 	}
 	output, err := run("findmnt", "-rn", "-S", path)
-	return err == nil && strings.TrimSpace(string(output)) != ""
+	if err == nil && strings.TrimSpace(string(output)) != "" {
+		return true, nil
+	}
+	// findmnt may return a non-zero status for an unmounted whole-disk source.
+	// lsblk is the authoritative fallback because it also reports mounted
+	// partitions beneath the target disk.
+	output, err = run("lsblk", "-nrpo", "MOUNTPOINT", "--", path)
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		mountpoint := strings.TrimSpace(line)
+		if mountpoint != "" && mountpoint != "-" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func validateIdentity(disk model.Disk, expected map[string]string) error {

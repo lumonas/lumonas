@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -113,7 +114,7 @@ func TestExecuteCreateFormatsLabelsAndMounts(t *testing.T) {
 	if !result.OK {
 		t.Fatalf("unexpected result: %#v", result)
 	}
-	if len(commands) != 4 || commands[0] != "findmnt -rn -S /dev/sda" || commands[1] != "mkfs.ext4 -F -L media /dev/sda" || commands[2] != "mkdir -p /srv/disks/wwn-test" || commands[3] != "mount -t ext4 /dev/sda /srv/disks/wwn-test" {
+	if len(commands) != 5 || commands[0] != "findmnt -rn -S /dev/sda" || commands[1] != "lsblk -nrpo MOUNTPOINT -- /dev/sda" || commands[2] != "mkfs.ext4 -F -L media /dev/sda" || commands[3] != "mkdir -p /srv/disks/wwn-test" || commands[4] != "mount -t ext4 /dev/sda /srv/disks/wwn-test" {
 		t.Fatalf("unexpected commands: %v", commands)
 	}
 }
@@ -171,6 +172,9 @@ func TestExecuteRejectsStaleIdentity(t *testing.T) {
 func TestExecuteRejectsMountedPartitionForDestructiveAction(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", SizeBytes: 100}
 	result := execute(request{Operation: "filesystem.format", OperationID: "op-format", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"sizeBytes": "100"}, RequestedState: map[string]any{"filesystem": "ext4"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, _ ...string) ([]byte, error) {
+		if name == "lsblk" {
+			return []byte("\n/srv/pools/main\n"), nil
+		}
 		if name == "findmnt" {
 			return []byte("/srv/pools/main"), nil
 		}
@@ -178,6 +182,20 @@ func TestExecuteRejectsMountedPartitionForDestructiveAction(t *testing.T) {
 	})
 	if result.OK || !strings.Contains(result.Error, "mounted") {
 		t.Fatalf("expected mounted partition rejection: %#v", result)
+	}
+}
+
+func TestExecuteFailsClosedWhenMountStateCannotBeVerified(t *testing.T) {
+	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
+	result := execute(request{Operation: "disk.erase", OperationID: "op-verify-mount", PlanHash: "hash", TargetDiskID: disk.ID, ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"}, ExpiresAt: time.Now().UTC().Add(time.Minute), Confirmed: true}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(name string, _ ...string) ([]byte, error) {
+		if name == "findmnt" || name == "lsblk" {
+			return nil, errors.New("mount lookup unavailable")
+		}
+		t.Fatal("destructive command ran without mount-state verification")
+		return nil, nil
+	})
+	if result.OK || !strings.Contains(result.Error, "verify target mount state") {
+		t.Fatalf("expected fail-closed mount verification error: %#v", result)
 	}
 }
 

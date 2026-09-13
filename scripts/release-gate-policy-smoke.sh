@@ -115,5 +115,10 @@ onboarding_text = onboarding.read_text(encoding="utf-8")
 for marker in ("onboardingProtectionReady", "Do not start SnapRAID while onboarding"):
     if marker not in onboarding_text:
         raise SystemExit(f"onboarding sync safety marker is missing: {marker}")
+privd = pathlib.Path(sys.argv[1]).parent.parent.parent / "cmd" / "lumonas-privd" / "main.go"
+privd_text = privd.read_text(encoding="utf-8")
+for marker in ("could not verify target mount state", '"lsblk", "-nrpo", "MOUNTPOINT"'):
+    if marker not in privd_text:
+        raise SystemExit(f"privileged mount-state safety marker is missing: {marker}")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY
