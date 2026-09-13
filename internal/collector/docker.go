@@ -1,42 +1,33 @@
 package collector
 
 import (
-	"encoding/json"
-	"os/exec"
-	"strings"
+	"context"
 
+	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/model"
-	"github.com/lumonas/lumonas/internal/runner"
 )
 
-type dockerContainer struct {
-	ID    string `json:"ID"`
-	Names string `json:"Names"`
-	Image string `json:"Image"`
-	State string `json:"State"`
-	Ports string `json:"Ports"`
+func DockerSummary() model.DockerSummary {
+	return DockerSummaryFromService(context.Background(), dockerruntime.New("", nil))
 }
 
-func DockerSummary() model.DockerSummary {
-	if _, err := exec.LookPath("docker"); err != nil {
+// DockerSummaryFromService keeps legacy collectors on the same typed Engine
+// API path as the daemon. Compose stack discovery remains owned by the Docker
+// runtime service, so this summary intentionally reports only container
+// activity and availability.
+func DockerSummaryFromService(ctx context.Context, service dockerruntime.Service) model.DockerSummary {
+	if !service.Available(ctx) {
 		return model.DockerSummary{}
 	}
-	out, err := runner.Output("docker", "ps", "--format", "{{json .}}", "-a")
+	containers, err := service.Containers(ctx)
 	if err != nil {
 		return model.DockerSummary{}
 	}
-	count, running := 0, 0
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line == "" {
-			continue
-		}
-		var c dockerContainer
-		if json.Unmarshal([]byte(line), &c) == nil {
-			count++
-			if strings.HasPrefix(c.State, "Up") {
-				running++
-			}
+	running := 0
+	for _, container := range containers {
+		if container.State == "running" {
+			running++
 		}
 	}
-	return model.DockerSummary{Stacks: 0, AppsRunning: running, UpdatesAvailable: 0}
+	return model.DockerSummary{Available: true, AppsRunning: running}
 }

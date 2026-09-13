@@ -94,6 +94,11 @@ for script in ("scripts/api-smoke.sh", "scripts/qemu-smoke.sh", "scripts/qemu-re
         for marker in ("docker/containers", "docker/images", "docker/volumes"):
             if marker not in script_text:
                 raise SystemExit(f"Docker inventory smoke is missing {marker}: {script}")
+collector_text = (repo_root / "internal/collector/docker.go").read_text(encoding="utf-8")
+if "dockerruntime.New(\"\", nil)" not in collector_text or "DockerSummaryFromService" not in collector_text:
+    raise SystemExit("legacy Docker collector is not delegated to the controlled runtime service")
+if "docker ps" in collector_text or "exec.LookPath" in collector_text:
+    raise SystemExit("legacy Docker collector still parses direct CLI output")
 upgrade_job = re.search(r"(?ms)^  upgrade-compatibility:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not upgrade_job or "TestStorageSnapshotMigrationAddsOriginAndPreservesRows" not in upgrade_job.group(0):
     raise SystemExit("upgrade-compatibility gate is missing snapshot migration coverage")

@@ -191,9 +191,10 @@ type NetInterfaceMetrics struct {
 }
 
 type DockerSummary struct {
-	Stacks           int `json:"stacks"`
-	AppsRunning      int `json:"appsRunning"`
-	UpdatesAvailable int `json:"updatesAvailable"`
+	Available        bool `json:"available"`
+	Stacks           int  `json:"stacks"`
+	AppsRunning      int  `json:"appsRunning"`
+	UpdatesAvailable int  `json:"updatesAvailable"`
 }
 
 type DockerDeployment struct {
