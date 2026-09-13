@@ -2,6 +2,7 @@
 /lumonasd
 /lumonas-web
 /lumonas-privd
+/lumonas-recover
 /build/
 /coverage/
 .pnpm-store/
