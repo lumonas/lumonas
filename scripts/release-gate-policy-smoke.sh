@@ -366,6 +366,12 @@ slot_api_tests = (repo_root / "cmd" / "lumonasd" / "slot_api_test.go").read_text
 for marker in ("TestParseSlotDeviceMappingRejectsUnsafeAndDuplicateEntries", "TestSlotAPIStagesActivatesAndConfirmsSignedImage"):
     if marker not in slot_api_tests:
         raise SystemExit(f"slot API coverage is missing {marker}")
+daemon_text = (repo_root / "cmd" / "lumonasd" / "slot_api.go").read_text(encoding="utf-8")
+if "rebootToPreviousSlot" not in daemon_text:
+    raise SystemExit("daemon does not arm a previous slot during automatic rollback")
+boot_test_text = (repo_root / "cmd" / "lumonasd" / "update_boot_test.go").read_text(encoding="utf-8")
+if "TestReconcileUpdateBootArmsPreviousSlotBeforeAutomaticReboot" not in boot_test_text:
+    raise SystemExit("automatic A/B rollback test is missing")
 openapi_text = (repo_root / "docs" / "openapi.yaml").read_text(encoding="utf-8")
 for marker in ("/updates/slot/stage:", "/updates/slot/activate:", "/updates/slot/confirm:"):
     if marker not in openapi_text:

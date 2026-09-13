@@ -476,7 +476,10 @@ The release-blocking QEMU job also runs `scripts/qemu-ab-smoke.sh` while the
 ephemeral SSH key is still installed. It attaches a spare virtual slot disk,
 exercises the typed `system.slot.write` and `system.slot.bootnext` worker
 operations, verifies digest tampering and BIOS BootNext rejection, and checks
-that confirming without a pending slot returns a conflict.
+that confirming without a pending slot returns a conflict. Repeated failed
+health boots additionally arm the known-good EFI entry and request a reboot;
+the focused daemon test verifies both privileged calls share one operation ID
+and plan hash.
 
 ## Recovery test
 

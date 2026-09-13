@@ -120,6 +120,73 @@ func osUpdatePublicKey() string {
 	return os.Getenv("LUMONAS_UPDATE_PUBLIC_KEY")
 }
 
+// rebootToPreviousSlot is only active when the appliance has an explicit
+// A/B device mapping. It arms the known-good EFI entry first and requests a
+// reboot only after that privileged operation succeeds; a missing mapping or
+// failed broker call therefore fails closed without a blind reboot.
+func (s *apiServer) rebootToPreviousSlot(state updates.SlotState) {
+	mapping, err := parseSlotDeviceMapping(os.Getenv("LUMONAS_SLOT_DEVICES"))
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("automatic slot rollback is not configured", "error", err)
+		}
+		return
+	}
+	target, ok := mapping[state.ActiveSlot]
+	if !ok {
+		if s.log != nil {
+			s.log.Error("automatic slot rollback has no active-slot mapping", "slot", state.ActiveSlot)
+		}
+		return
+	}
+	operationID := newID("slot-rollback")
+	planHash := newID("slot-rollback-plan")
+	bootCtx, cancelBoot := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelBoot()
+	bootResult, bootErr := s.executePrivileged(bootCtx, privileged.Request{
+		Operation:   "system.slot.bootnext",
+		OperationID: operationID,
+		PlanHash:    planHash,
+		RequestedState: map[string]any{
+			"entry": target.BootEntry,
+		},
+		ExpiresAt: time.Now().UTC().Add(2 * time.Minute),
+		Confirmed: true,
+	})
+	if bootErr != nil || !bootResult.OK {
+		if s.log != nil {
+			s.log.Error("automatic slot rollback could not arm BootNext", "error", firstError(bootErr, bootResult.Error), "slot", state.ActiveSlot)
+		}
+		return
+	}
+	rebootResult, rebootErr := s.executePrivileged(bootCtx, privileged.Request{
+		Operation:   "power.shutdown",
+		OperationID: operationID,
+		PlanHash:    planHash,
+		RequestedState: map[string]any{
+			"action": "reboot",
+		},
+		ExpiresAt: time.Now().UTC().Add(2 * time.Minute),
+		Confirmed: true,
+	})
+	if rebootErr != nil || !rebootResult.OK {
+		if s.log != nil {
+			s.log.Error("automatic slot rollback could not reboot", "error", firstError(rebootErr, rebootResult.Error), "slot", state.ActiveSlot)
+		}
+		return
+	}
+	if s.log != nil {
+		s.log.Warn("automatic slot rollback armed", "slot", state.ActiveSlot, "bootNext", target.BootEntry, "operationId", operationID)
+	}
+}
+
+func firstError(err error, fallback string) string {
+	if err != nil {
+		return err.Error()
+	}
+	return fallback
+}
+
 // activateSlotImage writes the staged image to the inactive slot device and
 // arms BootNext. Both privileged steps carry the same operation ID so the
 // audit trail shows one activation.

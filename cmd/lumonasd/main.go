@@ -228,6 +228,7 @@ func (s *apiServer) reconcileUpdateBoot() {
 		return
 	}
 	if state.PendingSlot == "" && rolledBack {
+		s.rebootToPreviousSlot(state)
 		s.publish("update.health_failed", "critical", nil, map[string]any{"reason": state.LastError})
 		s.log.Error("pending update failed boot health checks", "reason", state.LastError)
 		return

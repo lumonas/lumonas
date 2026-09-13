@@ -51,8 +51,9 @@ privileged write, tamper rejection, and BIOS fail-closed BootNext in QEMU.
 
 ### Remaining for full immutable A/B
 
-- UEFI QEMU boot-flip verification (BootNext into the written slot, health
-  gate, automatic bootloader fallback to the previous slot);
+- UEFI QEMU boot-flip verification (BootNext into the written slot and health
+  gate; the daemon now arms the previous EFI entry and reboots after repeated
+  failed health boots);
 - secure boot / UKI integration;
 - atomic deduplicated images;
 - background automatic updates.
