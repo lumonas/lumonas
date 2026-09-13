@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/monitoring"
 )
@@ -80,6 +82,36 @@ func TestAlertEngineBackupFailureLifecycle(t *testing.T) {
 	alerts, _ = server.store.GeneratedAlerts()
 	if len(alerts) != 0 {
 		t.Fatalf("expected backup alert resolved, got %#v", alerts)
+	}
+}
+
+func TestAlertEngineDebouncesUnhealthyContainers(t *testing.T) {
+	server := testServer(t)
+	if err := server.store.SaveAlertRule(monitoring.AlertRule{ID: "rule-container", Name: "Container unhealthy", Condition: "health check failing for 2 minutes", Severity: "warning", Routes: []string{"web"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	state := "Up 2 hours (unhealthy)"
+	server.dockerService = dockerruntime.New("", func(context.Context, string, ...string) ([]byte, error) {
+		return []byte(`{"ID":"container-1","Names":"media","Image":"example/media:latest","State":"` + state + `"}` + "\n"), nil
+	})
+	firstSample := time.Now().UTC()
+	server.clock = func() time.Time { return firstSample }
+	server.evaluateContainerHealth()
+	alerts, err := server.store.GeneratedAlerts()
+	if err != nil || len(alerts) != 0 {
+		t.Fatalf("container alert fired before debounce window: %#v err=%v", alerts, err)
+	}
+	server.clock = func() time.Time { return firstSample.Add(containerHealthDebounce + time.Second) }
+	server.evaluateContainerHealth()
+	alerts, err = server.store.GeneratedAlerts()
+	if err != nil || len(alerts) != 1 || alerts[0].Resource == nil || alerts[0].Resource.ID != "container-1" {
+		t.Fatalf("expected debounced container alert, got %#v err=%v", alerts, err)
+	}
+	state = "Up 2 hours"
+	server.evaluateContainerHealth()
+	alerts, _ = server.store.GeneratedAlerts()
+	if len(alerts) != 0 {
+		t.Fatalf("healthy container did not resolve alert: %#v", alerts)
 	}
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 const syncStaleThreshold = 48 * time.Hour
 const diskTemperatureDebounce = 5 * time.Minute
+const containerHealthDebounce = 2 * time.Minute
 
 // evaluateEventAlert fires or resolves rule-based alerts from published events.
 // It is invoked from publish(), so it must never publish the same event kind
@@ -93,10 +95,54 @@ func (s *apiServer) resolveAlertForRule(ruleID, resourceID string) {
 func (s *apiServer) evaluatePeriodicAlerts(tick int64) {
 	s.evaluateFilesystemCapacity()
 	s.evaluateDiskTemperatures()
+	s.evaluateContainerHealth()
 	if tick%10 == 0 {
 		s.evaluateSMARTAlerts()
 	}
 	s.evaluateSyncStaleness()
+}
+
+func (s *apiServer) evaluateContainerHealth() {
+	if s.dockerService.Run == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	containers, err := s.dockerService.Containers(ctx)
+	if err != nil {
+		return
+	}
+	for _, container := range containers {
+		if container.ID == "" {
+			continue
+		}
+		if container.State != "unhealthy" {
+			_ = s.store.ClearPendingAlert("rule-container", container.ID)
+			s.resolveAlertForRule("rule-container", container.ID)
+			continue
+		}
+		now := time.Now().UTC()
+		if s.clock != nil {
+			now = s.clock().UTC()
+		}
+		description := fmt.Sprintf("Container %s reports an unhealthy Docker health check", container.Name)
+		pending, found, err := s.store.PendingAlert("rule-container", container.ID)
+		if err != nil {
+			continue
+		}
+		if !found {
+			_ = s.store.SavePendingAlert(store.PendingAlert{
+				RuleID: "rule-container", ResourceID: container.ID, Severity: "warning",
+				Title: "Container unhealthy", Description: description, StartedAt: now,
+			})
+			continue
+		}
+		if now.Sub(pending.StartedAt) < containerHealthDebounce {
+			continue
+		}
+		_ = s.store.ClearPendingAlert("rule-container", container.ID)
+		s.fireAlertForRule("rule-container", pending.Title, pending.Description, &model.ResourceRef{Type: "container", ID: container.ID})
+	}
 }
 
 func (s *apiServer) evaluateFilesystemCapacity() {

@@ -98,6 +98,8 @@ Temperature conditions use a durable pending window: the first hot sample is
 recorded as `pending`, the alert fires only after the threshold remains true
 for the configured duration, and cooling clears the pending state. Pending
 windows survive a daemon restart, so a restart cannot bypass the debounce.
+The same lifecycle applies to Docker health checks, with a two-minute pending
+window for unhealthy containers.
 
 ## Alert rule examples
 
