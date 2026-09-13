@@ -111,7 +111,7 @@ iso-smoke: iso
 	LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_ISO_ASSERT=true bash scripts/iso-smoke.sh
 
 qemu-installer-smoke: iso
-	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_INSTALLER_ASSERT=true bash scripts/qemu-installer-smoke.sh
+	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_INSTALLER_ASSERT=true LUMONAS_INSTALLER_CONTRACT_ASSERT=true bash scripts/qemu-installer-smoke.sh
 
 qemu-recovery-smoke: iso recovery-fixture
 	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_RECOVERY_FIXTURE="$(CURDIR)/build/lumonas-recovery-fixture" LUMONAS_RECOVERY_ASSERT=true bash scripts/qemu-recovery-smoke.sh

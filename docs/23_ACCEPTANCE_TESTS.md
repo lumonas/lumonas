@@ -189,6 +189,10 @@ After offline restore, detach the ISO and boot the replacement system disk by
 itself. Pass only if the recovered disk reaches health/readiness and serves the
 real server API; checking files while still running the live ISO is insufficient.
 
+The same installed-disk standard applies to the browser installer path: a
+successful install must serve the authenticated disks, metrics, jobs, health,
+services, frontend, and SSE contracts before the installer gate passes.
+
 ## M. Incomplete Docker backup
 
 One app has no appdata protection.

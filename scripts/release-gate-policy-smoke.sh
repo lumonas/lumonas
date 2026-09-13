@@ -64,6 +64,12 @@ for marker in ("LUMONAS_RECOVERY_DEBUG_DIR", "build/qemu/recovery-debug/**"):
         raise SystemExit(f"ISO/recovery gate does not preserve failure diagnostics: {marker}")
 if "qemu-installer-smoke.sh" not in iso_block or "LUMONAS_INSTALLER_ASSERT=true" not in iso_block:
     raise SystemExit("ISO gate is missing the real live installer smoke")
+if "LUMONAS_INSTALLER_CONTRACT_ASSERT=true" not in iso_block:
+    raise SystemExit("ISO gate is missing the installed runtime contract assertion")
+installer_smoke = (pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-installer-smoke.sh").read_text(encoding="utf-8")
+for marker in ("installed-disks.json", "installed-metrics.json", "installed-jobs.json", "installed-health.json", "installed-services.json", "validate-sse.py", "LUMONAS_INSTALLER_DEBUG_DIR"):
+    if marker not in installer_smoke:
+        raise SystemExit(f"installer gate is missing post-install contract validation: {marker}")
 qemu_job = re.search(r"(?ms)^  qemu-smoke:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 qemu_block = qemu_job.group(0) if qemu_job else ""
 if "actions/setup-go@v5" not in qemu_block or "./cmd/lumonas-update-fixture" not in qemu_block:

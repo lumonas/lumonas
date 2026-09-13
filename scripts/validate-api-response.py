@@ -154,6 +154,25 @@ def validate_jobs(value: Any) -> None:
             fail(f"{label}.progress must be a number or null")
 
 
+def validate_services(value: Any) -> None:
+    if not isinstance(value, list):
+        fail("services must be a JSON array")
+    fields = ("id", "name", "active", "state")
+    for index, service in enumerate(value):
+        label = f"services[{index}]"
+        obj = object_value(service, label)
+        required(obj, fields, label)
+        for field in ("id", "name", "state"):
+            string_field(obj, field, label)
+        if obj["state"] not in ("running", "stopped", "degraded", "unknown"):
+            fail(f"{label}.state has an unsupported value")
+        if not isinstance(obj["active"], bool):
+            fail(f"{label}.active must be a boolean")
+        for field in ("detail", "user"):
+            if field in obj:
+                string_field(obj, field, label)
+
+
 def validate_docker_summary(value: Any) -> None:
     obj = object_value(value, "docker-summary")
     required(obj, ("available", "stacks", "appsRunning", "updatesAvailable"), "docker-summary")
@@ -370,6 +389,7 @@ def self_test() -> None:
         },
     }])
     validate_jobs([{"id": "job-1", "type": "smart.short", "title": "SMART", "state": "queued", "progress": None, "createdAt": "now", "correlationId": "corr-1", "operationId": "op-1", "planHash": "plan-1", "actor": "admin", "resourceId": "disk-1", "generation": 7}])
+    validate_services([{"id": "lumonas-web.service", "name": "lumonas-web.service", "active": True, "state": "running", "user": "lumonas"}])
     validate_docker_summary({"available": True, "stacks": 0, "appsRunning": 0, "updatesAvailable": 0})
     validate_docker_containers([])
     validate_docker_images([])
@@ -399,6 +419,7 @@ VALIDATORS = {
     "metrics": validate_metrics,
     "metrics-history": validate_metrics_history,
     "jobs": validate_jobs,
+    "services": validate_services,
     "docker-summary": validate_docker_summary,
     "docker-containers": validate_docker_containers,
     "docker-images": validate_docker_images,

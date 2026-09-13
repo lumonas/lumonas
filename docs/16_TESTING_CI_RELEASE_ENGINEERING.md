@@ -126,6 +126,12 @@ API over HTTPS before the ISO artifact is considered valid. The recovery ISO
 smoke uses the same HTTPS web path while keeping its internal recovery daemon
 on a separate loopback-only HTTP port.
 
+The installer gate also runs the post-install runtime contract against that
+freshly installed disk: server, disks, metrics, jobs, component health,
+service ownership, the compiled frontend shell, and the authenticated SSE
+stream are validated after login. This catches an installation that boots but
+ships an incomplete or misconfigured runtime.
+
 The release ISO job additionally attaches a disposable recovery media image
 containing a verified fixture bundle and a blank replacement disk. A
 systemd-managed recovery helper identifies both devices by stable virtio

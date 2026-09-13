@@ -2,21 +2,29 @@
 set -eu
 
 ASSERT_MODE="${LUMONAS_INSTALLER_ASSERT:-false}"
+CONTRACT_ASSERT="${LUMONAS_INSTALLER_CONTRACT_ASSERT:-$ASSERT_MODE}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 ISO="${LUMONAS_ISO:-}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-installer.XXXXXX")"
 DISK="$WORK/blank-system.qcow2"
 LIVE_LOG="${LUMONAS_INSTALLER_LIVE_LOG:-$WORK/live.log}"
 INSTALLED_LOG="${LUMONAS_INSTALLER_INSTALLED_LOG:-$WORK/installed.log}"
+DEBUG_DIR="${LUMONAS_INSTALLER_DEBUG_DIR:-}"
 QEMU_PID=""
 
 cleanup() {
+	status=$?
 	set +e
 	if [ -n "$QEMU_PID" ]; then
 		kill "$QEMU_PID" 2>/dev/null || true
 		wait "$QEMU_PID" 2>/dev/null || true
 	fi
+	if [ "$status" -ne 0 ] && [ -n "$DEBUG_DIR" ]; then
+		mkdir -p "$DEBUG_DIR"
+		cp -a "$WORK"/. "$DEBUG_DIR"/ 2>/dev/null || true
+	fi
 	rm -rf "$WORK"
+	return "$status"
 }
 trap cleanup EXIT INT TERM
 
@@ -207,10 +215,35 @@ curl -kfsS -c "$WORK/cookies.txt" -X POST -H 'Content-Type: application/json' \
 curl -kfsS -b "$WORK/cookies.txt" https://127.0.0.1:18083/api/v1/server >"$WORK/installed-server.json"
 python3 "$ROOT/scripts/validate-api-response.py" server "$WORK/installed-server.json"
 
+if [ "$CONTRACT_ASSERT" = "true" ]; then
+	for endpoint in server disks metrics jobs health services; do
+		case "$endpoint" in
+			server) path=/api/v1/server; output="$WORK/installed-server.json"; validator=server ;;
+			disks) path=/api/v1/disks; output="$WORK/installed-disks.json"; validator=disks ;;
+			metrics) path=/api/v1/system/metrics; output="$WORK/installed-metrics.json"; validator=metrics ;;
+			jobs) path=/api/v1/jobs; output="$WORK/installed-jobs.json"; validator=jobs ;;
+			health) path=/api/v1/health/components; output="$WORK/installed-health.json"; validator=health ;;
+			services) path=/api/v1/services; output="$WORK/installed-services.json"; validator=services ;;
+		esac
+		if [ "$endpoint" != "server" ]; then
+			curl -kfsS -b "$WORK/cookies.txt" "https://127.0.0.1:18083$path" >"$output"
+		fi
+		python3 "$ROOT/scripts/validate-api-response.py" "$validator" "$output"
+	done
+	curl -kfsS -b "$WORK/cookies.txt" https://127.0.0.1:18083/ >"$WORK/installed-index.html"
+	grep -F '<title>LumoNAS</title>' "$WORK/installed-index.html" >/dev/null
+	grep -F '<div id="root"></div>' "$WORK/installed-index.html" >/dev/null
+	grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$WORK/installed-services.json" >/dev/null
+	grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running","user":"lumonas"' "$WORK/installed-services.json" >/dev/null
+	installed_events_log="$WORK/installed-events.sse"
+	curl -kfsS --max-time 5 -N -b "$WORK/cookies.txt" https://127.0.0.1:18083/api/v1/events/stream >"$installed_events_log" 2>/dev/null || true
+	python3 "$ROOT/scripts/validate-sse.py" "$installed_events_log" system.metrics
+fi
+
 installer_status_code="$(curl -ksS -o /dev/null -w '%{http_code}' -b "$WORK/cookies.txt" https://127.0.0.1:18083/api/v1/install/status)"
 [ "$installer_status_code" = "404" ] || {
 	echo "installer endpoint remained available after installation: HTTP $installer_status_code" >&2
 	exit 1
 }
 
-echo "LumoNAS QEMU installer smoke passed (live install and installed-disk boot verified)"
+echo "LumoNAS QEMU installer smoke passed (live install, installed-disk boot, and post-install runtime contract verified)"

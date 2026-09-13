@@ -71,8 +71,9 @@ before booting the ISO.
 Run `make qemu-installer-smoke` to boot the live ISO, generate and apply a
 real installation plan against a disposable 12 GiB disk, then boot that disk
 without the ISO. The smoke logs in as the bootstrapped administrator and
-verifies that installer endpoints are no longer exposed on the installed
-appliance.
+verifies the authenticated server, disks, metrics, jobs, health, services,
+frontend, and SSE contracts, as well as the fact that installer endpoints are
+no longer exposed on the installed appliance.
 
 When a Debian appliance image is available, `make qemu-recovery-live
 LUMONAS_ISO=... LUMONAS_QEMU_IMAGE=...` runs the stronger live-source recovery

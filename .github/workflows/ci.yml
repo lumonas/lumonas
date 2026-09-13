@@ -370,7 +370,7 @@ jobs:
           LUMONAS_REPO_SIGN_KEY: ${{ secrets.LUMONAS_REPO_SIGN_KEY }}
           LUMONAS_REQUIRE_REPO_SIGNATURE: ${{ startsWith(github.ref, 'refs/tags/') }}
       - run: LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_ISO_ASSERT=true LUMONAS_ISO_LOG="$PWD/build/iso-smoke.log" bash scripts/iso-smoke.sh
-      - run: LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_INSTALLER_ASSERT=true LUMONAS_INSTALLER_LIVE_LOG="$PWD/build/qemu-installer-live.log" LUMONAS_INSTALLER_INSTALLED_LOG="$PWD/build/qemu-installer-installed.log" bash scripts/qemu-installer-smoke.sh
+      - run: LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_INSTALLER_ASSERT=true LUMONAS_INSTALLER_CONTRACT_ASSERT=true LUMONAS_INSTALLER_DEBUG_DIR="$PWD/build/qemu/installer-debug" LUMONAS_INSTALLER_LIVE_LOG="$PWD/build/qemu-installer-live.log" LUMONAS_INSTALLER_INSTALLED_LOG="$PWD/build/qemu-installer-installed.log" bash scripts/qemu-installer-smoke.sh
       - run: |
           source_image="$(find "$PWD/build/qemu" -type f -name '*.raw' -print -quit)"
           test -n "$source_image"
@@ -389,6 +389,7 @@ jobs:
             build/qemu-installer-installed.log
             build/qemu-recovery.log
             build/qemu/recovery-debug/**
+            build/qemu/installer-debug/**
           if-no-files-found: warn
 
   installer-scripts:
