@@ -18,20 +18,21 @@ type lsblkResponse struct {
 	BlockDevices []lsblkDevice `json:"blockdevices"`
 }
 type lsblkDevice struct {
-	Name       string `json:"name"`
-	Path       string `json:"path"`
-	Type       string `json:"type"`
-	Size       uint64 `json:"size"`
-	Model      string `json:"model"`
-	Serial     string `json:"serial"`
-	WWN        string `json:"wwn"`
-	Rota       any    `json:"rota"`
-	Tran       string `json:"tran"`
-	FSType     string `json:"fstype"`
-	UUID       string `json:"uuid"`
-	PartUUID   string `json:"partuuid"`
-	PTUUID     string `json:"ptuuid"`
-	Mountpoint string `json:"mountpoint"`
+	Name       string        `json:"name"`
+	Path       string        `json:"path"`
+	Type       string        `json:"type"`
+	Size       uint64        `json:"size"`
+	Model      string        `json:"model"`
+	Serial     string        `json:"serial"`
+	WWN        string        `json:"wwn"`
+	Rota       any           `json:"rota"`
+	Tran       string        `json:"tran"`
+	FSType     string        `json:"fstype"`
+	UUID       string        `json:"uuid"`
+	PartUUID   string        `json:"partuuid"`
+	PTUUID     string        `json:"ptuuid"`
+	Mountpoint string        `json:"mountpoint"`
+	Children   []lsblkDevice `json:"children,omitempty"`
 }
 
 type CommandRunner func(name string, args ...string) ([]byte, error)
@@ -46,7 +47,7 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 	if run == nil {
 		run = SystemRunner
 	}
-	out, err := run("lsblk", "-J", "-b", "-o", "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,ROTA,TRAN,FSTYPE,UUID,PARTUUID,PTUUID,MOUNTPOINT")
+	out, err := run("lsblk", "-J", "--tree", "-b", "-o", "NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,ROTA,TRAN,FSTYPE,UUID,PARTUUID,PTUUID,MOUNTPOINT")
 	if err != nil {
 		if runtime.GOOS != "linux" && errors.Is(err, exec.ErrNotFound) {
 			return []model.Disk{}, nil
@@ -63,6 +64,7 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 			continue
 		}
 		d = enrichFromUdev(run, d)
+		d = inheritFilesystemMetadata(d)
 		rotational := asBool(d.Rota)
 		iface := d.Tran
 		if iface == "" {
@@ -91,6 +93,50 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 		}
 	}
 	return result, nil
+}
+
+// inheritFilesystemMetadata promotes the best partition-level filesystem
+// metadata to the disk record. lsblk reports mounted filesystems on child
+// rows (for example /dev/sda1), while the API models a physical disk as one
+// resource. Prefer a mounted child so safety checks cannot miss an active
+// mount; otherwise use the first child that exposes filesystem metadata.
+func inheritFilesystemMetadata(device lsblkDevice) lsblkDevice {
+	var mounted, fallback *lsblkDevice
+	var visit func([]lsblkDevice)
+	visit = func(children []lsblkDevice) {
+		for index := range children {
+			child := &children[index]
+			if child.Mountpoint != "" {
+				copy := *child
+				mounted = &copy
+			} else if fallback == nil && (child.UUID != "" || child.FSType != "" || child.PartUUID != "") {
+				copy := *child
+				fallback = &copy
+			}
+			visit(child.Children)
+		}
+	}
+	visit(device.Children)
+	candidate := mounted
+	if candidate == nil {
+		candidate = fallback
+	}
+	if candidate == nil {
+		return device
+	}
+	if device.UUID == "" {
+		device.UUID = candidate.UUID
+	}
+	if device.FSType == "" {
+		device.FSType = candidate.FSType
+	}
+	if device.PartUUID == "" {
+		device.PartUUID = candidate.PartUUID
+	}
+	if device.Mountpoint == "" {
+		device.Mountpoint = candidate.Mountpoint
+	}
+	return device
 }
 
 // enrichFromUdev fills identity fields that can be absent from lsblk on
