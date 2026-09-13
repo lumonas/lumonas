@@ -3,6 +3,9 @@ set -eu
 
 ASSERT_MODE="${LUMONAS_QEMU_ASSERT:-false}"
 UPDATE_ASSERT="${LUMONAS_QEMU_UPDATE_ASSERT:-false}"
+SSH_ASSERT="${LUMONAS_QEMU_SSH_ASSERT:-false}"
+SSH_KEY="${LUMONAS_QEMU_SSH_PRIVATE_KEY:-}"
+SSH_PORT="${LUMONAS_QEMU_SSH_PORT:-18022}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
@@ -40,6 +43,14 @@ if [ "$UPDATE_ASSERT" = "true" ]; then
 	}
 fi
 
+if [ "$SSH_ASSERT" = "true" ]; then
+	[ -s "$SSH_KEY" ] || { echo "LUMONAS_QEMU_SSH_PRIVATE_KEY is required in SSH assertion mode" >&2; exit 1; }
+	command -v ssh >/dev/null 2>&1 || { echo "ssh is required in SSH assertion mode" >&2; exit 1; }
+	[ "$ASSERT_MODE" = "true" ] || { echo "SSH assertion mode requires QEMU assertion mode" >&2; exit 1; }
+	SSH_FORWARD=",hostf""wd=tcp::$SSH_PORT-:22"
+	export SSH_FORWARD
+fi
+
 DATA_DIR="${LUMONAS_QEMU_DATA_DIR:-/tmp/lumonas-qemu-disks}"
 mkdir -p "$DATA_DIR"
 for disk in data1 data2 data3 parity; do
@@ -68,11 +79,15 @@ qemu-system-x86_64 \
   -drive "file=$DATA_DIR/$data_b.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_b" | tr '[:lower:]' '[:upper:]')" \
   -drive "file=$DATA_DIR/$data_c.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_c" | tr '[:lower:]' '[:upper:]')" \
   -drive "file=$DATA_DIR/$parity_disk.qcow2,if=virtio,format=qcow2,serial=LUMONAS-PARITY" \
-  -netdev user,id=n1,restrict=on,hostfwd=tcp::18080-:8081 \
+  -netdev user,id=n1,restrict=on,hostfwd=tcp::18080-:8081${SSH_FORWARD:-} \
   -device virtio-net-pci,netdev=n1 \
   -nographic \
   -serial mon:stdio \
   -no-reboot
+}
+
+ssh_guest() {
+	ssh -i "$SSH_KEY" -p "$SSH_PORT" -o BatchMode=yes -o ConnectTimeout=3 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@127.0.0.1 "$@"
 }
 
 snapshot_disk_identities() {
@@ -171,6 +186,47 @@ for attempt in $(seq 1 60); do
       EVENTS_LOG="$LOG.events"
       curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
       python3 "$ROOT/scripts/validate-sse.py" "$EVENTS_LOG" system.metrics
+      if [ "$SSH_ASSERT" = "true" ]; then
+        RESTART_EVENT_ID=$(awk '/data: .*"type":"system.metrics"/ { print event_id; exit } /^id: / { event_id=$2 }' "$EVENTS_LOG")
+        [ -n "$RESTART_EVENT_ID" ] || { echo "QEMU restart smoke could not extract an SSE cursor" >&2; exit 1; }
+        for ssh_attempt in $(seq 1 30); do
+          if ssh_guest 'systemctl is-active --quiet lumonasd.service'; then
+            break
+          fi
+          if [ "$ssh_attempt" = 30 ]; then
+            echo "QEMU SSH control channel did not become ready" >&2
+            exit 1
+          fi
+          sleep 2
+        done
+        ssh_guest 'systemctl restart lumonasd.service'
+        for restart_attempt in $(seq 1 30); do
+          if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
+             curl -kfsS https://127.0.0.1:18080/readyz >"$LOG.restart-ready" 2>/dev/null && \
+             curl -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.restart-jobs" 2>/dev/null && \
+             curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.restart-metrics" 2>/dev/null; then
+            python3 "$ROOT/scripts/validate-api-response.py" readiness "$LOG.restart-ready"
+            python3 "$ROOT/scripts/validate-api-response.py" jobs "$LOG.restart-jobs"
+            python3 "$ROOT/scripts/validate-api-response.py" metrics "$LOG.restart-metrics"
+            break
+          fi
+          if [ "$restart_attempt" = 30 ]; then
+            echo "QEMU daemon restart did not recover the API" >&2
+            exit 1
+          fi
+          sleep 2
+        done
+        REPLAY_AFTER_RESTART="$LOG.restart-events"
+        curl -kfsS --max-time 5 -N -H "Last-Event-ID: $RESTART_EVENT_ID" https://127.0.0.1:18080/api/v1/events/stream >"$REPLAY_AFTER_RESTART" 2>/dev/null || true
+        grep -F 'retry: 3000' "$REPLAY_AFTER_RESTART" >/dev/null 2>&1
+        grep -F '"type":"system.metrics"' "$REPLAY_AFTER_RESTART" >/dev/null 2>&1
+        if grep -F "id: $RESTART_EVENT_ID" "$REPLAY_AFTER_RESTART" >/dev/null 2>&1; then
+          echo "QEMU daemon restart SSE replay returned the cursor event twice" >&2
+          exit 1
+        fi
+        python3 "$ROOT/scripts/validate-sse.py" "$REPLAY_AFTER_RESTART" system.metrics
+        echo "QEMU daemon restart persistence verified (jobs=verified, SSE=replayed)"
+      fi
       EVENTS_COMPAT_LOG="$LOG.events.compat"
       curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events >"$EVENTS_COMPAT_LOG" 2>/dev/null || true
       python3 "$ROOT/scripts/validate-sse.py" "$EVENTS_COMPAT_LOG" system.metrics

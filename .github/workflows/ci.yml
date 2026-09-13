@@ -293,14 +293,32 @@ jobs:
         with:
           name: lumonas-deb
           path: .
+      - name: Create ephemeral QEMU SSH key
+        run: |
+          ssh-keygen -q -t ed25519 -N '' -f "$RUNNER_TEMP/lumonas-qemu-ssh"
+          printf 'LUMONAS_QEMU_SSH_PUBLIC_KEY=%s\n' "$(cat "$RUNNER_TEMP/lumonas-qemu-ssh.pub")" >> "$GITHUB_ENV"
       - name: Build signed update fixture
         run: |
           go build -trimpath -o "$RUNNER_TEMP/lumonas-update-fixture" ./cmd/lumonas-update-fixture
           "$RUNNER_TEMP/lumonas-update-fixture" -dir "$RUNNER_TEMP/lumonas-update" -output "$RUNNER_TEMP/lumonas-update-fixture.json"
-      - run: sudo LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_UPDATE_FIXTURE="$RUNNER_TEMP/lumonas-update-fixture.json" LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh
+      - run: sudo env LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_UPDATE_FIXTURE="$RUNNER_TEMP/lumonas-update-fixture.json" LUMONAS_QEMU_SSH_PUBLIC_KEY="$LUMONAS_QEMU_SSH_PUBLIC_KEY" LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh
         env:
           RUNNER_TEMP: ${{ runner.temp }}
-      - run: LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_UPDATE_FIXTURE="$RUNNER_TEMP/lumonas-update-fixture.json" LUMONAS_QEMU_UPDATE_ASSERT=true LUMONAS_QEMU_LOG="$PWD/build/qemu/qemu-smoke.log" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
+      - run: LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_PRIVATE_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_QEMU_SSH_ASSERT=true LUMONAS_QEMU_UPDATE_FIXTURE="$RUNNER_TEMP/lumonas-update-fixture.json" LUMONAS_QEMU_UPDATE_ASSERT=true LUMONAS_QEMU_LOG="$PWD/build/qemu/qemu-smoke.log" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
+      - name: Remove ephemeral QEMU SSH access
+        if: always()
+        run: |
+          test -f "$PWD/build/qemu/lumonas-debian13.raw" || exit 0
+          clean_mount="$RUNNER_TEMP/lumonas-qemu-clean"
+          sudo mkdir -p "$clean_mount"
+          sudo mount -o loop "$PWD/build/qemu/lumonas-debian13.raw" "$clean_mount"
+          sudo rm -f "$clean_mount/root/.ssh/authorized_keys"
+          sudo rmdir "$clean_mount/root/.ssh" 2>/dev/null || true
+          sudo rm -f "$clean_mount/etc/systemd/system/multi-user.target.wants/ssh.service"
+          sudo rm -f "$clean_mount/var/lib/lumonas/update-fixture/package"
+          sudo rmdir "$clean_mount/var/lib/lumonas/update-fixture" 2>/dev/null || true
+          sudo sed -i '/^LUMONAS_UPDATE_PUBLIC_KEY=/d' "$clean_mount/etc/lumonas/lumonasd.env"
+          sudo umount "$clean_mount"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

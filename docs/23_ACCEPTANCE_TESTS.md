@@ -140,6 +140,11 @@ The readiness response must report `database`, `privilegedBroker`, and
 `privilegedWorkers` as true. Readiness is not accepted when any typed storage,
 network, power, or general privileged worker probe fails.
 
+The Debian QEMU appliance must additionally survive a real `lumonasd.service`
+restart. After the restart, the jobs and metrics contracts must remain
+available and an SSE client resuming with `Last-Event-ID` must receive the
+replayed metrics event without receiving the cursor event twice.
+
 ## K2. Debian upgrade preserves state
 
 Install the previous release package, replace its database with the supported

@@ -6,6 +6,7 @@ OUTPUT="${LUMONAS_QEMU_IMAGE:-$ROOT/build/qemu/lumonas-debian13.raw}"
 WORK="${LUMONAS_QEMU_WORKDIR:-$ROOT/build/qemu/work}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${LUMONAS_VERSION:-0.1.0-dev}_amd64.deb}"
 UPDATE_FIXTURE="${LUMONAS_UPDATE_FIXTURE:-}"
+SSH_PUBLIC_KEY="${LUMONAS_QEMU_SSH_PUBLIC_KEY:-}"
 SIZE="${LUMONAS_QEMU_DISK_SIZE:-4G}"
 DEBIAN_MIRROR="${LUMONAS_DEBIAN_MIRROR:-https://snapshot.debian.org/archive/debian/20260201T000000Z/}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"
@@ -83,7 +84,7 @@ PY
 	chmod 0640 "$WORK/mnt/var/lib/lumonas/update-fixture/package"
 fi
 
-chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_COMMIT="$SOURCE_COMMIT" LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" LUMONAS_DEBIAN_MIRROR="$DEBIAN_MIRROR" /bin/sh -eux <<'EOF'
+chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_COMMIT="$SOURCE_COMMIT" LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" LUMONAS_DEBIAN_MIRROR="$DEBIAN_MIRROR" LUMONAS_QEMU_SSH_PUBLIC_KEY="$SSH_PUBLIC_KEY" /bin/sh -eux <<'EOF'
 export DEBIAN_FRONTEND=noninteractive
 cat >/etc/apt/apt.conf.d/99lumonas-snapshot <<'APT'
 Acquire::Check-Valid-Until "false";
@@ -132,10 +133,15 @@ DROPIN
 cat >/etc/fstab <<'FSTAB'
 /dev/vda / ext4 defaults 0 1
 FSTAB
-systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
+systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service ssh.service lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
 systemctl disable systemd-networkd.service systemd-networkd-wait-online.service || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 passwd -l root || true
+if [ -n "$LUMONAS_QEMU_SSH_PUBLIC_KEY" ]; then
+  install -d -o root -g root -m 0700 /root/.ssh
+  printf '%s\n' "$LUMONAS_QEMU_SSH_PUBLIC_KEY" >/root/.ssh/authorized_keys
+  chmod 0600 /root/.ssh/authorized_keys
+fi
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 cat >/etc/default/grub <<'GRUB'
 GRUB_CMDLINE_LINUX_DEFAULT="quiet console=ttyS0,115200n8"

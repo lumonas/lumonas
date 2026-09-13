@@ -187,7 +187,17 @@ rather than root. It also fetches the live runtime settings contract and
 requires `lumonas-runtime.service` to be active, failing if the appliance does
 not expose both the runtime and tmpfs state through a live systemd unit.
 The image builder validates the runtime provisioning unit with the same
-in-guest `systemd-analyze verify` pass as the API services.
+in-guest `systemd-analyze verify` pass as the API services. The QEMU appliance
+job also injects a one-run Ed25519 public key into the disposable image,
+enables SSH only for that test image, and restarts the real
+`lumonasd.service` over the guest boundary. It then revalidates readiness,
+jobs, metrics, and `Last-Event-ID` SSE replay. The key is generated on the CI
+runner and is not a release secret; this proves persistence across a real
+systemd daemon restart rather than only an in-process test restart. The CI job
+removes the authorized key and SSH enablement from the raw image before it is
+uploaded or published, so the control channel is test-only. It also removes
+the signed-update fixture and its verification-key configuration before the
+image becomes a release artifact.
 
 The package-permissions job installs the generated `.deb` in a disposable
 Debian 13 container and verifies the resulting ownership and modes. It proves

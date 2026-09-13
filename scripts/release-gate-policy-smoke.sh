@@ -194,6 +194,12 @@ for marker in (
 qemu_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-smoke.sh"
 if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "validate-sse.py" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU smoke does not validate live API and SSE response contracts")
+for marker in ("LUMONAS_QEMU_SSH_ASSERT", "systemctl restart lumonasd.service", "REPLAY_AFTER_RESTART", "Last-Event-ID: $RESTART_EVENT_ID"):
+    if marker not in qemu_smoke.read_text(encoding="utf-8"):
+        raise SystemExit(f"QEMU smoke does not validate daemon restart persistence: {marker}")
+for marker in ("Create ephemeral QEMU SSH key", "LUMONAS_QEMU_SSH_PUBLIC_KEY", "LUMONAS_QEMU_SSH_PRIVATE_KEY", "Remove ephemeral QEMU SSH access", "authorized_keys", "update-fixture/package", "LUMONAS_UPDATE_PUBLIC_KEY"):
+    if marker not in workflow:
+        raise SystemExit(f"QEMU CI job is missing ephemeral guest control: {marker}")
 if "metrics-history" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU smoke does not validate retained system metrics")
 for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollback", "activeSlot"):
