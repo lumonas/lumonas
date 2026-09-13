@@ -375,6 +375,29 @@ lb_config() {
 }
 if [ -n "$INSTALL_PASSWORD" ]; then
 	(cd "$WORK" && lb_config --bootappend-install "auto=true priority=critical preseed/file=/cdrom/preseed.cfg")
+	# live-build does not propagate --bootappend-install to the generated
+	# Debian Installer menu files for all installer menu variants. Patch the
+	# binary-stage menus so the text automated installer actually consumes the
+	# preseed used to install the appliance package into the target system.
+	mkdir -p "$WORK/config/hooks/normal"
+	cat > "$WORK/config/hooks/normal/999-lumonas-preseed.hook.binary" <<'EOF'
+#!/bin/sh
+set -eu
+
+for menu in \
+	binary/boot/grub/install.cfg \
+	binary/boot/grub/install_start.cfg \
+	binary/isolinux/install.cfg \
+	binary/isolinux/gtk.cfg \
+	binary/isolinux/txt.cfg
+do
+	[ -f "$menu" ] || continue
+	sed -i \
+		-e '/\/install\/.*vmlinuz/ {/preseed\/file=/! s/[[:space:]]*---[[:space:]]*quiet/preseed\/file=\/cdrom\/preseed.cfg --- quiet/;}' \
+		"$menu"
+done
+EOF
+	chmod 0755 "$WORK/config/hooks/normal/999-lumonas-preseed.hook.binary"
 else
 	(cd "$WORK" && lb_config)
 fi
