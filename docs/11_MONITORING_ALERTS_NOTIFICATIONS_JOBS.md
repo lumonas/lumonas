@@ -110,7 +110,7 @@ Support hysteresis/debounce to avoid spam.
 
 ## Notification providers
 
-Planned:
+The current runtime provides native adapters for:
 
 - web UI;
 - email;
@@ -121,7 +121,13 @@ Planned:
 - ntfy;
 - generic webhook.
 
-Use a provider abstraction. Apprise may be used as a bridge initially, but keep LumoNAS alert routing semantics independent so individual native integrations can replace it later.
+SMTP is the email transport. All provider credentials are encrypted with the
+recovery key and are omitted from API responses, exports, audit metadata, and
+support bundles. Provider responses are bounded and delivery attempts are
+retried with exponential backoff.
+
+Keep the provider abstraction independent from LumoNAS alert routing so a
+future provider can be added without changing alert semantics.
 
 ## Routing
 
@@ -147,6 +153,12 @@ Send context:
 - action link if local context supports it.
 
 Send recovery message when useful.
+
+Repeated failures for the same channel and event enter a five-minute cooldown
+after three consecutive failures. The failure counter and cooldown are stored
+in SQLite, so a daemon restart cannot immediately resume spamming an
+unavailable provider. Successful delivery clears the window, and orphaned
+state is removed with operational retention cleanup.
 
 ## Jobs
 

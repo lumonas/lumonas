@@ -44,3 +44,25 @@ func TestNotificationDeliveryStatusPersistsWithoutSecrets(t *testing.T) {
 		t.Fatalf("unexpected delivery status: %#v %v", values, err)
 	}
 }
+
+func TestNotificationFailureWindowPersistsAndClears(t *testing.T) {
+	database, err := Open(t.TempDir() + "/lumonas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	suppressedUntil := time.Now().UTC().Add(5 * time.Minute)
+	if err := database.SaveNotificationFailure("ch-1", "disk.smart.warning", 3, suppressedUntil); err != nil {
+		t.Fatal(err)
+	}
+	failures, actualUntil, found, err := database.NotificationFailure("ch-1", "disk.smart.warning")
+	if err != nil || !found || failures != 3 || actualUntil.IsZero() {
+		t.Fatalf("failure window did not round trip: failures=%d until=%v found=%v err=%v", failures, actualUntil, found, err)
+	}
+	if err := database.ClearNotificationFailure("ch-1", "disk.smart.warning"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, found, err := database.NotificationFailure("ch-1", "disk.smart.warning"); err != nil || found {
+		t.Fatalf("failure window was not cleared: found=%v err=%v", found, err)
+	}
+}

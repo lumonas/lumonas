@@ -132,6 +132,28 @@ func TestNotificationSuppressionStartsFreshAfterExpiry(t *testing.T) {
 	}
 }
 
+func TestNotificationSuppressionSurvivesDaemonRestart(t *testing.T) {
+	server := testServer(t)
+	for range 3 {
+		server.recordNotificationDeliveryFailure("channel-restart", "disk.smart.warning", true)
+	}
+	if server.notificationDeliveryAllowed("channel-restart", "disk.smart.warning") {
+		t.Fatal("initial failure window was not suppressed")
+	}
+
+	restarted := testServer(t)
+	restarted.store = server.store
+	if restarted.notificationDeliveryAllowed("channel-restart", "disk.smart.warning") {
+		t.Fatal("persisted notification suppression was lost after restart")
+	}
+	server.recordNotificationDeliveryFailure("channel-restart", "disk.smart.warning", false)
+	clearedRestart := testServer(t)
+	clearedRestart.store = server.store
+	if !clearedRestart.notificationDeliveryAllowed("channel-restart", "disk.smart.warning") {
+		t.Fatal("cleared notification suppression remained active after restart")
+	}
+}
+
 func TestNotificationCredentialFailureIsPersistedAsDeliveryFailure(t *testing.T) {
 	server := testServer(t)
 	key := "notification-persist-key"

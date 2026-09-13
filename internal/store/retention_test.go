@@ -128,6 +128,23 @@ func TestPruneOperationalHistoryRunsWithDefaultPolicy(t *testing.T) {
 	}
 }
 
+func TestPruneNotificationFailuresRemovesOrphans(t *testing.T) {
+	database, err := Open(t.TempDir() + "/lumonas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if err := database.SaveNotificationFailure("missing-channel", "disk.smart.warning", 3, time.Now().UTC().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.PruneNotificationFailures(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, found, err := database.NotificationFailure("missing-channel", "disk.smart.warning"); err != nil || found {
+		t.Fatalf("orphan notification failure remained: found=%v err=%v", found, err)
+	}
+}
+
 func TestPruneOperationalHistoryBoundsCoreHistoryTables(t *testing.T) {
 	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {

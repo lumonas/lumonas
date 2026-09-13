@@ -175,16 +175,30 @@ func (s *apiServer) notificationDeliveryAllowed(channelID, eventType string) boo
 	key := channelID + "\x00" + eventType
 	now := time.Now().UTC()
 	s.notificationMu.Lock()
-	defer s.notificationMu.Unlock()
-	if state, ok := s.notificationFailures[key]; ok {
-		if !state.SuppressedUntil.IsZero() {
-			if now.Before(state.SuppressedUntil) {
-				return false
+	state, ok := s.notificationFailures[key]
+	s.notificationMu.Unlock()
+	if !ok {
+		failures, suppressedUntil, found, err := s.store.NotificationFailure(channelID, eventType)
+		if err == nil && found {
+			state = notificationFailureState{Failures: failures, SuppressedUntil: suppressedUntil}
+			s.notificationMu.Lock()
+			if s.notificationFailures == nil {
+				s.notificationFailures = make(map[string]notificationFailureState)
 			}
-			// Start a fresh failure window after suppression expires. Otherwise
-			// the next isolated failure would immediately re-suppress the channel.
-			delete(s.notificationFailures, key)
+			s.notificationFailures[key] = state
+			s.notificationMu.Unlock()
 		}
+	}
+	if !state.SuppressedUntil.IsZero() {
+		if now.Before(state.SuppressedUntil) {
+			return false
+		}
+		// Start a fresh failure window after suppression expires. Otherwise
+		// the next isolated failure would immediately re-suppress the channel.
+		s.notificationMu.Lock()
+		delete(s.notificationFailures, key)
+		s.notificationMu.Unlock()
+		_ = s.store.ClearNotificationFailure(channelID, eventType)
 	}
 	return true
 }
@@ -192,12 +206,15 @@ func (s *apiServer) notificationDeliveryAllowed(channelID, eventType string) boo
 func (s *apiServer) recordNotificationDeliveryFailure(channelID, eventType string, failed bool) {
 	key := channelID + "\x00" + eventType
 	s.notificationMu.Lock()
-	defer s.notificationMu.Unlock()
 	if s.notificationFailures == nil {
 		s.notificationFailures = make(map[string]notificationFailureState)
 	}
 	if !failed {
 		delete(s.notificationFailures, key)
+		s.notificationMu.Unlock()
+		if err := s.store.ClearNotificationFailure(channelID, eventType); err != nil && s.log != nil {
+			s.log.Warn("notification failure state clear failed", "channel", channelID, "event", eventType, "error", err)
+		}
 		return
 	}
 	state := s.notificationFailures[key]
@@ -206,6 +223,10 @@ func (s *apiServer) recordNotificationDeliveryFailure(channelID, eventType strin
 		state.SuppressedUntil = time.Now().UTC().Add(5 * time.Minute)
 	}
 	s.notificationFailures[key] = state
+	s.notificationMu.Unlock()
+	if err := s.store.SaveNotificationFailure(channelID, eventType, state.Failures, state.SuppressedUntil); err != nil && s.log != nil {
+		s.log.Warn("notification failure state persist failed", "channel", channelID, "event", eventType, "error", err)
+	}
 }
 
 func (s *apiServer) saveNotificationRule(w http.ResponseWriter, r *http.Request) {

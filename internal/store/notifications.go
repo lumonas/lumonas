@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/notify"
@@ -22,7 +23,15 @@ CREATE TABLE IF NOT EXISTS notification_deliveries (
   id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, event_type TEXT NOT NULL,
   state TEXT NOT NULL, attempted_at TEXT NOT NULL, error TEXT
 );
-CREATE INDEX IF NOT EXISTS notification_deliveries_attempted_idx ON notification_deliveries(attempted_at);`
+CREATE INDEX IF NOT EXISTS notification_deliveries_attempted_idx ON notification_deliveries(attempted_at);
+CREATE TABLE IF NOT EXISTS notification_failures (
+  channel_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  failures INTEGER NOT NULL,
+  suppressed_until TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(channel_id, event_type)
+);`
 
 func (s *Store) ensureNotificationSchema() error {
 	_, err := s.db.Exec(notificationSchema)
@@ -102,7 +111,67 @@ func (s *Store) DeleteNotificationChannel(id string) error {
 	if count == 0 {
 		return sql.ErrNoRows
 	}
+	if _, err := s.db.Exec(`DELETE FROM notification_failures WHERE channel_id=?`, id); err != nil {
+		return err
+	}
 	return nil
+}
+
+// NotificationFailure returns the persisted consecutive failure window for a
+// channel/event pair. Missing rows are not errors and return found=false.
+func (s *Store) NotificationFailure(channelID, eventType string) (failures int, suppressedUntil time.Time, found bool, err error) {
+	if channelID == "" || eventType == "" {
+		return 0, time.Time{}, false, sql.ErrNoRows
+	}
+	if err := s.ensureNotificationSchema(); err != nil {
+		return 0, time.Time{}, false, err
+	}
+	var rawSuppressed, updated string
+	err = s.db.QueryRow(`SELECT failures,COALESCE(suppressed_until,''),updated_at FROM notification_failures WHERE channel_id=? AND event_type=?`, channelID, eventType).Scan(&failures, &rawSuppressed, &updated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, time.Time{}, false, nil
+	}
+	if err != nil {
+		return 0, time.Time{}, false, err
+	}
+	if rawSuppressed != "" {
+		suppressedUntil, err = time.Parse(timeFormat, rawSuppressed)
+		if err != nil {
+			return 0, time.Time{}, false, err
+		}
+	}
+	if _, err := time.Parse(timeFormat, updated); err != nil {
+		return 0, time.Time{}, false, err
+	}
+	return failures, suppressedUntil, true, nil
+}
+
+// SaveNotificationFailure persists the failure window used for provider
+// cooldowns. A zero suppression time means the channel is not suppressed.
+func (s *Store) SaveNotificationFailure(channelID, eventType string, failures int, suppressedUntil time.Time) error {
+	if channelID == "" || eventType == "" || failures < 1 {
+		return sql.ErrNoRows
+	}
+	if err := s.ensureNotificationSchema(); err != nil {
+		return err
+	}
+	var suppressed any
+	if !suppressedUntil.IsZero() {
+		suppressed = suppressedUntil.UTC().Format(timeFormat)
+	}
+	_, err := s.db.Exec(`INSERT INTO notification_failures(channel_id,event_type,failures,suppressed_until,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(channel_id,event_type) DO UPDATE SET failures=excluded.failures,suppressed_until=excluded.suppressed_until,updated_at=excluded.updated_at`, channelID, eventType, failures, suppressed, time.Now().UTC().Format(timeFormat))
+	return err
+}
+
+func (s *Store) ClearNotificationFailure(channelID, eventType string) error {
+	if channelID == "" || eventType == "" {
+		return sql.ErrNoRows
+	}
+	if err := s.ensureNotificationSchema(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM notification_failures WHERE channel_id=? AND event_type=?`, channelID, eventType)
+	return err
 }
 
 func (s *Store) SaveNotificationDelivery(value notify.Delivery) error {

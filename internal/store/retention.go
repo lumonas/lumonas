@@ -20,6 +20,14 @@ WHERE id NOT IN (SELECT id FROM notification_deliveries ORDER BY attempted_at DE
 	return err
 }
 
+// PruneNotificationFailures removes stale suppression rows for channels that
+// no longer exist. Active cooldowns are bounded by the channel/event primary
+// key and are intentionally retained across restarts.
+func (s *Store) PruneNotificationFailures() error {
+	_, err := s.db.Exec(`DELETE FROM notification_failures WHERE channel_id NOT IN (SELECT id FROM notification_channels)`)
+	return err
+}
+
 // PruneExpiredSessions removes only sessions that can no longer authenticate.
 func (s *Store) PruneExpiredSessions(now time.Time) error {
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE expires_at <= ?`, now.UTC().Format(timeFormat))
@@ -108,6 +116,9 @@ func (s *Store) PruneOperationalHistory(now time.Time) error {
 		return err
 	}
 	if err := s.PruneNotificationDeliveries(defaultOperationalRetention); err != nil {
+		return err
+	}
+	if err := s.PruneNotificationFailures(); err != nil {
 		return err
 	}
 	if err := s.PruneBackupRuns(defaultOperationalRetention); err != nil {
