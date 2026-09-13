@@ -317,6 +317,11 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
 		}
+		if req.Operation != "install.apply" {
+			if err := storage.ValidateRequestedState(storage.Action(req.Operation), req.TargetDiskID, req.RequestedState); err != nil {
+				return response{Error: "requested state is invalid: " + err.Error()}
+			}
+		}
 		disks, err := discover(nil)
 		if err != nil {
 			return response{Error: "disk identity discovery failed"}

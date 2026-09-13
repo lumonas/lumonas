@@ -92,6 +92,8 @@ if "TestBackupCompletionEventRequiresDurableState" not in safety_block or "TestB
 for marker in ("TestSlotWriteRejectsPartitionTarget", "TestValidateSlotDevicePathRequiresPersistentAlias"):
     if marker not in safety_block:
         raise SystemExit(f"safety-recovery gate is missing slot-target safety coverage: {marker}")
+if "TestFilesystemMutationValidatesRequestedStateBeforeDiscovery" not in safety_block:
+    raise SystemExit("safety-recovery gate is missing privileged requested-state validation coverage")
 security_smoke = (pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "security-smoke.sh").read_text(encoding="utf-8")
 if "TestRequestAuditPersistsTypedObservabilityFields" not in security_smoke:
     raise SystemExit("security-controls gate is missing typed audit observability coverage")

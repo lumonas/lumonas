@@ -171,7 +171,7 @@ func ValidateRequestedState(action Action, diskID string, requested map[string]a
 			return err
 		}
 		if label, _ := requested["label"].(string); label != "" && !ValidFilesystemLabel(label) {
-			return errors.New("filesystem label must be 1-12 alphanumeric, dot, underscore, or hyphen characters")
+			return errors.New("filesystem label is invalid: must be 1-12 alphanumeric, dot, underscore, or hyphen characters")
 		}
 	case ActionFormat:
 		return validateFilesystem(true)

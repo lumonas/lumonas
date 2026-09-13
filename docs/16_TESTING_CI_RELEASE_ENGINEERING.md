@@ -111,6 +111,11 @@ The same release-blocking check covers NetworkManager checkpoints, Wi-Fi
 connection changes, Wake-on-LAN, service reloads, and power actions so no
 mutating worker path can be invoked without an operation scope.
 
+The privileged worker repeats operation-specific requested-state validation
+before disk discovery. Malformed filesystem, mount, or erase payloads therefore
+fail closed even when a request bypasses the API planner and reaches the typed
+Unix-socket boundary directly; the release safety gate runs this contract test.
+
 The real-daemon API smoke starts the broker and all four typed privileged
 workers in an isolated temporary socket directory before starting `lumonasd`.
 This keeps `/readyz` meaningful in CI and exercises the same Unix-socket
