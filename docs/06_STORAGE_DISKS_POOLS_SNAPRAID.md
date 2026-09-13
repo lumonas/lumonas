@@ -257,6 +257,29 @@ Forecast:
 
 Display only when enough history exists; do not show false precision.
 
+## Snapshots (btrfs and ZFS)
+
+Snapshot support is layered behind the privileged broker:
+
+- `snapshot.create`, `snapshot.list`, and `snapshot.delete` are allow-listed
+  storage-worker operations; arbitrary btrfs/zfs commands stay unreachable;
+- btrfs snapshots are read-only subvolume snapshots created under
+  `<source>.snapshots/<name>` so the parent remains a plain subvolume;
+- ZFS snapshots are immutable by construction and addressed as
+  `<dataset>@<name>`;
+- snapshot names combine an optional validated label with a UTC timestamp, so
+  a new snapshot can never overwrite an existing one;
+- sources are validated server-side: btrfs requires a clean absolute
+  subvolume path, zfs requires a well-formed dataset name;
+- creation and deletion require management authorization, a confirmed plan,
+  and an operation ID at the privileged boundary; persisted records live in
+  SQLite (`storage_snapshots`) and power the `/storage/snapshots` API;
+- deletion removes the persisted record only after the broker confirms the
+  privileged destroy succeeded.
+
+Scheduled snapshot policies remain future work; snapshots are manual until
+then.
+
 ## Acceptance criteria
 
 - Reboot/device-letter reorder does not change disk roles.

@@ -1,7 +1,9 @@
-import { HardDrive } from 'lucide-react'
-import { useDisks, usePools, useProtection } from '@/api/queries'
+import { HardDrive, Plus, Trash2 } from 'lucide-react'
+import { useCreateStorageSnapshot, useDeleteStorageSnapshot, useDisks, usePools, useProtection, useStorageSafety, useStorageSnapshots, useUnlockStorageSafety } from '@/api/queries'
 import { Metric } from '@/components/core/metric'
 import { StorageUsage } from '@/components/core/storage-usage'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatBytes } from '@/lib/format'
 import { ROLE_LABELS } from '@/features/storage/roles'
@@ -10,10 +12,22 @@ export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
   const { data: disks } = useDisks()
   const { data: pools } = usePools()
   const { data: protection } = useProtection()
+  const { data: snapshots } = useStorageSnapshots()
+  const { data: storageSafety } = useStorageSafety()
+  const unlockStorageSafety = useUnlockStorageSafety()
+  const createSnapshot = useCreateStorageSnapshot()
+  const deleteSnapshot = useDeleteStorageSnapshot()
   const pool = pools?.[0]
   const parity = disks?.find((d) => d.role === 'parity')
   const system = disks?.find((d) => d.role === 'system')
   const apps = disks?.find((d) => d.role === 'apps')
+
+  const handleDeleteSnapshot = async (id: string) => {
+    if (storageSafety?.state !== 'unlocked') {
+      await unlockStorageSafety.mutateAsync()
+    }
+    deleteSnapshot.mutate(id)
+  }
 
   return (
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -107,6 +121,58 @@ export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
           </CardContent>
         </Card>
       )}
+
+      <Card className="xl:col-span-2">
+        <CardHeader className="flex flex-row items-center justify-between pb-4">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Snapshots</CardTitle>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 text-xs"
+            disabled={createSnapshot.isPending || !pool}
+            onClick={() =>
+              createSnapshot.mutate({ kind: 'btrfs', source: pool?.mountPath ?? '' })
+            }
+          >
+            <Plus className="size-3.5" />
+            {createSnapshot.isPending ? 'Creating…' : 'Snapshot pool'}
+          </Button>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {snapshots && snapshots.length > 0 ? (
+            snapshots.map((snapshot) => (
+              <div key={snapshot.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 truncate text-sm font-medium">
+                    <span className="font-mono text-xs">{snapshot.name}</span>
+                    <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
+                      {snapshot.kind}
+                    </Badge>
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {snapshot.source} · {new Date(snapshot.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 shrink-0 gap-1.5 text-xs text-destructive hover:text-destructive"
+                  disabled={deleteSnapshot.isPending || unlockStorageSafety.isPending}
+                  onClick={() => void handleDeleteSnapshot(snapshot.id)}
+                >
+                  <Trash2 className="size-3.5" />
+                  Delete
+                </Button>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No snapshots yet. Snapshots are read-only point-in-time copies kept on the source
+              filesystem.
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
