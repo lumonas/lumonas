@@ -170,12 +170,15 @@ curl -kfsS "$SOURCE_API/api/v1/pools" >"$WORK/source-pools.json"
 curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"id":"lan","uuid":"11111111-1111-1111-1111-111111111111","name":"LAN","interface":"eth0","enabled":true,"type":"ethernet","ipv4":{"method":"auto"},"ipv6":{"method":"disabled"},"reauthenticated":true}' "$SOURCE_API/api/v1/network/connections" >"$WORK/source-network.json"
 curl -kfsS "$SOURCE_API/api/v1/network/connections" >"$WORK/source-networks.json"
 curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"name":"operator","password":"operator-password-123","managementRole":"admin"}' "$SOURCE_API/api/v1/users" >"$WORK/source-user.json"
-curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"id":"share-media","name":"Media","path":"/srv/pools/media","enabled":true,"protocols":[{"protocol":"smb","enabled":true}],"access":[]}' "$SOURCE_API/api/v1/shares" >"$WORK/source-share.json"
-curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @- "$SOURCE_API/api/v1/docker/stacks" >"$WORK/source-stack.json" <<'JSON'
+SOURCE_COOKIES="$WORK/source-cookies.txt"
+curl -kfsS -c "$SOURCE_COOKIES" -X POST -H 'Content-Type: application/json' -d '{"username":"operator","password":"operator-password-123"}' "$SOURCE_API/api/v1/auth/login" >"$WORK/source-login.json"
+SOURCE_CSRF=$(python3 -c 'import json,sys; value=json.load(open(sys.argv[1],encoding="utf-8")).get("csrfToken","").strip(); assert value; print(value)' "$WORK/source-login.json")
+curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' -d '{"id":"share-media","name":"Media","path":"/srv/pools/media","enabled":true,"protocols":[{"protocol":"smb","enabled":true}],"access":[]}' "$SOURCE_API/api/v1/shares" >"$WORK/source-share.json"
+curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' --data-binary @- "$SOURCE_API/api/v1/docker/stacks" >"$WORK/source-stack.json" <<'JSON'
 {"name":"media","composeYaml":"services:\n  media:\n    image: example/media:latest\n    volumes:\n      - /srv/lumonas/docker/appdata/media:/config\n"}
 JSON
-curl -kfsS -X POST "$SOURCE_API/api/v1/recovery/export" >"$WORK/source-export.json"
-curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"action":"poweroff","confirmed":true,"reauthenticated":true}' "$SOURCE_API/api/v1/power/shutdown" >/dev/null 2>&1 || true
+curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST "$SOURCE_API/api/v1/recovery/export" >"$WORK/source-export.json"
+curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' -d '{"action":"poweroff","confirmed":true,"reauthenticated":true}' "$SOURCE_API/api/v1/power/shutdown" >/dev/null 2>&1 || true
 for attempt in $(seq 1 60); do
 	if ! kill -0 "$SOURCE_PID" 2>/dev/null; then
 		break

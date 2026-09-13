@@ -279,6 +279,11 @@ endpoint, including certificate-tolerant validation for the disposable test
 certificate. Plain HTTP is not an accepted substitute because it would bypass
 the deployed web transport contract.
 
+After the source appliance creates its first management user, the scenario
+must log in, retain the session cookie, and send the issued CSRF token on all
+remaining mutations. This validates the same dynamic-auth transition used by
+the installed appliance before the recovery bundle is exported.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.
