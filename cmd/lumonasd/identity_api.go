@@ -390,6 +390,11 @@ func (s *apiServer) recordRequestAudit(r *http.Request, actor, action, id string
 		metadata = copy
 	}
 	metadata["correlationId"] = requestCorrelationID(r)
+	if _, ok := metadata["operationId"]; !ok {
+		if jobID, ok := metadata["jobId"].(string); ok && jobID != "" {
+			metadata["operationId"] = jobID
+		}
+	}
 	s.recordIdentityAudit(actor, action, id, metadata)
 }
 

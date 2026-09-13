@@ -362,6 +362,20 @@ assert_authenticated_status_and_body GET /api/v1/updates/status 200 '"activeSlot
 assert_authenticated_status_and_body GET '/api/v1/power/shutdown/plan?action=poweroff' 200 '"name":"stop-jobs"'
 assert_authenticated_status_and_body POST /api/v1/updates/check 202 '"type":"updates.check"'
 
+# A queued mutation must produce a typed, queryable audit trace rather than
+# only a legacy metadata blob.
+status=$(curl -sS -o "$TEMP_DIR/audit-after-mutation.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/audit?limit=100")
+[ "$status" = 200 ] || { echo "post-mutation audit request failed (HTTP $status)" >&2; exit 1; }
+validate_response audit "$TEMP_DIR/audit-after-mutation.json"
+if ! grep -F '"correlationId"' "$TEMP_DIR/audit-after-mutation.json" >/dev/null 2>&1 || \
+	! grep -F '"operationId"' "$TEMP_DIR/audit-after-mutation.json" >/dev/null 2>&1 || \
+	! grep -F '"generation"' "$TEMP_DIR/audit-after-mutation.json" >/dev/null 2>&1; then
+	echo "audit response did not include typed trace fields after a mutation" >&2
+	sed -n '1,160p' "$TEMP_DIR/audit-after-mutation.json" >&2
+	exit 1
+fi
+
 # The event stream must be live, not merely routable. The metrics loop emits
 # within the timeout window after the initial SSE retry frame.
 SSE_PATH="$TEMP_DIR/events.sse"

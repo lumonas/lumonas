@@ -33,6 +33,19 @@ func TestRequestAuditPersistsTypedObservabilityFields(t *testing.T) {
 	}
 }
 
+func TestRequestAuditDerivesOperationIDFromQueuedJob(t *testing.T) {
+	server := testServer(t)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/updates/check", nil)
+	server.recordRequestAudit(request, "operator", "updates.check.queued", "job-queued", map[string]any{"jobId": "job-queued"})
+	audits, err := server.store.Audit(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(audits) != 1 || audits[0].OperationID != "job-queued" {
+		t.Fatalf("queued job operation was not promoted into audit trace: %#v", audits)
+	}
+}
+
 func TestIdentityAPISeparatesFileAndManagementUsers(t *testing.T) {
 	server := testServer(t)
 

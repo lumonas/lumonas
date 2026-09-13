@@ -11,6 +11,10 @@ scheduled and daemon-created work uses `system`. Resource type and ID remain
 explicit fields; the original metadata/data payloads are retained for backward
 compatibility.
 
+Request audit records promote a queued job's `jobId` to `operationId` when the
+caller does not provide one explicitly, keeping the mutation trace joinable
+before and after the job starts.
+
 Jobs persist these trace fields through SQLite migrations, including the current
 configuration generation for jobs that do not originate from a destructive
 plan. This keeps restart diagnostics tied to the configuration state in which
