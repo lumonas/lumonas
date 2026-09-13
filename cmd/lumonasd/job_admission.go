@@ -38,9 +38,12 @@ func isJobResourceBusy(err error) bool {
 // admitJob performs the active-job check and insert under one process-wide
 // mutex. SQLite serializes the write, but without this mutex two HTTP handlers
 // could both observe an empty resource and enqueue conflicting work.
-func (s *apiServer) admitJob(job model.Job) error {
+func (s *apiServer) admitJob(job *model.Job) error {
 	s.jobsMu.Lock()
 	defer s.jobsMu.Unlock()
+	if job.Generation == 0 {
+		job.Generation = s.currentGeneration()
+	}
 
 	jobs, err := s.store.Jobs()
 	if err != nil {
@@ -55,7 +58,7 @@ func (s *apiServer) admitJob(job model.Job) error {
 			return &jobResourceBusyError{JobID: active.ID}
 		}
 	}
-	return s.store.SaveJob(job)
+	return s.store.SaveJob(*job)
 }
 
 func jobIsActive(state string) bool {

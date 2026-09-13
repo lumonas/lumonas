@@ -9,8 +9,13 @@ func (s *Store) ensureJobSchema() error {
 	if err != nil {
 		return err
 	}
-	hasCorrelationID := false
-	hasActor := false
+	columns := map[string]string{
+		"correlation_id": "TEXT",
+		"operation_id":   "TEXT",
+		"plan_hash":      "TEXT",
+		"actor":          "TEXT",
+		"generation":     "INTEGER NOT NULL DEFAULT 0",
+	}
 	for rows.Next() {
 		var cid, notNull, primaryKey int
 		var name, dataType string
@@ -19,29 +24,19 @@ func (s *Store) ensureJobSchema() error {
 			rows.Close()
 			return err
 		}
-		if name == "correlation_id" {
-			hasCorrelationID = true
-		}
-		if name == "actor" {
-			hasActor = true
-		}
+		delete(columns, name)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
 		return err
 	}
 	rows.Close()
-	if !hasCorrelationID {
-		if _, err := s.db.Exec(`ALTER TABLE jobs ADD COLUMN correlation_id TEXT`); err != nil {
+	for name, definition := range columns {
+		if _, err := s.db.Exec(`ALTER TABLE jobs ADD COLUMN ` + name + ` ` + definition); err != nil {
 			return err
 		}
 	}
-	if !hasActor {
-		if _, err := s.db.Exec(`ALTER TABLE jobs ADD COLUMN actor TEXT`); err != nil {
-			return err
-		}
-	}
-	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, ?), (6, ?)`, time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat))
+	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(5, ?), (6, ?), (11, ?)`, time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat))
 	return err
 }
 

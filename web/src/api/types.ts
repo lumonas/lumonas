@@ -80,7 +80,10 @@ export type JobState =
 export interface Job {
   id: string
   correlationId?: string
+  operationId?: string
+  planHash?: string
   actor?: string
+  generation?: number
   type: string
   title: string
   resourceId?: string

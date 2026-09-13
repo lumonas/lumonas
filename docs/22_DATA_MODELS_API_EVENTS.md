@@ -11,6 +11,11 @@ scheduled and daemon-created work uses `system`. Resource type and ID remain
 explicit fields; the original metadata/data payloads are retained for backward
 compatibility.
 
+Jobs persist these trace fields through SQLite migrations, including the current
+configuration generation for jobs that do not originate from a destructive
+plan. This keeps restart diagnostics tied to the configuration state in which
+work was queued.
+
 Recovery backup runs follow the same rule: manually queued runs persist the
 authenticated actor and carry it through export, verification, and failure
 events, while automatic scheduled runs are attributed to `system`.

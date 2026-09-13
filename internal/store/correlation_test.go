@@ -13,7 +13,7 @@ func TestJobCorrelationIDPersistsAcrossStoreReopen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job := model.Job{ID: "job-correlation", CorrelationID: "corr-request", Actor: "admin", Type: "test", Title: "test", State: "queued", CreatedAt: time.Now().UTC()}
+	job := model.Job{ID: "job-correlation", CorrelationID: "corr-request", OperationID: "op-request", PlanHash: "plan-request", Actor: "admin", Generation: 7, Type: "test", Title: "test", State: "queued", CreatedAt: time.Now().UTC()}
 	if err := database.SaveJob(job); err != nil {
 		t.Fatal(err)
 	}
@@ -35,6 +35,9 @@ func TestJobCorrelationIDPersistsAcrossStoreReopen(t *testing.T) {
 	if got.Actor != job.Actor {
 		t.Fatalf("actor was not persisted: got %q want %q", got.Actor, job.Actor)
 	}
+	if got.OperationID != job.OperationID || got.PlanHash != job.PlanHash || got.Generation != job.Generation {
+		t.Fatalf("job observability was not persisted: got operation=%q plan=%q generation=%d", got.OperationID, got.PlanHash, got.Generation)
+	}
 }
 
 func TestJobWithoutCorrelationIDFallsBackToJobID(t *testing.T) {
@@ -53,5 +56,8 @@ func TestJobWithoutCorrelationIDFallsBackToJobID(t *testing.T) {
 	}
 	if got.CorrelationID != job.ID {
 		t.Fatalf("expected job id fallback, got %q", got.CorrelationID)
+	}
+	if got.Generation == 0 {
+		t.Fatal("expected a current configuration generation on persisted jobs")
 	}
 }

@@ -33,7 +33,8 @@ func TestAdmitJobRejectsConflictingActiveResource(t *testing.T) {
 	if err := server.store.SaveJob(active); err != nil {
 		t.Fatal(err)
 	}
-	err := server.admitJob(model.Job{ID: "job-new", Type: "snapraid.scrub", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()})
+	job := model.Job{ID: "job-new", Type: "snapraid.scrub", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+	err := server.admitJob(&job)
 	if !isJobResourceBusy(err) || !strings.Contains(err.Error(), active.ID) {
 		t.Fatalf("expected protection conflict, got %v", err)
 	}
@@ -56,10 +57,10 @@ func TestAdmitJobAllowsTerminalAndDifferentDiskJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := server.admitJob(model.Job{ID: "job-new", Type: "smart.extended", ResourceID: "wwn:a", State: "queued", CreatedAt: time.Now().UTC()}); err != nil {
+	if err := server.admitJob(&model.Job{ID: "job-new", Type: "smart.extended", ResourceID: "wwn:a", State: "queued", CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("terminal job should release its resource: %v", err)
 	}
-	if err := server.admitJob(model.Job{ID: "job-other-disk", Type: "smart.short", ResourceID: "wwn:c", State: "queued", CreatedAt: time.Now().UTC()}); err != nil {
+	if err := server.admitJob(&model.Job{ID: "job-other-disk", Type: "smart.short", ResourceID: "wwn:c", State: "queued", CreatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("different disk should be admitted: %v", err)
 	}
 }

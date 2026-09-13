@@ -4099,9 +4099,19 @@ components:
           type: string
         correlationId:
           type: string
+        operationId:
+          type: string
+        planHash:
+          type: string
+        actor:
+          type: string
+        generation:
+          type: integer
         type:
           type: string
         title:
+          type: string
+        resourceId:
           type: string
         state:
           type: string

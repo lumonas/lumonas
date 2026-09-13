@@ -47,7 +47,8 @@ func (s *apiServer) createACLJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "ACL path does not exist"})
 		return
 	}
-	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: "acl.apply", Title: "Apply ACL changes", ResourceID: input.Path, State: "queued", CreatedAt: time.Now().UTC()}
+	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), OperationID: "", PlanHash: "", Actor: actor, Type: "acl.apply", Title: "Apply ACL changes", ResourceID: input.Path, State: "queued", CreatedAt: time.Now().UTC(), Generation: s.currentGeneration()}
+	job.OperationID, job.PlanHash = job.ID, job.ID
 	job.Stage = "Estimated " + formatACLCount(input.Path, input.Recursive) + " filesystem entries"
 	if err := s.store.SaveJob(job); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

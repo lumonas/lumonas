@@ -193,7 +193,7 @@ func (s *apiServer) confirmStoragePoolSetup(w http.ResponseWriter, r *http.Reque
 	if plan.ParityDiskID != "" {
 		protectionConfigured = s.applySnapraidConfiguration(plan.ParityDiskID, plan.DataDiskIDs)
 		if protectionConfigured {
-			job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+			job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), OperationID: plan.OperationID, PlanHash: plan.PlanHash, Actor: actor, Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC(), Generation: plan.ConfigGeneration}
 			if err := s.store.SaveJob(job); err == nil {
 				s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 				go s.runProtectionJob(job)

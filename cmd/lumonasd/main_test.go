@@ -168,6 +168,13 @@ func TestSnapraidJobIsQueuedAndFailsThroughUnavailableBroker(t *testing.T) {
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("expected 202, got %d", response.Code)
 	}
+	var job model.Job
+	if err := json.NewDecoder(response.Body).Decode(&job); err != nil {
+		t.Fatal(err)
+	}
+	if job.OperationID != job.ID || job.PlanHash != job.ID || job.Generation == 0 {
+		t.Fatalf("queued protection job lost trace fields: %#v", job)
+	}
 }
 
 func TestStoragePlanRequiresStableIdentityAndSafetyUnlock(t *testing.T) {

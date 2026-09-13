@@ -215,6 +215,25 @@ export function JobsTab() {
         </span>
       ),
     },
+    {
+      id: 'trace',
+      header: 'Trace',
+      cell: (j) => {
+        const values = [
+          j.operationId && `op: ${j.operationId}`,
+          j.planHash && `plan: ${j.planHash}`,
+          j.correlationId && `req: ${j.correlationId}`,
+          j.generation != null && `generation: ${j.generation}`,
+        ].filter(Boolean)
+        return values.length > 0 ? (
+          <span className="max-w-48 truncate font-mono text-[10px] text-muted-foreground" title={values.join(' · ')}>
+            {values.join(' · ')}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )
+      },
+    },
   ]
 
   return (

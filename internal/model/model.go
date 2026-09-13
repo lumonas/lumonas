@@ -100,7 +100,10 @@ type DiskRef struct {
 type Job struct {
 	ID            string     `json:"id"`
 	CorrelationID string     `json:"correlationId,omitempty"`
+	OperationID   string     `json:"operationId,omitempty"`
+	PlanHash      string     `json:"planHash,omitempty"`
 	Actor         string     `json:"actor,omitempty"`
+	Generation    int64      `json:"generation,omitempty"`
 	Type          string     `json:"type"`
 	Title         string     `json:"title"`
 	ResourceID    string     `json:"resourceId,omitempty"`

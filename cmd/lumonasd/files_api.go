@@ -475,7 +475,7 @@ func (s *apiServer) findRecycleShare(shareID, id string) (shares.ManagedShare, e
 
 func (s *apiServer) queueFileJob(actor, correlationID, title, resourceID string, task fileJobTask) model.Job {
 	now := time.Now().UTC()
-	job := model.Job{ID: newID("job"), CorrelationID: correlationID, Actor: actor, Type: "file.transfer", Title: title, ResourceID: resourceID, State: "queued", CreatedAt: now}
+	job := model.Job{ID: newID("job"), CorrelationID: correlationID, Actor: actor, Type: "file.transfer", Title: title, ResourceID: resourceID, State: "queued", Generation: s.currentGeneration(), CreatedAt: now}
 	if err := s.store.SaveJob(job); err != nil {
 		job.State, job.Error = "failed", err.Error()
 		return job

@@ -451,6 +451,7 @@ func (s *apiServer) networkDiagnostic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: "network.diagnostic", Title: "Network " + input.Kind, ResourceID: input.Target, State: "queued", CreatedAt: time.Now().UTC()}
+	job.Generation = s.currentGeneration()
 	if err := s.store.SaveJob(job); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

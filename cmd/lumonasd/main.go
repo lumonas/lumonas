@@ -2754,7 +2754,8 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: input.Type, Title: strings.ReplaceAll(input.Type, ".", " "), ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
-		if err := s.admitJob(job); err != nil {
+		job.OperationID, job.PlanHash = job.ID, job.ID
+		if err := s.admitJob(&job); err != nil {
 			if isJobResourceBusy(err) {
 				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 				return
@@ -2794,7 +2795,7 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: input.Type, Title: "SMART " + strings.TrimPrefix(input.Type, "smart.") + " validation", ResourceID: input.ResourceID, State: "queued", CreatedAt: time.Now().UTC()}
-	if err := s.admitJob(job); err != nil {
+	if err := s.admitJob(&job); err != nil {
 		if isJobResourceBusy(err) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 			return
@@ -2892,8 +2893,8 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 	if job.Type == "snapraid.fix" {
 		// Parity recovery restores the retired slot's content; follow it
 		// with a sync so the parity reflects the recovered data again.
-		syncJob := model.Job{ID: newID("job"), CorrelationID: job.CorrelationID, Actor: job.Actor, Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
-		if err := s.admitJob(syncJob); err == nil {
+		syncJob := model.Job{ID: newID("job"), CorrelationID: job.CorrelationID, OperationID: job.OperationID, PlanHash: job.PlanHash, Actor: job.Actor, Type: "snapraid.sync", Title: "snapraid sync", ResourceID: "protection", State: "queued", Generation: job.Generation, CreatedAt: time.Now().UTC()}
+		if err := s.admitJob(&syncJob); err == nil {
 			s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: syncJob.ID}, map[string]any{"job": syncJob})
 			go s.runProtectionJob(syncJob)
 		}

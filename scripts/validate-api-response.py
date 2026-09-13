@@ -118,6 +118,12 @@ def validate_jobs(value: Any) -> None:
         required(obj, fields, label)
         for field in ("id", "type", "title", "state", "createdAt"):
             string_field(obj, field, label)
+        for field in ("correlationId", "operationId", "planHash", "actor", "resourceId"):
+            if field in obj:
+                string_field(obj, field, label)
+        if "generation" in obj:
+            if not isinstance(obj["generation"], int) or isinstance(obj["generation"], bool) or obj["generation"] < 0:
+                fail(f"{label}.generation must be a non-negative integer")
         if obj["progress"] is not None and (not isinstance(obj["progress"], (int, float)) or isinstance(obj["progress"], bool)):
             fail(f"{label}.progress must be a number or null")
 
@@ -254,7 +260,7 @@ def self_test() -> None:
             "net": {"interface": "", "upMbps": 0.0, "downMbps": 0.0},
         },
     }])
-    validate_jobs([{"id": "job-1", "type": "smart.short", "title": "SMART", "state": "queued", "progress": None, "createdAt": "now"}])
+    validate_jobs([{"id": "job-1", "type": "smart.short", "title": "SMART", "state": "queued", "progress": None, "createdAt": "now", "correlationId": "corr-1", "operationId": "op-1", "planHash": "plan-1", "actor": "admin", "resourceId": "disk-1", "generation": 7}])
     validate_docker_summary({"available": True, "stacks": 0, "appsRunning": 0, "updatesAvailable": 0})
     validate_docker_containers([])
     validate_docker_images([])

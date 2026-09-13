@@ -145,7 +145,7 @@ func (s *apiServer) confirmDiskReplacement(w http.ResponseWriter, r *http.Reques
 	}
 	s.advanceGeneration("storage.disk.replacement")
 	// Step 3: recover the retired slot's content from parity, then re-sync.
-	fixJob := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: "snapraid.fix", Title: "snapraid fix " + plan.RetiredDataName, ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+	fixJob := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), OperationID: plan.OperationID, PlanHash: plan.PlanHash, Actor: actor, Type: "snapraid.fix", Title: "snapraid fix " + plan.RetiredDataName, ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC(), Generation: plan.ConfigGeneration}
 	s.setFixStage(fixJob.ID, plan.RetiredDataName)
 	if err := s.store.SaveJob(fixJob); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
