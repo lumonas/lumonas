@@ -50,6 +50,14 @@ the release gate.
 
 ### Integration
 
+Snapshot browsing is intentionally a read-only integration surface. The Btrfs
+implementation lists at most 500 entries per request through `mynas-privd`,
+rejects absolute and traversal paths, and exposes no ZFS filesystem path
+mapping. API tests verify the persisted snapshot lookup, typed broker request,
+response decoding, and the 422 behavior for unsupported snapshot kinds; the
+packaging and release-policy checks require those tests and the OpenAPI route
+to remain present.
+
 The frontend also has a browser-level smoke suite under `web/e2e/`. It runs
 against the production Vite application in explicit demo mode and covers first
 boot onboarding, the authenticated shell, and the Files, Docker, and Storage

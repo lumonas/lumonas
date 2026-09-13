@@ -484,6 +484,16 @@ created through the pool is found on a backing branch, the pool unmounts
 cleanly, `snapraid status`, `sync`, and `scrub` complete against the
 disposable configuration, and a missing SnapRAID configuration fails closed.
 
+## AC1. Read-only snapshot browsing
+
+Create a Btrfs snapshot containing a directory and a regular file, then browse
+the snapshot through `/api/v1/storage/snapshots/{id}/files`.
+
+Pass if the API returns bounded directory entries, permits only relative paths
+inside the snapshot, rejects traversal and absolute paths, routes the request
+through the typed privileged broker, and returns 422 for ZFS snapshots whose
+filesystem paths are not exposed.
+
 ## AB. Privileged IPC timeout
 
 Run the privileged client cancellation test with a worker that reads a request

@@ -310,5 +310,13 @@ privileged_loopback_text = privileged_loopback.read_text(encoding="utf-8")
 for marker in ("sfdisk", "partx --update", "partition-mounted", "mounted-partition rejection"):
     if marker not in privileged_loopback_text:
         raise SystemExit(f"privileged loopback smoke is missing partition coverage: {marker}")
+snapshot_browse = (repo_root / "cmd" / "lumonas-privd" / "browse_test.go").read_text(encoding="utf-8")
+if "TestSnapshotBrowseRejectsEscapeAndUnknownPaths" not in snapshot_browse:
+    raise SystemExit("snapshot browse safety coverage is missing path traversal rejection")
+snapshot_api = (repo_root / "cmd" / "lumonasd" / "snapshot_browse_api_test.go").read_text(encoding="utf-8")
+if "TestStorageSnapshotFilesListsBrokerEntries" not in snapshot_api:
+    raise SystemExit("snapshot browse API coverage is missing broker response handling")
+if "/storage/snapshots/{id}/files" not in (repo_root / "docs" / "openapi.yaml").read_text(encoding="utf-8"):
+    raise SystemExit("snapshot browse endpoint is missing from OpenAPI")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY
