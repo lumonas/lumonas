@@ -31,6 +31,11 @@ func (s *apiServer) supportBundle(w http.ResponseWriter, _ *http.Request) {
 		audit = []store.AuditEntry{}
 		collectionErrors["audit"] = "unavailable"
 	}
+	metricHistory, metricHistoryErr := s.store.SystemMetricSamples(time.Now().UTC().Add(-24*time.Hour), 1440)
+	if metricHistoryErr != nil {
+		metricHistory = []model.SystemMetricSample{}
+		collectionErrors["metricHistory"] = "unavailable"
+	}
 	server := map[string]any{
 		"nasUuid":  serverID,
 		"hostname": collector.Hostname(),
@@ -42,11 +47,12 @@ func (s *apiServer) supportBundle(w http.ResponseWriter, _ *http.Request) {
 	}
 	entries := map[string][]byte{}
 	for name, value := range map[string]any{
-		"server.json":  server,
-		"metrics.json": collector.Metrics(),
-		"disks.json":   disks,
-		"events.json":  events,
-		"audit.json":   audit,
+		"server.json":          server,
+		"metrics.json":         collector.Metrics(),
+		"metrics-history.json": metricHistory,
+		"disks.json":           disks,
+		"events.json":          events,
+		"audit.json":           audit,
 	} {
 		data, err := diagnostics.MarshalJSON(value)
 		if err != nil {

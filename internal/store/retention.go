@@ -151,5 +151,8 @@ func (s *Store) PruneOperationalHistory(now time.Time) error {
 	if err := s.PruneDockerDeployments(defaultOperationalRetention); err != nil {
 		return err
 	}
-	return s.PruneCapacitySnapshots(now.UTC().Add(-180 * 24 * time.Hour))
+	if err := s.PruneCapacitySnapshots(now.UTC().Add(-180 * 24 * time.Hour)); err != nil {
+		return err
+	}
+	return s.PruneSystemMetricSamples(now.UTC().Add(-7 * 24 * time.Hour))
 }

@@ -181,11 +181,17 @@ func TestPruneOperationalHistoryBoundsCoreHistoryTables(t *testing.T) {
 	if err := database.SaveCapacitySnapshot(model.CapacitySnapshot{ResourceID: "pool", CapturedAt: now, TotalBytes: 100, UsedBytes: 60}); err != nil {
 		t.Fatal(err)
 	}
+	if err := database.SaveSystemMetricSample(model.SystemMetricSample{CapturedAt: now.Add(-8 * 24 * time.Hour), Metrics: model.SystemMetrics{RAMTotalBytes: 100}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SaveSystemMetricSample(model.SystemMetricSample{CapturedAt: now, Metrics: model.SystemMetrics{RAMTotalBytes: 100}}); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := database.PruneOperationalHistory(now); err != nil {
 		t.Fatal(err)
 	}
-	for table, want := range map[string]int{"events": 10000, "audit_log": 10000, "jobs": 1000, "capacity_snapshots": 1} {
+	for table, want := range map[string]int{"events": 10000, "audit_log": 10000, "jobs": 1000, "capacity_snapshots": 1, "system_metric_samples": 1} {
 		var count int
 		if err := database.db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
 			t.Fatal(err)

@@ -179,6 +179,7 @@ func main() {
 	server.ensureRestartedJobs()
 	go server.persistMountState("startup")
 	go server.metricsLoop()
+	go server.metricsHistoryLoop()
 	go server.capacityLoop()
 	go server.backupLoop()
 	go server.upsMonitorLoop()
@@ -467,6 +468,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.notificationTest(w, r)
 	case r.Method == http.MethodGet && endpoint == "/system/metrics":
 		s.metrics(w)
+	case r.Method == http.MethodGet && endpoint == "/system/metrics/history":
+		s.metricsHistory(w, r)
 	case r.Method == http.MethodGet && endpoint == "/capacity/forecast":
 		s.capacityForecast(w, r)
 	case r.Method == http.MethodGet && endpoint == "/diagnostics/support-bundle":
@@ -1529,6 +1532,33 @@ func (s *apiServer) pruneRecoveryStages(directory string, keep int, current stri
 }
 
 func (s *apiServer) metrics(w http.ResponseWriter) { writeJSON(w, http.StatusOK, collector.Metrics()) }
+
+func (s *apiServer) metricsHistory(w http.ResponseWriter, r *http.Request) {
+	hours := 24
+	if value := r.URL.Query().Get("hours"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > 168 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "hours must be between 1 and 168"})
+			return
+		}
+		hours = parsed
+	}
+	limit := 1440
+	if value := r.URL.Query().Get("limit"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 1 || parsed > 10080 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be between 1 and 10080"})
+			return
+		}
+		limit = parsed
+	}
+	items, err := s.store.SystemMetricSamples(time.Now().UTC().Add(-time.Duration(hours)*time.Hour), limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "system metrics history unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
+}
 
 func (s *apiServer) networkInterfaces(w http.ResponseWriter) {
 	interfaces, err := network.Interfaces()
@@ -2877,6 +2907,27 @@ func (s *apiServer) metricsLoop() {
 	defer ticker.Stop()
 	for range ticker.C {
 		s.publish("system.metrics", "info", nil, metricsData(collector.Metrics()))
+	}
+}
+
+func (s *apiServer) metricsHistoryLoop() {
+	interval := time.Minute
+	if value := envOr("LUMONAS_METRICS_INTERVAL", ""); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil && parsed >= 10*time.Second {
+			interval = parsed
+		}
+	}
+	s.recordSystemMetricSample()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		s.recordSystemMetricSample()
+	}
+}
+
+func (s *apiServer) recordSystemMetricSample() {
+	if err := s.store.SaveSystemMetricSample(model.SystemMetricSample{CapturedAt: time.Now().UTC(), Metrics: collector.Metrics()}); err != nil && s.log != nil {
+		s.log.Warn("system metrics persistence failed", "error", err)
 	}
 }
 

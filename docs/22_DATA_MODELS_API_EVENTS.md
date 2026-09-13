@@ -15,6 +15,13 @@ Recovery backup runs follow the same rule: manually queued runs persist the
 authenticated actor and carry it through export, verification, and failure
 events, while automatic scheduled runs are attributed to `system`.
 
+System metrics are also retained as bounded, read-only samples. The live
+`/system/metrics` response and `system.metrics` SSE event remain the current
+observation; `/system/metrics/history` returns timestamped CPU, memory,
+temperature, network, and filesystem samples newest first. Samples are
+automatically pruned after seven days and are included in the support bundle
+as `metrics-history.json`.
+
 ## Core entities
 
 ### Server

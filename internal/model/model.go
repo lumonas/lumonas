@@ -156,6 +156,14 @@ type SystemMetrics struct {
 	Filesystems   []FilesystemUsage     `json:"filesystems,omitempty"`
 }
 
+// SystemMetricSample is a durable point-in-time observation used for
+// diagnostics and short-range charts. Live SSE metrics remain independent of
+// this bounded history.
+type SystemMetricSample struct {
+	CapturedAt time.Time     `json:"capturedAt"`
+	Metrics    SystemMetrics `json:"metrics"`
+}
+
 type FilesystemUsage struct {
 	Path           string  `json:"path"`
 	TotalBytes     uint64  `json:"totalBytes"`
