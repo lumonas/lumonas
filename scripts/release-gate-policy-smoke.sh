@@ -74,6 +74,11 @@ repo_root = pathlib.Path(sys.argv[1]).parent.parent.parent
 for script, marker in (("scripts/api-smoke.sh", "/api/v1/events"), ("scripts/qemu-smoke.sh", "EVENTS_COMPAT_LOG"), ("scripts/iso-smoke.sh", "validate-sse.py"), ("scripts/qemu-recovery-smoke.sh", "RECOVERED_EVENTS_LOG")):
     if marker not in (repo_root / script).read_text(encoding="utf-8"):
         raise SystemExit(f"runtime contract smoke is missing compatibility SSE coverage: {script}")
+if "docker-engine-api" not in match.group(1):
+    raise SystemExit("release job must require the Docker Engine API gate")
+for marker in ("TestEngineAPIReadOnlyCollectors", "TestEngineAPIRejectsEngineErrors", "TestSplitImageReference"):
+    if marker not in workflow:
+        raise SystemExit(f"Docker Engine API coverage is missing from CI: {marker}")
 upgrade_job = re.search(r"(?ms)^  upgrade-compatibility:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not upgrade_job or "TestStorageSnapshotMigrationAddsOriginAndPreservesRows" not in upgrade_job.group(0):
     raise SystemExit("upgrade-compatibility gate is missing snapshot migration coverage")

@@ -20,8 +20,9 @@ import (
 type Runner func(context.Context, string, ...string) ([]byte, error)
 
 type Service struct {
-	Root string
-	Run  Runner
+	Root   string
+	Run    Runner
+	engine *engineClient
 }
 
 type Stack struct {
@@ -103,7 +104,7 @@ type LogLine struct {
 
 func New(root string, run Runner) Service {
 	if run == nil {
-		run = commandRunner
+		return Service{Root: root, Run: commandRunner, engine: newEngineClient(dockerSocket())}
 	}
 	return Service{Root: root, Run: run}
 }
@@ -113,6 +114,9 @@ func commandRunner(ctx context.Context, name string, args ...string) ([]byte, er
 }
 
 func (s Service) Available(ctx context.Context) bool {
+	if s.engine != nil {
+		return s.engine.available(ctx)
+	}
 	_, err := s.Run(ctx, "docker", "version", "--format", "{{.Server.Version}}")
 	return err == nil
 }
@@ -144,6 +148,13 @@ func (s Service) Stacks(ctx context.Context) ([]Stack, error) {
 }
 
 func (s Service) Containers(ctx context.Context) ([]Container, error) {
+	if s.engine != nil {
+		result, err := s.engine.containers(ctx)
+		if err != nil && isUnavailable(err) {
+			return []Container{}, nil
+		}
+		return result, err
+	}
 	out, err := s.Run(ctx, "docker", "ps", "-a", "--format", "{{json .}}")
 	if err != nil {
 		if isUnavailable(err) {
@@ -180,6 +191,13 @@ func (s Service) Containers(ctx context.Context) ([]Container, error) {
 }
 
 func (s Service) Images(ctx context.Context) ([]Image, error) {
+	if s.engine != nil {
+		result, err := s.engine.images(ctx)
+		if err != nil && isUnavailable(err) {
+			return []Image{}, nil
+		}
+		return result, err
+	}
 	out, err := s.Run(ctx, "docker", "images", "--format", "{{json .}}")
 	if err != nil {
 		if isUnavailable(err) {
@@ -208,6 +226,13 @@ func (s Service) Images(ctx context.Context) ([]Image, error) {
 }
 
 func (s Service) Volumes(ctx context.Context) ([]Volume, error) {
+	if s.engine != nil {
+		result, err := s.engine.volumes(ctx)
+		if err != nil && isUnavailable(err) {
+			return []Volume{}, nil
+		}
+		return result, err
+	}
 	out, err := s.Run(ctx, "docker", "volume", "ls", "--format", "{{json .}}")
 	if err != nil {
 		if isUnavailable(err) {
@@ -239,6 +264,9 @@ func (s Service) Logs(ctx context.Context, container string, tail int) ([]LogLin
 	}
 	if tail < 1 || tail > 1000 {
 		tail = 200
+	}
+	if s.engine != nil {
+		return s.engine.logs(ctx, container, tail)
 	}
 	out, err := s.Run(ctx, "docker", "logs", "--timestamps", "--tail", strconv.Itoa(tail), container)
 	if err != nil {

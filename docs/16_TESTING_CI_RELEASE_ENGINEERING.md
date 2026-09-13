@@ -378,6 +378,11 @@ serial, WWN/UUID fields, and capacity) independently of `currentPath`, then
 requires at least one transient device path to change after the virtual disk
 order is rearranged.
 
+The Docker integration gate uses a deterministic Engine API double to verify
+container, image, volume, and multiplexed log-frame decoding. This protects
+the production Unix-socket path from regressing to human-oriented CLI output
+parsing while keeping Compose command tests independently injectable.
+
 The QEMU smoke exercises both documented SSE routes (`/api/v1/events/stream`
 and the compatibility alias `/api/v1/events`) and validates each captured
 envelope. The blank-disk ISO and recovered-disk boots additionally assert that

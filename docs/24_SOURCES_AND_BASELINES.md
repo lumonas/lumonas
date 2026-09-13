@@ -11,7 +11,11 @@ Baseline: Debian 13 Stable (Trixie). Debian announced 13.6 on 2026-07-11.
 
 ## Docker
 
-LumoNAS should use Docker Engine API/Go SDK rather than parsing `docker ps` output for normal management.
+LumoNAS uses the Docker Engine API over the Unix socket for normal read-only
+management and status collection rather than parsing `docker ps` output. The
+socket is bounded by `LUMONAS_DOCKER_SOCKET` and defaults to
+`/var/run/docker.sock`; Compose remains a separately validated command
+boundary because the Engine API does not replace Compose project operations.
 
 - https://docs.docker.com/reference/api/engine/
 - https://docs.docker.com/compose/

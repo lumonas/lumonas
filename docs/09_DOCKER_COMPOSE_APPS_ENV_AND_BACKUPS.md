@@ -1,5 +1,11 @@
 # Docker, Compose, Apps, Common Environment and Backups
 
+Docker status, container logs, image inventory, and volume inventory are read
+through the Docker Engine API over the local Unix socket. Responses are size
+bounded, container log frames are decoded without shell parsing, and Docker
+unavailability remains a first-class empty/attention state. Compose validation
+and stack mutations remain behind the bounded Compose command runner.
+
 ## Principle
 
 A beginner should install apps without YAML.
