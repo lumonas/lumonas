@@ -16,9 +16,16 @@ for target, dependency_text in (
     ("qemu-smoke", "qemu-smoke: qemu-image"),
     ("qemu-recovery-smoke", "qemu-recovery-smoke: iso recovery-fixture"),
     ("qemu-recovery-live", "qemu-recovery-live: iso qemu-image"),
+    ("iso-smoke", "iso-smoke: iso"),
 ):
     if dependency_text not in makefile_text:
         raise SystemExit(f"Makefile target {target} is missing its artifact dependency chain")
+for variable, marker in (
+    ("LUMONAS_ISO", "LUMONAS_ISO ?= $(CURDIR)/build/releases/lumonas-$(VERSION)-amd64.iso"),
+    ("LUMONAS_QEMU_IMAGE", "LUMONAS_QEMU_IMAGE ?= $(CURDIR)/build/qemu/lumonas-debian13.raw"),
+):
+    if marker not in makefile_text:
+        raise SystemExit(f"Makefile does not define a deterministic default for {variable}")
 match = re.search(r"(?ms)^  release:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?^    needs: \[([^\]]+)\]", workflow)
 if not match:
     raise SystemExit("release job needs list is missing")

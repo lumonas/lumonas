@@ -2,6 +2,8 @@ SHELL := /bin/sh
 
 VERSION ?= 0.1.0-dev
 GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumonas-gopath}
+LUMONAS_ISO ?= $(CURDIR)/build/releases/lumonas-$(VERSION)-amd64.iso
+LUMONAS_QEMU_IMAGE ?= $(CURDIR)/build/qemu/lumonas-debian13.raw
 
 .PHONY: all dev dev-full test test-go test-web frontend-e2e frontend-live-e2e check-openapi check-openapi-duplicates check-api-contract validate-api-response validate-sse build build-go build-web package package-dependency-parity iso recovery-fixture recovery-api-smoke recovery-bundle-smoke recovery-persistence-smoke api-smoke disk-identity-smoke storage-loopback privileged-storage-loopback disk-full-smoke share-config-smoke share-protocol-smoke iso-smoke qemu-recovery-smoke qemu-recovery-live security-smoke secret-scan-smoke command-boundary-smoke request-limits-smoke retention-smoke generation-retention-smoke fuzz-smoke dependency-smoke container-scan race-fuzz upgrade-compatibility release-gate-policy systemd-smoke systemd-security-smoke permission-smoke postinst-policy-smoke log-retention-smoke log-identity-smoke upgrade-smoke release-artifacts-smoke installer-signature-smoke qemu-image qemu-smoke verify-release
 
@@ -98,7 +100,7 @@ share-config-smoke:
 share-protocol-smoke:
 	bash scripts/share-protocol-smoke.sh
 
-iso-smoke:
+iso-smoke: iso
 	LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_ISO_ASSERT=true bash scripts/iso-smoke.sh
 
 qemu-recovery-smoke: iso recovery-fixture
@@ -171,10 +173,10 @@ installer-signature-smoke:
 	bash scripts/installer-signature-policy-smoke.sh
 
 qemu-image: package
-	sudo LUMONAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh
+	sudo LUMONAS_DEB="$(CURDIR)/lumonas_$(VERSION)_amd64.deb" LUMONAS_QEMU_IMAGE="$(LUMONAS_QEMU_IMAGE)" bash scripts/qemu-build-image.sh
 
 qemu-smoke: qemu-image
-	LUMONAS_QEMU_IMAGE="$(CURDIR)/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
+	LUMONAS_QEMU_IMAGE="$(LUMONAS_QEMU_IMAGE)" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
 
 verify-release:
 	bash scripts/verify-release.sh build/releases
