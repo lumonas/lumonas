@@ -29,7 +29,9 @@ assert_order(prerm, [
     "lumonas-privd.service",
 ], "upgrade stop")
 assert_order(postinst, [
-    "lumonas-runtime.service",
+	"runuser -u lumonas -- /usr/lib/lumonas/lumonas-migrate",
+	"systemctl daemon-reload",
+	"lumonas-runtime.service",
     "lumonas-privd.service", "lumonas-privd-storage.service",
     "lumonas-privd-network.service", "lumonas-privd-power.service",
     "lumonas-privd-general.service", "lumonas-jobs.target",

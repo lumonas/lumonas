@@ -140,6 +140,20 @@ The readiness response must report `database`, `privilegedBroker`, and
 `privilegedWorkers` as true. Readiness is not accepted when any typed storage,
 network, power, or general privileged worker probe fails.
 
+## K2. Debian upgrade preserves state
+
+Install the previous release package, replace its database with the supported
+legacy schema, and install the candidate package in a disposable Debian 13
+environment.
+
+Pass only if the maintainer scripts migrate the database before service start,
+preserve the legacy administrator, event, job, network binding, firewall, and
+connection records, add the current observability columns, preserve the
+administrator environment marker, and leave the package database audit clean.
+The tagged release workflow runs this scenario with the previous published
+`.deb`; the upgrade gate is blocked by package verification and is required by
+the release job.
+
 ## L. Config recovery
 
 Create backup, destroy system SSD, restore.

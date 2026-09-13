@@ -40,6 +40,13 @@ chroot/image builds retain their explicit no-PID-1 compatibility path.
 The matching `prerm` path fails a live upgrade if any ordered dependent or
 privileged provider cannot stop, preventing mixed old/new service binaries;
 the no-PID-1 fallback remains limited to image and chroot construction.
+The tagged Debian upgrade gate also replaces the freshly initialized database
+with a representative legacy schema before installing the new package. It
+requires the package `postinst` migration to preserve legacy users, events,
+jobs, network bindings, firewall state, and connections while adding the
+current correlation and generation columns. A package that installs cleanly
+but loses state or skips maintainer-script migrations therefore cannot pass
+the release gate.
 
 ### Integration
 

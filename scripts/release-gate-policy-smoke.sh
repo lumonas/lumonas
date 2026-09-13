@@ -164,6 +164,16 @@ if "docker ps" in collector_text or "exec.LookPath" in collector_text:
 upgrade_job = re.search(r"(?ms)^  upgrade-compatibility:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not upgrade_job or "TestStorageSnapshotMigrationAddsOriginAndPreservesRows" not in upgrade_job.group(0) or "TestOpenMigratesLegacyJobObservabilitySchema" not in upgrade_job.group(0) or "TestOpenMigratesLegacyLanHostSchema" not in upgrade_job.group(0):
     raise SystemExit("upgrade-compatibility gate is missing snapshot migration coverage")
+upgrade_debian = re.search(r"(?ms)^  upgrade-debian:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+if not upgrade_debian or "needs: [package, deb-verify]" not in upgrade_debian.group(0) or "scripts/upgrade-smoke.sh" not in upgrade_debian.group(0):
+    raise SystemExit("tagged Debian upgrade gate must depend on package verification and run the upgrade smoke")
+upgrade_smoke = (repo_root / "scripts" / "upgrade-smoke.sh").read_text(encoding="utf-8")
+for marker in ("apt-get install -y --no-install-recommends systemd passwd ca-certificates sqlite3", "CREATE TABLE network_connections", "legacy-user", "pragma_table_info", "service_bindings"):
+    if marker not in upgrade_smoke:
+        raise SystemExit(f"Debian upgrade smoke is missing legacy migration coverage: {marker}")
+upgrade_order = (repo_root / "scripts" / "upgrade-service-order-smoke.sh").read_text(encoding="utf-8")
+if "runuser -u lumonas -- /usr/lib/lumonas/lumonas-migrate" not in upgrade_order:
+    raise SystemExit("upgrade ordering smoke does not require migrations before service restart")
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", race_match.group(0), re.M):
     raise SystemExit("race-fuzz job is not running the centralized race/fuzz harness")
