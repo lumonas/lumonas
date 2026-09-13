@@ -274,6 +274,11 @@ guest image. It must verify the recovery prerequisite, candidate promotion,
 manual rollback, and persisted active-slot state before device-reorder checks
 are accepted.
 
+The live-source recovery preparation must use the packaged local HTTPS
+endpoint, including certificate-tolerant validation for the disposable test
+certificate. Plain HTTP is not an accepted substitute because it would bypass
+the deployed web transport contract.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.

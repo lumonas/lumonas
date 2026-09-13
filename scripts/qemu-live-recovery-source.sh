@@ -14,6 +14,7 @@ SOURCE_MOUNT="$WORK/source-mount"
 SOURCE_DATA="$WORK/source-disks"
 SOURCE_LOG="$WORK/live-source.log"
 SOURCE_PID=""
+SOURCE_API="https://127.0.0.1:18083"
 cleanup() {
 	set +e
 	if [ -n "$SOURCE_PID" ]; then
@@ -59,9 +60,9 @@ SOURCE_PID=$!
 
 source_ready=false
 for attempt in $(seq 1 120); do
-	if curl -fsS http://127.0.0.1:18083/healthz >/dev/null 2>&1 && \
-		curl -fsS http://127.0.0.1:18083/readyz >"$WORK/source-ready.json" 2>/dev/null && \
-		curl -fsS http://127.0.0.1:18083/api/v1/server >/dev/null 2>&1; then
+	if curl -kfsS "$SOURCE_API/healthz" >/dev/null 2>&1 && \
+		curl -kfsS "$SOURCE_API/readyz" >"$WORK/source-ready.json" 2>/dev/null && \
+		curl -kfsS "$SOURCE_API/api/v1/server" >/dev/null 2>&1; then
 		source_ready=true
 		break
 	fi
@@ -73,9 +74,9 @@ done
 [ "$source_ready" = true ] || { echo "live recovery source appliance never became ready" >&2; cat "$SOURCE_LOG" >&2 || true; exit 1; }
 grep -F '"privilegedBroker":true' "$WORK/source-ready.json" >/dev/null
 
-curl -fsS -X POST http://127.0.0.1:18083/api/v1/recovery/key >"$WORK/source-key.json"
+curl -kfsS -X POST "$SOURCE_API/api/v1/recovery/key" >"$WORK/source-key.json"
 python3 -c 'import json,sys; value=json.load(open(sys.argv[1],encoding="utf-8")).get("key","").strip(); assert value; open(sys.argv[2],"w",encoding="utf-8").write(value+"\n")' "$WORK/source-key.json" "$WORK/recovery.key"
-curl -fsS http://127.0.0.1:18083/api/v1/disks >"$WORK/source-disks.json"
+curl -kfsS "$SOURCE_API/api/v1/disks" >"$WORK/source-disks.json"
 python3 - "$WORK/source-disks.json" "$WORK/source-onboarding.json" "$WORK/source-protection.json" "$WORK/source-layout.json" <<'PY'
 import json
 import re
@@ -93,8 +94,8 @@ def branch(disk_id):
     return "/srv/disks/" + re.sub(r"[^A-Za-z0-9._-]", "_", disk_id)
 json.dump({"data": data, "parity": parity[0], "all": data + parity, "branches": {item: branch(item) for item in data + parity}}, open(sys.argv[4], "w", encoding="utf-8"))
 PY
-curl -fsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-onboarding.json" http://127.0.0.1:18083/api/v1/onboarding/complete >"$WORK/source-onboarding-result.json"
-curl -fsS -X POST -H 'Content-Type: application/json' -d '{"reauthenticated":true}' http://127.0.0.1:18083/api/v1/storage/safety/unlock >"$WORK/source-storage-unlock.json"
+curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-onboarding.json" "$SOURCE_API/api/v1/onboarding/complete" >"$WORK/source-onboarding-result.json"
+curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"reauthenticated":true}' "$SOURCE_API/api/v1/storage/safety/unlock" >"$WORK/source-storage-unlock.json"
 
 storage_plan_and_confirm() {
 	local disk_id=$1
@@ -106,7 +107,7 @@ import sys
 disk_id, mount_path, output = sys.argv[1:]
 json.dump({"action": "filesystem.create", "diskId": disk_id, "requestedState": {"filesystem": "ext4", "mountPath": mount_path, "label": "lumonas"}}, open(output, "w", encoding="utf-8"))
 PY
-	curl -fsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/storage-plan-$suffix.json" http://127.0.0.1:18083/api/v1/storage/operations/plan >"$WORK/storage-plan-result-$suffix.json"
+	curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/storage-plan-$suffix.json" "$SOURCE_API/api/v1/storage/operations/plan" >"$WORK/storage-plan-result-$suffix.json"
 	python3 - "$WORK/storage-plan-result-$suffix.json" "$WORK/storage-confirm-$suffix.json" <<'PY'
 import json
 import sys
@@ -120,7 +121,7 @@ import sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["operationId"])
 PY
 )
-	curl -fsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/storage-confirm-$suffix.json" "http://127.0.0.1:18083/api/v1/storage/operations/$operation_id/confirm" >"$WORK/storage-confirm-result-$suffix.json"
+	curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/storage-confirm-$suffix.json" "$SOURCE_API/api/v1/storage/operations/$operation_id/confirm" >"$WORK/storage-confirm-result-$suffix.json"
 }
 
 python3 - "$WORK/source-layout.json" <<'PY' >"$WORK/source-storage-ids"
@@ -149,7 +150,7 @@ import sys
 layout = json.load(open(sys.argv[1], encoding="utf-8"))
 json.dump({"name": "media", "diskIds": layout["data"]}, open(sys.argv[2], "w", encoding="utf-8"))
 PY
-curl -fsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-pool-plan.json" http://127.0.0.1:18083/api/v1/storage/pools/plan >"$WORK/source-pool-result.json"
+curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-pool-plan.json" "$SOURCE_API/api/v1/storage/pools/plan" >"$WORK/source-pool-result.json"
 python3 - "$WORK/source-pool-result.json" "$WORK/source-pool-confirm.json" <<'PY'
 import json
 import sys
@@ -162,19 +163,19 @@ import sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["operationId"])
 PY
 )
-curl -fsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-pool-confirm.json" "http://127.0.0.1:18083/api/v1/storage/pools/$pool_operation/confirm" >"$WORK/source-pool-confirm-result.json"
-curl -fsS -X PUT -H 'Content-Type: application/json' --data-binary @"$WORK/source-protection.json" http://127.0.0.1:18083/api/v1/storage/protection/config >"$WORK/source-protection-result.json"
-curl -fsS http://127.0.0.1:18083/api/v1/storage/mounts >"$WORK/source-mounts.json"
-curl -fsS http://127.0.0.1:18083/api/v1/pools >"$WORK/source-pools.json"
-curl -fsS -X POST -H 'Content-Type: application/json' -d '{"id":"lan","uuid":"11111111-1111-1111-1111-111111111111","name":"LAN","interface":"eth0","enabled":true,"type":"ethernet","ipv4":{"method":"auto"},"ipv6":{"method":"disabled"},"reauthenticated":true}' http://127.0.0.1:18083/api/v1/network/connections >"$WORK/source-network.json"
-curl -fsS http://127.0.0.1:18083/api/v1/network/connections >"$WORK/source-networks.json"
-curl -fsS -X POST -H 'Content-Type: application/json' -d '{"name":"operator","password":"operator-password-123","managementRole":"admin"}' http://127.0.0.1:18083/api/v1/users >"$WORK/source-user.json"
-curl -fsS -X POST -H 'Content-Type: application/json' -d '{"id":"share-media","name":"Media","path":"/srv/pools/media","enabled":true,"protocols":[{"protocol":"smb","enabled":true}],"access":[]}' http://127.0.0.1:18083/api/v1/shares >"$WORK/source-share.json"
-curl -fsS -X POST -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:18083/api/v1/docker/stacks >"$WORK/source-stack.json" <<'JSON'
+curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-pool-confirm.json" "$SOURCE_API/api/v1/storage/pools/$pool_operation/confirm" >"$WORK/source-pool-confirm-result.json"
+curl -kfsS -X PUT -H 'Content-Type: application/json' --data-binary @"$WORK/source-protection.json" "$SOURCE_API/api/v1/storage/protection/config" >"$WORK/source-protection-result.json"
+curl -kfsS "$SOURCE_API/api/v1/storage/mounts" >"$WORK/source-mounts.json"
+curl -kfsS "$SOURCE_API/api/v1/pools" >"$WORK/source-pools.json"
+curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"id":"lan","uuid":"11111111-1111-1111-1111-111111111111","name":"LAN","interface":"eth0","enabled":true,"type":"ethernet","ipv4":{"method":"auto"},"ipv6":{"method":"disabled"},"reauthenticated":true}' "$SOURCE_API/api/v1/network/connections" >"$WORK/source-network.json"
+curl -kfsS "$SOURCE_API/api/v1/network/connections" >"$WORK/source-networks.json"
+curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"name":"operator","password":"operator-password-123","managementRole":"admin"}' "$SOURCE_API/api/v1/users" >"$WORK/source-user.json"
+curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"id":"share-media","name":"Media","path":"/srv/pools/media","enabled":true,"protocols":[{"protocol":"smb","enabled":true}],"access":[]}' "$SOURCE_API/api/v1/shares" >"$WORK/source-share.json"
+curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @- "$SOURCE_API/api/v1/docker/stacks" >"$WORK/source-stack.json" <<'JSON'
 {"name":"media","composeYaml":"services:\n  media:\n    image: example/media:latest\n    volumes:\n      - /srv/lumonas/docker/appdata/media:/config\n"}
 JSON
-curl -fsS -X POST http://127.0.0.1:18083/api/v1/recovery/export >"$WORK/source-export.json"
-curl -fsS -X POST -H 'Content-Type: application/json' -d '{"action":"poweroff","confirmed":true,"reauthenticated":true}' http://127.0.0.1:18083/api/v1/power/shutdown >/dev/null 2>&1 || true
+curl -kfsS -X POST "$SOURCE_API/api/v1/recovery/export" >"$WORK/source-export.json"
+curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"action":"poweroff","confirmed":true,"reauthenticated":true}' "$SOURCE_API/api/v1/power/shutdown" >/dev/null 2>&1 || true
 for attempt in $(seq 1 60); do
 	if ! kill -0 "$SOURCE_PID" 2>/dev/null; then
 		break

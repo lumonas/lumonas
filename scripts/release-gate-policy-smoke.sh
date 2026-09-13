@@ -92,6 +92,10 @@ iso_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "iso-sm
 live_recovery_source = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-live-recovery-source.sh"
 if any('"privilegedBroker":true' not in path.read_text(encoding="utf-8") for path in (qemu_smoke, qemu_recovery_smoke, iso_smoke, live_recovery_source)):
     raise SystemExit("QEMU smoke does not assert the privileged broker readiness contract")
+live_recovery_text = live_recovery_source.read_text(encoding="utf-8")
+for marker in ("SOURCE_API=\"https://127.0.0.1:18083\"", "curl -kfsS \"$SOURCE_API/healthz\"", "curl -kfsS -X POST \"$SOURCE_API/api/v1/recovery/export\""):
+    if marker not in live_recovery_text:
+        raise SystemExit(f"live recovery source does not use the deployed HTTPS transport: {marker}")
 live_e2e = pathlib.Path(sys.argv[1]).parent.parent.parent / "web" / "e2e" / "live.spec.ts"
 live_e2e_text = live_e2e.read_text(encoding="utf-8")
 for marker in ("/api/v1/onboarding/complete", "/api/v1/events/stream", "snapraid.sync", "Overview"):
