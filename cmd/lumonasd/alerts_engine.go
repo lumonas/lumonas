@@ -6,9 +6,11 @@ import (
 
 	"github.com/lumonas/lumonas/internal/collector"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/store"
 )
 
 const syncStaleThreshold = 48 * time.Hour
+const diskTemperatureDebounce = 5 * time.Minute
 
 // evaluateEventAlert fires or resolves rule-based alerts from published events.
 // It is invoked from publish(), so it must never publish the same event kind
@@ -90,8 +92,8 @@ func (s *apiServer) resolveAlertForRule(ruleID, resourceID string) {
 // tick.
 func (s *apiServer) evaluatePeriodicAlerts(tick int64) {
 	s.evaluateFilesystemCapacity()
+	s.evaluateDiskTemperatures()
 	if tick%10 == 0 {
-		s.evaluateDiskTemperatures()
 		s.evaluateSMARTAlerts()
 	}
 	s.evaluateSyncStaleness()
@@ -165,17 +167,34 @@ func (s *apiServer) evaluateDiskTemperatures() {
 	}
 	for _, disk := range disks {
 		if disk.Temperature == nil {
+			_ = s.store.ClearPendingAlert("rule-temp", disk.ID)
 			continue
 		}
 		if *disk.Temperature > 45 {
-			s.fireAlertForRule(
-				"rule-temp",
-				"Disk temperature high",
-				fmt.Sprintf("%s (%s) is running at %.0f°C", disk.Name, disk.Model, *disk.Temperature),
-				&model.ResourceRef{Type: "disk", ID: disk.ID},
-			)
+			description := fmt.Sprintf("%s (%s) is running at %.0f°C", disk.Name, disk.Model, *disk.Temperature)
+			now := time.Now().UTC()
+			if s.clock != nil {
+				now = s.clock().UTC()
+			}
+			pending, found, err := s.store.PendingAlert("rule-temp", disk.ID)
+			if err != nil {
+				continue
+			}
+			if !found {
+				_ = s.store.SavePendingAlert(store.PendingAlert{
+					RuleID: "rule-temp", ResourceID: disk.ID, Severity: "warning",
+					Title: "Disk temperature high", Description: description, StartedAt: now,
+				})
+				continue
+			}
+			if now.Sub(pending.StartedAt) < diskTemperatureDebounce {
+				continue
+			}
+			_ = s.store.ClearPendingAlert("rule-temp", disk.ID)
+			s.fireAlertForRule("rule-temp", pending.Title, pending.Description, &model.ResourceRef{Type: "disk", ID: disk.ID})
 			continue
 		}
+		_ = s.store.ClearPendingAlert("rule-temp", disk.ID)
 		s.resolveAlertForRule("rule-temp", disk.ID)
 	}
 }

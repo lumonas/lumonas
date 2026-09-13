@@ -94,7 +94,10 @@ Example:
 - acknowledged;
 - resolved.
 
-Support hysteresis/debounce to avoid spam.
+Temperature conditions use a durable pending window: the first hot sample is
+recorded as `pending`, the alert fires only after the threshold remains true
+for the configured duration, and cooling clears the pending state. Pending
+windows survive a daemon restart, so a restart cannot bypass the debounce.
 
 ## Alert rule examples
 

@@ -22,6 +22,8 @@ func TestAlertEngineFiresAndResolvesTemperature(t *testing.T) {
 		t.Fatal(err)
 	}
 	server.diskFunc = func() ([]model.Disk, error) { return []model.Disk{diskWithTemperature("wwn:hot", 52)}, nil }
+	firstSample := time.Now().UTC()
+	server.clock = func() time.Time { return firstSample }
 
 	server.evaluateDiskTemperatures()
 
@@ -29,8 +31,14 @@ func TestAlertEngineFiresAndResolvesTemperature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(alerts) != 1 || !strings.Contains(alerts[0].Title, "Disk temperature high") {
-		t.Fatalf("expected temperature alert, got %#v", alerts)
+	if len(alerts) != 0 {
+		t.Fatalf("temperature alert fired before debounce window: %#v", alerts)
+	}
+	server.clock = func() time.Time { return firstSample.Add(diskTemperatureDebounce + time.Second) }
+	server.evaluateDiskTemperatures()
+	alerts, err = server.store.GeneratedAlerts()
+	if err != nil || len(alerts) != 1 || !strings.Contains(alerts[0].Title, "Disk temperature high") {
+		t.Fatalf("expected temperature alert after debounce, got %#v err=%v", alerts, err)
 	}
 	rule, err := server.store.AlertRule("rule-temp")
 	if err != nil {

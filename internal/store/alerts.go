@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
@@ -24,7 +25,17 @@ CREATE TABLE IF NOT EXISTS generated_alerts (
   started_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS generated_alerts_rule_idx ON generated_alerts(rule_id, resource_id, state);`
+CREATE INDEX IF NOT EXISTS generated_alerts_rule_idx ON generated_alerts(rule_id, resource_id, state);
+CREATE TABLE IF NOT EXISTS pending_alerts (
+  rule_id TEXT NOT NULL,
+  resource_id TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(rule_id, resource_id)
+);`
 
 func (s *Store) ensureAlertsSchema() error {
 	_, err := s.db.Exec(alertsSchema)
@@ -92,6 +103,62 @@ func (s *Store) OpenGeneratedAlert(alert model.Alert, ruleID string) (bool, erro
 		return false, err
 	}
 	return true, nil
+}
+
+type PendingAlert struct {
+	RuleID      string
+	ResourceID  string
+	Severity    string
+	Title       string
+	Description string
+	StartedAt   time.Time
+}
+
+// SavePendingAlert records the first observation of a condition that must
+// remain true for a debounce window before it becomes a generated alert.
+func (s *Store) SavePendingAlert(value PendingAlert) error {
+	if value.RuleID == "" || value.ResourceID == "" || value.Severity == "" || value.Title == "" || value.StartedAt.IsZero() {
+		return sql.ErrNoRows
+	}
+	if err := s.ensureAlertsSchema(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`INSERT INTO pending_alerts(rule_id,resource_id,severity,title,description,started_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(rule_id,resource_id) DO UPDATE SET severity=excluded.severity,title=excluded.title,description=excluded.description,updated_at=excluded.updated_at`, value.RuleID, value.ResourceID, value.Severity, value.Title, value.Description, value.StartedAt.UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat))
+	return err
+}
+
+func (s *Store) PendingAlert(ruleID, resourceID string) (PendingAlert, bool, error) {
+	if ruleID == "" || resourceID == "" {
+		return PendingAlert{}, false, sql.ErrNoRows
+	}
+	if err := s.ensureAlertsSchema(); err != nil {
+		return PendingAlert{}, false, err
+	}
+	var value PendingAlert
+	var started string
+	err := s.db.QueryRow(`SELECT rule_id,resource_id,severity,title,description,started_at FROM pending_alerts WHERE rule_id=? AND resource_id=?`, ruleID, resourceID).Scan(&value.RuleID, &value.ResourceID, &value.Severity, &value.Title, &value.Description, &started)
+	if errors.Is(err, sql.ErrNoRows) {
+		return PendingAlert{}, false, nil
+	}
+	if err != nil {
+		return PendingAlert{}, false, err
+	}
+	value.StartedAt, err = parseTime(started)
+	if err != nil {
+		return PendingAlert{}, false, err
+	}
+	return value, true, nil
+}
+
+func (s *Store) ClearPendingAlert(ruleID, resourceID string) error {
+	if ruleID == "" || resourceID == "" {
+		return sql.ErrNoRows
+	}
+	if err := s.ensureAlertsSchema(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM pending_alerts WHERE rule_id=? AND resource_id=?`, ruleID, resourceID)
+	return err
 }
 
 // GeneratedAlerts lists rule-fired alerts that have not been resolved.
