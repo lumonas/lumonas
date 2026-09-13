@@ -38,8 +38,9 @@ func TestApplyServiceConfigInstallsAndRestartsAllowListedService(t *testing.T) {
 		return nil, nil
 	}
 	result := applyServiceConfig(request{
-		Operation: "service.config.apply",
-		Confirmed: true,
+		Operation:   "service.config.apply",
+		OperationID: "service-config-1",
+		Confirmed:   true,
 		RequestedState: map[string]any{
 			"service":    "nfs-server.service",
 			"sourcePath": "/var/lib/lumonas/generated/exports",
@@ -58,6 +59,7 @@ func TestServiceReloadUsesReloadOrRestart(t *testing.T) {
 	var command string
 	result := execute(request{
 		Operation:      "service.reload",
+		OperationID:    "service-reload-1",
 		PlanHash:       "service-reload",
 		Confirmed:      true,
 		RequestedState: map[string]any{"service": "smbd.service"},

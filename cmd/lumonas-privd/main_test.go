@@ -312,6 +312,20 @@ func TestFirewallApplyRequiresOperationID(t *testing.T) {
 	}
 }
 
+func TestShareActivationRequiresOperationID(t *testing.T) {
+	for _, operation := range []string{"service.config.apply", "avahi.config.apply"} {
+		t.Run(operation, func(t *testing.T) {
+			result := execute(request{Operation: operation, PlanHash: "share-plan", Confirmed: true}, nil, func(string, ...string) ([]byte, error) {
+				t.Fatal("share activation command ran without an operation ID")
+				return nil, nil
+			})
+			if result.OK || !strings.Contains(result.Error, "operationId is required") {
+				t.Fatalf("share mutation without an operation ID was accepted: %#v", result)
+			}
+		})
+	}
+}
+
 func TestSambaUserProvisioningUsesStdinPasswords(t *testing.T) {
 	commands := make([]string, 0)
 	stdinCommands := make([]string, 0)

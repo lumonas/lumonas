@@ -6,5 +6,5 @@ if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/de
 	echo "obsolete FTPS certificate path found" >&2
 	exit 1
 fi
-GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" go test ./cmd/lumonasd ./internal/shares -run 'Test(FTP|PrepareShareConfigs|ProtocolRenderers)'
+GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" go test ./cmd/lumonasd ./internal/shares -run 'Test(FTP|PrepareShareConfigs|ProtocolRenderers|ReloadShareServicesFailsClosedWithoutPrivilegedBroker|ReloadShareServicesUsesTypedBrokerForEveryActivation)'
 echo "LumoNAS share configuration smoke checks passed"

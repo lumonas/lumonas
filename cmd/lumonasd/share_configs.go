@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/lumonas/lumonas/internal/privileged"
 	"github.com/lumonas/lumonas/internal/shares"
@@ -289,13 +290,7 @@ func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.Man
 	if len(services) == 0 {
 		return nil
 	}
-	socket := envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")
-	if _, err := os.Stat(socket); os.IsNotExist(err) {
-		// Development environments may not run the privileged broker. The
-		// validated files remain canonical and will be picked up on startup.
-		return nil
-	}
-	if err := s.publishAvahiAnnouncement(ctx, socket, values); err != nil {
+	if err := s.publishAvahiAnnouncement(ctx, values); err != nil {
 		return err
 	}
 	for service := range services {
@@ -303,15 +298,11 @@ func (s *apiServer) reloadShareServices(ctx context.Context, values []shares.Man
 		if sourcePath := serviceConfigSource(service); sourcePath != "" {
 			state["sourcePath"] = sourcePath
 		}
-		result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
+		if err := s.brokerExecute(ctx, privileged.Request{
 			Operation: "service.config.apply", OperationID: newID("service-config"), PlanHash: newID("service-config-plan"),
-			RequestedState: state, Confirmed: true,
-		})
-		if err != nil {
+			RequestedState: state, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true,
+		}); err != nil {
 			return err
-		}
-		if !result.OK {
-			return fmt.Errorf("reload %s: %s", service, result.Error)
 		}
 	}
 	return nil
@@ -330,7 +321,7 @@ func serviceConfigSource(service string) string {
 
 // publishAvahiAnnouncement updates the mDNS SMB/Time Machine announcement
 // through the privileged broker. An empty render removes the announcement.
-func (s *apiServer) publishAvahiAnnouncement(ctx context.Context, socket string, values []shares.ManagedShare) error {
+func (s *apiServer) publishAvahiAnnouncement(ctx context.Context, values []shares.ManagedShare) error {
 	publishSMB := false
 	for _, value := range values {
 		for _, protocol := range value.Protocols {
@@ -347,15 +338,8 @@ func (s *apiServer) publishAvahiAnnouncement(ctx context.Context, socket string,
 		}
 		content = rendered
 	}
-	result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
+	return s.brokerExecute(ctx, privileged.Request{
 		Operation: "avahi.config.apply", OperationID: newID("avahi"), PlanHash: newID("avahi-plan"),
-		RequestedState: map[string]any{"content": content}, Confirmed: true,
+		RequestedState: map[string]any{"content": content}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true,
 	})
-	if err != nil {
-		return err
-	}
-	if !result.OK {
-		return fmt.Errorf("avahi announcement: %s", result.Error)
-	}
-	return nil
 }

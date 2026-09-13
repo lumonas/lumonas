@@ -31,9 +31,9 @@ func TestAvahiBrokerPublishesAndRemovesAnnouncement(t *testing.T) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
 		return nil, nil
 	}
-	base := request{Operation: "avahi.config.apply", PlanHash: "avahi", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute)}
+	base := request{Operation: "avahi.config.apply", OperationID: "avahi-1", PlanHash: "avahi", Confirmed: true, ExpiresAt: time.Now().UTC().Add(time.Minute)}
 	content := "<?xml version=\"1.0\"?>\n<!DOCTYPE service-group SYSTEM \"avahi-service.dtd\">\n<service-group>\n  <name>%h</name>\n</service-group>\n"
-	published := applyAvahiConfig(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, ExpiresAt: base.ExpiresAt, RequestedState: map[string]any{"content": content}}, run)
+	published := applyAvahiConfig(request{Operation: base.Operation, OperationID: base.OperationID, PlanHash: base.PlanHash, Confirmed: true, ExpiresAt: base.ExpiresAt, RequestedState: map[string]any{"content": content}}, run)
 	if !published.OK {
 		t.Fatalf("publish failed: %#v", published)
 	}
@@ -44,7 +44,7 @@ func TestAvahiBrokerPublishesAndRemovesAnnouncement(t *testing.T) {
 	if !strings.Contains(strings.Join(commands, "; "), "systemctl reload avahi-daemon") {
 		t.Fatalf("expected daemon reload: %v", commands)
 	}
-	removed := applyAvahiConfig(request{Operation: base.Operation, PlanHash: base.PlanHash, Confirmed: true, ExpiresAt: base.ExpiresAt, RequestedState: map[string]any{"content": ""}}, run)
+	removed := applyAvahiConfig(request{Operation: base.Operation, OperationID: base.OperationID, PlanHash: base.PlanHash, Confirmed: true, ExpiresAt: base.ExpiresAt, RequestedState: map[string]any{"content": ""}}, run)
 	if !removed.OK {
 		t.Fatalf("remove failed: %#v", removed)
 	}

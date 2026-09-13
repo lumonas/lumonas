@@ -59,6 +59,11 @@ Firewall activation is fail-closed: the daemon writes a generated ruleset only
 as a staged file and requires the typed privileged worker to validate and apply
 it. A missing broker or failed `nft` validation restores the previous ruleset
 and fails the request; the release-blocking safety job covers this behavior.
+Share configuration activation follows the same rule: validated files are
+staged first, but a share mutation is not successful until the typed broker
+has applied every required service and Avahi change. A missing broker rolls
+back the generated files and stored share state; release CI covers this
+fail-closed path.
 
 ### QEMU end-to-end
 
