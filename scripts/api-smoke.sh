@@ -291,6 +291,11 @@ if [ "$status" != 200 ] || ! head -c 1 "$TEMP_DIR/disks.json" | grep '\[' >/dev/
 fi
 validate_response disks "$TEMP_DIR/disks.json"
 
+status=$(curl -sS -o "$TEMP_DIR/lan-hosts.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/network/lan/hosts")
+[ "$status" = 200 ] || { echo "LAN host inventory request failed (HTTP $status)" >&2; exit 1; }
+validate_response lan-hosts "$TEMP_DIR/lan-hosts.json"
+
 status=$(curl -sS -o "$TEMP_DIR/metrics.json" -w '%{http_code}' \
 	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/system/metrics")
 [ "$status" = 200 ] || { echo "authenticated metrics request failed (HTTP $status)" >&2; exit 1; }

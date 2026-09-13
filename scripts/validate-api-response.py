@@ -73,6 +73,20 @@ def validate_disks(value: Any) -> None:
         required(smart, ("overall", "reallocatedSectors", "pendingSectors", "uncorrectableSectors", "crcErrors", "powerOnHours"), f"{label}.smart")
 
 
+def validate_lan_hosts(value: Any) -> None:
+    if not isinstance(value, list):
+        fail("lan-hosts must be a JSON array")
+    fields = ("mac", "ip", "interface", "firstSeen", "lastSeen")
+    for index, host in enumerate(value):
+        label = f"lan-hosts[{index}]"
+        obj = object_value(host, label)
+        required(obj, fields, label)
+        for field in fields:
+            string_field(obj, field, label)
+        if "hostname" in obj:
+            string_field(obj, "hostname", label)
+
+
 def validate_metrics(value: Any) -> None:
     obj = object_value(value, "metrics")
     required(obj, ("cpuPercent", "load", "ramUsedBytes", "ramTotalBytes", "cpuTempC", "uptimeSeconds", "net"), "metrics")
@@ -325,6 +339,10 @@ def self_test() -> None:
         "smart": {"overall": "healthy", "reallocatedSectors": 0, "pendingSectors": 0,
                    "uncorrectableSectors": 0, "crcErrors": 0, "powerOnHours": 0},
     }])
+    validate_lan_hosts([{
+        "mac": "aa:bb:cc:dd:ee:ff", "ip": "192.168.1.10", "interface": "eth0",
+        "hostname": "media", "firstSeen": "2026-01-02T00:00:00Z", "lastSeen": "2026-01-02T00:00:00Z",
+    }])
     validate_metrics({
         "cpuPercent": 1.0, "load": [0.0, 0.0, 0.0], "ramUsedBytes": 1,
         "ramTotalBytes": 2, "cpuTempC": 0.0, "uptimeSeconds": 1,
@@ -363,6 +381,7 @@ def self_test() -> None:
 VALIDATORS = {
     "server": validate_server,
     "disks": validate_disks,
+    "lan-hosts": validate_lan_hosts,
     "metrics": validate_metrics,
     "metrics-history": validate_metrics_history,
     "jobs": validate_jobs,

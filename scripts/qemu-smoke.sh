@@ -116,6 +116,7 @@ for attempt in $(seq 1 60); do
      curl -kfsS https://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/server >"$LOG.server" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/network/lan/hosts >"$LOG.lan-hosts" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.metrics" 2>/dev/null && \
      curl -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
@@ -154,6 +155,7 @@ for attempt in $(seq 1 60); do
        grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$LOG.services" >/dev/null 2>&1; then
       python3 "$ROOT/scripts/validate-api-response.py" server "$LOG.server"
       python3 "$ROOT/scripts/validate-api-response.py" disks "$LOG.disks"
+      python3 "$ROOT/scripts/validate-api-response.py" lan-hosts "$LOG.lan-hosts"
       python3 "$ROOT/scripts/validate-api-response.py" metrics "$LOG.metrics"
       grep -F '"capturedAt"' "$LOG.metrics-history" >/dev/null 2>&1 || continue
       python3 "$ROOT/scripts/validate-api-response.py" metrics-history "$LOG.metrics-history"
