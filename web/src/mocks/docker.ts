@@ -1,6 +1,7 @@
 import type {
   CatalogApp,
   DockerContainer,
+  DockerDeployment,
   DockerImage,
   DockerStack,
   DockerVolume,
@@ -752,6 +753,39 @@ export const volumes: DockerVolume[] = [
   { id: 'vol-radarr', name: 'radarr-config', stackId: 'stack-radarr', stackName: 'radarr', usedBytes: 290 * MB, bindPath: '/srv/lumonas/apps/radarr/config' },
   { id: 'vol-nc-html', name: 'nextcloud-html', stackId: 'stack-nextcloud', stackName: 'nextcloud', usedBytes: 2.8 * GB, bindPath: '/srv/lumonas/apps/nextcloud/html' },
   { id: 'vol-nc-db', name: 'nextcloud-db', stackId: 'stack-nextcloud', stackName: 'nextcloud', usedBytes: 620 * MB, bindPath: '/srv/lumonas/apps/nextcloud/db' },
+]
+
+export const dockerDeployments: DockerDeployment[] = [
+  {
+    id: 'deploy-jellyfin-install',
+    stackName: 'jellyfin',
+    kind: 'install',
+    state: 'committed',
+    composeAfter: JELLYFIN_COMPOSE,
+    createdAt: daysAgo(12),
+    updatedAt: daysAgo(12),
+  },
+  {
+    id: 'deploy-immich-update',
+    stackName: 'immich',
+    kind: 'update',
+    state: 'committed',
+    composeBefore: 'services:\n  immich:\n    image: ghcr.io/immich-app/immich-server:v1.108.0\n',
+    composeAfter: 'services:\n  immich:\n    image: ghcr.io/immich-app/immich-server:v1.115.0\n',
+    createdAt: hoursAgo(30),
+    updatedAt: hoursAgo(30),
+  },
+  {
+    id: 'deploy-pihole-update',
+    stackName: 'pihole',
+    kind: 'update',
+    state: 'rolled_back',
+    composeBefore: 'services:\n  pihole:\n    image: pihole/pihole:2024.05.0\n',
+    composeAfter: 'services:\n  pihole:\n    image: pihole/pihole:2024.07.0\n',
+    error: 'stack update failed its health gate: DNS resolution probe never passed',
+    createdAt: daysAgo(3),
+    updatedAt: daysAgo(3),
+  },
 ]
 
 const LOG_SEEDS: Record<string, string[]> = {

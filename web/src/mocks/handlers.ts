@@ -15,6 +15,7 @@ import {
 import {
   catalog,
   containers,
+  dockerDeployments,
   findContainer,
   findStack,
   images,
@@ -354,6 +355,14 @@ export const handlers = [
   http.get(`${BASE}/docker/apps`, () => HttpResponse.json(catalog)),
 
   http.get(`${BASE}/docker/stacks`, () => HttpResponse.json(stacks)),
+
+  http.get(`${BASE}/docker/deployments`, ({ request }) => {
+    const stack = new URL(request.url).searchParams.get('stack')
+    const list = stack
+      ? dockerDeployments.filter((deployment) => deployment.stackName === stack)
+      : dockerDeployments
+    return HttpResponse.json(list)
+  }),
 
   http.get(`${BASE}/docker/stacks/:id`, ({ params }) => {
     const stack = findStack(params.id as string)
