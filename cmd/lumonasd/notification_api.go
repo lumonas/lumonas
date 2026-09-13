@@ -177,12 +177,14 @@ func (s *apiServer) notificationDeliveryAllowed(channelID, eventType string) boo
 	s.notificationMu.Lock()
 	defer s.notificationMu.Unlock()
 	if state, ok := s.notificationFailures[key]; ok {
-		if now.Before(state.SuppressedUntil) {
-			return false
+		if !state.SuppressedUntil.IsZero() {
+			if now.Before(state.SuppressedUntil) {
+				return false
+			}
+			// Start a fresh failure window after suppression expires. Otherwise
+			// the next isolated failure would immediately re-suppress the channel.
+			delete(s.notificationFailures, key)
 		}
-		// Start a fresh failure window after suppression expires. Otherwise the
-		// next isolated failure would immediately re-suppress the channel.
-		delete(s.notificationFailures, key)
 	}
 	return true
 }

@@ -103,6 +103,20 @@ func TestNotificationFailuresAreTemporarilySuppressedAndRecover(t *testing.T) {
 	}
 }
 
+func TestNotificationFailureWindowAccumulatesBeforeSuppression(t *testing.T) {
+	server := testServer(t)
+	for attempt := 1; attempt <= 2; attempt++ {
+		server.recordNotificationDeliveryFailure("channel-window", "disk.smart.warning", true)
+		if !server.notificationDeliveryAllowed("channel-window", "disk.smart.warning") {
+			t.Fatalf("failure window suppressed too early on attempt %d", attempt)
+		}
+	}
+	server.recordNotificationDeliveryFailure("channel-window", "disk.smart.warning", true)
+	if server.notificationDeliveryAllowed("channel-window", "disk.smart.warning") {
+		t.Fatal("third consecutive failure did not activate suppression")
+	}
+}
+
 func TestNotificationSuppressionStartsFreshAfterExpiry(t *testing.T) {
 	server := testServer(t)
 	key := "channel-1\x00disk.smart.warning"
@@ -115,5 +129,36 @@ func TestNotificationSuppressionStartsFreshAfterExpiry(t *testing.T) {
 	server.recordNotificationDeliveryFailure("channel-1", "disk.smart.warning", true)
 	if server.notificationFailures[key].Failures != 1 {
 		t.Fatalf("expected fresh failure window, got %#v", server.notificationFailures[key])
+	}
+}
+
+func TestNotificationCredentialFailureIsPersistedAsDeliveryFailure(t *testing.T) {
+	server := testServer(t)
+	key := "notification-persist-key"
+	t.Setenv("LUMONAS_RECOVERY_KEY", key)
+	if _, err := server.store.SaveNotificationChannel(notify.Channel{ID: "channel-corrupt", Type: "webhook", Label: "Corrupt", Target: "https://provider.test/webhook", Enabled: true}, notify.Credentials{Token: "secret"}, []byte(key)); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.store.SaveAlertRule(monitoring.AlertRule{ID: "rule-corrupt", Name: "Disk storage", Condition: "disk storage warning", Severity: "warning", Routes: []string{"channel-corrupt"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LUMONAS_RECOVERY_KEY", "wrong-key")
+	for range 3 {
+		server.sendConfiguredNotifications("disk.smart.warning", "warning", notify.Message{Title: "Disk warning", Body: "test"})
+	}
+	deliveries, err := server.store.NotificationDeliveries(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deliveries) != 3 {
+		t.Fatalf("expected three persisted credential failures, got %#v", deliveries)
+	}
+	for _, delivery := range deliveries {
+		if delivery.ChannelID != "channel-corrupt" || delivery.State != "failed" || delivery.Error != "notification credentials unavailable" {
+			t.Fatalf("credential failure was not persisted safely: %#v", deliveries)
+		}
+	}
+	if server.notificationDeliveryAllowed("channel-corrupt", "disk.smart.warning") {
+		t.Fatalf("credential failures did not enter notification suppression tracking: %#v", server.notificationFailures)
 	}
 }

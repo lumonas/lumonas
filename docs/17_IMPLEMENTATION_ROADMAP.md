@@ -44,6 +44,10 @@ Deliver:
 - notification provider responses are bounded before retry/error handling.
 - support bundles report partial collection failures without leaking raw
   collector errors or silently omitting required diagnostic sections.
+- notification credential and delivery failures are persisted with sanitized
+  status and participate in suppression tracking.
+- notification suppression windows accumulate consecutive failures before
+  activating cooldown.
 
 Exit criteria:
 

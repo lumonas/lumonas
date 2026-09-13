@@ -2836,11 +2836,13 @@ func (s *apiServer) sendConfiguredNotifications(eventType, severity string, mess
 		}
 		deliveryID := newID("notification-delivery")
 		if !s.notificationDeliveryAllowed(channel.ID, eventType) {
-			_ = s.store.SaveNotificationDelivery(notify.Delivery{ID: deliveryID, ChannelID: channel.ID, EventType: eventType, State: "suppressed", AttemptedAt: time.Now().UTC(), Error: "temporarily suppressed after repeated delivery failures"})
+			s.saveNotificationDelivery(notify.Delivery{ID: deliveryID, ChannelID: channel.ID, EventType: eventType, State: "suppressed", AttemptedAt: time.Now().UTC(), Error: "temporarily suppressed after repeated delivery failures"})
 			continue
 		}
 		_, credentials, credentialErr := s.store.NotificationChannel(channel.ID, key)
 		if credentialErr != nil {
+			s.saveNotificationDelivery(notify.Delivery{ID: deliveryID, ChannelID: channel.ID, EventType: eventType, State: "failed", AttemptedAt: time.Now().UTC(), Error: "notification credentials unavailable"})
+			s.recordNotificationDeliveryFailure(channel.ID, eventType, true)
 			if s.log != nil {
 				s.log.Warn("notification credentials unavailable", "channel", channel.ID, "error", credentialErr)
 			}
@@ -2855,7 +2857,7 @@ func (s *apiServer) sendConfiguredNotifications(eventType, severity string, mess
 			if err != nil {
 				state, failure = "failed", true
 			}
-			_ = s.store.SaveNotificationDelivery(notify.Delivery{ID: deliveryID, ChannelID: channel.ID, EventType: eventType, State: state, AttemptedAt: time.Now().UTC(), Error: notificationDeliveryError(err)})
+			s.saveNotificationDelivery(notify.Delivery{ID: deliveryID, ChannelID: channel.ID, EventType: eventType, State: state, AttemptedAt: time.Now().UTC(), Error: notificationDeliveryError(err)})
 			s.recordNotificationDeliveryFailure(channel.ID, eventType, failure)
 			if err != nil && s.log != nil {
 				s.log.Warn("notification delivery failed", "channel", channel.ID, "event", message.Title, "error", err)
@@ -2867,6 +2869,12 @@ func (s *apiServer) sendConfiguredNotifications(eventType, severity string, mess
 		if err := notify.SendWithRetry(context.Background(), 3, func(ctx context.Context) error { return legacy.Send(ctx, message) }); err != nil && s.log != nil {
 			s.log.Warn("legacy notification delivery failed", "event", message.Title, "error", err)
 		}
+	}
+}
+
+func (s *apiServer) saveNotificationDelivery(delivery notify.Delivery) {
+	if err := s.store.SaveNotificationDelivery(delivery); err != nil && s.log != nil {
+		s.log.Warn("notification delivery record failed", "delivery", delivery.ID, "error", err)
 	}
 }
 

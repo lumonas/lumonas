@@ -667,3 +667,12 @@ Run the support-bundle test with disk discovery unavailable.
 
 Pass if the archive remains downloadable, its disk section is empty rather than
 fabricated, and `server.json` records the redacted `disks: unavailable` status.
+
+## BI. Notification failure reporting
+
+Run notification delivery with unreadable encrypted channel credentials.
+
+Pass if a sanitized `failed` delivery row is persisted and the channel enters
+the existing bounded suppression policy without exposing credential details.
+The first two consecutive failures must remain eligible for delivery, while
+the third activates the cooldown and later success clears it.
