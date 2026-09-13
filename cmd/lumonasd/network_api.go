@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -374,19 +375,20 @@ func (s *apiServer) activateFirewallRules(ctx context.Context, rules string) (fu
 		}
 	}
 	socket := envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")
-	if _, err := os.Stat(socket); err == nil {
-		result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
-			Operation: "firewall.apply", OperationID: newID("firewall"), PlanHash: newID("firewall-plan"),
-			RequestedState: map[string]any{"configPath": path}, Confirmed: true,
-		})
-		if err != nil {
-			rollback()
-			return func() {}, err
-		}
-		if !result.OK {
-			rollback()
-			return func() {}, fmt.Errorf("%s", result.Error)
-		}
+	operationID := newID("firewall")
+	hash := sha256.Sum256([]byte(rules))
+	planHash := fmt.Sprintf("%x", hash[:])
+	result, err := (privileged.Client{Socket: socket}).Execute(ctx, privileged.Request{
+		Operation: "firewall.apply", OperationID: operationID, PlanHash: planHash,
+		RequestedState: map[string]any{"configPath": path}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true,
+	})
+	if err != nil {
+		rollback()
+		return func() {}, err
+	}
+	if !result.OK {
+		rollback()
+		return func() {}, fmt.Errorf("%s", result.Error)
 	}
 	return rollback, nil
 }

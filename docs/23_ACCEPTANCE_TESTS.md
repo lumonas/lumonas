@@ -611,3 +611,12 @@ Pass if the release-blocking fuzz job exercises Compose/YAML transformations,
 backup and recovery manifests, path and storage-plan validation, generated
 share protocol configuration, network connection payloads, and API-adjacent
 credential/path validation without panics.
+
+## BB. Firewall activation safety
+
+Run the release-blocking safety-recovery tests.
+
+Pass if firewall rules are staged and activated only through the typed
+privileged worker, every firewall mutation carries an operation ID and expiry,
+and a missing broker or failed validation leaves the previous generated
+ruleset unchanged.

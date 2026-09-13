@@ -293,12 +293,22 @@ func TestTypedIdentityAndACLOperationsAreAllowListed(t *testing.T) {
 
 func TestFirewallApplyValidatesBeforeActivation(t *testing.T) {
 	commands := make([]string, 0)
-	result := execute(request{Operation: "firewall.apply", PlanHash: "firewall", Confirmed: true, RequestedState: map[string]any{"configPath": "/var/lib/lumonas/generated/nftables.conf"}}, nil, func(name string, args ...string) ([]byte, error) {
+	result := execute(request{Operation: "firewall.apply", OperationID: "firewall-1", PlanHash: "firewall", Confirmed: true, RequestedState: map[string]any{"configPath": "/var/lib/lumonas/generated/nftables.conf"}}, nil, func(name string, args ...string) ([]byte, error) {
 		commands = append(commands, name+" "+strings.Join(args, " "))
 		return nil, nil
 	})
 	if !result.OK || len(commands) != 2 || commands[0] != "nft -c -f /var/lib/lumonas/generated/nftables.conf" || commands[1] != "nft -f /var/lib/lumonas/generated/nftables.conf" {
 		t.Fatalf("unexpected firewall apply: %#v commands=%v", result, commands)
+	}
+}
+
+func TestFirewallApplyRequiresOperationID(t *testing.T) {
+	result := execute(request{Operation: "firewall.apply", PlanHash: "firewall", Confirmed: true, RequestedState: map[string]any{"configPath": "/var/lib/lumonas/generated/nftables.conf"}}, nil, func(string, ...string) ([]byte, error) {
+		t.Fatal("firewall command ran without an operation ID")
+		return nil, nil
+	})
+	if result.OK || !strings.Contains(result.Error, "operationId is required") {
+		t.Fatalf("firewall mutation without an operation ID was accepted: %#v", result)
 	}
 }
 

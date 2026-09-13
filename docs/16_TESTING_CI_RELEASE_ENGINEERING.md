@@ -55,6 +55,11 @@ the Debian package, so an enabled FTPS share cannot point at stale TLS names.
 The dedicated share-integration CI gate runs these production-path tests
 independently and is required by the tagged release job.
 
+Firewall activation is fail-closed: the daemon writes a generated ruleset only
+as a staged file and requires the typed privileged worker to validate and apply
+it. A missing broker or failed `nft` validation restores the previous ruleset
+and fails the request; the release-blocking safety job covers this behavior.
+
 ### QEMU end-to-end
 
 Virtual NAS:
