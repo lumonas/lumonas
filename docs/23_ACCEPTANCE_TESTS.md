@@ -687,3 +687,12 @@ returns an error. A checkpoint must not remain active without a durable
 rollback record.
 The commit and rollback endpoints must likewise report an incomplete result if
 their durable completion state cannot be written after the privileged action.
+
+## BK. Storage execution state persistence
+
+Run the storage confirmation persistence safety test.
+
+Pass if a destructive storage command is never reported as fully successful
+when its executed-plan state cannot be persisted. The API must identify the
+operation as completed with incomplete persistence and must not emit a normal
+success event.

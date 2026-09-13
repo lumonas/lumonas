@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -139,6 +140,41 @@ func TestStorageCreatePlanValidatesRequestedStateAndSafety(t *testing.T) {
 	server.routes().ServeHTTP(confirmed, confirm)
 	if confirmed.Code != http.StatusLocked {
 		t.Fatalf("expected safety lock on confirm, got %d", confirmed.Code)
+	}
+}
+
+func TestStorageConfirmationReportsPlanPersistenceFailure(t *testing.T) {
+	server := testServer(t)
+	planResponse := httptest.NewRecorder()
+	server.routes().ServeHTTP(planResponse, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(`{"action":"filesystem.format","diskId":"wwn:test"}`)))
+	if planResponse.Code != http.StatusCreated {
+		t.Fatalf("plan creation failed: %d %s", planResponse.Code, planResponse.Body.String())
+	}
+	var plan struct {
+		OperationID string `json:"operationId"`
+		PlanHash    string `json:"planHash"`
+	}
+	if err := json.NewDecoder(planResponse.Body).Decode(&plan); err != nil {
+		t.Fatal(err)
+	}
+	server.safetyUntil = time.Now().UTC().Add(time.Minute)
+	server.persistExecutedPlanFn = func(storage.Plan) error {
+		return errors.New("storage operation database unavailable")
+	}
+	var operations []string
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		operations = append(operations, request.Operation)
+		return nil
+	}
+
+	confirm := httptest.NewRecorder()
+	body := `{"planHash":"` + plan.PlanHash + `","reauthenticated":true,"storageSafetyUnlocked":true}`
+	server.routes().ServeHTTP(confirm, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/"+plan.OperationID+"/confirm", strings.NewReader(body)))
+	if confirm.Code != http.StatusInternalServerError || !strings.Contains(confirm.Body.String(), "plan state persistence failed") {
+		t.Fatalf("expected plan persistence failure, got %d: %s", confirm.Code, confirm.Body.String())
+	}
+	if len(operations) != 1 || operations[0] != "filesystem.format" {
+		t.Fatalf("unexpected privileged operation sequence: %#v", operations)
 	}
 }
 

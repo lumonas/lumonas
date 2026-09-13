@@ -63,6 +63,7 @@ type apiServer struct {
 	brokerExec                  func(ctx context.Context, request privileged.Request) error
 	recordNetworkCheckpointFn   func(operationID, connectionID, state string) error
 	completeNetworkCheckpointFn func(operationID, state string) (string, error)
+	persistExecutedPlanFn       func(storage.Plan) error
 	corsOrigins                 []string
 	csrfTokens                  map[string]csrfBinding
 	csrfMu                      sync.Mutex
@@ -1103,8 +1104,7 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 	}
 	expectedIdentity := map[string]string{"id": plan.Target.DiskID, "wwn": plan.Target.WWN, "serial": plan.Target.Serial, "model": plan.Target.Model, "gptDiskGuid": plan.Target.GPTDiskGUID, "partitionUuid": plan.Target.PartitionUUID, "filesystemUuid": plan.Target.FilesystemUUID, "sizeBytes": strconv.FormatUint(plan.Target.SizeBytes, 10)}
 	request := privileged.Request{Operation: string(plan.Action), OperationID: plan.OperationID, CorrelationID: requestCorrelationID(r), PlanHash: plan.PlanHash, TargetDiskID: plan.Target.DiskID, ExpectedIdentity: expectedIdentity, ExpectedState: map[string]string{"currentPath": plan.ExpectedState.CurrentPath, "mounted": strconv.FormatBool(plan.ExpectedState.Mounted), "role": plan.ExpectedState.Role, "poolId": plan.ExpectedState.PoolID}, RequestedState: plan.RequestedState, ExpiresAt: plan.ExpiresAt, Confirmed: true}
-	broker := privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}
-	result, err := broker.Execute(r.Context(), request)
+	result, err := s.executePrivileged(r.Context(), request)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -1114,7 +1114,14 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	plan.Status = "executed"
-	_ = s.store.SavePlan(plan)
+	persistPlan := s.persistExecutedPlanFn
+	if persistPlan == nil {
+		persistPlan = s.store.SavePlan
+	}
+	if err := persistPlan(plan); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "storage operation completed but plan state persistence failed: " + err.Error()})
+		return
+	}
 	s.advanceGeneration("storage." + string(plan.Action))
 	s.publish("storage.operation.completed", "warning", &model.ResourceRef{Type: "disk", ID: plan.Target.DiskID}, map[string]any{"operationId": plan.OperationID, "action": plan.Action, "planHash": plan.PlanHash})
 	s.persistMountState("storage." + string(plan.Action))

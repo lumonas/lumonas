@@ -191,6 +191,10 @@ created unless both the privileged state and its durable rollback record exist.
 The corresponding commit/rollback test also fails the completion write and
 requires the API to report that the privileged action completed with
 persistence incomplete.
+The storage confirmation safety test applies the same rule after a destructive
+operation: if the executed plan cannot be persisted, the API reports the
+operation as completed but state persistence incomplete and emits no success
+event.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the
