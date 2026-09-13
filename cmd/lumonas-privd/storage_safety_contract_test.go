@@ -46,6 +46,17 @@ func TestDestructiveStorageExecutionFailsClosedForMissingOrMountedDisk(t *testin
 	}
 }
 
+func TestDestructiveStorageExecutionRejectsKernelPathIdentity(t *testing.T) {
+	disk := model.Disk{ID: "path:/dev/sda", CurrentPath: "/dev/sda", SizeBytes: 100}
+	result := execute(storageSafetyRequest(disk.ID), func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, func(string, ...string) ([]byte, error) {
+		t.Fatal("unstable disk identity reached command execution")
+		return nil, nil
+	})
+	if result.OK || !strings.Contains(result.Error, "no stable identity") {
+		t.Fatalf("kernel-path destructive target was not rejected: %#v", result)
+	}
+}
+
 func TestDestructiveStorageExecutionFailsClosedWhenFindmntReportsMount(t *testing.T) {
 	disk := model.Disk{ID: "serial:SERIAL-1", Serial: "SERIAL-1", SizeBytes: 100, CurrentPath: "/dev/sda"}
 	var commands []string

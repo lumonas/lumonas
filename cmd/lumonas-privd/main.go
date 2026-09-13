@@ -321,6 +321,9 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		if target == nil {
 			return response{Error: "stable disk identity is no longer present"}
 		}
+		if !model.HasStableDiskIdentity(target.ID) {
+			return response{Error: "target disk has no stable identity"}
+		}
 		if err := validateIdentity(*target, req.ExpectedIdentity); err != nil {
 			return response{Error: err.Error()}
 		}
@@ -855,6 +858,9 @@ func executePoolMount(req request, discover func(collector.CommandRunner) ([]mod
 		byID[disk.ID] = disk
 	}
 	for index, expected := range req.ExpectedDisks {
+		if !model.HasStableDiskIdentity(expected.ID) {
+			return response{Error: "pool disk has no stable identity"}
+		}
 		disk, ok := byID[expected.ID]
 		if !ok {
 			return response{Error: "pool disk is no longer present"}
@@ -904,6 +910,9 @@ func executePoolUnmount(req request, run command) response {
 }
 
 func validateExpectedDisk(actual model.Disk, expected expectedDisk) error {
+	if !model.HasStableDiskIdentity(expected.ID) || !model.HasStableDiskIdentity(actual.ID) {
+		return fmt.Errorf("disk %q has no stable identity", expected.ID)
+	}
 	if expected.WWN != "" && actual.WWN != expected.WWN {
 		return fmt.Errorf("pool disk %q WWN mismatch", expected.ID)
 	}

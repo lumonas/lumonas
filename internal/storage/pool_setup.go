@@ -81,6 +81,9 @@ func NewPoolSetupPlan(id, name string, disks []model.Disk, dataIDs []string, par
 	mountIDs := make([]string, 0, len(dataIDs)+1)
 	expected := make([]PoolSetupIdentity, 0, len(dataIDs)+1)
 	for _, id := range dataIDs {
+		if !model.HasStableDiskIdentity(id) {
+			return PoolSetupPlan{}, fmt.Errorf("data disk %q has no stable identity", id)
+		}
 		disk, ok := byID[id]
 		if !ok {
 			return PoolSetupPlan{}, fmt.Errorf("data disk %q is not currently discovered", id)
@@ -110,6 +113,9 @@ func NewPoolSetupPlan(id, name string, disks []model.Disk, dataIDs []string, par
 		}
 	}
 	if parityID != "" {
+		if !model.HasStableDiskIdentity(parityID) {
+			return PoolSetupPlan{}, fmt.Errorf("parity disk %q has no stable identity", parityID)
+		}
 		parity, ok := byID[parityID]
 		if !ok {
 			return PoolSetupPlan{}, fmt.Errorf("parity disk %q is not currently discovered", parityID)
@@ -194,6 +200,9 @@ func ValidatePoolSetupPlan(plan PoolSetupPlan, actual []model.Disk, now time.Tim
 		formatted[id] = true
 	}
 	for _, expected := range plan.ExpectedDisks {
+		if !model.HasStableDiskIdentity(expected.DiskID) {
+			return fmt.Errorf("disk %q has no stable identity", expected.DiskID)
+		}
 		disk, ok := byID[expected.DiskID]
 		if !ok {
 			return fmt.Errorf("disk %q is no longer present", expected.DiskID)

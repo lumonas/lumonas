@@ -57,7 +57,7 @@ func NewPlan(id string, action Action, disk model.Disk, generation int64, now ti
 	if id == "" {
 		return Plan{}, errors.New("operation id is required")
 	}
-	if disk.ID == "" {
+	if !model.HasStableDiskIdentity(disk.ID) {
 		return Plan{}, errors.New("disk has no stable identity")
 	}
 	if !supported(action) {
@@ -92,6 +92,9 @@ func Validate(plan Plan, actual model.Disk, now time.Time, currentGeneration int
 	}
 	if plan.ConfigGeneration != currentGeneration {
 		return errors.New("configuration generation changed after planning")
+	}
+	if !model.HasStableDiskIdentity(plan.Target.DiskID) {
+		return errors.New("operation plan targets an unstable disk identity")
 	}
 	if actual.ID != plan.Target.DiskID {
 		return errors.New("stable disk identity mismatch")

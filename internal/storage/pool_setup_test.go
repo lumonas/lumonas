@@ -51,6 +51,13 @@ func TestPoolSetupPlanIncludesMountsAndImmutableIdentities(t *testing.T) {
 	}
 }
 
+func TestPoolSetupPlanRejectsKernelPathIdentity(t *testing.T) {
+	disk := poolSetupTestDisk("path:/dev/sda", "", false)
+	if _, err := NewPoolSetupPlan("setup-path", "media", []model.Disk{disk}, []string{disk.ID}, "", "ext4", true, 7, time.Now().UTC()); err == nil {
+		t.Fatal("pool setup plan accepted a kernel-path identity")
+	}
+}
+
 func TestPoolSetupPlanFailsClosedOnReplacementGenerationAndExpiry(t *testing.T) {
 	now := time.Now().UTC()
 	disk := poolSetupTestDisk("data", "", false)

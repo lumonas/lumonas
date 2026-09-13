@@ -90,6 +90,9 @@ func revalidateMountDisks(req request, entries []storage.MountEntry, discover fu
 	}
 	expected := make(map[string]expectedDisk, len(req.ExpectedDisks))
 	for _, disk := range req.ExpectedDisks {
+		if !model.HasStableDiskIdentity(disk.ID) {
+			return fmt.Errorf("mount disk %q has no stable identity", disk.ID)
+		}
 		if _, duplicate := expected[disk.ID]; duplicate {
 			return fmt.Errorf("expected mount disk identities contain a duplicate")
 		}

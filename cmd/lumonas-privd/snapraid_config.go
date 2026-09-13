@@ -121,6 +121,9 @@ func revalidateSnapraidDisks(req request, parity string, data []string, discover
 	expected := append([]expectedDisk(nil), req.ExpectedDisks...)
 	sort.Slice(expected, func(i, j int) bool { return expected[i].ID < expected[j].ID })
 	for _, disk := range expected {
+		if !model.HasStableDiskIdentity(disk.ID) {
+			return fmt.Errorf("SnapRAID disk %q has no stable identity", disk.ID)
+		}
 		if !requested[disk.ID] {
 			return fmt.Errorf("expected SnapRAID disk %q is not part of the requested layout", disk.ID)
 		}

@@ -40,6 +40,14 @@ func TestPlanHashAndIdentityValidation(t *testing.T) {
 	}
 }
 
+func TestMutationPlanRejectsKernelPathIdentity(t *testing.T) {
+	disk := testDisk()
+	disk.ID = "path:/dev/sdb"
+	if _, err := NewPlan("op-path", ActionErase, disk, 7, time.Now().UTC()); err == nil {
+		t.Fatal("destructive plan accepted a kernel-path identity")
+	}
+}
+
 func TestPlanRejectsExpiryMountAndGenerationRaces(t *testing.T) {
 	now := time.Now().UTC()
 	plan, err := NewPlan("op-2", ActionErase, testDisk(), 7, now)

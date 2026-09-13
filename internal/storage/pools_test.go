@@ -30,6 +30,13 @@ func TestPoolPlanUsesStableIdentitiesAndCanonicalBranches(t *testing.T) {
 	}
 }
 
+func TestPoolPlanRejectsKernelPathIdentity(t *testing.T) {
+	disk := poolDisk("path:/dev/sda", "/dev/sda", 100)
+	if _, err := NewPoolPlan("pool-1", "media", "/srv/pools/media", []model.Disk{disk}, 7, time.Now().UTC()); err == nil {
+		t.Fatal("pool plan accepted a kernel-path identity")
+	}
+}
+
 func TestPoolPlanFailsClosedOnReorderedOrReplacedDisk(t *testing.T) {
 	disks := []model.Disk{poolDisk("wwn:a", "/dev/sda", 100), poolDisk("wwn:b", "/dev/sdb", 200)}
 	plan, err := NewPoolPlan("pool-1", "media", "/srv/pools/media", disks, 7, time.Now().UTC())

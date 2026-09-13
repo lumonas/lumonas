@@ -111,7 +111,7 @@ func NewPoolPlan(id, name, mountPath string, disks []model.Disk, generation int6
 	seen := make(map[string]bool, len(disks))
 	branches := make(map[string]bool, len(disks))
 	for _, disk := range disks {
-		if disk.ID == "" || disk.CurrentPath == "" {
+		if !model.HasStableDiskIdentity(disk.ID) || disk.CurrentPath == "" {
 			return PoolPlan{}, errors.New("every pool disk requires a stable identity and current path")
 		}
 		if seen[disk.ID] {
@@ -174,6 +174,9 @@ func ValidatePoolPlan(plan PoolPlan, actual []model.Disk, now time.Time, generat
 	seen := make(map[string]bool, len(plan.Members))
 	branches := make(map[string]bool, len(plan.Members))
 	for _, member := range plan.Members {
+		if !model.HasStableDiskIdentity(member.DiskID) {
+			return fmt.Errorf("pool plan targets an unstable disk identity %q", member.DiskID)
+		}
 		if seen[member.DiskID] {
 			return fmt.Errorf("pool plan contains duplicate disk %q", member.DiskID)
 		}
