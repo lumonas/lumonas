@@ -26,6 +26,7 @@ import (
 	"github.com/lumonas/lumonas/internal/collector"
 	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 	"github.com/lumonas/lumonas/internal/events"
+	"github.com/lumonas/lumonas/internal/httpobs"
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/monitoring"
 	"github.com/lumonas/lumonas/internal/network"
@@ -3009,6 +3010,21 @@ func auditableEvent(kind string) bool {
 
 func (s *apiServer) requestMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observed := httpobs.Wrap(w)
+		started := time.Now()
+		defer func() {
+			if s.log != nil {
+				s.log.Info("http request",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"status", observed.Status(),
+					"bytes", observed.Bytes(),
+					"duration_ms", time.Since(started).Seconds()*1000,
+					"correlation_id", trace.CorrelationID(r.Context()),
+				)
+			}
+		}()
+		w = observed
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")

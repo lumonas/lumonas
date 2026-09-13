@@ -412,6 +412,11 @@ Pass if the JSON event preserves `correlationId`, `operationId`, `planHash`,
 `actor`, `generation`, resource identity, schema version, and payload data,
 and the frontend event type exposes the same optional metadata.
 
+The daemon must also emit one structured HTTP request log per request with the
+method, URL path, response status, response bytes, duration, and correlation
+ID, without logging query strings or request bodies. The observer must preserve
+SSE flushing.
+
 ## AG. Destructive storage fail-closed gate
 
 Run the privileged storage safety tests and the Linux loopback smoke test.

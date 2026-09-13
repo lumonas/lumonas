@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -61,6 +62,29 @@ func TestRequestMiddlewarePropagatesCorrelationID(t *testing.T) {
 	}
 	if response.Header().Get("X-Request-ID") != got {
 		t.Fatalf("response correlation header %q does not match context %q", response.Header().Get("X-Request-ID"), got)
+	}
+}
+
+func TestRequestMiddlewareLogsStructuredSafeFields(t *testing.T) {
+	var logs bytes.Buffer
+	server := &apiServer{log: slog.New(slog.NewJSONHandler(&logs, nil))}
+	handler := server.requestMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/server?token=do-not-log", nil))
+	if response.Code != http.StatusCreated {
+		t.Fatalf("unexpected response status: %d", response.Code)
+	}
+	line := logs.String()
+	for _, field := range []string{`"msg":"http request"`, `"method":"GET"`, `"path":"/api/v1/server"`, `"status":201`, `"bytes":2`, `"correlation_id":"corr-`} {
+		if !strings.Contains(line, field) {
+			t.Fatalf("structured request log missing %q: %s", field, line)
+		}
+	}
+	if strings.Contains(line, "token=do-not-log") {
+		t.Fatalf("request query string leaked into structured log: %s", line)
 	}
 }
 

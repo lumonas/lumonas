@@ -196,6 +196,8 @@ done
 require_line "$ROOT/Makefile" 'storage-loopback:'
 require_line "$ROOT/internal/storage/plans.go" 'invalid state must never appear as a confirmable plan'
 require_line "$ROOT/internal/storage/plans.go" 'disk.erase does not accept requested state'
+require_line "$ROOT/internal/httpobs/response.go" 'Flush keeps Server-Sent Events'
+require_line "$ROOT/cmd/lumonasd/main.go" '"http request"'
 require_line "$ROOT/Makefile" 'disk-full-smoke:'
 require_line "$ROOT/Makefile" 'disk-identity-smoke:'
 require_line "$ROOT/Makefile" 'fuzz-smoke:'

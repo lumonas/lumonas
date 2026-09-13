@@ -156,6 +156,9 @@ Host integration commands are executed through bounded contexts, including
 privileged storage/network operations, disk and SMART discovery, Docker,
 Samba validation, WireGuard, Tailscale, and NUT.
 
+The API emits structured request logs with status, response size, duration, and
+correlation IDs while keeping query strings and request bodies out of logs.
+
 Offline recovery includes the plan-first `lumonas-recover` utility. Restoration requires explicit `--apply` plus an absolute target root and writes verified configuration, Compose state, the SQLite database, and encrypted secrets atomically.
 
 Management sessions can be reviewed and revoked by token digest, while Time Machine shares render Samba fruit support only when explicitly enabled.

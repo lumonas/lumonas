@@ -23,6 +23,8 @@ Deliver:
 - bounded stdin-aware runners for WireGuard and SFTP integrations.
 - operation IDs are required at the privileged boundary for storage/protection mutations.
 - structured redacted journald request/result logging for the privileged broker.
+- structured HTTP request logging with status, byte count, duration, and
+  correlation ID while preserving SSE streaming.
 - QEMU smoke validation of the compiled frontend served by `lumonas-web`.
 - Wake-on-LAN capability discovery and typed `ethtool` mutation through the
   network privileged worker.
