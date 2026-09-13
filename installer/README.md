@@ -51,6 +51,8 @@ BIOS boot partition, an EFI system partition, and a UUID-backed root
 partition. Its UEFI A/B smoke assigns the inactive disk a distinct GPT
 identity before creating the EFI entry, so firmware `BootNext` cannot resolve
 both slots to the same device.
+The smoke treats the SSH disconnect caused by the deliberate reboot as
+expected and requires the guest to return from the selected slot.
 
 ## Browser-based installation
 

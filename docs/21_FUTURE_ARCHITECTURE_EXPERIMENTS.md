@@ -52,8 +52,8 @@ The x86 QEMU image is GPT-partitioned with both a BIOS boot partition and an
 EFI system partition. `scripts/qemu-uefi-ab-smoke.sh`
 (`LUMONAS_UEFI_AB_ASSERT=true`) boots it through OVMF, registers both slot
 entries against distinct GPT identities, rewrites the inactive whole disk
-through the broker, arms `BootNext`, and
-verifies after a real reboot that the root filesystem came from slot B.
+through the broker, arms `BootNext`, tolerates the expected SSH disconnect,
+and verifies after a real reboot that the root filesystem came from slot B.
 
 ### Remaining for full immutable A/B
 

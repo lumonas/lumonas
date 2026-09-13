@@ -131,7 +131,7 @@ SLOT_B_DEVICE=/dev/disk/by-id/virtio-LUMONAS-SLOTB
 [ -b "$SLOT_B_DEVICE" ]
 export SLOT_B_DEVICE
 python3 - <<PY
-import hashlib, json, socket
+import hashlib, json, os, socket
 path = "/var/lib/lumonas/updates/slot-b/image"
 digest = hashlib.sha256(open(path, "rb").read()).hexdigest()
 request = {
@@ -162,7 +162,7 @@ response = json.loads(client.recv(65536))
 assert response.get("ok") is True, response
 PY
 efibootmgr | grep -F "BootNext: $(cat /run/lumonas-uefi-ab-entry)" >/dev/null
-systemctl reboot'
+systemctl reboot' || true
 
 # The firmware reboot is expected to drop SSH. Wait for the same guest to
 # return and prove that the root filesystem came from the inactive disk.

@@ -267,6 +267,8 @@ require_line "$ROOT/scripts/qemu-smoke.sh" 'Last-Event-ID: $RESTART_EVENT_ID'
 require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" 'LUMONAS_UEFI_AB_ASSERT'
 require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" 'if=pflash'
 require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" 'sgdisk -G "$SLOT_B_DEVICE"'
+require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" 'import hashlib, json, os, socket'
+require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" "systemctl reboot' || true"
 require_line "$ROOT/scripts/qemu-uefi-ab-smoke.sh" '/dev/vdb3'
 require_line "$ROOT/cmd/lumonas-privd/system_slots.go" 'could not verify slot target is a whole disk'
 require_line "$ROOT/.github/workflows/ci.yml" 'qemu-uefi-ab-smoke.sh'

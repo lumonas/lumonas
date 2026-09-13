@@ -107,7 +107,7 @@ make qemu-uefi-ab-smoke LUMONAS_UEFI_AB_ASSERT=true LUMONAS_QEMU_IMAGE=build/qem
 The second check assigns the inactive disk a distinct GPT identity, rewrites
 it through `lumonas-privd`,
 arms EFI `BootNext`, reboots the guest, and verifies the root filesystem came
-from that slot.
+from that slot after the expected SSH disconnect.
 
 After the Debian package and QEMU smoke test are reliable, the offline installer can be built on Debian/Ubuntu with `live-build`:
 
