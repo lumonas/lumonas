@@ -331,5 +331,8 @@ for path, markers in (
 workflow_text = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 if "make arm64-image-smoke netboot-smoke" not in workflow_text:
     raise SystemExit("CI does not run architecture and netboot packaging smokes")
+for marker in ("package-arm64:", "LUMONAS_CC=aarch64-linux-gnu-gcc", "name: lumonas-deb-arm64", "deb-verify-arm64:"):
+    if marker not in workflow_text:
+        raise SystemExit(f"CI does not build and verify the arm64 package: {marker}")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY
