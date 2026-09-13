@@ -41,7 +41,7 @@ func TestStreamReplaysEventsAfterLastEventID(t *testing.T) {
 	server := testServer(t)
 	for _, event := range []model.Event{
 		{ID: "evt-before", Type: "old", Timestamp: time.Now().UTC(), Severity: "info", Data: map[string]any{}},
-		{ID: "evt-after", Type: "new", Timestamp: time.Now().UTC().Add(time.Second), Severity: "info", Data: map[string]any{"value": "replayed"}},
+		{ID: "evt-after", Type: "new", Timestamp: time.Now().UTC().Add(time.Second), Severity: "info", CorrelationID: "corr-replay", OperationID: "op-replay", PlanHash: "plan-replay", Data: map[string]any{"value": "replayed"}},
 	} {
 		if err := server.store.SaveEvent(event); err != nil {
 			t.Fatal(err)
@@ -76,5 +76,8 @@ func TestStreamReplaysEventsAfterLastEventID(t *testing.T) {
 	}
 	if strings.Contains(body, "id: evt-before") {
 		t.Fatalf("SSE response replayed the cursor event itself: %s", body)
+	}
+	if !strings.Contains(body, `"correlationId":"corr-replay"`) || !strings.Contains(body, `"operationId":"op-replay"`) || !strings.Contains(body, `"planHash":"plan-replay"`) {
+		t.Fatalf("SSE response lost operation tracing fields: %s", body)
 	}
 }

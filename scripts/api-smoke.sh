@@ -283,6 +283,12 @@ else
 	curl -sS --max-time 5 -N -b "$COOKIE_JAR" -H "Last-Event-ID: $LAST_EVENT_ID" "$BASE_URL/api/v1/events/stream" >"$REPLAY_PATH" 2>/dev/null || true
 	grep -F 'retry: 3000' "$REPLAY_PATH" >/dev/null
 	grep -F '"type":"job.state_changed"' "$REPLAY_PATH" >/dev/null
+	if grep -F "id: $LAST_EVENT_ID" "$REPLAY_PATH" >/dev/null 2>&1; then
+		echo "SSE replay returned the Last-Event-ID cursor event twice" >&2
+		exit 1
+	fi
+	python3 "$ROOT_DIR/scripts/validate-sse.py" "$REPLAY_PATH" job.state_changed
+	grep -F '"correlationId"' "$REPLAY_PATH" >/dev/null
 fi
 
 # SnapRAID jobs are accepted and delegated to the privileged broker.

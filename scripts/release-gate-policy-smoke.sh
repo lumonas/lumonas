@@ -43,5 +43,8 @@ for marker in (
 qemu_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-smoke.sh"
 if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "validate-sse.py" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU smoke does not validate live API and SSE response contracts")
+api_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "api-smoke.sh"
+if "Last-Event-ID" not in api_smoke.read_text(encoding="utf-8") or "cursor event twice" not in api_smoke.read_text(encoding="utf-8"):
+    raise SystemExit("API smoke does not enforce non-duplicating SSE replay")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY

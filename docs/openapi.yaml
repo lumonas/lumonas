@@ -1145,7 +1145,7 @@ paths:
       operationId: eventStream
       responses:
         '200':
-          description: Event stream. Each SSE data frame is a JSON Event with schemaVersion 1.
+          description: Event stream. Each SSE data frame is a JSON Event with schemaVersion 1; Last-Event-ID resumes strictly after the cursor.
           content:
             text/event-stream:
               schema:
