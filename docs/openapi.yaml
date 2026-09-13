@@ -3257,6 +3257,52 @@ paths:
         '4XX':
           description: Client error
 
+  /updates/slot/stage:
+    post:
+      tags: [Settings]
+      summary: Stage a signed OS slot image for the inactive slot
+      operationId: stageUpdateSlotImage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [imagePath, manifest, signature]
+              properties:
+                imagePath: {type: string}
+                manifest: {type: object}
+                signature: {type: string}
+      responses:
+        '202':
+          description: Slot image staged
+        '4XX':
+          description: Client error
+
+  /updates/slot/activate:
+    post:
+      tags: [Settings]
+      summary: Write the staged image to the inactive slot and arm BootNext
+      operationId: activateUpdateSlotImage
+      responses:
+        '202':
+          description: Slot written and BootNext armed
+        '409':
+          description: No slot image staged
+        '503':
+          description: Privileged broker unavailable
+
+  /updates/slot/confirm:
+    post:
+      tags: [Settings]
+      summary: Commit the pending slot after a healthy boot
+      operationId: confirmUpdateSlotImage
+      responses:
+        '200':
+          description: Slot committed
+        '409':
+          description: Nothing to commit
+
   /updates/apply:
     post:
       tags: [Settings]

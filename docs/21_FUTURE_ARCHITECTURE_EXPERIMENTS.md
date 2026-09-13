@@ -28,6 +28,35 @@ Challenges:
 - disk space;
 - Debian update model.
 
+### Current state: image-based slot pipeline (implemented)
+
+The core of this design is implemented behind the privileged broker:
+
+- `POST /updates/slot/stage` verifies a signed root-filesystem image
+  (ed25519 manifest, identical trust model to package updates) and stages it
+  under the inactive slot directory of `LUMONAS_UPDATE_ROOT`;
+- `POST /updates/slot/activate` re-verifies the staged image (drift between
+  staging and activation fails closed), writes it to the inactive slot device
+  via the `system.slot.write` broker operation (digest-checked `dd`, target
+  must be an unmounted block device), and arms the bootloader through
+  `system.slot.bootnext` (`efibootmgr --bootnext`);
+- boot health and rollback reuse the existing `updates.Manager`
+  boot-attempt machinery; `POST /updates/slot/confirm` commits the pending
+  slot after the running version proves healthy;
+- slot devices and EFI entries are configured per appliance with
+  `LUMONAS_SLOT_DEVICES=a=<device>:<entry>,b=<device>:<entry>`.
+
+`scripts/qemu-ab-smoke.sh` (`LUMONAS_AB_ASSERT=true`) exercises stage,
+privileged write, tamper rejection, and BIOS fail-closed BootNext in QEMU.
+
+### Remaining for full immutable A/B
+
+- UEFI QEMU boot-flip verification (BootNext into the written slot, health
+  gate, automatic bootloader fallback to the previous slot);
+- secure boot / UKI integration;
+- atomic deduplicated images;
+- background automatic updates.
+
 ## Immutable/semi-immutable root
 
 Consider a read-only or image-based base OS with mutable state in dedicated partitions.
