@@ -135,6 +135,11 @@ live_recovery_text = live_recovery_source.read_text(encoding="utf-8")
 for marker in ("SOURCE_API=\"https://127.0.0.1:18083\"", "curl -kfsS \"$SOURCE_API/healthz\"", "SOURCE_COOKIES=", "SOURCE_CSRF=", "X-CSRF-Token: $SOURCE_CSRF", "api/v1/recovery/export"):
     if marker not in live_recovery_text:
         raise SystemExit(f"live recovery source is missing its HTTPS/auth contract: {marker}")
+for marker in ("live recovery source shutdown request failed", "live recovery source appliance did not power off cleanly", "wait \"$SOURCE_PID\""):
+    if marker not in live_recovery_text:
+        raise SystemExit(f"live recovery source is missing clean-shutdown enforcement: {marker}")
+if 'api/v1/power/shutdown" >/dev/null 2>&1 || true' in live_recovery_text:
+    raise SystemExit("live recovery source ignores a failed shutdown request")
 for path in (qemu_smoke, qemu_recovery_smoke, iso_smoke, live_recovery_source):
     text = path.read_text(encoding="utf-8")
     if text.count("hostfwd=") != text.count("restrict=on,hostfwd="):

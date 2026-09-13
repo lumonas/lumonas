@@ -178,7 +178,11 @@ curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Cont
 {"name":"media","composeYaml":"services:\n  media:\n    image: example/media:latest\n    volumes:\n      - /srv/lumonas/docker/appdata/media:/config\n"}
 JSON
 curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST "$SOURCE_API/api/v1/recovery/export" >"$WORK/source-export.json"
-curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' -d '{"action":"poweroff","confirmed":true,"reauthenticated":true}' "$SOURCE_API/api/v1/power/shutdown" >/dev/null 2>&1 || true
+if ! curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' -d '{"action":"poweroff","confirmed":true,"reauthenticated":true}' "$SOURCE_API/api/v1/power/shutdown" >/dev/null 2>&1; then
+	echo "live recovery source shutdown request failed" >&2
+	cat "$SOURCE_LOG" >&2 || true
+	exit 1
+fi
 for attempt in $(seq 1 60); do
 	if ! kill -0 "$SOURCE_PID" 2>/dev/null; then
 		break
@@ -186,9 +190,11 @@ for attempt in $(seq 1 60); do
 	sleep 2
 done
 if kill -0 "$SOURCE_PID" 2>/dev/null; then
-	kill "$SOURCE_PID" 2>/dev/null || true
-	wait "$SOURCE_PID" 2>/dev/null || true
+	echo "live recovery source appliance did not power off cleanly" >&2
+	cat "$SOURCE_LOG" >&2 || true
+	exit 1
 fi
+wait "$SOURCE_PID"
 SOURCE_PID=""
 
 mount -o loop,ro "$SOURCE_RAW" "$SOURCE_MOUNT"

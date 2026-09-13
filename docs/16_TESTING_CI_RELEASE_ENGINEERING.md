@@ -406,6 +406,9 @@ disks, creates a real mergerfs pool, persists a LAN profile, creates a
 management user, share, Compose stack, and appdata, exports and persists the
 bundle, then boots the ISO against a blank replacement disk. The fixture
 remains a local fallback, while tagged CI asserts the live-source path.
+The source shutdown request is release-blocking: a failed API request or a
+guest that does not exit cleanly fails the harness instead of being
+force-killed and treated as a valid recovery source.
 
 ## Upgrade matrix
 
