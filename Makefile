@@ -5,7 +5,7 @@ GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumo
 LUMONAS_ISO ?= $(CURDIR)/build/releases/lumonas-$(VERSION)-amd64.iso
 LUMONAS_QEMU_IMAGE ?= $(CURDIR)/build/qemu/lumonas-debian13.raw
 
-.PHONY: all dev dev-full test test-go test-web frontend-e2e frontend-live-e2e check-openapi check-openapi-duplicates check-api-contract validate-api-response validate-sse build build-go build-web package package-dependency-parity docker-engine-api iso recovery-fixture recovery-api-smoke recovery-bundle-smoke recovery-persistence-smoke api-smoke update-fixture disk-identity-smoke storage-loopback privileged-storage-loopback disk-full-smoke share-config-smoke share-protocol-smoke iso-smoke qemu-recovery-smoke qemu-recovery-live security-smoke secret-scan-smoke command-boundary-smoke request-limits-smoke retention-smoke generation-retention-smoke fuzz-smoke dependency-smoke container-scan race-fuzz interop-smoke upgrade-compatibility release-gate-policy systemd-smoke systemd-security-smoke permission-smoke postinst-policy-smoke log-retention-smoke log-identity-smoke upgrade-smoke release-artifacts-smoke installer-signature-smoke installer-workdir-policy-smoke qemu-image qemu-smoke verify-release
+.PHONY: all dev dev-full test test-go test-web frontend-e2e frontend-live-e2e check-openapi check-openapi-duplicates check-api-contract validate-api-response validate-sse build build-go build-web package package-dependency-parity docker-engine-api iso recovery-fixture recovery-api-smoke recovery-bundle-smoke recovery-persistence-smoke api-smoke update-fixture disk-identity-smoke storage-loopback privileged-storage-loopback disk-full-smoke share-config-smoke share-protocol-smoke iso-smoke qemu-installer-smoke qemu-recovery-smoke qemu-recovery-live security-smoke secret-scan-smoke command-boundary-smoke request-limits-smoke retention-smoke generation-retention-smoke fuzz-smoke dependency-smoke container-scan race-fuzz interop-smoke upgrade-compatibility release-gate-policy systemd-smoke systemd-security-smoke permission-smoke postinst-policy-smoke log-retention-smoke log-identity-smoke upgrade-smoke release-artifacts-smoke installer-signature-smoke installer-workdir-policy-smoke qemu-image qemu-smoke verify-release
 
 all: build
 
@@ -109,6 +109,9 @@ share-protocol-smoke:
 
 iso-smoke: iso
 	LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_ISO_ASSERT=true bash scripts/iso-smoke.sh
+
+qemu-installer-smoke: iso
+	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_INSTALLER_ASSERT=true bash scripts/qemu-installer-smoke.sh
 
 qemu-recovery-smoke: iso recovery-fixture
 	sudo LUMONAS_ISO="$(LUMONAS_ISO)" LUMONAS_RECOVERY_FIXTURE="$(CURDIR)/build/lumonas-recovery-fixture" LUMONAS_RECOVERY_ASSERT=true bash scripts/qemu-recovery-smoke.sh

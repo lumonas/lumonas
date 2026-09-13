@@ -32,7 +32,7 @@ var installAdminPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // re-checked here — while the script owns the exact partition, filesystem,
 // bootstrap, and bootloader commands. The administrator credential never
 // appears in argv: the password is delivered via stdin and stored only in the
-// root-owned first-boot environment file of the installed system.
+// first-boot environment file of the installed system.
 func applyDiskInstall(req request, disk model.Disk, run command, stdinRun stdinRunner) response {
 	if !req.Confirmed {
 		return response{Error: "operation plan is not confirmed"}

@@ -68,6 +68,12 @@ configured user, network connection, share, Compose stack, encrypted secret,
 explicit network/firewall/mount metadata, and a restored SQLite database
 before booting the ISO.
 
+Run `make qemu-installer-smoke` to boot the live ISO, generate and apply a
+real installation plan against a disposable 12 GiB disk, then boot that disk
+without the ISO. The smoke logs in as the bootstrapped administrator and
+verifies that installer endpoints are no longer exposed on the installed
+appliance.
+
 When a Debian appliance image is available, `make qemu-recovery-live
 LUMONAS_ISO=... LUMONAS_QEMU_IMAGE=...` runs the stronger live-source recovery
 path: it formats disposable data/parity disks, mounts them, creates a real
