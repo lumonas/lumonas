@@ -472,6 +472,12 @@ Expected result: fail closed.
 Onboarding also fails closed: an initial SnapRAID sync is not queued until
 the privileged configuration and stable-disk validation both succeed.
 
+The release-blocking QEMU job also runs `scripts/qemu-ab-smoke.sh` while the
+ephemeral SSH key is still installed. It attaches a spare virtual slot disk,
+exercises the typed `system.slot.write` and `system.slot.bootnext` worker
+operations, verifies digest tampering and BIOS BootNext rejection, and checks
+that confirming without a pending slot returns a conflict.
+
 ## Recovery test
 
 Release-blocking scenario:
