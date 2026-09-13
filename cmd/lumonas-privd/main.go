@@ -79,6 +79,11 @@ var networkCheckpointCommand = exec.Command
 
 var wireGuardApply = network.ApplyWireGuardConfigWithRunner
 
+var tailscaleUp = network.TailscaleUpWithRunner
+var tailscaleDown = network.TailscaleDownWithRunner
+var tailscaleSetExitNode = network.TailscaleSetExitNodeWithRunner
+var tailscaleClearExitNode = network.TailscaleClearExitNodeWithRunner
+
 func main() {
 	socket := flag.String("socket", "/run/lumonas/privd.sock", "Unix socket path")
 	worker := flag.String("worker", "", "run as a restricted operation worker (storage, network, power, or general)")
@@ -241,7 +246,7 @@ func operationWorker(operation string) string {
 	switch operation {
 	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply":
 		return "storage"
-	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.wol.set", "firewall.apply":
+	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "firewall.apply":
 		return "network"
 	case "power.action", "power.shutdown":
 		return "power"
@@ -408,6 +413,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return connectWiFi(req, stdinCommandRunner)
 	case "network.wireguard.apply":
 		return applyWireGuard(req)
+	case "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node":
+		return applyTailscale(req)
 	case "network.wol.set":
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
@@ -453,7 +460,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 
 func requiresOperationID(operation string) bool {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.wol.set", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply":
 		return true
 	default:
 		return false
@@ -642,6 +649,48 @@ func applyWireGuard(req request) response {
 		return response{Error: err.Error()}
 	}
 	return response{OK: true, Data: map[string]any{"operationId": req.OperationID, "interface": iface, "state": "applied"}}
+}
+
+func applyTailscale(req request) response {
+	if !req.Confirmed {
+		return response{Error: "operation plan is not confirmed"}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), privilegedCommandTimeout)
+	defer cancel()
+	run := network.TailscaleCommandRunner(commandrunner.OutputContext)
+	switch req.Operation {
+	case "network.tailscale.up":
+		hostname := requestedString(req.RequestedState, "hostname")
+		if err := network.ValidateTailscaleConfig(hostname); err != nil {
+			return response{Error: err.Error()}
+		}
+		if err := tailscaleUp(ctx, hostname, requestedString(req.RequestedState, "authKey"), run); err != nil {
+			return response{Error: err.Error()}
+		}
+		return response{OK: true, Data: map[string]any{"operationId": req.OperationID, "hostname": hostname, "state": "connected"}}
+	case "network.tailscale.down":
+		if err := tailscaleDown(ctx, run); err != nil {
+			return response{Error: err.Error()}
+		}
+		return response{OK: true, Data: map[string]any{"operationId": req.OperationID, "state": "disconnected"}}
+	case "network.tailscale.exit-node":
+		peerIP := requestedString(req.RequestedState, "peerIp")
+		if peerIP == "" {
+			if err := tailscaleClearExitNode(ctx, run); err != nil {
+				return response{Error: err.Error()}
+			}
+		} else {
+			if net.ParseIP(peerIP) == nil {
+				return response{Error: "peerIp must be a valid IP address"}
+			}
+			if err := tailscaleSetExitNode(ctx, peerIP, run); err != nil {
+				return response{Error: err.Error()}
+			}
+		}
+		return response{OK: true, Data: map[string]any{"operationId": req.OperationID, "peerIp": peerIP, "state": "updated"}}
+	default:
+		return response{Error: "tailscale operation is not allow-listed"}
+	}
 }
 
 func deviceHasMounts(path string, run command) bool {

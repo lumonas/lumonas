@@ -705,3 +705,11 @@ Pass if the unprivileged daemon never invokes `wg set` directly, the request
 requires an operation ID and expiry, the network worker validates the typed
 configuration, and the private key is supplied through bounded stdin rather
 than command arguments or logs.
+
+## BM. Privileged Tailscale mutation
+
+Run the Tailscale worker and API broker tests.
+
+Pass if connect, disconnect, and exit-node changes are routed through the
+network worker, require typed allow-listed operations with an operation ID and
+expiry, validate host/IP inputs, and produce sanitized audit/event metadata.

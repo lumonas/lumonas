@@ -2,8 +2,32 @@ package network
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
+
+func TestTailscaleMutationsUseInjectedBoundedRunner(t *testing.T) {
+	var commands []string
+	run := func(_ context.Context, name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return nil, nil
+	}
+	if err := TailscaleUpWithRunner(context.Background(), "lumonas", "auth-secret", run); err != nil {
+		t.Fatal(err)
+	}
+	if err := TailscaleDownWithRunner(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	if err := TailscaleSetExitNodeWithRunner(context.Background(), "100.64.0.2", run); err != nil {
+		t.Fatal(err)
+	}
+	if err := TailscaleClearExitNodeWithRunner(context.Background(), run); err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != 4 || !strings.HasPrefix(commands[0], "tailscale up") || commands[1] != "tailscale down" || commands[2] != "tailscale set --exit-node=100.64.0.2" || commands[3] != "tailscale set --exit-node=none" {
+		t.Fatalf("unexpected tailscale command sequence: %#v", commands)
+	}
+}
 
 func TestValidateTailscaleConfigRejectsEmptyHostname(t *testing.T) {
 	if err := ValidateTailscaleConfig(""); err == nil {

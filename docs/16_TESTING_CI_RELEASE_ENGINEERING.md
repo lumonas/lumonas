@@ -198,6 +198,10 @@ event.
 WireGuard mutation is covered by the privileged-worker gate as well: the API
 must send a typed, operation-scoped request to the network worker, and the
 private key must cross the final command boundary on stdin only.
+Tailscale connect, disconnect, and exit-node changes use the same worker
+boundary, operation IDs, expiries, authorization, and audit path; their
+command runners are injected in tests so missing binaries cannot turn into a
+false-positive mutation.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the

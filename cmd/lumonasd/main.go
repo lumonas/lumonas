@@ -472,7 +472,7 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && endpoint == "/network/tailscale/up":
 		s.tailscaleUp(w, r)
 	case r.Method == http.MethodPost && endpoint == "/network/tailscale/down":
-		s.tailscaleDown(w)
+		s.tailscaleDown(w, r)
 	case r.Method == http.MethodPost && endpoint == "/network/tailscale/exit-node":
 		s.tailscaleExitNode(w, r)
 	case r.Method == http.MethodGet && endpoint == "/services":
@@ -1699,6 +1699,10 @@ func (s *apiServer) tailscaleStatus(w http.ResponseWriter) {
 }
 
 func (s *apiServer) tailscaleUp(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		Hostname string `json:"hostname"`
 		AuthKey  string `json:"authKey,omitempty"`
@@ -1711,30 +1715,52 @@ func (s *apiServer) tailscaleUp(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	if err := network.TailscaleUp(ctx, input.Hostname, input.AuthKey); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	operationID := newID("tailscale")
+	result, err := s.executePrivileged(r.Context(), privileged.Request{
+		Operation: "network.tailscale.up", OperationID: operationID, PlanHash: operationID,
+		RequestedState: map[string]any{"hostname": input.Hostname, "authKey": input.AuthKey},
+		ExpiresAt:      time.Now().UTC().Add(2 * time.Minute), Confirmed: true,
+	})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
+	if !result.OK {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
+		return
+	}
+	s.recordRequestAudit(r, actor, "network.tailscale.up", input.Hostname, map[string]any{"operationId": operationID})
 	s.advanceGeneration("network.tailscale.up")
-	s.publish("network.tailscale.connected", "info", &model.ResourceRef{Type: "tailscale", ID: input.Hostname}, nil)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "connected"})
+	s.publish("network.tailscale.connected", "info", &model.ResourceRef{Type: "tailscale", ID: input.Hostname}, map[string]any{"operationId": operationID})
+	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *apiServer) tailscaleDown(w http.ResponseWriter) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := network.TailscaleDown(ctx); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+func (s *apiServer) tailscaleDown(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
 		return
 	}
+	operationID := newID("tailscale")
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "network.tailscale.down", OperationID: operationID, PlanHash: operationID, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
+		return
+	}
+	s.recordRequestAudit(r, actor, "network.tailscale.down", "tailscale", map[string]any{"operationId": operationID})
 	s.advanceGeneration("network.tailscale.down")
-	s.publish("network.tailscale.disconnected", "info", nil, nil)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
+	s.publish("network.tailscale.disconnected", "info", nil, map[string]any{"operationId": operationID})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *apiServer) tailscaleExitNode(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
 	var input struct {
 		PeerIP string `json:"peerIp"`
 	}
@@ -1742,21 +1768,24 @@ func (s *apiServer) tailscaleExitNode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-	if input.PeerIP == "" {
-		if err := network.TailscaleClearExitNode(ctx); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-	} else {
-		if err := network.TailscaleSetExitNode(ctx, input.PeerIP); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
+	if input.PeerIP != "" && net.ParseIP(input.PeerIP) == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "peerIp must be a valid IP address"})
+		return
 	}
+	operationID := newID("tailscale")
+	result, err := s.executePrivileged(r.Context(), privileged.Request{Operation: "network.tailscale.exit-node", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"peerIp": input.PeerIP}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	if !result.OK {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": result.Error})
+		return
+	}
+	s.recordRequestAudit(r, actor, "network.tailscale.exit-node", input.PeerIP, map[string]any{"operationId": operationID})
 	s.advanceGeneration("network.tailscale.exit-node")
-	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+	s.publish("network.tailscale.exit-node.updated", "info", &model.ResourceRef{Type: "tailscale", ID: "exit-node"}, map[string]any{"operationId": operationID})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *apiServer) services(w http.ResponseWriter, r *http.Request) {

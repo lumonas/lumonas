@@ -80,6 +80,23 @@ func TestWireGuardApplyUsesPrivilegedBroker(t *testing.T) {
 	}
 }
 
+func TestTailscaleUpUsesPrivilegedBroker(t *testing.T) {
+	server := testServer(t)
+	var request privileged.Request
+	server.brokerExec = func(_ context.Context, value privileged.Request) error {
+		request = value
+		return nil
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/network/tailscale/up", strings.NewReader(`{"hostname":"lumonas","authKey":"secret"}`)))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected privileged Tailscale apply to succeed, got %d: %s", response.Code, response.Body.String())
+	}
+	if request.Operation != "network.tailscale.up" || request.OperationID == "" || request.RequestedState["hostname"] != "lumonas" {
+		t.Fatalf("unexpected privileged request: %#v", request)
+	}
+}
+
 func TestNetworkConfigurationAPIRequiresReauthenticationAndPersistsTypedState(t *testing.T) {
 	server := testServer(t)
 

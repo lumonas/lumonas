@@ -48,6 +48,26 @@ func TestWireGuardMutationUsesNetworkWorkerAndTypedConfig(t *testing.T) {
 	}
 }
 
+func TestTailscaleMutationUsesNetworkWorker(t *testing.T) {
+	previous := tailscaleUp
+	t.Cleanup(func() { tailscaleUp = previous })
+	var gotHostname string
+	tailscaleUp = func(_ context.Context, hostname, authKey string, _ network.TailscaleCommandRunner) error {
+		gotHostname = hostname
+		if authKey != "secret" {
+			t.Fatalf("unexpected auth key: %q", authKey)
+		}
+		return nil
+	}
+	result := executeWorker(request{
+		Operation: "network.tailscale.up", OperationID: "tailscale-1", PlanHash: "tailscale-plan", Confirmed: true,
+		ExpiresAt: time.Now().UTC().Add(time.Minute), RequestedState: map[string]any{"hostname": "lumonas", "authKey": "secret"},
+	}, "network")
+	if !result.OK || gotHostname != "lumonas" {
+		t.Fatalf("unexpected Tailscale worker result: %#v hostname=%q", result, gotHostname)
+	}
+}
+
 func TestBrokerForwardsConfirmedOperationToRootOnlyWorker(t *testing.T) {
 	client, server := net.Pipe()
 	previousDial := workerDial

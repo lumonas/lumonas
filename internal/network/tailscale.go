@@ -39,6 +39,12 @@ type TailscaleDNSName struct {
 	IP   string `json:"ip"`
 }
 
+// TailscaleCommandRunner is the bounded command boundary used by the
+// privileged network worker for mutating operations.
+type TailscaleCommandRunner func(context.Context, string, ...string) ([]byte, error)
+
+var runTailscaleCommand TailscaleCommandRunner = runner.CombinedOutputContext
+
 func TailscaleGetStatus(ctx context.Context) (*TailscaleStatus, error) {
 	out, err := runner.CombinedOutputContext(ctx, "tailscale", "status", "--json")
 	if err != nil {
@@ -70,33 +76,61 @@ func TailscaleIsInstalled() bool {
 }
 
 func TailscaleUp(ctx context.Context, hostname string, authKey string) error {
+	return TailscaleUpWithRunner(ctx, hostname, authKey, runTailscaleCommand)
+}
+
+func TailscaleUpWithRunner(ctx context.Context, hostname string, authKey string, run TailscaleCommandRunner) error {
+	if run == nil {
+		run = runner.CombinedOutputContext
+	}
 	args := []string{"up", "--hostname=" + hostname}
 	if authKey != "" {
 		args = append(args, "--authkey="+authKey)
 	}
-	if out, err := runner.CombinedOutputContext(ctx, "tailscale", args...); err != nil {
+	if out, err := run(ctx, "tailscale", args...); err != nil {
 		return fmt.Errorf("tailscale up: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 func TailscaleDown(ctx context.Context) error {
-	if out, err := runner.CombinedOutputContext(ctx, "tailscale", "down"); err != nil {
+	return TailscaleDownWithRunner(ctx, runTailscaleCommand)
+}
+
+func TailscaleDownWithRunner(ctx context.Context, run TailscaleCommandRunner) error {
+	if run == nil {
+		run = runner.CombinedOutputContext
+	}
+	if out, err := run(ctx, "tailscale", "down"); err != nil {
 		return fmt.Errorf("tailscale down: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 func TailscaleSetExitNode(ctx context.Context, peerIP string) error {
+	return TailscaleSetExitNodeWithRunner(ctx, peerIP, runTailscaleCommand)
+}
+
+func TailscaleSetExitNodeWithRunner(ctx context.Context, peerIP string, run TailscaleCommandRunner) error {
+	if run == nil {
+		run = runner.CombinedOutputContext
+	}
 	args := []string{"set", "--exit-node=" + peerIP}
-	if out, err := runner.CombinedOutputContext(ctx, "tailscale", args...); err != nil {
+	if out, err := run(ctx, "tailscale", args...); err != nil {
 		return fmt.Errorf("tailscale set exit-node: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
 
 func TailscaleClearExitNode(ctx context.Context) error {
-	if out, err := runner.CombinedOutputContext(ctx, "tailscale", "set", "--exit-node=none"); err != nil {
+	return TailscaleClearExitNodeWithRunner(ctx, runTailscaleCommand)
+}
+
+func TailscaleClearExitNodeWithRunner(ctx context.Context, run TailscaleCommandRunner) error {
+	if run == nil {
+		run = runner.CombinedOutputContext
+	}
+	if out, err := run(ctx, "tailscale", "set", "--exit-node=none"); err != nil {
 		return fmt.Errorf("tailscale clear exit-node: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return nil
