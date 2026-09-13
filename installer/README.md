@@ -54,7 +54,9 @@ both slots to the same device.
 The smoke treats the SSH disconnect caused by the deliberate reboot as
 expected and requires the guest to return from the selected slot. The release
 safety gate also rejects transient kernel names, partition targets, and any
-slot device that cannot be proven to be a whole disk.
+slot device that cannot be proven to be a whole disk. The signed update path
+also requires a verified recovery bundle before slot activation and persists
+the pending/healthy/rollback state across daemon restarts.
 
 ## Browser-based installation
 

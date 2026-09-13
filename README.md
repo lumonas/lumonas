@@ -111,6 +111,10 @@ from that slot after the expected SSH disconnect. The UEFI harness forwards SSH
 and the HTTPS web health endpoint on separate host ports, so both control and
 application readiness are exercised independently.
 
+The signed A/B path is release-gated: slot staging requires a verified recovery
+bundle, activation revalidates the image digest and stable whole-disk target,
+and failed health confirmation rolls back to the known-good slot.
+
 After the Debian package and QEMU smoke test are reliable, the offline installer can be built on Debian/Ubuntu with `live-build`:
 
 ```sh

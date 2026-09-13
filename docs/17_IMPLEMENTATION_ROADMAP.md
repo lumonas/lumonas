@@ -272,7 +272,13 @@ Deliver:
 - signed update channel;
 - pre-update recovery verification;
 - rollback strategy;
-- evaluate A/B OS deployment.
+- immutable A/B OS slot staging and activation;
+- stable whole-disk alias and partition-target rejection;
+- BIOS and UEFI/OVMF boot-flip smoke coverage;
+- release-gated health confirmation and automatic rollback.
+
+Secure Boot/UKI integration and unattended update policy remain follow-up
+tracks after the current release-blocking A/B implementation.
 
 ## Continuous tracks
 

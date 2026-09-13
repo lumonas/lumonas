@@ -92,7 +92,8 @@ Scope is explicitly not considered a blocker here. Risks are solved architectura
 - no unattended major dist-upgrade;
 - pre-update recovery verification;
 - tested supported migration paths;
-- future A/B system slots.
+- signed immutable A/B system slots with health confirmation and rollback;
+- release-blocking BIOS and UEFI boot-flip tests.
 
 ## 9. App catalog maintenance — High
 

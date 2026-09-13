@@ -66,7 +66,7 @@ An expert should still be able to:
 | `11_MONITORING_ALERTS_NOTIFICATIONS_JOBS.md` | Live status, alerts, telemetry, notifications |
 | `12_UI_UX_DESIGN_SYSTEM_AND_WIREFRAMES.md` | Navigation, design language, interaction patterns |
 | `13_FILES_BROWSER_AND_DATA_OPERATIONS.md` | File browser, copy/move/upload/recycle bin |
-| `14_SYSTEM_RUNTIME_WRITE_OPTIMIZATION_UPDATES_POWER.md` | zram/tmpfs, updates, A/B future, UPS/power |
+| `14_SYSTEM_RUNTIME_WRITE_OPTIMIZATION_UPDATES_POWER.md` | zram/tmpfs, signed updates, A/B slots, UPS/power |
 | `15_SECURITY_AUTH_SECRETS_AUDIT.md` | Authentication, secrets, audit and API security |
 | `16_TESTING_CI_RELEASE_ENGINEERING.md` | CI, destructive tests, ISO and upgrade tests |
 | `17_IMPLEMENTATION_ROADMAP.md` | Dependency-based implementation sequence |

@@ -48,7 +48,10 @@ mergerfs combines paths and uses policies to choose branches for operations. Use
 
 ## mkosi
 
-Candidate future image/A-B/reproducible image tooling. Supports Debian image creation.
+Optional future image/A-B/reproducible-image tooling. The current release path
+already builds the Debian 13 GPT/EFI QEMU image with the repository shell
+builder and validates A/B activation through BIOS and OVMF; mkosi is not a
+runtime dependency.
 
 - https://github.com/systemd/mkosi
 - https://github.com/systemd/mkosi/blob/main/mkosi/resources/man/mkosi.1.md

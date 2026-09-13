@@ -124,10 +124,17 @@ On candidate boot, record a bounded boot attempt. A healthy confirmation
 promotes the candidate; repeated failed attempts clear the pending slot and
 keep the previous active slot selected.
 
-The current package manager implements this state machine. Full EFI/partition
-slot switching remains deployment-specific and is validated in the QEMU image.
+The current update manager implements this state machine for signed immutable
+root-filesystem images. Staging verifies the Ed25519 manifest and synchronizes
+the image before activation; activation re-verifies the digest, writes only to
+the configured inactive stable whole-disk alias through `lumonas-privd`, and
+arms EFI `BootNext`. Health confirmation commits the candidate, while failed
+health checks arm the known-good slot before reboot. BIOS and OVMF QEMU smokes
+exercise the fail-closed and real-reboot paths.
 
-This is a future architecture track, not required for first functional build.
+Secure Boot/UKI integration, deduplicated image storage, and unattended update
+policy remain future work; the current A/B path is part of the release safety
+baseline.
 
 ## Power
 
