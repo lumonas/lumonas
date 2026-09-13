@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -91,6 +92,42 @@ func TestNotificationChannelSendTestUsesEncryptedChannelCredentials(t *testing.T
 	if test.Code != http.StatusOK || !strings.Contains(test.Body.String(), `"sent":true`) || !received {
 		t.Fatalf("channel test failed: %d %s received=%v", test.Code, test.Body.String(), received)
 	}
+}
+
+func TestConfiguredNotificationDeliveryUsesInjectedClient(t *testing.T) {
+	server := testServer(t)
+	t.Setenv("LUMONAS_RECOVERY_KEY", "notification-delivery-key")
+	var calls atomic.Int32
+	server.notificationClient = &http.Client{Transport: notificationRoundTripper(func(r *http.Request) (*http.Response, error) {
+		calls.Add(1)
+		return &http.Response{StatusCode: http.StatusNoContent, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+	})}
+	if _, err := server.store.SaveNotificationChannel(notify.Channel{ID: "channel-injected", Type: "webhook", Label: "Injected", Target: "https://provider.test/webhook", Enabled: true}, notify.Credentials{Token: "delivery-token"}, []byte("notification-delivery-key")); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.store.SaveAlertRule(monitoring.AlertRule{ID: "rule-injected", Name: "Disk warning", Condition: "disk warning", Severity: "warning", Routes: []string{"channel-injected"}, Enabled: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	server.sendConfiguredNotifications("disk.smart.warning", "warning", notify.Message{Title: "Disk warning", Body: "payload", Severity: "warning"})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		deliveries, err := server.store.NotificationDeliveries(10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(deliveries) > 0 {
+			if deliveries[0].State != "sent" {
+				t.Fatalf("injected notification client delivery failed: %#v", deliveries[0])
+			}
+			if calls.Load() == 0 {
+				t.Fatal("configured delivery did not use the injected client")
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("configured notification delivery was not persisted")
 }
 
 func TestNotificationDeliveryListIsAuthenticatedAndRedacted(t *testing.T) {

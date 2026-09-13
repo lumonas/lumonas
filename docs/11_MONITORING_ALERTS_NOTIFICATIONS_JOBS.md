@@ -130,7 +130,9 @@ SMTP is the email transport; its target uses `smtp://host:port?to=address` and
 the encrypted credentials contain the sender/username and password. All
 provider credentials are encrypted with the recovery key and are omitted from
 API responses, exports, audit metadata, and support bundles. Provider responses
-are bounded and delivery attempts are retried with exponential backoff.
+are bounded and delivery attempts are retried with exponential backoff. Event-
+driven deliveries use the daemon's bounded HTTP client, which keeps provider
+calls replaceable in tests and prevents an unbounded network wait.
 
 Keep the provider abstraction independent from LumoNAS alert routing so a
 future provider can be added without changing alert semantics.

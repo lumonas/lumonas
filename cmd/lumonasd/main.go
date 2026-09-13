@@ -2945,8 +2945,10 @@ func (s *apiServer) sendConfiguredNotifications(eventType, severity string, mess
 			continue
 		}
 		go func(channel notify.Channel, credentials notify.Credentials, deliveryID string) {
-			err := notify.SendWithRetry(context.Background(), 3, func(ctx context.Context) error {
-				return notify.SendChannel(ctx, nil, channel, credentials, message)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			err := notify.SendWithRetry(ctx, 3, func(ctx context.Context) error {
+				return notify.SendChannel(ctx, s.notificationClient, channel, credentials, message)
 			})
 			state := "sent"
 			failure := false
