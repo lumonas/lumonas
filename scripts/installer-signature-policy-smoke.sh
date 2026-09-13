@@ -12,4 +12,7 @@ if LUMONAS_REQUIRE_REPO_SIGNATURE=true LUMONAS_REPO_SIGN_KEY= \
 	exit 1
 fi
 grep -F 'LUMONAS_REPO_SIGN_KEY is required' "$ERROR_FILE" >/dev/null
+grep -F 'REPO_SIGNATURE_REQUIRED' "$ROOT/installer/build-iso.sh" >/dev/null
+grep -F 'signed LumoNAS repository metadata could not be verified' "$ROOT/installer/build-iso.sh" >/dev/null
+grep -F 'signed LumoNAS repository package installation failed' "$ROOT/installer/build-iso.sh" >/dev/null
 echo "LumoNAS installer signature policy passed"

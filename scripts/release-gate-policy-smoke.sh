@@ -28,5 +28,14 @@ if missing:
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not race_match or not re.search(r"^\s+- run: .*scripts/fuzz-smoke\.sh", race_match.group(0), re.M):
     raise SystemExit("race-fuzz job is not running the bounded fuzz harness")
+installer = pathlib.Path(sys.argv[1]).parent.parent.parent / "installer" / "build-iso.sh"
+installer_text = installer.read_text(encoding="utf-8")
+for marker in (
+    "REPO_SIGNATURE_REQUIRED",
+    "signed LumoNAS repository metadata could not be verified",
+    "signed LumoNAS repository package installation failed",
+):
+    if marker not in installer_text:
+        raise SystemExit(f"installer signed-repository fail-closed marker is missing: {marker}")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY

@@ -18,6 +18,10 @@ if [ "${LUMONAS_REQUIRE_REPO_SIGNATURE:-false}" = "true" ] && [ -z "$REPO_SIGN_K
 	echo "LUMONAS_REPO_SIGN_KEY is required for a signed offline repository" >&2
 	exit 1
 fi
+REPO_SIGNATURE_REQUIRED=false
+if [ "${LUMONAS_REQUIRE_REPO_SIGNATURE:-false}" = "true" ]; then
+	REPO_SIGNATURE_REQUIRED=true
+fi
 
 command -v lb >/dev/null 2>&1 || { echo "live-build is required" >&2; exit 1; }
 command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required" >&2; exit 1; }
@@ -103,8 +107,20 @@ set -eu
 cat >/etc/apt/sources.list.d/lumonas-local.list <<'APT'
 $REPO_SOURCE
 APT
-apt-get update -o Dir::Etc::sourcelist="sources.list.d/lumonas-local.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0" || true
-apt-get install -y --allow-downgrades lumonas || dpkg -i /opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb
+REPO_SIGNATURE_REQUIRED="$REPO_SIGNATURE_REQUIRED"
+if ! apt-get update -o Dir::Etc::sourcelist="sources.list.d/lumonas-local.list" -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"; then
+	if [ "\$REPO_SIGNATURE_REQUIRED" = "true" ]; then
+		echo "signed LumoNAS repository metadata could not be verified" >&2
+		exit 1
+	fi
+	dpkg -i /opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb
+elif ! apt-get install -y --allow-downgrades lumonas; then
+	if [ "\$REPO_SIGNATURE_REQUIRED" = "true" ]; then
+		echo "signed LumoNAS repository package installation failed" >&2
+		exit 1
+	fi
+	dpkg -i /opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb
+fi
 mkdir -p /usr/share/doc/lumonas
 {
   echo "formatVersion=1"

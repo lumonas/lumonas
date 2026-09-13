@@ -15,7 +15,10 @@ release-only `LUMONAS_REPO_SIGN_KEY` fingerprint and
 into an ephemeral GnuPG home before building. Such builds fail closed unless
 the embedded repository contains `Release.gpg`, `InRelease`, and the exported
 archive keyring. Local development builds may omit the key and use the
-explicitly marked unsigned repository path.
+explicitly marked unsigned repository path. During the live-build hook, a
+required signature also makes APT metadata refresh and package installation
+fail closed; direct `dpkg` fallback is available only for unsigned local
+development images.
 
 The image build uses Debian package mirrors while constructing the ISO, but the resulting media carries the LumoNAS package repository and can install the appliance package without Internet access. CI publishes the ISO with checksums, SBOM, and release signatures. With `LUMONAS_ENABLE_RECOVERY_SMOKE=true`, the image also boots an offline recovery fixture against a blank replacement disk, starts `lumonasd` against the restored filesystem, verifies the restored SQLite state through the real principals/shares API, and then checks users, shares, ACLs, Compose stack, mergerfs/SnapRAID configuration, encrypted secret payload, and recovery result before powering off.
 

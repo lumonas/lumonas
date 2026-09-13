@@ -125,6 +125,9 @@ Release builds must set `LUMONAS_REQUIRE_REPO_SIGNATURE=true` and provide the
 release signing key and private key to an ephemeral GnuPG home. The installer
 then fails closed unless `Release.gpg`, `InRelease`, and the embedded archive
 keyring are present; `[trusted=yes]` is reserved for local development images.
+The live-build installation hook also fails closed if signed repository
+metadata refresh or package installation fails; direct package fallback is
+limited to unsigned local development media.
 
 ## Boot menu
 

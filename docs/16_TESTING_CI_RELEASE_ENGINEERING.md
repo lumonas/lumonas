@@ -335,7 +335,10 @@ The ISO job also requires the embedded APT repository to be signed on tagged
 builds. It imports the release-only armored private key into an ephemeral
 GnuPG home, selects it by the configured fingerprint, and checks for
 `Release.gpg`, `InRelease`, and the exported keyring; unsigned `[trusted=yes]`
-media is limited to non-release development builds.
+media is limited to non-release development builds. The installer hook also
+refuses its direct `dpkg` fallback whenever the repository signature policy is
+required, so tagged builds cannot silently install around failed APT
+signature verification.
 
 Package and ISO builders derive `SOURCE_DATE_EPOCH` from the source commit when
 the caller does not provide it. The Debian build records that epoch in
