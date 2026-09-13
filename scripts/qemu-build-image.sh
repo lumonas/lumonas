@@ -63,7 +63,7 @@ mkdir -p /usr/share/doc/lumonas
   echo "packages:"
   dpkg-query -W -f='${Package}\t${Version}\n' | sort
 } >/usr/share/doc/lumonas/qemu-package-manifest.txt
-systemd-analyze verify /lib/systemd/system/lumonas-runtime.service /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service
+systemd-analyze verify /lib/systemd/system/lumonas-runtime.service /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service /lib/systemd/system/lumonas-jobs.target /lib/systemd/system/lumonas-services.target /lib/systemd/system/lumonas-storage.target
 mkdir -p /etc/NetworkManager/system-connections /etc/systemd/system/lumonas-web.service.d
 cat >/etc/NetworkManager/system-connections/qemu-ethernet.nmconnection <<'NETWORK'
 [connection]
@@ -86,7 +86,7 @@ DROPIN
 cat >/etc/fstab <<'FSTAB'
 /dev/vda / ext4 defaults 0 1
 FSTAB
-systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
 systemctl disable systemd-networkd.service systemd-networkd-wait-online.service || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 passwd -l root || true

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lumonas/lumonas/internal/power"
 	"github.com/lumonas/lumonas/internal/privileged"
 )
 
@@ -28,6 +29,26 @@ func TestShutdownPlanIsExplicitAndRequiresReauthentication(t *testing.T) {
 	server.routes().ServeHTTP(invalid, httptest.NewRequest(http.MethodGet, "/api/v1/power/shutdown/plan?action=destroy", nil))
 	if invalid.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected invalid action rejection, got %d", invalid.Code)
+	}
+}
+
+func TestShutdownPlanUsesPackagedLifecycleTargets(t *testing.T) {
+	steps, err := power.OrderedShutdown("poweroff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range []struct {
+		index int
+		name  string
+	}{
+		{index: 0, name: "lumonas-jobs.target"},
+		{index: 1, name: "lumonas-services.target"},
+		{index: 3, name: "lumonas-storage.target"},
+	} {
+		index, want := check.index, check.name
+		if steps[index].Command != "systemctl" || len(steps[index].Args) != 2 || steps[index].Args[1] != want {
+			t.Fatalf("shutdown step %d does not target %s: %#v", index, want, steps[index])
+		}
 	}
 }
 

@@ -21,7 +21,8 @@ def assert_order(source, names, label):
         raise SystemExit(f"{label} dependency order is invalid")
 
 assert_order(prerm, [
-    "lumonas-web.service", "lumonasd.service",
+    "lumonas-web.service", "lumonas-jobs.target", "lumonas-services.target",
+    "lumonas-storage.target", "lumonasd.service",
     "lumonas-runtime.service",
     "lumonas-privd-general.service", "lumonas-privd-power.service",
     "lumonas-privd-network.service", "lumonas-privd-storage.service",
@@ -31,7 +32,8 @@ assert_order(postinst, [
     "lumonas-runtime.service",
     "lumonas-privd.service", "lumonas-privd-storage.service",
     "lumonas-privd-network.service", "lumonas-privd-power.service",
-    "lumonas-privd-general.service", "lumonasd.service",
+    "lumonas-privd-general.service", "lumonas-jobs.target",
+    "lumonas-services.target", "lumonas-storage.target", "lumonasd.service",
     "lumonas-web.service",
 ], "upgrade start")
 live_prerm = prerm.split('if [ -d /run/systemd/system ]', 1)[1].split('else', 1)[0]

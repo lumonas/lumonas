@@ -1,0 +1,6 @@
+[Unit]
+Description=LumoNAS storage mount lifecycle
+After=local-fs.target
+
+[Install]
+WantedBy=multi-user.target

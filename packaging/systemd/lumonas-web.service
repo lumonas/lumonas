@@ -2,6 +2,7 @@
 Description=LumoNAS web interface
 After=lumonasd.service
 Requires=lumonasd.service
+PartOf=lumonas-services.target
 
 [Service]
 Type=simple

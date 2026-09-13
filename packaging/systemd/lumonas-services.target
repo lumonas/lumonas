@@ -1,0 +1,6 @@
+[Unit]
+Description=LumoNAS share and container services lifecycle
+After=lumonas-jobs.target
+
+[Install]
+WantedBy=multi-user.target

@@ -146,7 +146,7 @@ LUMONAS_COOKIE_SECURE=true
 ENV
 chown root:lumonas /etc/lumonas/lumonas-web.env
 chmod 0640 /etc/lumonas/lumonas-web.env
-systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
+systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
 EOF
 chmod 0755 "$WORK/config/hooks/live/020-install-lumonas.hook.chroot"
 if [ "${LUMONAS_ENABLE_RECOVERY_SMOKE:-false}" = "true" ]; then
@@ -351,7 +351,7 @@ d-i partman/confirm_nooverwrite boolean true
 d-i grub-installer/only_debian boolean true
 d-i grub-installer/with_other_os boolean true
 d-i grub-installer/bootdev string /dev/vda
-d-i preseed/late_command string cp /cdrom/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb /target/tmp/lumonas.deb; in-target dpkg -i /tmp/lumonas.deb; cp /cdrom/etc/lumonas/lumonas-web.env /target/etc/lumonas/lumonas-web.env; in-target systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
+d-i preseed/late_command string cp /cdrom/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb /target/tmp/lumonas.deb; in-target dpkg -i /tmp/lumonas.deb; cp /cdrom/etc/lumonas/lumonas-web.env /target/etc/lumonas/lumonas-web.env; in-target systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
 EOF
 	chmod 0600 "$WORK/config/includes.binary/preseed.cfg"
 fi

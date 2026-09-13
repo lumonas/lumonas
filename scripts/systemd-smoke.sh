@@ -13,5 +13,5 @@ if ! command -v systemd-analyze >/dev/null 2>&1; then
 	exit 0
 fi
 
-systemd-analyze verify "$ROOT"/packaging/systemd/*.service
+systemd-analyze verify "$ROOT"/packaging/systemd/*.service "$ROOT"/packaging/systemd/*.target
 echo "LumoNAS systemd units verified"

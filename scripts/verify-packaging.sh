@@ -22,6 +22,10 @@ for unit in lumonas-web.service lumonasd.service lumonas-privd.service lumonas-p
 	require_line "$SYSTEMD/$unit" 'Group=lumonas'
 done
 
+for target in lumonas-jobs.target lumonas-services.target lumonas-storage.target; do
+	[ -f "$SYSTEMD/$target" ] || { echo "missing systemd target: $target" >&2; exit 1; }
+	done
+
 for key in NoNewPrivileges=true ProtectSystem=strict MemoryMax= TasksMax= Group=lumonas; do
 	require_line "$SYSTEMD/lumonas-runtime.service" "$key"
 done
@@ -32,6 +36,15 @@ require_line "$SYSTEMD/lumonasd.service" 'User=lumonas'
 require_line "$SYSTEMD/lumonas-privd.service" 'User=root'
 require_line "$SYSTEMD/lumonas-privd.service" 'CapabilityBoundingSet='
 require_line "$SYSTEMD/lumonasd.service" 'ReadWritePaths=/var/lib/lumonas /srv/lumonas'
+require_line "$SYSTEMD/lumonasd.service" 'PartOf=lumonas-jobs.target'
+require_line "$SYSTEMD/lumonas-web.service" 'PartOf=lumonas-services.target'
+require_line "$SYSTEMD/smbd.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
+require_line "$SYSTEMD/rsync.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
+require_line "$SYSTEMD/vsftpd.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
+require_line "$SYSTEMD/docker.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
+require_line "$SYSTEMD/nfs-server.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
+require_line "$SYSTEMD/ssh.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
+require_line "$SYSTEMD/avahi-daemon.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
 require_line "$SYSTEMD/lumonasd.service" 'Requires=lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service'
 for worker in storage network power general; do
   require_line "$SYSTEMD/lumonas-privd-$worker.service" 'Requires=lumonas-privd.service'
@@ -119,6 +132,7 @@ if grep -F '/etc/lumonas/tls/tls.crt' "$ROOT/cmd/lumonasd/share_configs.go" >/de
 	exit 1
 fi
 require_line "$ROOT/packaging/debian/prerm" 'lumonas-web.service'
+require_line "$ROOT/packaging/debian/prerm" 'lumonas-storage.target'
 require_line "$ROOT/packaging/build-deb.sh" 'DEBIAN/prerm'
 require_line "$ROOT/scripts/api-smoke.sh" 'start_server()'
 require_line "$ROOT/scripts/api-smoke.sh" 'daemon restarted before the job completed'

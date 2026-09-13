@@ -16,7 +16,7 @@ type Status struct {
 	User   string `json:"user,omitempty"`
 }
 
-var DefaultNames = []string{"lumonas-privd.service", "lumonasd.service", "lumonas-web.service", "docker.service", "smbd.service", "nfs-server.service", "ssh.service"}
+var DefaultNames = []string{"lumonas-privd.service", "lumonasd.service", "lumonas-web.service", "docker.service", "smbd.service", "nfs-server.service", "ssh.service", "lumonas-jobs.target", "lumonas-services.target", "lumonas-storage.target"}
 
 // normalizeState maps raw "systemctl is-active" output onto the state
 // vocabulary the web interface understands: running, stopped, degraded.

@@ -137,6 +137,7 @@ func RenderMountUnits(entries []MountEntry) (map[string]string, error) {
 		var builder strings.Builder
 		builder.WriteString("# " + UnitDirectoryHint + "\n")
 		builder.WriteString("[Unit]\n")
+		builder.WriteString("PartOf=lumonas-storage.target\n")
 		switch entry.Kind {
 		case "disk":
 			fmt.Fprintf(&builder, "Description=LumoNAS disk %s mounted at %s\n", entry.TargetID, entry.MountPath)

@@ -96,13 +96,13 @@ runuser -u lumonas -- /usr/lib/lumonas/lumonas-migrate --db "$database_path"
 if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
 	systemctl daemon-reload
 	systemctl try-reload-or-restart systemd-journald.service
-	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
-	for unit in lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service; do
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
+	for unit in lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service; do
 		systemctl start "$unit"
 	done
 else
 	systemctl daemon-reload || true
 	systemctl try-reload-or-restart systemd-journald.service || true
-	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
 fi
 exit 0
