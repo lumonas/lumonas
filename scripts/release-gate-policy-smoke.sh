@@ -17,6 +17,7 @@ for target, dependency_text in (
     ("qemu-recovery-smoke", "qemu-recovery-smoke: iso recovery-fixture"),
     ("qemu-recovery-live", "qemu-recovery-live: iso qemu-image"),
     ("iso-smoke", "iso-smoke: iso"),
+    ("qemu-installer-smoke", "qemu-installer-smoke: iso"),
 ):
     if dependency_text not in makefile_text:
         raise SystemExit(f"Makefile target {target} is missing its artifact dependency chain")
@@ -61,6 +62,8 @@ iso_block = iso_job.group(0) if iso_job else ""
 for marker in ("LUMONAS_RECOVERY_DEBUG_DIR", "build/qemu/recovery-debug/**"):
     if marker not in iso_block:
         raise SystemExit(f"ISO/recovery gate does not preserve failure diagnostics: {marker}")
+if "qemu-installer-smoke.sh" not in iso_block or "LUMONAS_INSTALLER_ASSERT=true" not in iso_block:
+    raise SystemExit("ISO gate is missing the real live installer smoke")
 qemu_job = re.search(r"(?ms)^  qemu-smoke:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 qemu_block = qemu_job.group(0) if qemu_job else ""
 if "actions/setup-go@v5" not in qemu_block or "./cmd/lumonas-update-fixture" not in qemu_block:
