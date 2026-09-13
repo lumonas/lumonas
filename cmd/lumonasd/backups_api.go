@@ -21,6 +21,21 @@ import (
 var automaticBackupMu sync.Mutex
 var automaticBackupPending bool
 
+const interruptedBackupReason = "daemon restarted before backup completed"
+
+func (s *apiServer) reconcileInterruptedBackups() {
+	count, err := s.store.FailInterruptedBackupRuns(interruptedBackupReason)
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("interrupted backup reconciliation failed", "error", err)
+		}
+		return
+	}
+	if count > 0 && s.log != nil {
+		s.log.Warn("interrupted backups failed closed", "count", count, "reason", interruptedBackupReason)
+	}
+}
+
 func (s *apiServer) recoveryKeyString() string {
 	if value := os.Getenv("LUMONAS_RECOVERY_KEY"); value != "" {
 		return value
@@ -132,6 +147,9 @@ func (s *apiServer) backupStatus(w http.ResponseWriter, r *http.Request) {
 	if len(runs) > 0 {
 		status.LatestVerified = runs[0].State == "verified"
 		status.LatestGeneration = runs[0].Generation
+		if runs[0].State == "failed" && runs[0].Error != "" {
+			status.Warnings = append(status.Warnings, "latest backup failed: "+runs[0].Error)
+		}
 		if copies, copyErr := s.store.BackupCopies(runs[0].ID); copyErr == nil {
 			for _, copy := range copies {
 				for index := range status.DestinationHealth {

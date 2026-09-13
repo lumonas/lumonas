@@ -234,4 +234,10 @@ Show range/uncertainty, e.g.:
 - A stopped container changes state without page refresh.
 - Alert spam is suppressed while a condition remains firing.
 - Critical storage events survive restart.
+
+Backup runs are failed closed during daemon startup when they were queued or
+running at the time of interruption. In-flight destination copies are marked
+failed as well, and the backup health response reports the failure instead of
+leaving stale work appearing active.
+
 - Metrics retention does not generate unbounded SQLite growth.

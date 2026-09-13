@@ -210,6 +210,39 @@ func (s *Store) SaveBackupRun(value backup.Run) error {
 	return err
 }
 
+// FailInterruptedBackupRuns closes backup work that cannot safely resume after
+// the daemon process disappeared. A new process must never report an old
+// upload as active or silently continue with an incomplete bundle.
+func (s *Store) FailInterruptedBackupRuns(reason string) (int, error) {
+	if reason == "" {
+		reason = "daemon restarted before backup completed"
+	}
+	if err := s.ensureBackupSchema(); err != nil {
+		return 0, err
+	}
+	now := time.Now().UTC().Format(timeFormat)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`UPDATE backup_copies SET state='failed',verified=0,finished_at=?,error=? WHERE state='running' AND run_id IN (SELECT id FROM backup_runs WHERE state IN ('queued','running'))`, now, reason); err != nil {
+		return 0, err
+	}
+	result, err := tx.Exec(`UPDATE backup_runs SET state='failed',finished_at=?,error=? WHERE state IN ('queued','running')`, now, reason)
+	if err != nil {
+		return 0, err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return int(count), nil
+}
+
 func (s *Store) SaveBackupCopy(value backup.Copy) error {
 	if err := s.ensureBackupSchema(); err != nil {
 		return err

@@ -75,6 +75,46 @@ func TestBackupScheduleRejectsUnboundedIntervals(t *testing.T) {
 	}
 }
 
+func TestFailInterruptedBackupRunsClosesRunsAndCopies(t *testing.T) {
+	database, err := Open(t.TempDir() + "/lumonas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if _, err := database.SaveBackupDestination(backup.Destination{ID: "local", Name: "Local", Type: backup.DestinationLocal, Target: "/tmp/lumonas-backups", Enabled: true, Retention: backup.DefaultRetention()}, backup.Credentials{}, []byte("recovery-key")); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now().UTC().Add(-time.Minute)
+	for _, state := range []string{"queued", "running"} {
+		run := backup.Run{ID: "run-" + state, Trigger: "scheduled", Generation: 2, State: state, StartedAt: started}
+		if err := database.SaveBackupRun(run); err != nil {
+			t.Fatal(err)
+		}
+		if state == "running" {
+			if err := database.SaveBackupCopy(backup.Copy{ID: "copy-running", RunID: run.ID, DestinationID: "local", Object: "recovery/run.mrb", Checksum: "abc", State: "running", CreatedAt: started}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	count, err := database.FailInterruptedBackupRuns("daemon restarted before backup completed")
+	if err != nil || count != 2 {
+		t.Fatalf("unexpected interrupted backup count: %d %v", count, err)
+	}
+	runs, err := database.BackupRuns(10)
+	if err != nil || len(runs) != 2 {
+		t.Fatalf("could not read reconciled runs: %#v %v", runs, err)
+	}
+	for _, run := range runs {
+		if run.State != "failed" || run.FinishedAt == nil || run.Error == "" {
+			t.Fatalf("interrupted run was not failed closed: %#v", run)
+		}
+	}
+	copies, err := database.BackupCopies("run-running")
+	if err != nil || len(copies) != 1 || copies[0].State != "failed" || copies[0].Verified {
+		t.Fatalf("interrupted copy was not failed closed: %#v %v", copies, err)
+	}
+}
+
 func TestOpenMigratesLegacyBackupRunActorColumn(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	legacy, err := sql.Open("sqlite3", path)

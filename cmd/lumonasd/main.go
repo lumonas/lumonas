@@ -188,6 +188,7 @@ func main() {
 	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", dynamicAuth: true, corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]csrfBinding), rateAttempts: make(map[string][]time.Time)}
 	server.dockerService = server.dockerServiceWithBroker(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"))
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
+	server.reconcileInterruptedBackups()
 	reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	server.reconcilePendingDeployments(reconcileCtx)
 	reconcileCancel()

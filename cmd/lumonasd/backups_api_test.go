@@ -72,6 +72,31 @@ func TestBackupStatusReportsVerifiedCopies(t *testing.T) {
 	}
 }
 
+func TestReconcileInterruptedBackupsFailsClosed(t *testing.T) {
+	server := testServer(t)
+	run := backup.Run{ID: "interrupted", Trigger: "scheduled", Generation: 4, State: "running", StartedAt: time.Now().UTC().Add(-time.Minute)}
+	if err := server.store.SaveBackupRun(run); err != nil {
+		t.Fatal(err)
+	}
+	server.reconcileInterruptedBackups()
+	runs, err := server.store.BackupRuns(1)
+	if err != nil || len(runs) != 1 || runs[0].State != "failed" || runs[0].Error != interruptedBackupReason {
+		t.Fatalf("interrupted backup was not reconciled: %#v %v", runs, err)
+	}
+}
+
+func TestBackupStatusReportsInterruptedFailure(t *testing.T) {
+	server := testServer(t)
+	if err := server.store.SaveBackupRun(backup.Run{ID: "failed", Trigger: "scheduled", Generation: 4, State: "failed", Error: interruptedBackupReason, StartedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/backups/status", nil))
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "latest backup failed") {
+		t.Fatalf("backup status omitted the failure warning: %d %s", response.Code, response.Body.String())
+	}
+}
+
 func TestBackupScheduleAPIRequiresValidIntervalAndPersists(t *testing.T) {
 	server := testServer(t)
 	invalid := httptest.NewRecorder()
