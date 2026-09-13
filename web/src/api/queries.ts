@@ -53,6 +53,7 @@ import type {
   StorageSafety,
   SystemMetrics,
   UPSStatus,
+  UPSConfig,
   UPSPolicy,
   UserGroup,
   WireGuardConfig,
@@ -108,6 +109,7 @@ export const queryKeys = {
   capacityForecast: ['capacity', 'forecast'] as const,
   groups: ['groups'] as const,
   ups: ['power', 'ups'] as const,
+  upsConfig: ['power', 'ups-config'] as const,
   upsPolicy: ['power', 'ups-policy'] as const,
   wireguardStatus: ['network', 'wireguard', 'status'] as const,
   tailscaleStatus: ['network', 'tailscale', 'status'] as const,
@@ -182,6 +184,21 @@ export function useMetrics() {
 
 export function useUPS() {
   return useQuery({ queryKey: queryKeys.ups, queryFn: () => apiGet<UPSStatus[]>('/power/ups') })
+}
+
+export function useUPSConfig() {
+  return useQuery({ queryKey: queryKeys.upsConfig, queryFn: () => apiGet<UPSConfig>('/ups/config') })
+}
+
+export function useUpdateUPSConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: UPSConfig) => apiPatch<UPSConfig>('/ups/config', input),
+    onSuccess: (config) => {
+      qc.setQueryData(queryKeys.upsConfig, config)
+      void qc.invalidateQueries({ queryKey: queryKeys.ups })
+    },
+  })
 }
 
 export function useUPSPolicy() {

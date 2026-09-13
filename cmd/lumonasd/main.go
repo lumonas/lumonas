@@ -520,6 +520,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.upsPolicy(w, r)
 	case r.Method == http.MethodPatch && endpoint == "/ups/policy":
 		s.updateUPSPolicy(w, r)
+	case r.Method == http.MethodGet && endpoint == "/ups/config":
+		s.upsConfig(w, r)
+	case r.Method == http.MethodPatch && endpoint == "/ups/config":
+		s.updateUPSConfig(w, r)
 	case r.Method == http.MethodPost && endpoint == "/power/action":
 		s.powerAction(w, r)
 	case r.Method == http.MethodGet && endpoint == "/power/shutdown/plan":
@@ -2006,7 +2010,7 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	for _, unit := range power.Discover(ctx, nil, nil) {
+	for _, unit := range power.Discover(ctx, s.configuredUPSNames(), nil) {
 		if !unit.OnBattery {
 			continue
 		}

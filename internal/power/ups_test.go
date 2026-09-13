@@ -2,6 +2,7 @@ package power
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -33,5 +34,20 @@ func TestDiscoverListsUPSWhenNamesOmitted(t *testing.T) {
 	items := Discover(context.Background(), nil, runner)
 	if calls != 3 || len(items) != 2 || items[0].Name != "alpha" || items[1].Name != "zeta" {
 		t.Fatalf("unexpected discovery: calls=%d items=%#v", calls, items)
+	}
+}
+
+func TestNormalizeNamesValidatesAndSortsNUTDevices(t *testing.T) {
+	names, err := NormalizeNames([]string{"ups@host:3493", " local-ups ", "ups@host:3493"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(names, ","), "local-ups,ups@host:3493"; got != want {
+		t.Fatalf("unexpected normalized names %q, want %q", got, want)
+	}
+	for _, invalid := range [][]string{{"bad name"}, {"ups,other"}, {"../ups"}} {
+		if _, err := NormalizeNames(invalid); err == nil {
+			t.Fatalf("invalid UPS name accepted: %#v", invalid)
+		}
 	}
 }

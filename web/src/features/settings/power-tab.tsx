@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BatteryCharging, Power, RotateCw } from 'lucide-react'
-import { usePowerAction, useSettings, useUPS, useUPSPolicy, useUpdateUPSPolicy, useUpdateSettings } from '@/api/queries'
+import { usePowerAction, useSettings, useUPS, useUPSConfig, useUPSPolicy, useUpdateUPSConfig, useUpdateUPSPolicy, useUpdateSettings } from '@/api/queries'
 import { AlertBanner } from '@/components/core/alert-banner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -27,13 +27,18 @@ import { Switch } from '@/components/ui/switch'
 export function PowerTab() {
   const { data: settings } = useSettings()
   const { data: upsUnits } = useUPS()
+  const { data: upsConfig } = useUPSConfig()
   const { data: upsPolicy } = useUPSPolicy()
   const updateSettings = useUpdateSettings()
   const updateUPSPolicy = useUpdateUPSPolicy()
+  const updateUPSConfig = useUpdateUPSConfig()
   const powerAction = usePowerAction()
   const [confirmAction, setConfirmAction] = useState<'shutdown' | 'reboot' | null>(null)
+  const [upsNamesDraft, setUpsNamesDraft] = useState<string | null>(null)
   const minimumRuntimeMinutes = Math.round((upsPolicy?.minimumRuntimeSec ?? 300) / 60)
   const minimumCharge = Math.round(upsPolicy?.minimumCharge ?? 10)
+
+  const upsNames = upsNamesDraft ?? upsConfig?.names.join(', ') ?? ''
 
   if (!settings) return null
   const { power } = settings
@@ -241,6 +246,27 @@ export function PowerTab() {
               On battery: alert → stop jobs → flush writes → stop apps → sync/unmount → safe
               shutdown.
             </p>
+            <div className="grid gap-1 rounded-lg border p-3">
+              <Label htmlFor="ups-names" className="text-xs text-muted-foreground">NUT devices</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="ups-names"
+                  value={upsNames}
+                  onChange={(event) => setUpsNamesDraft(event.target.value)}
+                  placeholder="Auto-discover, or ups@host:3493"
+                  className="h-8 text-xs"
+                />
+                <Button
+                  variant="outline"
+                  className="h-8 shrink-0 text-xs"
+                  onClick={() => updateUPSConfig.mutate({ names: upsNames.split(',').map((name) => name.trim()).filter(Boolean) })}
+                  disabled={updateUPSConfig.isPending}
+                >
+                  Save
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Leave empty to use NUT auto-discovery.</p>
+            </div>
             <div className="grid grid-cols-1 gap-3 rounded-lg border p-3 sm:grid-cols-3">
               <div className="flex items-center justify-between gap-3 sm:col-span-3">
                 <Label className="text-xs text-muted-foreground">Automatic safe shutdown</Label>

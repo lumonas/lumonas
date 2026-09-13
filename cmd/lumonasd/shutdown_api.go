@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +18,10 @@ type upsPolicyRequest struct {
 	MinimumCharge     float64 `json:"minimumCharge"`
 }
 
+type upsConfigRequest struct {
+	Names []string `json:"names"`
+}
+
 func (s *apiServer) upsStatus(w http.ResponseWriter, r *http.Request) {
 	s.ups(w, r)
 }
@@ -26,6 +31,38 @@ func (s *apiServer) upsPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, upsPolicyJSON(s.autoShutdownPolicy()))
+}
+
+func (s *apiServer) upsConfig(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"names": s.configuredUPSNames()})
+}
+
+func (s *apiServer) updateUPSConfig(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	var input upsConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	names, err := power.NormalizeNames(input.Names)
+	if err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	encoded, _ := json.Marshal(names)
+	if err := s.store.SetMeta("ups_names", string(encoded)); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordRequestAudit(r, actor, "ups.config.update", "ups", map[string]any{"names": names})
+	s.advanceGeneration("ups.config.update")
+	writeJSON(w, http.StatusOK, map[string]any{"names": names})
 }
 
 func (s *apiServer) updateUPSPolicy(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +104,7 @@ func (s *apiServer) upsMonitorLoop() {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		for _, unit := range power.Discover(ctx, nil, nil) {
+		for _, unit := range power.Discover(ctx, s.configuredUPSNames(), nil) {
 			if power.ShouldShutdown(unit, s.autoShutdownPolicy()) {
 				s.publish("ups.shutdown.pending", "critical", nil, map[string]any{"ups": unit.Name, "runtimeSec": unit.RuntimeSec, "chargePercent": unit.ChargePercent})
 				s.requestUPSShutdown(unit.Name)
@@ -167,4 +204,19 @@ func (s *apiServer) autoShutdownPolicy() power.ShutdownPolicy {
 		}
 	}
 	return policy
+}
+
+func (s *apiServer) configuredUPSNames() []string {
+	if encoded, ok := s.store.Meta("ups_names"); ok {
+		var names []string
+		if json.Unmarshal([]byte(encoded), &names) == nil {
+			if normalized, err := power.NormalizeNames(names); err == nil {
+				return normalized
+			}
+		}
+	}
+	if names, err := power.NormalizeNames(strings.Split(os.Getenv("LUMONAS_UPS_NAMES"), ",")); err == nil {
+		return names
+	}
+	return nil
 }

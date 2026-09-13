@@ -81,6 +81,7 @@ import type {
 const BASE = '/api/v1'
 
 let mockUPSPolicy = { enabled: false, minimumRuntimeSec: 300, minimumCharge: 10 }
+let mockUPSConfig = { names: [] as string[] }
 
 const ROLE_ORDER: Record<string, number> = {
   system: 0,
@@ -240,6 +241,11 @@ export const handlers = [
     return HttpResponse.json({ status: server.health, score: diskStatus === 'healthy' && protection.status === 'healthy' ? 100 : diskStatus === 'critical' || protection.status === 'critical' ? 30 : 70, components })
   }),
   http.get(`${BASE}/power/ups`, () => HttpResponse.json([])),
+  http.get(`${BASE}/ups/config`, () => HttpResponse.json(mockUPSConfig)),
+  http.patch(`${BASE}/ups/config`, async ({ request }) => {
+    mockUPSConfig = { names: ((await request.json() as { names?: string[] }).names ?? []).map((name) => name.trim()).filter(Boolean) }
+    return HttpResponse.json(mockUPSConfig)
+  }),
   http.get(`${BASE}/ups/policy`, () => HttpResponse.json(mockUPSPolicy)),
   http.patch(`${BASE}/ups/policy`, async ({ request }) => {
     mockUPSPolicy = { ...mockUPSPolicy, ...(await request.json() as typeof mockUPSPolicy) }

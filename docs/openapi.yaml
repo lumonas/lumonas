@@ -3010,6 +3010,40 @@ paths:
         '4XX':
           description: Client error
 
+  /ups/config:
+    get:
+      tags: [Settings]
+      summary: Get configured NUT devices
+      operationId: get-ups-config
+      responses:
+        '200':
+          description: Configured UPS device names
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UPSConfig'
+        '4XX':
+          description: Client error
+    patch:
+      tags: [Settings]
+      summary: Configure NUT devices
+      operationId: patch-ups-config
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UPSConfig'
+      responses:
+        '200':
+          description: Updated UPS device names
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UPSConfig'
+        '4XX':
+          description: Client error
+
   /ups/status:
     get:
       tags: [Settings]
@@ -3186,6 +3220,18 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HealthComponent'
+
+    UPSConfig:
+      type: object
+      required: [names]
+      properties:
+        names:
+          type: array
+          maxItems: 16
+          items:
+            type: string
+            minLength: 1
+            maxLength: 128
 
     ServerInfo:
       type: object

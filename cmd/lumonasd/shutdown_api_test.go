@@ -59,6 +59,25 @@ func TestUPSPolicyIsPersistedAndValidated(t *testing.T) {
 	}
 }
 
+func TestUPSConfigIsPersistedAndValidated(t *testing.T) {
+	server := testServer(t)
+	updated := httptest.NewRecorder()
+	server.routes().ServeHTTP(updated, httptest.NewRequest(http.MethodPatch, "/api/v1/ups/config", strings.NewReader(`{"names":["ups@host:3493","local-ups","local-ups"]}`)))
+	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"names":["local-ups","ups@host:3493"]`) {
+		t.Fatalf("expected normalized UPS config, got %d: %s", updated.Code, updated.Body.String())
+	}
+	readback := httptest.NewRecorder()
+	server.routes().ServeHTTP(readback, httptest.NewRequest(http.MethodGet, "/api/v1/ups/config", nil))
+	if readback.Code != http.StatusOK || !strings.Contains(readback.Body.String(), `"ups@host:3493"`) {
+		t.Fatalf("expected persisted UPS config, got %d: %s", readback.Code, readback.Body.String())
+	}
+	invalid := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalid, httptest.NewRequest(http.MethodPatch, "/api/v1/ups/config", strings.NewReader(`{"names":["bad name"]}`)))
+	if invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected invalid UPS config rejection, got %d: %s", invalid.Code, invalid.Body.String())
+	}
+}
+
 func TestPowerActionRequiresAdministrativeIdentity(t *testing.T) {
 	server := testServer(t)
 	server.authRequired = true

@@ -421,6 +421,10 @@ export interface UPSStatus {
   onBattery: boolean
 }
 
+export interface UPSConfig {
+  names: string[]
+}
+
 export interface StorageMount {
   kind: 'disk' | 'pool'
   targetId: string

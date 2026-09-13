@@ -425,7 +425,7 @@ func defaultSettings(s *apiServer) map[string]any {
 	cancelWOL()
 	ups := make([]any, 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	for _, unit := range power.Discover(ctx, settingsUPSNames(), nil) {
+	for _, unit := range power.Discover(ctx, s.configuredUPSNames(), nil) {
 		ups = append(ups, map[string]any{"name": unit.Name, "status": unit.Status, "chargePercent": unit.ChargePercent, "runtimeSec": unit.RuntimeSec, "onBattery": unit.OnBattery})
 	}
 	cancel()
@@ -472,16 +472,6 @@ func (s *apiServer) dockerCounts() (stacks, running, updates int) {
 		}
 	}
 	return len(stackList), running, updates
-}
-
-func settingsUPSNames() []string {
-	values := make([]string, 0)
-	for _, value := range strings.Split(os.Getenv("LUMONAS_UPS_NAMES"), ",") {
-		if value = strings.TrimSpace(value); value != "" {
-			values = append(values, value)
-		}
-	}
-	return values
 }
 
 func validSettings(value map[string]any) bool {

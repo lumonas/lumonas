@@ -2,6 +2,8 @@ package power
 
 import (
 	"context"
+	"errors"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +26,35 @@ type UPS struct {
 	OnBattery     bool     `json:"onBattery"`
 }
 
+var upsNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,127}$`)
+
+// NormalizeNames validates and canonicalizes configured NUT device names.
+// NUT names may optionally include a remote host and port (ups@host:3493),
+// but never contain whitespace, shell metacharacters, or commas.
+func NormalizeNames(names []string) ([]string, error) {
+	if len(names) > 16 {
+		return nil, errors.New("at most 16 UPS names may be configured")
+	}
+	seen := make(map[string]struct{}, len(names))
+	result := make([]string, 0, len(names))
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if !upsNamePattern.MatchString(name) {
+			return nil, errors.New("UPS names may contain only letters, numbers, dot, underscore, colon, at-sign, or hyphen")
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		result = append(result, name)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
 func Discover(ctx context.Context, names []string, runner Runner) []UPS {
 	if runner == nil {
 		runner = func(ctx context.Context, name string, args ...string) ([]byte, error) {
@@ -39,6 +70,11 @@ func Discover(ctx context.Context, names []string, runner Runner) []UPS {
 				}
 			}
 		}
+	}
+	if normalized, err := NormalizeNames(names); err == nil {
+		names = normalized
+	} else {
+		names = nil
 	}
 	result := make([]UPS, 0, len(names))
 	for _, name := range names {
