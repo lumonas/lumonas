@@ -88,7 +88,7 @@ for marker in ("TestEngineAPIReadOnlyCollectors", "TestEngineAPIRejectsEngineErr
 if '"available":true' not in (repo_root / "scripts/qemu-smoke.sh").read_text(encoding="utf-8") or '"available":true' not in (repo_root / "scripts/qemu-recovery-smoke.sh").read_text(encoding="utf-8"):
     raise SystemExit("QEMU runtime smoke must require Docker Engine availability")
 validator_text = (repo_root / "scripts/validate-api-response.py").read_text(encoding="utf-8")
-for marker in ("docker-containers", "docker-images", "docker-volumes", "audit", "lan-hosts", "recovery-status", "recovery-plan", "updates-status"):
+for marker in ("docker-containers", "docker-images", "docker-volumes", "audit", "lan-hosts", "readiness", "recovery-status", "recovery-plan", "updates-status"):
     if marker not in validator_text:
         raise SystemExit(f"Docker response contract validator is missing {marker}")
 for script in ("scripts/api-smoke.sh", "scripts/qemu-smoke.sh", "scripts/qemu-recovery-smoke.sh"):
@@ -109,14 +109,21 @@ api_contract = (repo_root / "scripts/api-smoke.sh").read_text(encoding="utf-8")
 for marker in ("validate_response recovery-status", "validate_response recovery-plan", "validate_response updates-status"):
     if marker not in api_contract:
         raise SystemExit(f"API smoke is missing {marker}")
-if "validate_response lan-hosts" not in api_contract:
-    raise SystemExit("API smoke is missing LAN host inventory validation")
+if "validate_response lan-hosts" not in api_contract or "validate_response readiness" not in api_contract:
+    raise SystemExit("API smoke is missing LAN/readiness response validation")
 qemu_contract = (repo_root / "scripts/qemu-smoke.sh").read_text(encoding="utf-8")
 for marker in ("validate-api-response.py\" recovery-status", "validate-api-response.py\" recovery-plan", "validate-api-response.py\" updates-status"):
     if marker not in qemu_contract:
         raise SystemExit(f"QEMU smoke is missing {marker}")
-if "validate-api-response.py\" lan-hosts" not in qemu_contract:
-    raise SystemExit("QEMU smoke is missing LAN host inventory validation")
+if "validate-api-response.py\" lan-hosts" not in qemu_contract or "validate-api-response.py\" readiness" not in qemu_contract:
+    raise SystemExit("QEMU smoke is missing LAN/readiness response validation")
+for script, markers in (
+    ("scripts/iso-smoke.sh", ("validate-api-response.py", "readiness")),
+    ("scripts/qemu-recovery-smoke.sh", ("recovery-plan", "readiness")),
+):
+    script_text = (repo_root / script).read_text(encoding="utf-8")
+    if any(marker not in script_text for marker in markers):
+        raise SystemExit(f"{script} is missing readiness/recovery contract validation")
 collector_text = (repo_root / "internal/collector/docker.go").read_text(encoding="utf-8")
 if "dockerruntime.New(\"\", nil)" not in collector_text or "DockerSummaryFromService" not in collector_text:
     raise SystemExit("legacy Docker collector is not delegated to the controlled runtime service")

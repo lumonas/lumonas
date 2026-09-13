@@ -48,6 +48,18 @@ def validate_server(value: Any) -> None:
         string_field(obj, field, "server")
 
 
+def validate_readiness(value: Any) -> None:
+    obj = object_value(value, "readiness")
+    required(obj, ("status", "checks"), "readiness")
+    if obj["status"] not in ("ready", "not_ready"):
+        fail("readiness.status must be ready or not_ready")
+    checks = object_value(obj["checks"], "readiness.checks")
+    required(checks, ("database", "privilegedBroker"), "readiness.checks")
+    for field in ("database", "privilegedBroker"):
+        if not isinstance(checks[field], bool):
+            fail(f"readiness.checks.{field} must be a boolean")
+
+
 def validate_disks(value: Any) -> None:
     if not isinstance(value, list):
         fail("disks must be a JSON array")
@@ -332,6 +344,7 @@ def validate_updates_status(value: Any) -> None:
 
 def self_test() -> None:
     validate_server({field: "value" for field in ("id", "name", "hostname", "version", "nasUuid", "timezone", "health", "ip")})
+    validate_readiness({"status": "ready", "checks": {"database": True, "privilegedBroker": True}})
     validate_disks([{
         "id": "wwn-123", "name": "sda", "model": "virtual", "gptDiskGuid": "guid-1",
         "sizeBytes": 1024, "role": "data", "rotational": False, "interface": "virtio",
@@ -380,6 +393,7 @@ def self_test() -> None:
 
 VALIDATORS = {
     "server": validate_server,
+    "readiness": validate_readiness,
     "disks": validate_disks,
     "lan-hosts": validate_lan_hosts,
     "metrics": validate_metrics,

@@ -154,6 +154,7 @@ for attempt in $(seq 1 60); do
        grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$LOG.services" >/dev/null 2>&1; then
       python3 "$ROOT/scripts/validate-api-response.py" server "$LOG.server"
+      python3 "$ROOT/scripts/validate-api-response.py" readiness "$LOG.ready"
       python3 "$ROOT/scripts/validate-api-response.py" disks "$LOG.disks"
       python3 "$ROOT/scripts/validate-api-response.py" lan-hosts "$LOG.lan-hosts"
       python3 "$ROOT/scripts/validate-api-response.py" metrics "$LOG.metrics"

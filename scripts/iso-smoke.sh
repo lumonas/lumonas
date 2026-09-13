@@ -37,6 +37,7 @@ if ! command -v qemu-img >/dev/null 2>&1; then
 	echo "qemu-img is required for ISO smoke testing" >&2
 	exit 1
 fi
+command -v python3 >/dev/null 2>&1 || { echo "python3 is required for ISO API contract validation" >&2; exit 1; }
 qemu-img create -f qcow2 "$DISK" 2G >/dev/null
 
 qemu-system-x86_64 \
@@ -62,6 +63,7 @@ for attempt in $(seq 1 90); do
 		curl -kfsS https://127.0.0.1:18081/api/v1/services >"$LOG.services" 2>/dev/null; then
 		grep -F '"privilegedBroker":true' "$LOG.ready" >/dev/null
 		ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+		python3 "$ROOT/scripts/validate-api-response.py" readiness "$LOG.ready"
 		python3 "$ROOT/scripts/validate-api-response.py" metrics "$LOG.metrics"
 		python3 "$ROOT/scripts/validate-api-response.py" jobs "$LOG.jobs"
 		EVENTS_LOG="$LOG.events"

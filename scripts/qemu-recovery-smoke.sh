@@ -13,7 +13,7 @@ fi
 
 ISO="${LUMONAS_ISO:-}"
 [ -f "$ISO" ] || { echo "LUMONAS_ISO must point to the offline ISO" >&2; exit 1; }
-for command in go qemu-img qemu-system-x86_64 mkfs.ext4 mount umount curl; do
+for command in go qemu-img qemu-system-x86_64 mkfs.ext4 mount umount curl python3; do
 	command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 1; }
 done
 
@@ -67,6 +67,7 @@ grep -F '"verified":true' "$PLAN_PATH" >/dev/null
 grep -F '"databaseValid":true' "$PLAN_PATH" >/dev/null
 grep -F '"desiredStateValid":true' "$PLAN_PATH" >/dev/null
 grep -F '"composeValid":true' "$PLAN_PATH" >/dev/null
+python3 "$ROOT/scripts/validate-api-response.py" recovery-plan "$PLAN_PATH"
 truncate -s 128M "$RECOVERY_IMAGE"
 mkfs.ext4 -F -L LUMONAS-RECOVERY "$RECOVERY_IMAGE" >/dev/null
 mount -o loop "$RECOVERY_IMAGE" "$RECOVERY_MOUNT"
@@ -106,6 +107,7 @@ for attempt in $(seq 1 120); do
 done
 [ "$API_READY" = true ] || { echo "recovery ISO API never became ready" >&2; cat "$LOG" >&2 || true; exit 1; }
 grep -F '"privilegedBroker":true' "$WORK/ready.json" >/dev/null
+python3 "$ROOT/scripts/validate-api-response.py" readiness "$WORK/ready.json"
 
 guest_exited=false
 for attempt in $(seq 1 90); do
@@ -206,6 +208,7 @@ done
 }
 grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
+python3 "$ROOT/scripts/validate-api-response.py" readiness "$WORK/recovered-ready.json"
 python3 "$ROOT/scripts/validate-api-response.py" health "$WORK/recovered-health.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-summary "$WORK/recovered-docker-summary.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$WORK/recovered-docker-containers.json"
