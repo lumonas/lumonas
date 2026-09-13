@@ -907,6 +907,32 @@ paths:
                 items:
                   $ref: '#/components/schemas/Alert'
 
+  /alerts/history:
+    get:
+      tags: [Monitoring]
+      summary: List recently resolved alerts
+      operationId: listAlertHistory
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+      responses:
+        '200':
+          description: Resolved alert history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Alert'
+        '400':
+          description: Invalid history limit
+
   /notification-channels:
     get:
       tags: [Monitoring]

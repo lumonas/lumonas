@@ -46,5 +46,10 @@ if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "
 api_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "api-smoke.sh"
 if "Last-Event-ID" not in api_smoke.read_text(encoding="utf-8") or "cursor event twice" not in api_smoke.read_text(encoding="utf-8"):
     raise SystemExit("API smoke does not enforce non-duplicating SSE replay")
+live_e2e = pathlib.Path(sys.argv[1]).parent.parent.parent / "web" / "e2e" / "live.spec.ts"
+live_e2e_text = live_e2e.read_text(encoding="utf-8")
+for marker in ("/api/v1/onboarding/complete", "/api/v1/events/stream", "snapraid.sync", "Overview"):
+    if marker not in live_e2e_text:
+        raise SystemExit(f"live browser smoke is missing real-runtime coverage: {marker}")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY

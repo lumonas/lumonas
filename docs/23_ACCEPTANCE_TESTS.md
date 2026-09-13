@@ -244,6 +244,11 @@ navigation against the production Vite bundle in explicit demo mode. It runs
 in the release-blocking `frontend-e2e` CI job and complements, rather than
 replaces, the real-backend appliance smoke.
 
+The release-blocking `frontend-live-e2e` job additionally runs the compiled
+frontend against the real daemon with MSW disabled. It completes onboarding,
+queues a maintenance job, observes the browser-delivered SSE job event, and
+opens the live Overview, Storage, and Monitoring routes.
+
 ## S. Config drift
 
 Modify supported service config externally.

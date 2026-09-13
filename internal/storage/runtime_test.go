@@ -51,6 +51,15 @@ func TestDiscoverProtectionReadsConfigWithoutMutating(t *testing.T) {
 	}
 }
 
+func TestDiscoverProtectionKeepsEmptyCollectionsNonNil(t *testing.T) {
+	result := DiscoverProtection(context.Background(), nil, func(context.Context, string, ...string) ([]byte, error) {
+		return nil, nil
+	}, filepath.Join(t.TempDir(), "missing-snapraid.conf"))
+	if result.ParityDisks == nil || result.ProtectedDiskIDs == nil {
+		t.Fatalf("empty protection collections must encode as arrays: %#v", result)
+	}
+}
+
 func TestDiscoverProtectionMarksMissingConfiguredDiskCritical(t *testing.T) {
 	directory := t.TempDir()
 	config := filepath.Join(directory, "snapraid.conf")

@@ -50,6 +50,14 @@ navigation paths. CI installs a pinned Chromium runtime and runs this suite as
 the `frontend-e2e` job; tagged publication depends on that job as well as the
 real-backend runtime smoke.
 
+The companion `frontend-live-e2e` suite runs the production bundle against
+`scripts/dev.sh full`, with MSW disabled. It completes onboarding against the
+real daemon, queues a maintenance job, waits for its `job.state_changed` event
+through the browser's native `EventSource`, and navigates the live Overview,
+Storage, and Monitoring pages. This catches a frontend/API/SSE integration
+regression that API-only smoke tests cannot detect and is required by the
+tagged release job.
+
 Run system tools in containers/VMs where appropriate:
 
 - Samba config rendering/validation;

@@ -96,7 +96,17 @@ func parseMounts(output string) []mount {
 }
 
 func DiscoverProtection(ctx context.Context, disks []model.Disk, runner RuntimeRunner, configPath string) model.Protection {
-	result := model.Protection{Status: model.Attention, SyncSchedule: "Not configured", ScrubSchedule: "Not configured", LastSyncResult: nil}
+	// Keep collection fields JSON arrays even when SnapRAID is not configured.
+	// The frontend contract treats these fields as arrays; encoding a nil slice
+	// as null makes a freshly installed appliance crash while rendering storage.
+	result := model.Protection{
+		Status:           model.Attention,
+		ParityDisks:      make([]model.DiskRef, 0),
+		ProtectedDiskIDs: make([]string, 0),
+		SyncSchedule:     "Not configured",
+		ScrubSchedule:    "Not configured",
+		LastSyncResult:   nil,
+	}
 	if configPath == "" {
 		configPath = "/etc/lumonas/snapraid.conf"
 	}
