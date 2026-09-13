@@ -229,6 +229,11 @@ disk, metrics, and jobs endpoints, plus the JSON envelope of streamed SSE
 events. This catches runtime serialization regressions that static route and
 type checks cannot see.
 
+It performs a Unix-socket capability preflight: the normal local target reports
+an explicit skip when the host sandbox forbids AF_UNIX binds, while CI and
+`make api-smoke-strict` fail closed instead of weakening the privileged-worker
+assertion.
+
 The Debian 13 QEMU smoke reuses those same validators against the appliance's
 live responses and event stream, so release gating checks runtime shape and
 reachability together rather than relying on string probes alone.

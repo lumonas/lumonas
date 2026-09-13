@@ -410,6 +410,10 @@ input hashes.
 
 Run the black-box API smoke and `lumonasd` restart/event-stream tests.
 
+The release/CI form must run in strict mode and fail if the privileged Unix
+socket boundary cannot be created; a local non-strict run may report an
+explicit host-capability skip.
+
 The same smoke must wait for a retained `/api/v1/system/metrics/history`
 sample, validate its timestamped metric envelope, and find that sample again
 after restarting the daemon against the same SQLite database. The QEMU smoke

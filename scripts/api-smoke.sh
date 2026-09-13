@@ -44,6 +44,35 @@ require_command() {
 }
 
 require_command curl
+require_command python3
+
+# The black-box smoke needs real Unix-domain sockets for the privileged
+# workers. Some development sandboxes prohibit AF_UNIX binds even in a
+# writable temporary directory. Treat that as an explicit local skip, but
+# never hide it from CI assertion mode.
+SOCKET_PROBE="$TEMP_DIR/socket-probe"
+SOCKET_PROBE_ERROR="$TEMP_DIR/socket-probe.error"
+if ! python3 - "$SOCKET_PROBE" 2>"$SOCKET_PROBE_ERROR" <<'PY'
+import socket
+import sys
+
+sock = socket.socket(socket.AF_UNIX)
+try:
+    sock.bind(sys.argv[1])
+finally:
+    sock.close()
+PY
+then
+	if [ "${LUMONAS_API_SMOKE_ASSERT:-false}" = "true" ]; then
+		echo "API smoke requires a writable Unix-domain socket in assertion mode" >&2
+		cat "$SOCKET_PROBE_ERROR" >&2 || true
+		exit 1
+	fi
+	echo "API smoke skipped: host does not permit Unix-domain socket binds" >&2
+	cat "$SOCKET_PROBE_ERROR" >&2 || true
+	exit 0
+fi
+rm -f "$SOCKET_PROBE" "$SOCKET_PROBE_ERROR"
 
 if [ -n "${LUMONAS_API_SMOKE_BIN:-}" ]; then
 	LUMONASD_BIN=$LUMONAS_API_SMOKE_BIN

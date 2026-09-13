@@ -40,6 +40,7 @@ flows still work. Set `LUMONAS_AUTH_REQUIRED=true` for an authenticated session
 | `make dev-full` | `lumonasd` + privd broker + 4 workers + Vite (real API) | http://localhost:5173 (API: 8080) |
 | `pnpm dev:api` | Vite only, proxies to an already-running backend | http://localhost:5173 |
 | `make api-smoke` | Black-box backend smoke test (self-contained) | — |
+| `make api-smoke-strict` | Same smoke test, failing when privileged Unix sockets are unavailable | Linux/Debian |
 | `make test` | Go tests + web lint/typecheck/tests + contract checks | — |
 
 The dev launcher reads these overrides (all optional):

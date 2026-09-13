@@ -95,6 +95,8 @@ if "TestRequestAuditPersistsTypedObservabilityFields" not in security_smoke:
 api_smoke_text = (repo_root / "scripts/api-smoke.sh").read_text(encoding="utf-8")
 if "audit response did not include typed trace fields after a mutation" not in api_smoke_text:
     raise SystemExit("API smoke does not require typed audit trace fields after a mutation")
+if "writable Unix-domain socket in assertion mode" not in api_smoke_text or "SOCKET_PROBE" not in api_smoke_text:
+    raise SystemExit("API smoke does not fail closed on an unavailable privileged socket boundary")
 for script, marker in (("scripts/api-smoke.sh", "/api/v1/events"), ("scripts/qemu-smoke.sh", "EVENTS_COMPAT_LOG"), ("scripts/iso-smoke.sh", "validate-sse.py"), ("scripts/qemu-recovery-smoke.sh", "RECOVERED_EVENTS_LOG")):
     if marker not in (repo_root / script).read_text(encoding="utf-8"):
         raise SystemExit(f"runtime contract smoke is missing compatibility SSE coverage: {script}")
