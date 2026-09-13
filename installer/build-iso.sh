@@ -11,6 +11,7 @@ DEBIAN_MIRROR="${LUMONAS_DEBIAN_MIRROR:-http://deb.debian.org/debian}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || date +%s)}"
 SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
 INSTALL_PASSWORD="${LUMONAS_INSTALL_PASSWORD:-}"
+INSTALL_PRESEED="${LUMONAS_INSTALL_PRESEED:-false}"
 case "$SOURCE_DATE_EPOCH" in
 	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
 esac
@@ -323,7 +324,7 @@ EOF
 # carry the appliance package on the ISO itself and install it into that
 # target with a preseed late command. Development builds can exercise the
 # real-disk installer path without baking credentials into the repository.
-if [ -n "$INSTALL_PASSWORD" ]; then
+if [ "$INSTALL_PRESEED" = "true" ] || [ -n "$INSTALL_PASSWORD" ]; then
 	mkdir -p "$WORK/config/includes.binary/etc/lumonas"
 	cat > "$WORK/config/includes.binary/etc/lumonas/lumonas-web.env" <<'ENV'
 LUMONAS_WEB_LISTEN=0.0.0.0:8081
@@ -338,8 +339,9 @@ ENV
 d-i passwd/root-login boolean false
 d-i passwd/user-fullname string Dawidof
 d-i passwd/username string dawidof
-d-i passwd/user-password password $INSTALL_PASSWORD
-d-i passwd/user-password-again password $INSTALL_PASSWORD
+d-i debian-installer/locale string en_US.UTF-8
+d-i keyboard-configuration/xkb-keymap select us
+d-i netcfg/choose_interface select auto
 d-i netcfg/hostname string lumonas-iso-test
 d-i partman-auto/disk string /dev/vda
 d-i partman-auto/method string regular
@@ -353,6 +355,9 @@ d-i grub-installer/with_other_os boolean true
 d-i grub-installer/bootdev string /dev/vda
 d-i preseed/late_command string cp /cdrom/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb /target/tmp/lumonas.deb; in-target dpkg -i /tmp/lumonas.deb; cp /cdrom/etc/lumonas/lumonas-web.env /target/etc/lumonas/lumonas-web.env; in-target systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
 EOF
+	if [ -n "$INSTALL_PASSWORD" ]; then
+		printf 'd-i passwd/user-password password %s\nd-i passwd/user-password-again password %s\n' "$INSTALL_PASSWORD" "$INSTALL_PASSWORD" >> "$WORK/config/includes.binary/preseed.cfg"
+	fi
 	chmod 0600 "$WORK/config/includes.binary/preseed.cfg"
 fi
 
@@ -373,7 +378,7 @@ lb_config() {
 	--firmware-chroot false \
 	"$@"
 }
-if [ -n "$INSTALL_PASSWORD" ]; then
+if [ "$INSTALL_PRESEED" = "true" ] || [ -n "$INSTALL_PASSWORD" ]; then
 	(cd "$WORK" && lb_config --bootappend-install "auto=true priority=critical preseed/file=/cdrom/preseed.cfg")
 	# live-build does not propagate --bootappend-install to the generated
 	# Debian Installer menu files for all installer menu variants. Patch the
