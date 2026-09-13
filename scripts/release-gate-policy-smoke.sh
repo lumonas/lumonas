@@ -235,6 +235,14 @@ iso_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "iso-sm
 live_recovery_source = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-live-recovery-source.sh"
 if any('"privilegedBroker":true' not in path.read_text(encoding="utf-8") for path in (qemu_smoke, qemu_recovery_smoke, iso_smoke, live_recovery_source)):
     raise SystemExit("QEMU smoke does not assert the privileged broker readiness contract")
+readiness_validator = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "validate-api-response.py"
+readiness_text = readiness_validator.read_text(encoding="utf-8")
+if "privilegedWorkers" not in readiness_text:
+    raise SystemExit("readiness validator does not require privilegedWorkers")
+daemon_source = (pathlib.Path(sys.argv[1]).parent.parent.parent / "cmd" / "lumonasd" / "main.go").read_text(encoding="utf-8")
+for marker in ("privilegedWorkersReady", "worker.ping."):
+    if marker not in daemon_source:
+        raise SystemExit(f"daemon readiness is missing {marker}")
 live_recovery_text = live_recovery_source.read_text(encoding="utf-8")
 for marker in ("SOURCE_API=\"https://127.0.0.1:18083\"", "curl -kfsS \"$SOURCE_API/healthz\"", "SOURCE_COOKIES=", "SOURCE_CSRF=", "X-CSRF-Token: $SOURCE_CSRF", "api/v1/recovery/export"):
     if marker not in live_recovery_text:

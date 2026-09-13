@@ -102,6 +102,13 @@ This keeps `/readyz` meaningful in CI and exercises the same Unix-socket
 boundary used by the packaged appliance rather than replacing it with an
 in-process test double.
 
+Readiness is a deployment contract: the daemon must report a healthy database,
+privileged broker, and every restricted worker before the installed runtime is
+considered ready. The worker check uses typed non-mutating
+`worker.ping.storage`, `worker.ping.network`, `worker.ping.power`, and
+`worker.ping.general` broker operations, so a partially started privileged
+runtime cannot be advertised as ready.
+
 ### QEMU end-to-end
 
 Virtual NAS:

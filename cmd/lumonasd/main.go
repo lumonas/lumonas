@@ -249,18 +249,35 @@ func (s *apiServer) healthz(w http.ResponseWriter, _ *http.Request) {
 }
 func (s *apiServer) readyz(w http.ResponseWriter, _ *http.Request) {
 	nasUUID, hasNASUUID := s.store.Meta("nas_uuid")
-	checks := map[string]bool{"database": hasNASUUID && strings.TrimSpace(nasUUID) != "", "privilegedBroker": false}
+	checks := map[string]bool{"database": hasNASUUID && strings.TrimSpace(nasUUID) != "", "privilegedBroker": false, "privilegedWorkers": false}
 	if checks["database"] {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		result, err := s.executePrivileged(ctx, privileged.Request{Operation: "ping", PlanHash: "readiness"})
-		cancel()
 		checks["privilegedBroker"] = err == nil && result.OK
+		if checks["privilegedBroker"] {
+			checks["privilegedWorkers"] = s.privilegedWorkersReady(ctx)
+		}
+		cancel()
 	}
-	if !checks["database"] || !checks["privilegedBroker"] {
+	if !checks["database"] || !checks["privilegedBroker"] || !checks["privilegedWorkers"] {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "checks": checks})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "checks": checks})
+}
+
+func (s *apiServer) privilegedWorkersReady(ctx context.Context) bool {
+	for _, worker := range []string{"storage", "network", "power", "general"} {
+		result, err := s.executePrivileged(ctx, privileged.Request{
+			Operation: "worker.ping." + worker,
+			PlanHash:  "readiness",
+			Confirmed: true,
+		})
+		if err != nil || !result.OK {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {

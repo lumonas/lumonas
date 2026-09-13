@@ -244,13 +244,13 @@ func executeWorker(req request, worker string) response {
 
 func operationWorker(operation string) string {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.delete", "install.apply":
+	case "worker.ping.storage", "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.delete", "install.apply":
 		return "storage"
-	case "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply":
+	case "worker.ping.network", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply":
 		return "network"
-	case "power.action", "power.shutdown":
+	case "worker.ping.power", "power.action", "power.shutdown":
 		return "power"
-	case "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "avahi.config.apply":
+	case "worker.ping.general", "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "avahi.config.apply":
 		return "general"
 	default:
 		return ""
@@ -292,6 +292,8 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return response{Error: "operationId is required"}
 	}
 	switch req.Operation {
+	case "worker.ping.storage", "worker.ping.network", "worker.ping.power", "worker.ping.general":
+		return response{OK: true, Data: map[string]string{"service": "lumonas-privd", "worker": strings.TrimPrefix(req.Operation, "worker.ping.")}}
 	case "ping":
 		return response{OK: true, Data: map[string]string{"service": "lumonas-privd"}}
 	case "docker.read":

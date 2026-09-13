@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -134,7 +135,7 @@ func TestReadyRequiresDatabaseIdentityAndPrivilegedBroker(t *testing.T) {
 	server := testServer(t)
 	ready := httptest.NewRecorder()
 	server.routes().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
-	if ready.Code != http.StatusOK || !strings.Contains(ready.Body.String(), `"database":true`) || !strings.Contains(ready.Body.String(), `"privilegedBroker":true`) {
+	if ready.Code != http.StatusOK || !strings.Contains(ready.Body.String(), `"database":true`) || !strings.Contains(ready.Body.String(), `"privilegedBroker":true`) || !strings.Contains(ready.Body.String(), `"privilegedWorkers":true`) {
 		t.Fatalf("expected ready checks to pass, got %d: %s", ready.Code, ready.Body.String())
 	}
 
@@ -143,8 +144,47 @@ func TestReadyRequiresDatabaseIdentityAndPrivilegedBroker(t *testing.T) {
 	}
 	notReady := httptest.NewRecorder()
 	server.routes().ServeHTTP(notReady, httptest.NewRequest(http.MethodGet, "/readyz", nil))
-	if notReady.Code != http.StatusServiceUnavailable || !strings.Contains(notReady.Body.String(), `"privilegedBroker":false`) {
+	if notReady.Code != http.StatusServiceUnavailable || !strings.Contains(notReady.Body.String(), `"privilegedBroker":false`) || !strings.Contains(notReady.Body.String(), `"privilegedWorkers":false`) {
 		t.Fatalf("expected broker failure to make readiness fail, got %d: %s", notReady.Code, notReady.Body.String())
+	}
+}
+
+func TestReadyProbesEveryPrivilegedWorker(t *testing.T) {
+	server := testServer(t)
+	var operations []string
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		operations = append(operations, request.Operation)
+		return nil
+	}
+	ready := httptest.NewRecorder()
+	server.routes().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusOK {
+		t.Fatalf("expected readiness, got %d: %s", ready.Code, ready.Body.String())
+	}
+	want := []string{"ping", "worker.ping.storage", "worker.ping.network", "worker.ping.power", "worker.ping.general"}
+	if !reflect.DeepEqual(operations, want) {
+		t.Fatalf("unexpected readiness probes: got %v want %v", operations, want)
+	}
+}
+
+func TestReadyFailsClosedWhenPrivilegedWorkerProbeFails(t *testing.T) {
+	server := testServer(t)
+	var operations []string
+	server.brokerExec = func(_ context.Context, request privileged.Request) error {
+		operations = append(operations, request.Operation)
+		if request.Operation == "worker.ping.network" {
+			return errors.New("network worker unavailable")
+		}
+		return nil
+	}
+	ready := httptest.NewRecorder()
+	server.routes().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusServiceUnavailable || !strings.Contains(ready.Body.String(), `"privilegedBroker":true`) || !strings.Contains(ready.Body.String(), `"privilegedWorkers":false`) {
+		t.Fatalf("expected worker failure to make readiness fail, got %d: %s", ready.Code, ready.Body.String())
+	}
+	want := []string{"ping", "worker.ping.storage", "worker.ping.network"}
+	if !reflect.DeepEqual(operations, want) {
+		t.Fatalf("readiness continued after worker failure: got %v want %v", operations, want)
 	}
 }
 

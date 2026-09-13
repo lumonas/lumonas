@@ -136,6 +136,10 @@ Pass if the live ISO web service exposes health, readiness, and server routes
 over HTTPS with the generated certificate, while the recovery daemon remains
 bound to its separate loopback-only API port.
 
+The readiness response must report `database`, `privilegedBroker`, and
+`privilegedWorkers` as true. Readiness is not accepted when any typed storage,
+network, power, or general privileged worker probe fails.
+
 ## L. Config recovery
 
 Create backup, destroy system SSD, restore.

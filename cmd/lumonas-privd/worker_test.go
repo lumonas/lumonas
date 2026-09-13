@@ -26,6 +26,22 @@ func TestWorkerRejectsOperationsOutsideItsCapabilityDomain(t *testing.T) {
 	}
 }
 
+func TestEachPrivilegedWorkerAnswersTypedReadinessProbe(t *testing.T) {
+	for _, worker := range []string{"storage", "network", "power", "general"} {
+		t.Run(worker, func(t *testing.T) {
+			operation := "worker.ping." + worker
+			result := executeWorker(request{Operation: operation, PlanHash: "readiness", Confirmed: true}, worker)
+			if !result.OK || result.Error != "" {
+				t.Fatalf("worker readiness probe failed: %#v", result)
+			}
+			data, ok := result.Data.(map[string]string)
+			if !ok || data["worker"] != worker {
+				t.Fatalf("unexpected worker readiness payload: %#v", result.Data)
+			}
+		})
+	}
+}
+
 func TestWireGuardMutationUsesNetworkWorkerAndTypedConfig(t *testing.T) {
 	previous := wireGuardApply
 	t.Cleanup(func() { wireGuardApply = previous })

@@ -54,8 +54,8 @@ def validate_readiness(value: Any) -> None:
     if obj["status"] not in ("ready", "not_ready"):
         fail("readiness.status must be ready or not_ready")
     checks = object_value(obj["checks"], "readiness.checks")
-    required(checks, ("database", "privilegedBroker"), "readiness.checks")
-    for field in ("database", "privilegedBroker"):
+    required(checks, ("database", "privilegedBroker", "privilegedWorkers"), "readiness.checks")
+    for field in ("database", "privilegedBroker", "privilegedWorkers"):
         if not isinstance(checks[field], bool):
             fail(f"readiness.checks.{field} must be a boolean")
 
@@ -363,7 +363,7 @@ def validate_updates_status(value: Any) -> None:
 
 def self_test() -> None:
     validate_server({field: "value" for field in ("id", "name", "hostname", "version", "nasUuid", "timezone", "health", "ip")})
-    validate_readiness({"status": "ready", "checks": {"database": True, "privilegedBroker": True}})
+    validate_readiness({"status": "ready", "checks": {"database": True, "privilegedBroker": True, "privilegedWorkers": True}})
     validate_disks([{
         "id": "wwn-123", "name": "sda", "model": "virtual", "gptDiskGuid": "guid-1",
         "sizeBytes": 1024, "role": "data", "rotational": False, "interface": "virtio",

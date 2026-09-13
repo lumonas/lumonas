@@ -3489,11 +3489,13 @@ components:
           enum: [ready, not_ready]
         checks:
           type: object
-          required: [database, privilegedBroker]
+          required: [database, privilegedBroker, privilegedWorkers]
           properties:
             database:
               type: boolean
             privilegedBroker:
+              type: boolean
+            privilegedWorkers:
               type: boolean
 
     HealthState:
