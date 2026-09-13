@@ -360,7 +360,10 @@ func copyFile(source, target string) error {
 		_ = output.Close()
 		return err
 	}
-	return output.Close()
+	if err := output.Close(); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(target))
 }
 
 func syncDirectory(directory string) error {

@@ -532,6 +532,13 @@ The Debian maintainer scripts stop services in dependent-to-provider order
 dependency order afterward. A packaging smoke test checks both the script
 ordering and that `prerm` is included in the generated `.deb`.
 
+The A/B update safety gate also exercises immutable slot-image staging and the
+privileged writer. It verifies the staged digest before any device access,
+rejects character devices and mounted or unverifiable targets, requires typed
+operation IDs, durably syncs the staged image directory, and refuses to
+promote a slot when the reported health version does not match the pending
+version.
+
 Before that dependency graph is started, `postinst` runs the packaged
 `lumonas-migrate` binary as the unprivileged `lumonas` user. It reads only the
 validated `LUMONAS_DB_PATH` setting, applies the production SQLite migration

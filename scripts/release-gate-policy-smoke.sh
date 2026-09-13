@@ -334,5 +334,31 @@ if "make arm64-image-smoke netboot-smoke" not in workflow_text:
 for marker in ("package-arm64:", "LUMONAS_CC=aarch64-linux-gnu-gcc", "name: lumonas-deb-arm64", "deb-verify-arm64:"):
     if marker not in workflow_text:
         raise SystemExit(f"CI does not build and verify the arm64 package: {marker}")
+slot_source = (repo_root / "cmd" / "lumonas-privd" / "system_slots.go").read_text(encoding="utf-8")
+for marker in ("slotTargetStat", "ModeCharDevice", "slot image digest does not match", "could not verify slot target mount state"):
+    if marker not in slot_source:
+        raise SystemExit(f"slot writer safety guard is missing {marker}")
+slot_tests = (repo_root / "cmd" / "lumonas-privd" / "system_slots_test.go").read_text(encoding="utf-8")
+for marker in ("TestSlotWriteVerifiesDigestBeforeWrite", "TestSlotWriteFailsClosedWhenMountStateUnknown", "TestSlotWriteRejectsCharacterDevice"):
+    if marker not in slot_tests:
+        raise SystemExit(f"slot writer safety test is missing {marker}")
+update_source = (repo_root / "internal" / "updates" / "updates.go").read_text(encoding="utf-8")
+if "syncDirectory(filepath.Dir(target))" not in update_source:
+    raise SystemExit("A/B staging does not sync the target directory")
+slot_image_source = (repo_root / "internal" / "updates" / "slotimage.go").read_text(encoding="utf-8")
+if "slot health version does not match pending version" not in slot_image_source:
+    raise SystemExit("A/B slot promotion does not bind health to the pending version")
+slot_api = (repo_root / "cmd" / "lumonasd" / "slot_api.go").read_text(encoding="utf-8")
+for marker in ("parseSlotDeviceMapping", "stageSlotImage", "activateSlotImage", "confirmSlotImage", "system.slot.write", "system.slot.bootnext"):
+    if marker not in slot_api:
+        raise SystemExit(f"slot API integration is missing {marker}")
+slot_api_tests = (repo_root / "cmd" / "lumonasd" / "slot_api_test.go").read_text(encoding="utf-8")
+for marker in ("TestParseSlotDeviceMappingRejectsUnsafeAndDuplicateEntries", "TestSlotAPIStagesActivatesAndConfirmsSignedImage"):
+    if marker not in slot_api_tests:
+        raise SystemExit(f"slot API coverage is missing {marker}")
+openapi_text = (repo_root / "docs" / "openapi.yaml").read_text(encoding="utf-8")
+for marker in ("/updates/slot/stage:", "/updates/slot/activate:", "/updates/slot/confirm:"):
+    if marker not in openapi_text:
+        raise SystemExit(f"slot API route is missing from OpenAPI: {marker}")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY

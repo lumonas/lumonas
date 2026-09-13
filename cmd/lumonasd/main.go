@@ -443,6 +443,12 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.updatesStatus(w, r)
 	case r.Method == http.MethodPost && endpoint == "/updates/apply":
 		s.applyUpdate(w, r)
+	case r.Method == http.MethodPost && endpoint == "/updates/slot/stage":
+		s.stageSlotImage(w, r)
+	case r.Method == http.MethodPost && endpoint == "/updates/slot/activate":
+		s.activateSlotImage(w, r)
+	case r.Method == http.MethodPost && endpoint == "/updates/slot/confirm":
+		s.confirmSlotImage(w, r)
 	case r.Method == http.MethodPost && endpoint == "/updates/rollback":
 		s.rollbackUpdate(w, r)
 	case r.Method == http.MethodPost && endpoint == "/updates/health":
