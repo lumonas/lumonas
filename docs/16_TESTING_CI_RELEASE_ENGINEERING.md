@@ -188,6 +188,10 @@ checks the stable Disk and LumoEvent field sets in OpenAPI and TypeScript,
 requires all 56 named frontend response types to have OpenAPI components, and
 checks route parity so a response-shape or endpoint regression cannot hide.
 
+The contract gate also rejects duplicate OpenAPI path or method keys. The
+normalizer in `scripts/normalize-openapi.py` merges legacy split path blocks
+before review so strict YAML parsers cannot silently discard an operation.
+
 The black-box API smoke test additionally validates live JSON from the server,
 disk, metrics, and jobs endpoints, plus the JSON envelope of streamed SSE
 events. This catches runtime serialization regressions that static route and

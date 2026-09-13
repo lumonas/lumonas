@@ -386,71 +386,6 @@ paths:
   /storage/protection/replacement/plan:
     post:
       tags: [Storage]
-      summary: Plan a SnapRAID data-disk replacement
-      operationId: planDiskReplacement
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [retiredDiskId, replacementDiskId]
-              properties:
-                retiredDiskId: {type: string}
-                replacementDiskId: {type: string}
-      responses:
-        '201':
-          description: Replacement plan
-        '4XX':
-          description: Client error
-
-  /storage/protection/replacement/confirm:
-    post:
-      tags: [Storage]
-      summary: Confirm and start SnapRAID disk replacement
-      operationId: confirmDiskReplacement
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [operationId, planHash, reauthenticated, storageSafetyUnlocked]
-              properties:
-                operationId: {type: string}
-                planHash: {type: string}
-                reauthenticated: {type: boolean}
-                storageSafetyUnlocked: {type: boolean}
-      responses:
-        '202':
-          description: Replacement formatting and parity recovery queued
-        '4XX':
-          description: Client error
-
-  /docker/images/check-updates:
-    post:
-      tags: [Docker]
-      summary: Compare local images against the registry
-      operationId: checkImageUpdates
-      description: >-
-        Fetches manifest digests for locally present images (no image layers
-        are pulled) and reports which ones have a newer build upstream. The
-        result feeds the "updates available" counters.
-      responses:
-        '200':
-          description: Images with update flags
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/DockerImage'
-        '503':
-          description: Docker unavailable
-
-  /storage/protection/replacement/plan:
-    post:
-      tags: [Storage]
       summary: Plan a protected data disk replacement
       operationId: planDiskReplacement
       description: >-
@@ -503,6 +438,27 @@ paths:
           description: Plan hash or identity revalidation failed
         '423':
           description: Reauthentication and storage safety unlock required
+
+  /docker/images/check-updates:
+    post:
+      tags: [Docker]
+      summary: Compare local images against the registry
+      operationId: checkImageUpdates
+      description: >-
+        Fetches manifest digests for locally present images (no image layers
+        are pulled) and reports which ones have a newer build upstream. The
+        result feeds the "updates available" counters.
+      responses:
+        '200':
+          description: Images with update flags
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DockerImage'
+        '503':
+          description: Docker unavailable
 
   /docker/summary:
     get:
@@ -666,6 +622,23 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NetworkConnection'
+    post:
+      tags: [Network]
+      summary: Create or run network resource
+      operationId: post-network-connections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
 
   /network/interfaces:
     get:
@@ -797,6 +770,23 @@ paths:
       responses:
         '200':
           description: Binding list
+    patch:
+      tags: [Network]
+      summary: Update network resource
+      operationId: patch-network-bindings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
 
   /network/firewall/policy:
     get:
@@ -806,6 +796,23 @@ paths:
       responses:
         '200':
           description: Firewall policy
+    patch:
+      tags: [Network]
+      summary: Update network resource
+      operationId: patch-network-firewall-policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
 
   /backups/destinations:
     get:
@@ -821,6 +828,23 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BackupDestination'
+    post:
+      tags: [Backups]
+      summary: Create or run backup resource
+      operationId: post-backups-destinations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
 
   /backups/runs:
     get:
@@ -891,6 +915,23 @@ paths:
       responses:
         '200':
           description: Channel list
+    post:
+      tags: [Monitoring]
+      summary: Create or run notification channel
+      operationId: post-notification-channels
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
 
   /users:
     get:
@@ -900,6 +941,23 @@ paths:
       responses:
         '200':
           description: User list
+    post:
+      tags: [Users]
+      summary: Create or run user
+      operationId: post-users
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
 
   /users/{id}/passkeys:
     get:
@@ -1053,6 +1111,23 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AppSettings'
+    patch:
+      tags: [Settings]
+      summary: Update settings
+      operationId: patch-settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '4XX':
+          description: Client error
 
   /updates/status:
     get:
@@ -1301,6 +1376,25 @@ paths:
                   $ref: '#/components/schemas/Job'
 
   # --- Auto-documented coverage (generated against the router; see scripts/check-openapi.py) ---
+    post:
+      tags: [Monitoring]
+      summary: Queue a maintenance job (SMART or SnapRAID)
+      operationId: post-jobs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+        '202':
+          description: Accepted (async job queued)
+        '409':
+          description: Another active job owns the requested resource
+        '4XX':
+          description: Client error
 
   /acl/jobs:
     post:
@@ -1491,25 +1585,6 @@ paths:
         '4XX':
           description: Client error
 
-  /backups/destinations:
-    post:
-      tags: [Backups]
-      summary: Create or run backup resource
-      operationId: post-backups-destinations
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: OK
-        '202':
-          description: Accepted (async job queued)
-        '4XX':
-          description: Client error
-
   /backups/destinations/{id}:
     delete:
       tags: [Backups]
@@ -1535,8 +1610,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /backups/schedule:
     patch:
       tags: [Backups]
       summary: Update backup resource
@@ -1928,8 +2001,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /groups:
     post:
       tags: [Users]
       summary: Create or run group
@@ -1960,8 +2031,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /groups/{id}:
     patch:
       tags: [Users]
       summary: Update group
@@ -1999,51 +2068,11 @@ paths:
         '4XX':
           description: Client error
 
-  /jobs:
-    post:
-      tags: [Monitoring]
-      summary: Queue a maintenance job (SMART or SnapRAID)
-      operationId: post-jobs
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: OK
-        '202':
-          description: Accepted (async job queued)
-        '409':
-          description: Another active job owns the requested resource
-        '4XX':
-          description: Client error
-
   /jobs/{id}:
     get:
       tags: [Monitoring]
       summary: Get job
       operationId: get-jobs-id
-      responses:
-        '200':
-          description: OK
-        '202':
-          description: Accepted (async job queued)
-        '4XX':
-          description: Client error
-
-  /network/bindings:
-    patch:
-      tags: [Network]
-      summary: Update network resource
-      operationId: patch-network-bindings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
       responses:
         '200':
           description: OK
@@ -2076,25 +2105,6 @@ paths:
       tags: [Network]
       summary: Commit or roll back a network checkpoint
       operationId: post-network-checkpoints-id-action
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: OK
-        '202':
-          description: Accepted (async job queued)
-        '4XX':
-          description: Client error
-
-  /network/connections:
-    post:
-      tags: [Network]
-      summary: Create or run network resource
-      operationId: post-network-connections
       requestBody:
         required: true
         content:
@@ -2179,25 +2189,6 @@ paths:
         '4XX':
           description: Client error
 
-  /network/firewall/policy:
-    patch:
-      tags: [Network]
-      summary: Update network resource
-      operationId: patch-network-firewall-policy
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: OK
-        '202':
-          description: Accepted (async job queued)
-        '4XX':
-          description: Client error
-
   /network/interfaces/metrics:
     get:
       tags: [Network]
@@ -2224,25 +2215,6 @@ paths:
         '4XX':
           description: Client error
 
-  /notification-channels:
-    post:
-      tags: [Monitoring]
-      summary: Create or run notification channel
-      operationId: post-notification-channels
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: OK
-        '202':
-          description: Accepted (async job queued)
-        '4XX':
-          description: Client error
-
   /notification-channels/{id}:
     delete:
       tags: [Monitoring]
@@ -2255,8 +2227,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /notification-channels/{id}:
     patch:
       tags: [Monitoring]
       summary: Update notification channel
@@ -2319,8 +2289,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /notification-rules:
     post:
       tags: [Monitoring]
       summary: Create or run notification rule
@@ -2615,25 +2583,6 @@ paths:
         '4XX':
           description: Client error
 
-  /settings:
-    patch:
-      tags: [Settings]
-      summary: Update settings
-      operationId: patch-settings
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: OK
-        '202':
-          description: Accepted (async job queued)
-        '4XX':
-          description: Client error
-
   /shares/{id}:
     delete:
       tags: [Shares]
@@ -2646,8 +2595,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /shares/{id}:
     get:
       tags: [Shares]
       summary: Get share
@@ -2659,8 +2606,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /shares/{id}:
     patch:
       tags: [Shares]
       summary: Update share
@@ -2729,8 +2674,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /ssh/keys:
     post:
       tags: [Network]
       summary: Create or run SSH key
@@ -2932,8 +2875,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /ups/policy:
     patch:
       tags: [Settings]
       summary: Update UPS
@@ -2965,25 +2906,6 @@ paths:
         '4XX':
           description: Client error
 
-  /users:
-    post:
-      tags: [Users]
-      summary: Create or run user
-      operationId: post-users
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-      responses:
-        '200':
-          description: OK
-        '202':
-          description: Accepted (async job queued)
-        '4XX':
-          description: Client error
-
   /users/{id}:
     delete:
       tags: [Users]
@@ -2996,8 +2918,6 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
-
-  /users/{id}:
     patch:
       tags: [Users]
       summary: Update user
