@@ -437,10 +437,11 @@ bounded `snapraid status` probe without issuing a mutating storage command.
 Run the loopback storage smoke test from the packaged/QEMU dependency set.
 
 Pass if both ext4 and XFS images are created, reattached by stable filesystem
-identity, mounted read-only, and checked with `findmnt`; the disk collector
-must also preserve filesystem UUID/type and mounted state reported on a child
-partition; missing `xfsprogs` must fail the release gate instead of silently
-skipping XFS coverage.
+identity, the production disk collector discovers the disposable ext4 device
+without a mutating command, mounted read-only, and checked with `findmnt`; the
+disk collector must also preserve filesystem UUID/type and mounted state
+reported on a child partition; missing `xfsprogs` must fail the release gate
+instead of silently skipping XFS coverage.
 
 ## AC. Real pool and protection integration
 

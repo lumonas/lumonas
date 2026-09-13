@@ -108,7 +108,7 @@ the live-build work directory when debugging an image build.
 
 Storage mutations now use immutable plans, planner-time state validation, stable disk identity revalidation, explicit safety unlock/reauthentication, and the typed `lumonas-privd` broker. Mount, unmount, format, and erase workers are allow-listed; SnapRAID jobs, NetworkManager checkpoints, ACL changes, scheduled backup/power policy, and explicit power actions are brokered with bounded confirmation. Automatic recovery remains an explicit staged operation.
 
-The CI storage gate also exercises disposable loopback media: ext4 UUID stability, read-only import, mismatch rejection, format/erase behavior, and optional XFS import are verified before release artifacts can be promoted.
+The CI storage gate also exercises disposable loopback media: ext4 UUID stability, the production read-only disk collector, read-only import, mismatch rejection, format/erase behavior, and XFS import are verified before release artifacts can be promoted.
 
 Frontend API queries are checked against the backend route contract and every
 named response type is required to have a matching OpenAPI component schema.

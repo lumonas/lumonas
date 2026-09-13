@@ -1,9 +1,35 @@
 package collector
 
 import (
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
+
+func TestDisksReadOnlyIdentityAgainstRealDevice(t *testing.T) {
+	path := strings.TrimSpace(os.Getenv("LUMONAS_TEST_DISK_PATH"))
+	if path == "" {
+		t.Skip("LUMONAS_TEST_DISK_PATH is only set by the loopback smoke")
+	}
+	disks, err := Disks(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, disk := range disks {
+		if disk.CurrentPath != path {
+			continue
+		}
+		if disk.ID == "" || strings.HasPrefix(disk.ID, "path:") {
+			t.Fatalf("real disk collector did not retain a stable identity: %#v", disk)
+		}
+		if disk.FilesystemUUID == "" {
+			t.Fatalf("real disk collector lost the filesystem UUID: %#v", disk)
+		}
+		return
+	}
+	t.Fatalf("real disk collector did not return disposable device %q: %#v", path, disks)
+}
 
 func TestDisksUseStableIdentityAcrossDevicePathChanges(t *testing.T) {
 	first := []byte(`{"blockdevices":[{"name":"sdb","path":"/dev/sdb","type":"disk","size":100,"model":"Test","serial":"SERIAL-1","wwn":"wwn-1","rota":true,"tran":"sata"}]}`)

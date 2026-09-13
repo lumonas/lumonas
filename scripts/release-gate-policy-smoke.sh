@@ -188,6 +188,12 @@ if "if curl -kfsS -X POST -H" not in qemu_smoke.read_text(encoding="utf-8"):
 disk_identity_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "disk-identity-smoke.sh"
 if "DisksPromoteMountedPartitionMetadata" not in disk_identity_smoke.read_text(encoding="utf-8"):
     raise SystemExit("disk identity smoke does not cover mounted partition metadata")
+storage_loopback = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "storage-loopback-smoke.sh"
+if "TestDisksReadOnlyIdentityAgainstRealDevice" not in storage_loopback.read_text(encoding="utf-8"):
+    raise SystemExit("storage loopback smoke does not exercise the production disk collector")
+collector_tests = pathlib.Path(sys.argv[1]).parent.parent.parent / "internal" / "collector" / "disks_test.go"
+if "TestDisksReadOnlyIdentityAgainstRealDevice" not in collector_tests.read_text(encoding="utf-8"):
+    raise SystemExit("collector is missing its real-device read-only identity test")
 qemu_builder = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-build-image.sh"
 for marker in ("LUMONAS_UPDATE_FIXTURE", "LUMONAS_UPDATE_PUBLIC_KEY", "update-fixture/package", "chown -R lumonas:lumonas /var/lib/lumonas/update-fixture"):
     if marker not in qemu_builder.read_text(encoding="utf-8"):

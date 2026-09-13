@@ -12,12 +12,14 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 0
 fi
 
-for command in blkid losetup mount umount mkfs.ext4 mkfs.xfs wipefs truncate findmnt mergerfs snapraid; do
+for command in go blkid losetup mount umount mkfs.ext4 mkfs.xfs wipefs truncate findmnt mergerfs snapraid; do
 	command -v "$command" >/dev/null 2>&1 || {
 		echo "$command is required for loopback storage assertions" >&2
 		exit 1
 	}
 done
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-storage.XXXXXX")"
 LOOPS=""
@@ -74,6 +76,13 @@ REATTACHED_UUID="$(blkid -s UUID -o value "$EXT4_LOOP")"
 	echo "ext4 UUID changed after loop-device reattachment" >&2
 	exit 1
 }
+
+# Exercise the production read-only disk collector against the disposable
+# device, not just the filesystem utility wrappers used by this smoke.
+LUMONAS_TEST_DISK_PATH="$EXT4_LOOP" \
+	GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" \
+	GOPATH="${GOPATH:-/tmp/lumonas-gopath}" \
+	go test "$ROOT/internal/collector" -run '^TestDisksReadOnlyIdentityAgainstRealDevice$' -count=1
 
 mount "$EXT4_LOOP" "$WORK/ext4-mount"
 printf '%s\n' 'stable identity smoke test' >"$WORK/ext4-mount/sentinel"
