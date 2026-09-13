@@ -74,8 +74,22 @@ func filesystemUsage(path string) (usage, bool) {
 }
 
 func pathMatchesDisk(branch string, disk model.Disk) bool {
-	for _, value := range []string{disk.ID, disk.CurrentPath, disk.Name, disk.Serial, disk.WWN} {
-		if value != "" && strings.Contains(branch, value) {
+	clean := filepath.Clean(branch)
+	if clean == DiskBranchPath(disk.ID) {
+		return true
+	}
+	if segment, found := strings.CutPrefix(clean, "/srv/disks/"); found {
+		segment = strings.SplitN(segment, "/", 2)[0]
+		if segment == disk.ID {
+			return true
+		}
+	}
+	if disk.CurrentPath != "" && clean == filepath.Clean(disk.CurrentPath) {
+		return true
+	}
+	base := filepath.Base(clean)
+	for _, value := range []string{disk.Name, disk.Serial, disk.WWN} {
+		if value != "" && base == value {
 			return true
 		}
 	}

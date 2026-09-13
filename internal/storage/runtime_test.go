@@ -30,6 +30,23 @@ func TestDiscoverPoolsUsesStableDiskIDs(t *testing.T) {
 	}
 }
 
+func TestDiscoverPoolsDoesNotUseSubstringDiskIdentityMatches(t *testing.T) {
+	disks := []model.Disk{
+		{ID: "wwn:data", CurrentPath: "/dev/sda"},
+		{ID: "wwn:data10", CurrentPath: "/dev/sdb"},
+	}
+	runner := func(_ context.Context, command string, args ...string) ([]byte, error) {
+		if command != "findmnt" {
+			t.Fatalf("unexpected command: %s %v", command, args)
+		}
+		return []byte("/srv/pools/media fuse.mergerfs /srv/disks/wwn_data10\n"), nil
+	}
+	items := DiscoverPools(context.Background(), disks, runner)
+	if len(items) != 1 || len(items[0].Members) != 1 || items[0].Members[0].DiskID != "wwn:data10" {
+		t.Fatalf("substring identity match selected the wrong disk: %#v", items)
+	}
+}
+
 func TestDiscoverProtectionReadsConfigWithoutMutating(t *testing.T) {
 	directory := t.TempDir()
 	config := filepath.Join(directory, "snapraid.conf")
