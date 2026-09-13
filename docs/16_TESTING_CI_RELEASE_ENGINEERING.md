@@ -486,6 +486,9 @@ identity, Docker stack discovery, bundle verification, or versioned-copy
 persistence fails; the API cannot report a verified bundle for partial state.
 Notification provider responses are bounded to 64 KiB before status handling,
 and the security gate exercises the oversized-response rejection path.
+Support bundles retain their downloadable archive even when a collector fails,
+but record redacted collection-error status in `server.json` instead of making
+missing disks, events, audit rows, or appliance identity appear healthy.
 
 The protection-config API test uses a generated configuration and stable disk
 identities, so the endpoint’s read-only discovery path is exercised separately

@@ -6,18 +6,39 @@ import (
 
 	"github.com/lumonas/lumonas/internal/collector"
 	"github.com/lumonas/lumonas/internal/diagnostics"
+	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/store"
 )
 
 func (s *apiServer) supportBundle(w http.ResponseWriter, _ *http.Request) {
-	serverID, _ := s.store.Meta("nas_uuid")
-	disks, _ := s.diskFunc()
-	events, _ := s.store.Events(500)
-	audit, _ := s.store.Audit(500)
+	collectionErrors := make(map[string]string)
+	serverID, serverIDOK := s.store.Meta("nas_uuid")
+	if !serverIDOK {
+		collectionErrors["serverIdentity"] = "unavailable"
+	}
+	disks, diskErr := s.diskFunc()
+	if diskErr != nil {
+		disks = []model.Disk{}
+		collectionErrors["disks"] = "unavailable"
+	}
+	events, eventErr := s.store.Events(500)
+	if eventErr != nil {
+		events = []model.Event{}
+		collectionErrors["events"] = "unavailable"
+	}
+	audit, auditErr := s.store.Audit(500)
+	if auditErr != nil {
+		audit = []store.AuditEntry{}
+		collectionErrors["audit"] = "unavailable"
+	}
 	server := map[string]any{
 		"nasUuid":  serverID,
 		"hostname": collector.Hostname(),
 		"version":  s.version,
 		"health":   s.serverHealth(),
+	}
+	if len(collectionErrors) > 0 {
+		server["collectionErrors"] = collectionErrors
 	}
 	entries := map[string][]byte{}
 	for name, value := range map[string]any{

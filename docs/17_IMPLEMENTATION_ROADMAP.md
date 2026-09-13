@@ -42,6 +42,8 @@ Deliver:
 - recovery export requires stable disk and NAS identity, verifies the bundle,
   and persists a versioned copy before reporting success.
 - notification provider responses are bounded before retry/error handling.
+- support bundles report partial collection failures without leaking raw
+  collector errors or silently omitting required diagnostic sections.
 
 Exit criteria:
 

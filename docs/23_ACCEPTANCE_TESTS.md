@@ -660,3 +660,10 @@ Run the security smoke tests against a provider returning more than 64 KiB.
 
 Pass if delivery rejects the response within the bounded read and records a
 failure eligible for the existing retry/suppression path.
+
+## BH. Support-bundle collection completeness
+
+Run the support-bundle test with disk discovery unavailable.
+
+Pass if the archive remains downloadable, its disk section is empty rather than
+fabricated, and `server.json` records the redacted `disks: unavailable` status.
