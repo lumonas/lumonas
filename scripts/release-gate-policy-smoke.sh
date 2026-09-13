@@ -80,6 +80,8 @@ if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "
 for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollback", "activeSlot"):
     if marker not in qemu_smoke.read_text(encoding="utf-8"):
         raise SystemExit(f"QEMU smoke does not exercise signed update rollback: {marker}")
+if "if curl -kfsS -X POST -H" not in qemu_smoke.read_text(encoding="utf-8"):
+    raise SystemExit("QEMU signed-update smoke must guard the apply request with a shell conditional")
 qemu_builder = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-build-image.sh"
 for marker in ("LUMONAS_UPDATE_FIXTURE", "LUMONAS_UPDATE_PUBLIC_KEY", "update-fixture/package", "chown -R lumonas:lumonas /var/lib/lumonas/update-fixture"):
     if marker not in qemu_builder.read_text(encoding="utf-8"):
@@ -117,6 +119,9 @@ live_recovery_text = live_recovery_source.read_text(encoding="utf-8")
 for marker in ("SOURCE_API=\"https://127.0.0.1:18083\"", "curl -kfsS \"$SOURCE_API/healthz\"", "SOURCE_COOKIES=", "SOURCE_CSRF=", "X-CSRF-Token: $SOURCE_CSRF", "api/v1/recovery/export"):
     if marker not in live_recovery_text:
         raise SystemExit(f"live recovery source is missing its HTTPS/auth contract: {marker}")
+for path in (qemu_smoke, qemu_recovery_smoke, iso_smoke, live_recovery_source):
+    if "restrict=on,hostfwd=" not in path.read_text(encoding="utf-8"):
+        raise SystemExit(f"QEMU appliance smoke is not isolated from guest egress: {path.name}")
 live_e2e = pathlib.Path(sys.argv[1]).parent.parent.parent / "web" / "e2e" / "live.spec.ts"
 live_e2e_text = live_e2e.read_text(encoding="utf-8")
 for marker in ("/api/v1/onboarding/complete", "/api/v1/events/stream", "snapraid.sync", "Overview"):

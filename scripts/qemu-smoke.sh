@@ -68,7 +68,7 @@ qemu-system-x86_64 \
   -drive "file=$DATA_DIR/$data_b.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_b" | tr '[:lower:]' '[:upper:]')" \
   -drive "file=$DATA_DIR/$data_c.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_c" | tr '[:lower:]' '[:upper:]')" \
   -drive "file=$DATA_DIR/$parity_disk.qcow2,if=virtio,format=qcow2,serial=LUMONAS-PARITY" \
-  -netdev user,id=n1,hostfwd=tcp::18080-:8081 \
+  -netdev user,id=n1,restrict=on,hostfwd=tcp::18080-:8081 \
   -device virtio-net-pci,netdev=n1 \
   -nographic \
   -serial mon:stdio \
@@ -185,7 +185,7 @@ request = {
 }
 json.dump(request, open(sys.argv[2], "w", encoding="utf-8"), separators=(",", ":"))
 PY
-          curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$UPDATE_REQUEST_LOG" https://127.0.0.1:18080/api/v1/updates/apply >"$UPDATE_REQUEST_LOG.response" 2>/dev/null && \
+          if curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$UPDATE_REQUEST_LOG" https://127.0.0.1:18080/api/v1/updates/apply >"$UPDATE_REQUEST_LOG.response" 2>/dev/null && \
           grep -F '"pendingSlot":"b"' "$UPDATE_REQUEST_LOG.response" >/dev/null 2>&1 && \
           curl -kfsS -X POST -H 'Content-Type: application/json' -d "{\"healthy\":true,\"version\":$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["manifest"]["version"]))' "$LUMONAS_QEMU_UPDATE_FIXTURE")}" https://127.0.0.1:18080/api/v1/updates/health >"$UPDATE_HEALTH_LOG" 2>/dev/null && \
           grep -F '"activeSlot":"b"' "$UPDATE_HEALTH_LOG" >/dev/null 2>&1 && \

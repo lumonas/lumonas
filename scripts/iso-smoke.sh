@@ -45,7 +45,7 @@ qemu-system-x86_64 \
 	-smp 2 \
 	-cdrom "$LUMONAS_ISO" \
 	-drive "file=$DISK,if=virtio,format=qcow2,serial=LUMONAS-REPLACEMENT" \
-	-netdev user,id=n1,hostfwd=tcp::18081-:8081 \
+	-netdev user,id=n1,restrict=on,hostfwd=tcp::18081-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-boot d \
 	-nographic \

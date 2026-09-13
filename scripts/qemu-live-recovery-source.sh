@@ -51,7 +51,7 @@ qemu-system-x86_64 \
 	-drive "file=$SOURCE_DATA/data2.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA2" \
 	-drive "file=$SOURCE_DATA/data3.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA3" \
 	-drive "file=$SOURCE_DATA/parity.qcow2,if=virtio,format=qcow2,serial=LUMONAS-PARITY" \
-	-netdev user,id=n1,hostfwd=tcp::18083-:8081 \
+	-netdev user,id=n1,restrict=on,hostfwd=tcp::18083-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-nographic \
 	-serial mon:stdio \

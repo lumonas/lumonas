@@ -301,6 +301,10 @@ The ISO builder must also reject broad or traversing workdir paths and cache
 sources inside the workdir before cleanup. The installer workdir policy smoke is
 release-blocking.
 
+ISO, recovery, and appliance QEMU smoke tests must retain only their local host
+forwarding and set QEMU user networking to `restrict=on`, so successful health
+and recovery assertions cannot depend on Internet access.
+
 When recovery fails, the release job must retain the source-guest, ISO-guest,
 and replacement-boot logs before temporary files are removed. Successful runs
 may clean up the disposable recovery workspace.

@@ -84,7 +84,7 @@ qemu-system-x86_64 \
 	-cdrom "$ISO" \
 	-drive "file=$TARGET_IMAGE,if=virtio,format=qcow2,serial=LUMONAS-REPLACEMENT" \
 	-drive "file=$RECOVERY_IMAGE,if=virtio,format=raw,serial=LUMONAS-RECOVERY" \
-	-netdev user,id=n1,hostfwd=tcp::18082-:8081 \
+	-netdev user,id=n1,restrict=on,hostfwd=tcp::18082-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-boot d \
 	-nographic \
