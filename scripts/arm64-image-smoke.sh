@@ -29,7 +29,7 @@ fi
 command -v mmdebstrap >/dev/null 2>&1 || { echo "mmdebstrap missing for full arm64 build" >&2; exit 1; }
 [ "$(id -u)" = "0" ] || { echo "full arm64 build requires root" >&2; exit 1; }
 
-bash "$ROOT/scripts/reproducible-package-smoke.sh" "$VERSION"
+LUMONAS_DEB_ARCH=arm64 bash "$ROOT/scripts/reproducible-package-smoke.sh" "$VERSION"
 LUMONAS_DEB="$ROOT/lumonas_${VERSION}_arm64.deb" \
 LUMONAS_ARM64_IMAGE="${TMPDIR:-/tmp}/lumonas-arm64-check.img" \
 LUMONAS_ARM64_SIZE=2G \

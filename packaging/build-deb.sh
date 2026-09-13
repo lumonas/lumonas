@@ -3,7 +3,16 @@ set -eu
 
 VERSION="${1:-0.1.0-dev}"
 DEB_ARCH="${LUMONAS_DEB_ARCH:-amd64}"
-GOARCH="${LUMONAS_GOARCH:-$DEB_ARCH}"
+case "$DEB_ARCH" in
+	amd64) DEFAULT_GOARCH=amd64 ;;
+	arm64) DEFAULT_GOARCH=arm64 ;;
+	*) echo "unsupported Debian package architecture: $DEB_ARCH" >&2; exit 1 ;;
+esac
+GOARCH="${LUMONAS_GOARCH:-$DEFAULT_GOARCH}"
+case "$GOARCH" in
+	amd64|arm64) ;;
+	*) echo "unsupported Go package architecture: $GOARCH" >&2; exit 1 ;;
+esac
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/build/package"
 GIT_COMMIT="${LUMONAS_GIT_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf '%s' unknown)}"

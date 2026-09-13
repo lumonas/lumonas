@@ -68,6 +68,10 @@ command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required" >&2; exit 1
 command -v dpkg-scanpackages >/dev/null 2>&1 || { echo "dpkg-scanpackages (dpkg-dev) is required" >&2; exit 1; }
 command -v apt-ftparchive >/dev/null 2>&1 || { echo "apt-ftparchive (apt-utils) is required" >&2; exit 1; }
 [ -f "$DEB" ] || { echo "Build the Debian package first: $DEB" >&2; exit 1; }
+[ "$(dpkg-deb -f "$DEB" Architecture)" = "amd64" ] || {
+	echo "the x86-64 offline ISO requires an amd64 LumoNAS package" >&2
+	exit 1
+}
 
 rm -rf "$WORK"
 mkdir -p "$WORK/config/package-lists" "$WORK/config/hooks/live" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas" "$WORK/config/includes.chroot/usr/share/doc/lumonas" "$WORK/config/includes.chroot/etc/apt/preferences.d" "$WORK/config/includes.binary/opt/lumonas-repo/pool/main/l/lumonas"

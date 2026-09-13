@@ -318,5 +318,18 @@ if "TestStorageSnapshotFilesListsBrokerEntries" not in snapshot_api:
     raise SystemExit("snapshot browse API coverage is missing broker response handling")
 if "/storage/snapshots/{id}/files" not in (repo_root / "docs" / "openapi.yaml").read_text(encoding="utf-8"):
     raise SystemExit("snapshot browse endpoint is missing from OpenAPI")
+for path, markers in (
+    (repo_root / "installer" / "build-arm64.sh", ("LUMONAS_DEB", "grub-install --target=arm64-efi", 'losetup -d "$LOOP"')),
+    (repo_root / "installer" / "build-netboot.sh", ("lumonas.squashfs", "grub.cfg", "ipxe")),
+    (repo_root / "scripts" / "arm64-image-smoke.sh", ("LUMONAS_ARM64_ASSERT", "LUMONAS_DEB_ARCH=arm64")),
+    (repo_root / "scripts" / "netboot-smoke.sh", ("LUMONAS_NETBOOT_ASSERT", "lumonas.squashfs")),
+):
+    text = path.read_text(encoding="utf-8")
+    for marker in markers:
+        if marker not in text:
+            raise SystemExit(f"installer variant gate is missing {marker}: {path.name}")
+workflow_text = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+if "make arm64-image-smoke netboot-smoke" not in workflow_text:
+    raise SystemExit("CI does not run architecture and netboot packaging smokes")
 print("LumoNAS release gate policy passed: required blocking jobs are wired to publication")
 PY

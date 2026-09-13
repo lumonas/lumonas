@@ -698,6 +698,12 @@ under `/usr/share/doc/lumonas/`, including the source commit, source epoch, and
 every installed package version, so an artifact can be audited after boot or
 offline inspection.
 
+The packaging smoke also checks the optional arm64 package parameterization
+and PXE/netboot bundle builders. These checks are structural on the amd64 CI
+runner; the arm64 image path is only enabled on a native or binfmt-capable
+Debian host. The x86-64 ISO and QEMU builders reject non-amd64 packages so an
+arm64 artifact cannot be accidentally embedded in the release appliance.
+
 Local artifact construction follows the same dependency chain as CI: `make
 iso` builds the matching Debian package before invoking `live-build`, and
 `make qemu-image` likewise depends on the package target. This prevents a

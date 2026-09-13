@@ -28,7 +28,8 @@ field() {
 }
 
 [ "$(field Package)" = "lumonas" ] || { echo "unexpected package name" >&2; exit 1; }
-[ "$(field Architecture)" = "${LUMONAS_DEB_ARCH:-amd64}" ] || { echo "unexpected package architecture" >&2; exit 1; }
+EXPECTED_ARCH="${LUMONAS_DEB_ARCH:-amd64}"
+[ "$(field Architecture)" = "$EXPECTED_ARCH" ] || { echo "unexpected package architecture" >&2; exit 1; }
 [ -n "$(field Version)" ] || { echo "package version is empty" >&2; exit 1; }
 
 CONTENTS=$(dpkg-deb -c "$PACKAGE")
@@ -46,8 +47,8 @@ for binary in lumonasd lumonas-web lumonas-privd lumonas-recover lumonas-migrate
 		echo "$binary is not executable in the package" >&2
 		exit 1
 	}
-	case "$(file "$DATA_DIR/usr/lib/lumonas/$binary")" in
-	*ELF*64-bit*x86-64*|*ELF*64-bit*aarch64*) ;;
+	case "$EXPECTED_ARCH:$(file "$DATA_DIR/usr/lib/lumonas/$binary")" in
+	amd64:*ELF*64-bit*x86-64*|arm64:*ELF*64-bit*aarch64*) ;;
 	*)
 		echo "$binary is not a Linux ${LUMONAS_DEB_ARCH:-amd64} executable" >&2
 		exit 1
@@ -96,7 +97,6 @@ grep -F 'PartOf=lumonas-jobs.target' "$DATA_DIR/lib/systemd/system/lumonasd.serv
 }
 python3 - "$DATA_DIR/etc/docker/daemon.json.lumonas" <<'PY'
 import json
-import os
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as handle:
@@ -119,9 +119,8 @@ if grep -R -n -E 'setupWorker|MOCK_ACTIVATE|msw/passthrough|VITE_USE_MOCKS' "$DA
 	exit 1
 fi
 
-python3 - "$DATA_DIR/usr/share/lumonas/build-manifest.json" "$(field Version)" "$(field Depends)" "$(field Recommends)" <<'PY'
+python3 - "$DATA_DIR/usr/share/lumonas/build-manifest.json" "$(field Version)" "$(field Architecture)" "$(field Depends)" "$(field Recommends)" <<'PY'
 import json
-import os
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as handle:
@@ -131,11 +130,11 @@ if manifest.get("package") != "lumonas":
     raise SystemExit("manifest package mismatch")
 if manifest.get("version") != sys.argv[2]:
     raise SystemExit("manifest version mismatch")
-if manifest.get("architecture") != os.environ.get("LUMONAS_DEB_ARCH", "amd64"):
+if manifest.get("architecture") != sys.argv[3]:
     raise SystemExit("manifest architecture mismatch")
-if manifest.get("debianDepends") != sys.argv[3]:
+if manifest.get("debianDepends") != sys.argv[4]:
     raise SystemExit("manifest Depends mismatch")
-if manifest.get("debianRecommends") != sys.argv[4]:
+if manifest.get("debianRecommends") != sys.argv[5]:
     raise SystemExit("manifest Recommends mismatch")
 for key in ("sourceCommit", "goVersion", "frontendLockSHA256", "catalogSHA256"):
     if not manifest.get(key):

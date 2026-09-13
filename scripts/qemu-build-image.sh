@@ -27,6 +27,10 @@ for command in debootstrap qemu-img mkfs.ext4 grub-install; do
 done
 [ "$(id -u)" -eq 0 ] || { echo "Run this builder as root (for example: sudo $0)" >&2; exit 1; }
 [ -f "$DEB" ] || { echo "Build the Debian package first: $DEB" >&2; exit 1; }
+[ "$(dpkg-deb -f "$DEB" Architecture)" = "amd64" ] || {
+	echo "the x86-64 QEMU appliance requires an amd64 LumoNAS package" >&2
+	exit 1
+}
 [ -z "$UPDATE_FIXTURE" ] || [ -f "$UPDATE_FIXTURE" ] || { echo "update fixture not found: $UPDATE_FIXTURE" >&2; exit 1; }
 [ ! -e "$OUTPUT" ] || { echo "Refusing to overwrite existing image: $OUTPUT" >&2; exit 1; }
 [ ! -e "$WORK" ] || { echo "Refusing to overwrite existing work directory: $WORK" >&2; exit 1; }
