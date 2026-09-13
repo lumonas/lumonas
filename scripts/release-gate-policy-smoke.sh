@@ -50,6 +50,11 @@ for job, artifact in (("qemu-smoke", "lumonas-qemu"), ("iso", "lumonas-iso-smoke
     block = job_match.group(0) if job_match else ""
     if "uses: actions/upload-artifact@v4" not in block or "if: always()" not in block or artifact not in block:
         raise SystemExit(f"{job} must retain appliance diagnostics when the gate fails")
+iso_job = re.search(r"(?ms)^  iso:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+iso_block = iso_job.group(0) if iso_job else ""
+for marker in ("LUMONAS_RECOVERY_DEBUG_DIR", "build/qemu/recovery-debug/**"):
+    if marker not in iso_block:
+        raise SystemExit(f"ISO/recovery gate does not preserve failure diagnostics: {marker}")
 qemu_job = re.search(r"(?ms)^  qemu-smoke:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 qemu_block = qemu_job.group(0) if qemu_job else ""
 if "actions/setup-go@v5" not in qemu_block or "./cmd/lumonas-update-fixture" not in qemu_block:

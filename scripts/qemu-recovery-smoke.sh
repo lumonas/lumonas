@@ -25,11 +25,13 @@ TARGET_RAW="$WORK/replacement.raw"
 RECOVERY_MOUNT="$WORK/recovery-mount"
 TARGET_MOUNT="$WORK/target-mount"
 LOG="${LUMONAS_RECOVERY_LOG:-$WORK/qemu-recovery.log}"
+DEBUG_DIR="${LUMONAS_RECOVERY_DEBUG_DIR:-}"
 FIXTURE="${LUMONAS_RECOVERY_FIXTURE:-}"
 SOURCE_IMAGE="${LUMONAS_RECOVERY_SOURCE_IMAGE:-}"
 SOURCE_MODE=false
 QEMU_PID=""
 cleanup() {
+	status=$?
 	set +e
 	if [ -n "$QEMU_PID" ]; then
 		kill "$QEMU_PID" 2>/dev/null || true
@@ -37,7 +39,12 @@ cleanup() {
 	fi
 	umount "$TARGET_MOUNT" 2>/dev/null || true
 	umount "$RECOVERY_MOUNT" 2>/dev/null || true
+	if [ "$status" -ne 0 ] && [ -n "$DEBUG_DIR" ]; then
+		mkdir -p "$DEBUG_DIR"
+		cp -a "$WORK"/. "$DEBUG_DIR"/ 2>/dev/null || true
+	fi
 	rm -rf "$WORK"
+	return "$status"
 }
 trap cleanup EXIT INT TERM
 

@@ -361,7 +361,7 @@ jobs:
       - run: |
           source_image="$(find "$PWD/build/qemu" -type f -name '*.raw' -print -quit)"
           test -n "$source_image"
-          sudo env LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_RECOVERY_ASSERT=true LUMONAS_RECOVERY_SOURCE_IMAGE="$source_image" LUMONAS_RECOVERY_FIXTURE="$RUNNER_TEMP/lumonas-recovery-fixture" LUMONAS_RECOVER_BIN="$RUNNER_TEMP/lumonas-recover" LUMONAS_RECOVERY_LOG="$PWD/build/qemu-recovery.log" bash scripts/qemu-recovery-smoke.sh
+          sudo env LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_RECOVERY_ASSERT=true LUMONAS_RECOVERY_SOURCE_IMAGE="$source_image" LUMONAS_RECOVERY_FIXTURE="$RUNNER_TEMP/lumonas-recovery-fixture" LUMONAS_RECOVER_BIN="$RUNNER_TEMP/lumonas-recover" LUMONAS_RECOVERY_LOG="$PWD/build/qemu-recovery.log" LUMONAS_RECOVERY_DEBUG_DIR="$PWD/build/qemu/recovery-debug" bash scripts/qemu-recovery-smoke.sh
       - uses: actions/upload-artifact@v4
         with:
           name: lumonas-iso
@@ -373,6 +373,7 @@ jobs:
           path: |
             build/iso-smoke.log
             build/qemu-recovery.log
+            build/qemu/recovery-debug/**
           if-no-files-found: warn
 
   installer-scripts:
