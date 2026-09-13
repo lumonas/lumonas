@@ -220,6 +220,7 @@ func (c *engineClient) images(ctx context.Context) ([]Image, error) {
 	if err := c.get(ctx, "/images/json", &rows); err != nil {
 		return nil, err
 	}
+	usedIDs, usedReferences := c.usedImages(ctx)
 	result := make([]Image, 0, len(rows))
 	for _, row := range rows {
 		tags := row.RepoTags
@@ -228,10 +229,53 @@ func (c *engineClient) images(ctx context.Context) ([]Image, error) {
 		}
 		for _, reference := range tags {
 			repo, tag := splitImageReference(reference)
-			result = append(result, Image{ID: row.ID, Repo: repo, Tag: tag, SizeBytes: row.Size, CreatedDaysAgo: createdDaysAgo(row.Created)})
+			result = append(result, Image{
+				ID: row.ID, Repo: repo, Tag: tag, SizeBytes: row.Size,
+				CreatedDaysAgo: createdDaysAgo(row.Created),
+				InUse:          imageInUse(row.ID, reference, usedIDs, usedReferences),
+			})
 		}
 	}
 	return result, nil
+}
+
+// usedImages is a small read-only inventory request. It avoids inspecting
+// every container a second time just to calculate the image table's inUse
+// flag. The reference fallback keeps this useful with older daemons that omit
+// ImageID from the container listing.
+func (c *engineClient) usedImages(ctx context.Context) (map[string]struct{}, map[string]struct{}) {
+	var rows []struct {
+		Image   string `json:"Image"`
+		ImageID string `json:"ImageID"`
+	}
+	if err := c.get(ctx, "/containers/json?all=true", &rows); err != nil {
+		return nil, nil
+	}
+	ids := make(map[string]struct{}, len(rows))
+	references := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		if normalized := normalizeImageID(row.ImageID); normalized != "" {
+			ids[normalized] = struct{}{}
+		}
+		if reference := strings.TrimSpace(row.Image); reference != "" {
+			references[reference] = struct{}{}
+		}
+	}
+	return ids, references
+}
+
+func imageInUse(id, reference string, usedIDs, usedReferences map[string]struct{}) bool {
+	if normalized := normalizeImageID(id); normalized != "" {
+		if _, ok := usedIDs[normalized]; ok {
+			return true
+		}
+	}
+	_, ok := usedReferences[reference]
+	return ok
+}
+
+func normalizeImageID(id string) string {
+	return strings.TrimPrefix(strings.TrimSpace(id), "sha256:")
 }
 
 func (c *engineClient) volumes(ctx context.Context) ([]Volume, error) {

@@ -76,7 +76,7 @@ for script, marker in (("scripts/api-smoke.sh", "/api/v1/events"), ("scripts/qem
         raise SystemExit(f"runtime contract smoke is missing compatibility SSE coverage: {script}")
 if "docker-engine-api" not in match.group(1):
     raise SystemExit("release job must require the Docker Engine API gate")
-for marker in ("TestEngineAPIReadOnlyCollectors", "TestEngineAPIRejectsEngineErrors", "TestSplitImageReference", "TestContainerCPUPercent"):
+for marker in ("TestEngineAPIReadOnlyCollectors", "TestEngineAPIRejectsEngineErrors", "TestSplitImageReference", "TestContainerCPUPercent", "TestImageUsageFallsBackToContainerReference", "TestImageIDNormalization"):
     if marker not in workflow:
         raise SystemExit(f"Docker Engine API coverage is missing from CI: {marker}")
 if '"available":true' not in (repo_root / "scripts/qemu-smoke.sh").read_text(encoding="utf-8") or '"available":true' not in (repo_root / "scripts/qemu-recovery-smoke.sh").read_text(encoding="utf-8"):

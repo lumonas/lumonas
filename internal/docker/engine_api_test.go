@@ -17,13 +17,16 @@ func TestEngineAPIReadOnlyCollectors(t *testing.T) {
 		case "/version":
 			return http.StatusOK, `{"Version":"27.0.0"}`
 		case "/containers/json":
-			return http.StatusOK, `[{"Id":"container-1","Names":["/media"],"Image":"example/media:latest","State":"running","Status":"Up 2 hours (unhealthy)","Labels":{"com.docker.compose.project":"media"},"Ports":[{"PublicPort":8096,"PrivatePort":8096,"Type":"tcp"}]}]`
+			return http.StatusOK, `[{"Id":"container-1","Names":["/media"],"Image":"example/media:latest","ImageID":"sha256:image-1","State":"running","Status":"Up 2 hours (unhealthy)","Labels":{"com.docker.compose.project":"media"},"Ports":[{"PublicPort":8096,"PrivatePort":8096,"Type":"tcp"}]}]`
 		case "/containers/container-1/json":
 			return http.StatusOK, `{"RestartCount":3,"State":{"StartedAt":"2026-09-13T10:00:00.000000000Z"}}`
 		case "/containers/container-1/stats":
 			return http.StatusOK, `{"memory_stats":{"usage":1048576},"cpu_stats":{"cpu_usage":{"total_usage":200,"percpu_usage":[100,100]},"system_cpu_usage":1000,"online_cpus":2},"precpu_stats":{"cpu_usage":{"total_usage":100},"system_cpu_usage":500}}`
 		case "/images/json":
-			payload, _ := json.Marshal([]map[string]any{{"Id": "image-1", "RepoTags": []string{"example/media:latest", "example/media:stable"}, "Size": uint64(1234), "Created": time.Now().Add(-48 * time.Hour).Unix()}})
+			payload, _ := json.Marshal([]map[string]any{
+				{"Id": "sha256:image-1", "RepoTags": []string{"example/media:latest", "example/media:stable"}, "Size": uint64(1234), "Created": time.Now().Add(-48 * time.Hour).Unix()},
+				{"Id": "sha256:image-2", "RepoTags": []string{"example/unused:latest"}, "Size": uint64(5678), "Created": time.Now().Add(-72 * time.Hour).Unix()},
+			})
 			return http.StatusOK, string(payload)
 		case "/volumes":
 			return http.StatusOK, `{"Volumes":[{"Name":"media-data"}]}`
@@ -50,7 +53,7 @@ func TestEngineAPIReadOnlyCollectors(t *testing.T) {
 		t.Fatalf("unexpected container mapping: %#v", containers[0])
 	}
 	images, err := service.Images(context.Background())
-	if err != nil || len(images) != 2 || images[0].SizeBytes != 1234 || images[0].CreatedDaysAgo < 1 {
+	if err != nil || len(images) != 3 || images[0].SizeBytes != 1234 || images[0].CreatedDaysAgo < 1 || !images[0].InUse || !images[1].InUse || images[2].InUse {
 		t.Fatalf("unexpected image mapping: %#v, err=%v", images, err)
 	}
 	volumes, err := service.Volumes(context.Background())
@@ -60,6 +63,32 @@ func TestEngineAPIReadOnlyCollectors(t *testing.T) {
 	logs, err := service.Logs(context.Background(), "container-1", 25)
 	if err != nil || len(logs) != 1 || logs[0].Level != "warn" || logs[0].Message != "warning message" {
 		t.Fatalf("unexpected log mapping: %#v, err=%v", logs, err)
+	}
+}
+
+func TestImageUsageFallsBackToContainerReference(t *testing.T) {
+	client := testEngineClient(func(path string) (int, string) {
+		switch path {
+		case "/images/json":
+			return http.StatusOK, `[{"Id":"sha256:image-1","RepoTags":["example/media:latest"]}]`
+		case "/containers/json":
+			return http.StatusOK, `[{"Image":"example/media:latest"}]`
+		default:
+			return http.StatusNotFound, "not found"
+		}
+	})
+	images, err := (Service{engine: client}).Images(context.Background())
+	if err != nil || len(images) != 1 || !images[0].InUse {
+		t.Fatalf("reference fallback did not mark image in use: %#v, err=%v", images, err)
+	}
+}
+
+func TestImageIDNormalization(t *testing.T) {
+	if !imageInUse("sha256:image-1", "example/media:latest", map[string]struct{}{"image-1": {}}, nil) {
+		t.Fatal("sha256 image ID was not normalized")
+	}
+	if imageInUse("sha256:image-2", "example/media:latest", nil, map[string]struct{}{"other:latest": {}}) {
+		t.Fatal("unrelated image reference was marked in use")
 	}
 }
 

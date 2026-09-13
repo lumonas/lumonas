@@ -6,6 +6,10 @@ bounded, container log frames are decoded without shell parsing, and Docker
 unavailability remains a first-class empty/attention state. Compose validation
 and stack mutations remain behind the bounded Compose command runner.
 
+Image inventory derives `inUse` from the Engine's container image IDs, with a
+reference fallback for older daemons that omit those IDs. This keeps unused
+image cleanup conservative after tags are changed or containers are stopped.
+
 ## Principle
 
 A beginner should install apps without YAML.
