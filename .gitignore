@@ -4,6 +4,7 @@
 /lumonas-privd
 /build/
 /coverage/
+.pnpm-store/
 web/playwright-report/
 web/test-results/
 *.deb
