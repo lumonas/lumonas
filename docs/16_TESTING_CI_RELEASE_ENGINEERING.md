@@ -391,9 +391,11 @@ Good candidates:
 - backup manifests;
 - destructive plan invariants.
 
-The `security-controls` job is also release-blocking. It scans tracked files
-for high-confidence private-key and token formats, then runs the diagnostics
-redaction and privileged-operation rejection tests with a clean checkout.
+The `security-controls` job is also release-blocking. A dedicated scanner
+checks tracked files for high-confidence private-key, cloud-token, package
+token, and credential-URL formats; its smoke test proves both detection and
+safe-fixture behavior. The job then runs the diagnostics redaction and
+privileged-operation rejection tests with a clean checkout.
 Support bundle redaction also covers structured recovery-key fields, raw PEM
 private-key blocks, and entries whose filenames identify recovery keys or
 private keys.

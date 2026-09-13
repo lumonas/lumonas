@@ -138,6 +138,7 @@ done
 [ -x "$ROOT/scripts/qemu-live-recovery-source.sh" ] || { echo "live recovery source helper must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/recovery-api-smoke.sh" ] || { echo "recovery API smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/security-smoke.sh" ] || { echo "security smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/secret-scan-smoke.sh" ] || { echo "secret scan smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/command-boundary-smoke.sh" ] || { echo "command-boundary smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-smoke.sh" ] || { echo "systemd smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/systemd-security-smoke.sh" ] || { echo "systemd security smoke test must be executable" >&2; exit 1; }
@@ -156,6 +157,7 @@ require_line "$ROOT/Makefile" 'qemu-recovery-live:'
 require_line "$ROOT/Makefile" 'recovery-fixture:'
 require_line "$ROOT/Makefile" 'recovery-api-smoke:'
 require_line "$ROOT/Makefile" 'security-smoke:'
+require_line "$ROOT/Makefile" 'secret-scan-smoke:'
 require_line "$ROOT/Makefile" 'systemd-smoke:'
 require_line "$ROOT/Makefile" 'systemd-security-smoke:'
 require_line "$ROOT/Makefile" 'permission-smoke:'

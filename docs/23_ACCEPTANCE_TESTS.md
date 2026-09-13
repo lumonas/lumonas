@@ -594,3 +594,11 @@ protocol-specific validators before activation, unsafe paths and malformed
 directives fail closed, and the active configuration remains unchanged after a
 validation failure. The validator smoke must run in the release-blocking share
 integration job.
+
+## AZ. Secret scanning
+
+Run `scripts/secret-scan-smoke.sh`.
+
+Pass if tracked files are scanned for high-confidence private-key, cloud-token,
+package-token, and credential-URL formats, synthetic leaks are rejected, safe
+fixtures pass, and the scan runs in the release-blocking security-controls job.
