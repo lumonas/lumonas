@@ -122,6 +122,66 @@ def validate_jobs(value: Any) -> None:
             fail(f"{label}.progress must be a number or null")
 
 
+def validate_docker_summary(value: Any) -> None:
+    obj = object_value(value, "docker-summary")
+    required(obj, ("available", "stacks", "appsRunning", "updatesAvailable"), "docker-summary")
+    if not isinstance(obj["available"], bool):
+        fail("docker-summary.available must be a boolean")
+    for field in ("stacks", "appsRunning", "updatesAvailable"):
+        if not isinstance(obj[field], int) or isinstance(obj[field], bool) or obj[field] < 0:
+            fail(f"docker-summary.{field} must be a non-negative integer")
+
+
+def validate_docker_containers(value: Any) -> None:
+    if not isinstance(value, list):
+        fail("docker-containers must be a JSON array")
+    fields = ("id", "name", "image", "state", "cpuPercent", "ramUsedBytes", "restarts", "ports")
+    for index, container in enumerate(value):
+        label = f"docker-containers[{index}]"
+        obj = object_value(container, label)
+        required(obj, fields, label)
+        for field in ("id", "name", "image", "state"):
+            string_field(obj, field, label)
+        number_field(obj, "cpuPercent", label)
+        for field in ("ramUsedBytes", "restarts"):
+            if not isinstance(obj[field], int) or isinstance(obj[field], bool) or obj[field] < 0:
+                fail(f"{label}.{field} must be a non-negative integer")
+        if not isinstance(obj["ports"], list):
+            fail(f"{label}.ports must be a JSON array")
+
+
+def validate_docker_images(value: Any) -> None:
+    if not isinstance(value, list):
+        fail("docker-images must be a JSON array")
+    fields = ("id", "repo", "tag", "sizeBytes", "createdDaysAgo", "updateAvailable", "inUse")
+    for index, image in enumerate(value):
+        label = f"docker-images[{index}]"
+        obj = object_value(image, label)
+        required(obj, fields, label)
+        for field in ("id", "repo", "tag"):
+            string_field(obj, field, label)
+        for field in ("sizeBytes", "createdDaysAgo"):
+            if not isinstance(obj[field], int) or isinstance(obj[field], bool) or obj[field] < 0:
+                fail(f"{label}.{field} must be a non-negative integer")
+        for field in ("updateAvailable", "inUse"):
+            if not isinstance(obj[field], bool):
+                fail(f"{label}.{field} must be a boolean")
+
+
+def validate_docker_volumes(value: Any) -> None:
+    if not isinstance(value, list):
+        fail("docker-volumes must be a JSON array")
+    fields = ("id", "name", "usedBytes")
+    for index, volume in enumerate(value):
+        label = f"docker-volumes[{index}]"
+        obj = object_value(volume, label)
+        required(obj, fields, label)
+        for field in ("id", "name"):
+            string_field(obj, field, label)
+        if not isinstance(obj["usedBytes"], int) or isinstance(obj["usedBytes"], bool) or obj["usedBytes"] < 0:
+            fail(f"{label}.usedBytes must be a non-negative integer")
+
+
 def validate_events(value: Any) -> None:
     if not isinstance(value, list):
         fail("events must be a JSON array")
@@ -159,6 +219,10 @@ def self_test() -> None:
         },
     }])
     validate_jobs([{"id": "job-1", "type": "smart.short", "title": "SMART", "state": "queued", "progress": None, "createdAt": "now"}])
+    validate_docker_summary({"available": True, "stacks": 0, "appsRunning": 0, "updatesAvailable": 0})
+    validate_docker_containers([])
+    validate_docker_images([])
+    validate_docker_volumes([])
     validate_events([{"schemaVersion": 1, "id": "evt-1", "type": "system.metrics", "timestamp": "now", "severity": "info", "data": {}}])
 
 
@@ -168,6 +232,10 @@ VALIDATORS = {
     "metrics": validate_metrics,
     "metrics-history": validate_metrics_history,
     "jobs": validate_jobs,
+    "docker-summary": validate_docker_summary,
+    "docker-containers": validate_docker_containers,
+    "docker-images": validate_docker_images,
+    "docker-volumes": validate_docker_volumes,
     "events": validate_events,
 }
 

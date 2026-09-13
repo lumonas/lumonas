@@ -81,6 +81,19 @@ for marker in ("TestEngineAPIReadOnlyCollectors", "TestEngineAPIRejectsEngineErr
         raise SystemExit(f"Docker Engine API coverage is missing from CI: {marker}")
 if '"available":true' not in (repo_root / "scripts/qemu-smoke.sh").read_text(encoding="utf-8") or '"available":true' not in (repo_root / "scripts/qemu-recovery-smoke.sh").read_text(encoding="utf-8"):
     raise SystemExit("QEMU runtime smoke must require Docker Engine availability")
+validator_text = (repo_root / "scripts/validate-api-response.py").read_text(encoding="utf-8")
+for marker in ("docker-containers", "docker-images", "docker-volumes"):
+    if marker not in validator_text:
+        raise SystemExit(f"Docker response contract validator is missing {marker}")
+for script in ("scripts/api-smoke.sh", "scripts/qemu-smoke.sh", "scripts/qemu-recovery-smoke.sh"):
+    script_text = (repo_root / script).read_text(encoding="utf-8")
+    if script == "scripts/api-smoke.sh":
+        if "for docker_resource in containers images volumes" not in script_text:
+            raise SystemExit("Docker inventory API smoke is missing its complete resource loop")
+    else:
+        for marker in ("docker/containers", "docker/images", "docker/volumes"):
+            if marker not in script_text:
+                raise SystemExit(f"Docker inventory smoke is missing {marker}: {script}")
 upgrade_job = re.search(r"(?ms)^  upgrade-compatibility:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not upgrade_job or "TestStorageSnapshotMigrationAddsOriginAndPreservesRows" not in upgrade_job.group(0):
     raise SystemExit("upgrade-compatibility gate is missing snapshot migration coverage")

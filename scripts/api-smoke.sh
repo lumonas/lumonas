@@ -314,6 +314,18 @@ status=$(curl -sS -o "$TEMP_DIR/jobs.json" -w '%{http_code}' \
 [ "$status" = 200 ] || { echo "authenticated jobs request failed (HTTP $status)" >&2; exit 1; }
 validate_response jobs "$TEMP_DIR/jobs.json"
 
+status=$(curl -sS -o "$TEMP_DIR/docker-summary.json" -w '%{http_code}' \
+	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/docker/summary")
+[ "$status" = 200 ] || { echo "authenticated Docker summary request failed (HTTP $status)" >&2; exit 1; }
+validate_response docker-summary "$TEMP_DIR/docker-summary.json"
+
+for docker_resource in containers images volumes; do
+	status=$(curl -sS -o "$TEMP_DIR/docker-$docker_resource.json" -w '%{http_code}' \
+		-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/docker/$docker_resource")
+	[ "$status" = 200 ] || { echo "authenticated Docker $docker_resource request failed (HTTP $status)" >&2; exit 1; }
+	validate_response "docker-$docker_resource" "$TEMP_DIR/docker-$docker_resource.json"
+done
+
 assert_authenticated_status_and_body GET /api/v1/settings 200 '"runtime"'
 assert_authenticated_status_and_body GET /api/v1/ups/config 200 '"names":[]'
 assert_authenticated_status_and_body PATCH /api/v1/ups/config 200 '"names":[]' '{"names":[]}'

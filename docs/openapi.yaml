@@ -3587,6 +3587,7 @@ components:
 
     DockerSummary:
       type: object
+      required: [available, stacks, appsRunning, updatesAvailable]
       properties:
         available:
           type: boolean
@@ -3658,6 +3659,7 @@ components:
 
     DockerContainer:
       type: object
+      required: [id, name, image, state, cpuPercent, ramUsedBytes, restarts, ports]
       properties:
         id:
           type: string
@@ -3673,9 +3675,27 @@ components:
           type: number
         ramUsedBytes:
           type: integer
+        restarts:
+          type: integer
+        ports:
+          type: array
+          items:
+            type: object
+            required: [host, container]
+            properties:
+              host:
+                type: integer
+              container:
+                type: integer
+              label:
+                type: string
+        startedAt:
+          type: string
+          format: date-time
 
     DockerImage:
       type: object
+      required: [id, repo, tag, sizeBytes, createdDaysAgo, updateAvailable, inUse]
       properties:
         id:
           type: string
@@ -3685,6 +3705,12 @@ components:
           type: string
         sizeBytes:
           type: integer
+        createdDaysAgo:
+          type: integer
+        updateAvailable:
+          type: boolean
+        inUse:
+          type: boolean
 
     DockerImagePackSummary:
       type: object

@@ -120,6 +120,9 @@ for attempt in $(seq 1 60); do
      curl -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/docker/summary >"$LOG.docker-summary" 2>/dev/null && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/docker/containers >"$LOG.docker-containers" 2>/dev/null && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/docker/images >"$LOG.docker-images" 2>/dev/null && \
+     curl -kfsS https://127.0.0.1:18080/api/v1/docker/volumes >"$LOG.docker-volumes" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
      curl -kfsS https://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
@@ -153,6 +156,10 @@ for attempt in $(seq 1 60); do
       grep -F '"capturedAt"' "$LOG.metrics-history" >/dev/null 2>&1 || continue
       python3 "$ROOT/scripts/validate-api-response.py" metrics-history "$LOG.metrics-history"
       python3 "$ROOT/scripts/validate-api-response.py" jobs "$LOG.jobs"
+      python3 "$ROOT/scripts/validate-api-response.py" docker-summary "$LOG.docker-summary"
+      python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$LOG.docker-containers"
+      python3 "$ROOT/scripts/validate-api-response.py" docker-images "$LOG.docker-images"
+      python3 "$ROOT/scripts/validate-api-response.py" docker-volumes "$LOG.docker-volumes"
       EVENTS_LOG="$LOG.events"
       curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
       python3 "$ROOT/scripts/validate-sse.py" "$EVENTS_LOG" system.metrics

@@ -382,9 +382,11 @@ The Docker integration gate uses a deterministic Engine API double to verify
 container, image, volume, and multiplexed log-frame decoding. This protects
 the production Unix-socket path from regressing to human-oriented CLI output
 parsing while keeping Compose command tests independently injectable.
-The QEMU and recovered-disk smoke tests also require the `/docker/summary`
-contract to report `available: true`, so an empty zero-valued response cannot
-hide a missing Docker daemon.
+The API, QEMU, and recovered-disk smoke tests validate the summary plus the
+container, image, and volume inventory response shapes. The QEMU and
+recovered-disk smoke tests also require the `/docker/summary` contract to
+report `available: true`, so an empty zero-valued response cannot hide a
+missing Docker daemon.
 
 The QEMU smoke exercises both documented SSE routes (`/api/v1/events/stream`
 and the compatibility alias `/api/v1/events`) and validates each captured

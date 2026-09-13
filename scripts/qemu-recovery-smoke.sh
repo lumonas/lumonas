@@ -186,6 +186,9 @@ for attempt in $(seq 1 120); do
 		curl -kfsS https://127.0.0.1:18084/readyz >"$WORK/recovered-ready.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/docker/summary >"$WORK/recovered-docker-summary.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/docker/containers >"$WORK/recovered-docker-containers.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/docker/images >"$WORK/recovered-docker-images.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/docker/volumes >"$WORK/recovered-docker-volumes.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/services >"$WORK/recovered-services.json" 2>/dev/null; then
 		recovered_ready=true
 		break
@@ -202,6 +205,10 @@ done
 }
 grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
+python3 "$ROOT/scripts/validate-api-response.py" docker-summary "$WORK/recovered-docker-summary.json"
+python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$WORK/recovered-docker-containers.json"
+python3 "$ROOT/scripts/validate-api-response.py" docker-images "$WORK/recovered-docker-images.json"
+python3 "$ROOT/scripts/validate-api-response.py" docker-volumes "$WORK/recovered-docker-volumes.json"
 grep -F '"available":true' "$WORK/recovered-docker-summary.json" >/dev/null
 grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
 grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
