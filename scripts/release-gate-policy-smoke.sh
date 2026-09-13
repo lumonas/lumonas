@@ -69,6 +69,9 @@ if "Last-Event-ID" not in api_smoke_text or "cursor event twice" not in api_smok
     raise SystemExit("API smoke does not enforce non-duplicating SSE replay")
 if "/api/v1/ups/config" not in api_smoke_text or '"names":[]' not in api_smoke_text:
     raise SystemExit("API smoke does not exercise persisted UPS configuration")
+for marker in ("start_privileged_stack()", 'LUMONAS_PRIVD_SOCKET="$PRIVD_DIR/privd.sock"', "-worker \"$worker\""):
+    if marker not in api_smoke_text:
+        raise SystemExit(f"API smoke does not start the real privileged stack: {marker}")
 qemu_recovery_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-recovery-smoke.sh"
 iso_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "iso-smoke.sh"
 live_recovery_source = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-live-recovery-source.sh"

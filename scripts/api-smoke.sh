@@ -15,6 +15,7 @@ COOKIE_JAR="$TEMP_DIR/cookies.txt"
 ADMIN_PASSWORD='api-smoke-password-123'
 SERVER_PID=''
 RESTART_SSE_PID=''
+PRIVD_PIDS=''
 
 cleanup() {
 	if [ -n "$RESTART_SSE_PID" ]; then
@@ -25,6 +26,12 @@ cleanup() {
 		kill "$SERVER_PID" 2>/dev/null || true
 		wait "$SERVER_PID" 2>/dev/null || true
 	fi
+	for pid in $PRIVD_PIDS; do
+		kill "$pid" 2>/dev/null || true
+	done
+	for pid in $PRIVD_PIDS; do
+		wait "$pid" 2>/dev/null || true
+	done
 	rm -rf "$TEMP_DIR"
 }
 trap cleanup EXIT INT TERM
@@ -55,6 +62,66 @@ if [ ! -x "$LUMONASD_BIN" ]; then
 	exit 1
 fi
 
+if [ -n "${LUMONAS_API_SMOKE_PRIVD_BIN:-}" ]; then
+	LUMONAS_PRIVD_BIN=$LUMONAS_API_SMOKE_PRIVD_BIN
+else
+	LUMONAS_PRIVD_BIN="$TEMP_DIR/lumonas-privd"
+	(
+		cd "$ROOT_DIR"
+		GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" \
+		GOPATH="${GOPATH:-/tmp/lumonas-gopath}" \
+			go build -trimpath -o "$LUMONAS_PRIVD_BIN" ./cmd/lumonas-privd
+	)
+fi
+
+if [ ! -x "$LUMONAS_PRIVD_BIN" ]; then
+	echo "lumonas-privd binary is not executable: $LUMONAS_PRIVD_BIN" >&2
+	exit 1
+fi
+
+PRIVD_DIR="$TEMP_DIR/privd"
+PRIVD_LOG_DIR="$TEMP_DIR/privd-logs"
+mkdir -p "$PRIVD_DIR" "$PRIVD_LOG_DIR"
+
+start_privileged_stack() {
+	for worker in storage network power general; do
+		LUMONAS_PRIVD_WORKER_DIR="$PRIVD_DIR" \
+			"$LUMONAS_PRIVD_BIN" -worker "$worker" -socket "$PRIVD_DIR/$worker.sock" \
+			>"$PRIVD_LOG_DIR/$worker.log" 2>&1 &
+		PRIVD_PIDS="$PRIVD_PIDS $!"
+	done
+	for attempt in $(seq 1 50); do
+		ready=true
+		for worker in storage network power general; do
+			if [ ! -S "$PRIVD_DIR/$worker.sock" ]; then
+				ready=false
+			fi
+		done
+		if [ "$ready" = true ]; then
+			break
+		fi
+		sleep 0.1
+	done
+	for worker in storage network power general; do
+		if [ ! -S "$PRIVD_DIR/$worker.sock" ]; then
+			echo "privileged $worker worker did not create its socket" >&2
+			sed -n '1,120p' "$PRIVD_LOG_DIR/$worker.log" >&2
+			exit 1
+		fi
+	done
+	LUMONAS_PRIVD_WORKER_DIR="$PRIVD_DIR" \
+		"$LUMONAS_PRIVD_BIN" -socket "$PRIVD_DIR/privd.sock" \
+		>"$PRIVD_LOG_DIR/broker.log" 2>&1 &
+	PRIVD_PIDS="$PRIVD_PIDS $!"
+	for attempt in $(seq 1 50); do
+		[ -S "$PRIVD_DIR/privd.sock" ] && return 0
+		sleep 0.1
+	done
+	echo "privileged broker did not create its socket" >&2
+	sed -n '1,120p' "$PRIVD_LOG_DIR/broker.log" >&2
+	exit 1
+}
+
 validate_response() {
 	python3 "$ROOT_DIR/scripts/validate-api-response.py" "$1" "$2"
 }
@@ -66,10 +133,12 @@ start_server() {
 	LUMONAS_CATALOG_FILE="$ROOT_DIR/catalog/apps.json" \
 	LUMONAS_STACK_ROOT="$TEMP_DIR/stacks" \
 	LUMONAS_RECOVERY_DIR="$TEMP_DIR/recovery" \
+	LUMONAS_PRIVD_SOCKET="$PRIVD_DIR/privd.sock" \
 	"$LUMONASD_BIN" -listen "$LISTEN_ADDR" >"$LOG_PATH" 2>&1 &
 	SERVER_PID=$!
 }
 
+start_privileged_stack
 start_server
 
 wait_for_status() {

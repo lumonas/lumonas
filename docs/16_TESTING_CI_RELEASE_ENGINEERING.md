@@ -96,6 +96,12 @@ The same release-blocking check covers NetworkManager checkpoints, Wi-Fi
 connection changes, Wake-on-LAN, service reloads, and power actions so no
 mutating worker path can be invoked without an operation scope.
 
+The real-daemon API smoke starts the broker and all four typed privileged
+workers in an isolated temporary socket directory before starting `lumonasd`.
+This keeps `/readyz` meaningful in CI and exercises the same Unix-socket
+boundary used by the packaged appliance rather than replacing it with an
+in-process test double.
+
 ### QEMU end-to-end
 
 Virtual NAS:
