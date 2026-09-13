@@ -39,6 +39,8 @@ Deliver:
   byte-for-byte reproducibility before publication.
 - Debian integration dependencies are parity-checked across package metadata,
   the no-recommends QEMU appliance image, and the offline installer ISO.
+- Boot-critical resolver dependencies are explicit in both appliance images;
+  `systemd-resolved` cannot be supplied only through an optional recommendation.
 - recovery bundles carry bounded, validated Docker appdata archives with
   fail-closed extraction targets.
 - Docker Compose bind and named-volume appdata sources are resolved and

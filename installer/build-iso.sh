@@ -83,6 +83,7 @@ Pin-Priority: 1001
 EOF
 cat > "$WORK/config/package-lists/lumonas.list.chroot" <<'EOF'
 network-manager
+systemd-resolved
 avahi-daemon
 nftables
 openssh-server

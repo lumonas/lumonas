@@ -505,6 +505,9 @@ metadata with the explicit QEMU and offline ISO install sets. This matters
 because the QEMU image uses `--no-install-recommends`: a newly declared
 integration must be added to both appliance builders or the release is
 rejected before image construction.
+The same rule covers boot-critical packages such as `systemd-resolved`; the
+QEMU image enables its resolver unit and must carry the package explicitly so
+the resolver symlink cannot point at a component omitted by `--no-install-recommends`.
 The same release gate statically verifies the sandbox policy: all services
 must use `NoNewPrivileges`, private temporary storage, protected home/system
 paths, bounded resources, and non-shell entrypoints; the web/daemon services
