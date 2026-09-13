@@ -581,5 +581,6 @@ plans, and completed network checkpoints are bounded to the configured
 history window, while active sessions, active backup work, pending network
 rollback state, firing/acknowledged alerts, and unexpired storage plans remain
 available. Expired sessions and resolved alert history must be removed. The
-daemon must run the same policy at startup and periodically while serving
-requests.
+daemon must bound committed configuration generations while preserving
+pending generations, and run the same policy at startup and periodically
+while serving requests.

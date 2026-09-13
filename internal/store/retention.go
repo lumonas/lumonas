@@ -90,6 +90,9 @@ WHERE state NOT IN ('firing','acknowledged')
 // PruneOperationalHistory applies one bounded policy to operational tables.
 // It is safe to call at startup and periodically while the daemon is running.
 func (s *Store) PruneOperationalHistory(now time.Time) error {
+	if err := s.PruneConfigGenerations(defaultOperationalRetention); err != nil {
+		return err
+	}
 	if err := s.PruneExpiredSessions(now); err != nil {
 		return err
 	}

@@ -129,6 +129,7 @@ done
 [ -x "$ROOT/scripts/fuzz-smoke.sh" ] || { echo "fuzz smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/request-limits-smoke.sh" ] || { echo "request-limits smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/retention-smoke.sh" ] || { echo "retention smoke test must be executable" >&2; exit 1; }
+[ -x "$ROOT/scripts/generation-retention-smoke.sh" ] || { echo "generation retention smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/frontend-runtime-smoke.sh" ] || { echo "frontend runtime smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/share-config-smoke.sh" ] || { echo "share configuration smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/iso-smoke.sh" ] || { echo "ISO smoke test must be executable" >&2; exit 1; }
@@ -145,6 +146,7 @@ require_line "$ROOT/Makefile" 'disk-identity-smoke:'
 require_line "$ROOT/Makefile" 'fuzz-smoke:'
 require_line "$ROOT/Makefile" 'request-limits-smoke:'
 require_line "$ROOT/Makefile" 'retention-smoke:'
+require_line "$ROOT/Makefile" 'generation-retention-smoke:'
 require_line "$ROOT/.github/workflows/ci.yml" 'LUMONAS_FUZZ_TIME=5s bash scripts/fuzz-smoke.sh'
 require_line "$ROOT/Makefile" 'share-config-smoke:'
 require_line "$ROOT/Makefile" 'qemu-recovery-smoke:'

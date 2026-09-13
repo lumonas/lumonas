@@ -26,9 +26,11 @@ minutes. Notification deliveries, completed backup runs, expired storage
 plans, and completed network checkpoints are bounded, while active backup
 sessions, firing/acknowledged alerts, pending rollback checkpoints, and
 unexpired plans are retained; expired sessions and resolved alert history are
-removed. The
+removed. Committed configuration-generation history is bounded while pending
+generations remain available for recovery diagnosis. The
 release security-controls job runs `scripts/retention-smoke.sh` so an
 unbounded operational table cannot silently ship.
+The dedicated generation-retention smoke test is also release-blocking.
 
 ### Integration
 
