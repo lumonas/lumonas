@@ -180,7 +180,8 @@ Scope is explicitly not considered a blocker here. Risks are solved architectura
 
 **Mitigation:**
 
-- scheduler resource locks;
+- scheduler resource locks for SnapRAID protection work and per-disk SMART
+  work, with conflicting jobs rejected before persistence;
 - detect heavy-job overlap;
 - priority;
 - maintenance windows.

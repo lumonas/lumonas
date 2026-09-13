@@ -1881,6 +1881,8 @@ paths:
           description: OK
         '202':
           description: Accepted (async job queued)
+        '409':
+          description: Another active job owns the requested resource
         '4XX':
           description: Client error
 

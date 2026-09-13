@@ -206,7 +206,7 @@ func (s *apiServer) jobTypeActive(jobType string) bool {
 		return true
 	}
 	for _, job := range jobs {
-		if job.Type == jobType && (job.State == "queued" || job.State == "preparing" || job.State == "running" || job.State == "waiting-confirmation") {
+		if job.Type == jobType && jobIsActive(job.State) {
 			return true
 		}
 	}
@@ -217,7 +217,7 @@ func (s *apiServer) launchScheduleJob(schedule monitoring.Schedule) {
 	switch schedule.JobType {
 	case "snapraid.sync", "snapraid.scrub":
 		job := model.Job{ID: newID("job"), CorrelationID: "schedule-" + schedule.ID, Type: schedule.JobType, Title: strings.ReplaceAll(schedule.JobType, ".", " ") + " (scheduled)", ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
-		if err := s.store.SaveJob(job); err != nil {
+		if err := s.admitJob(job); err != nil {
 			s.scheduleLaunchFailed(schedule, err)
 			return
 		}
@@ -235,7 +235,7 @@ func (s *apiServer) launchScheduleJob(schedule monitoring.Schedule) {
 		}
 		for _, disk := range disks {
 			job := model.Job{ID: newID("job"), CorrelationID: "schedule-" + schedule.ID, Type: schedule.JobType, Title: "SMART " + strings.TrimPrefix(schedule.JobType, "smart.") + " validation (scheduled)", ResourceID: disk.ID, State: "queued", CreatedAt: time.Now().UTC()}
-			if err := s.store.SaveJob(job); err != nil {
+			if err := s.admitJob(job); err != nil {
 				s.scheduleLaunchFailed(schedule, err)
 				continue
 			}
