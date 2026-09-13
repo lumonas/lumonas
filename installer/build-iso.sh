@@ -87,6 +87,7 @@ avahi-daemon
 nftables
 openssh-server
 samba
+samba-common-bin
 nfs-kernel-server
 rsync
 vsftpd
@@ -95,6 +96,7 @@ e2fsprogs
 xfsprogs
 lm-sensors
 nut
+nut-client
 curl
 mergerfs
 snapraid

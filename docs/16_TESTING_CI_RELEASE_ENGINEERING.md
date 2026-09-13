@@ -500,6 +500,11 @@ may skip it when Docker or the scanner tool is unavailable.
 Packaging validation also runs `systemd-analyze verify` against every packaged
 service unit. The check is optional for macOS/local development, but CI fails
 if `systemd-analyze` is unavailable or any unit is invalid.
+The package dependency parity smoke test also compares the Debian control
+metadata with the explicit QEMU and offline ISO install sets. This matters
+because the QEMU image uses `--no-install-recommends`: a newly declared
+integration must be added to both appliance builders or the release is
+rejected before image construction.
 The same release gate statically verifies the sandbox policy: all services
 must use `NoNewPrivileges`, private temporary storage, protected home/system
 paths, bounded resources, and non-shell entrypoints; the web/daemon services

@@ -318,6 +318,7 @@ jobs:
       - run: bash scripts/installer-signature-policy-smoke.sh
       - run: bash scripts/postinst-policy-smoke.sh
       - run: bash scripts/release-gate-policy-smoke.sh
+      - run: bash scripts/package-dependency-parity-smoke.sh
       - run: bash scripts/command-boundary-smoke.sh
       - run: python3 scripts/check-api-contract.py
       - run: bash scripts/log-retention-smoke.sh

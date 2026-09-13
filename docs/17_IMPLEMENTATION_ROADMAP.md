@@ -37,6 +37,8 @@ Deliver:
   not only signature-file presence.
 - Debian package builds normalize entry timestamps and are checked for
   byte-for-byte reproducibility before publication.
+- Debian integration dependencies are parity-checked across package metadata,
+  the no-recommends QEMU appliance image, and the offline installer ISO.
 - recovery bundles carry bounded, validated Docker appdata archives with
   fail-closed extraction targets.
 - Docker Compose bind and named-volume appdata sources are resolved and

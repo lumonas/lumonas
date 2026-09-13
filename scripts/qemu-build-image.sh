@@ -50,8 +50,9 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y --no-install-recommends \
   systemd systemd-sysv linux-image-amd64 grub-pc openssh-server curl ca-certificates openssl \
-  iproute2 util-linux smartmontools lm-sensors nut e2fsprogs xfsprogs mergerfs snapraid \
-  network-manager docker.io docker-compose samba samba-common-bin vsftpd avahi-daemon
+  iproute2 util-linux smartmontools lm-sensors nut nut-client e2fsprogs xfsprogs mergerfs snapraid \
+  network-manager docker.io docker-compose samba samba-common-bin nfs-kernel-server rsync vsftpd \
+  avahi-daemon nftables
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
 mkdir -p /usr/share/doc/lumonas
