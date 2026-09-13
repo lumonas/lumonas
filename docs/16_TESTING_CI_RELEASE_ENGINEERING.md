@@ -308,6 +308,10 @@ tests.
 The UPS status endpoint reads the persisted NUT device configuration used by
 the shutdown monitor, while an empty configuration retains safe NUT
 auto-discovery behavior.
+Automatic UPS shutdowns receive a bounded 30-second broker deadline and emit
+correlated pending, started, or failed events with operation ID and plan hash;
+broker failures are therefore visible in the audit/event history instead of
+only the daemon log.
 All other `lumonasd` privileged calls use that same execution helper as well,
 including storage mounts/pools, SnapRAID, ACL jobs, runtime provisioning, and
 live runtime status.

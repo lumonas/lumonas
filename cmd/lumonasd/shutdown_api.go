@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/power"
 	"github.com/lumonas/lumonas/internal/privileged"
+	"github.com/lumonas/lumonas/internal/trace"
 )
 
 type upsPolicyRequest struct {
@@ -115,7 +117,6 @@ func (s *apiServer) checkUPSShutdown(ctx context.Context) {
 	}
 	for _, unit := range s.discoverUPS(ctx, s.configuredUPSNames()) {
 		if power.ShouldShutdown(unit, s.autoShutdownPolicy()) {
-			s.publish("ups.shutdown.pending", "critical", nil, map[string]any{"ups": unit.Name, "runtimeSec": unit.RuntimeSec, "chargePercent": unit.ChargePercent})
 			s.requestUPSShutdown(unit.Name)
 			break
 		}
@@ -140,14 +141,28 @@ func (s *apiServer) maintenanceModeEnabled() bool {
 
 func (s *apiServer) requestUPSShutdown(upsName string) {
 	operationID := newID("ups-shutdown")
-	result, err := s.executePrivileged(context.Background(), privileged.Request{Operation: "power.shutdown", OperationID: operationID, PlanHash: operationID, RequestedState: map[string]any{"action": "poweroff"}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
+	correlationID := trace.NewCorrelationID()
+	resource := &model.ResourceRef{Type: "ups", ID: upsName}
+	data := map[string]any{"ups": upsName, "operationId": operationID, "correlationId": correlationID, "planHash": operationID}
+	s.publish("ups.shutdown.pending", "critical", resource, data)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result, err := s.executePrivileged(ctx, privileged.Request{Operation: "power.shutdown", OperationID: operationID, CorrelationID: correlationID, PlanHash: operationID, RequestedState: map[string]any{"action": "poweroff"}, ExpiresAt: time.Now().UTC().Add(2 * time.Minute), Confirmed: true})
 	if err != nil || !result.OK {
 		if s.log != nil {
 			s.log.Error("UPS shutdown sequence failed", "ups", upsName, "error", err)
 		}
+		failure := map[string]any{"ups": upsName, "operationId": operationID, "correlationId": correlationID, "planHash": operationID}
+		if err != nil {
+			failure["error"] = err.Error()
+		} else {
+			failure["error"] = result.Error
+		}
+		s.publish("ups.shutdown.failed", "critical", resource, failure)
 		return
 	}
-	s.publish("ups.shutdown.started", "critical", nil, map[string]any{"ups": upsName, "operationId": operationID})
+	data["state"] = "started"
+	s.publish("ups.shutdown.started", "critical", resource, data)
 }
 
 func (s *apiServer) shutdownPlan(w http.ResponseWriter, r *http.Request) {

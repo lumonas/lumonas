@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/power"
 	"github.com/lumonas/lumonas/internal/privileged"
 )
@@ -139,8 +140,40 @@ func TestUPSMonitorTriggersOrderedPrivilegedShutdown(t *testing.T) {
 		return nil
 	}
 	server.checkUPSShutdown(context.Background())
-	if request.Operation != "power.shutdown" || request.OperationID == "" || request.RequestedState["action"] != "poweroff" {
+	if request.Operation != "power.shutdown" || request.OperationID == "" || request.CorrelationID == "" || request.PlanHash != request.OperationID || request.RequestedState["action"] != "poweroff" {
 		t.Fatalf("expected ordered privileged shutdown request, got %#v", request)
+	}
+}
+
+func TestUPSMonitorPublishesCorrelatedFailure(t *testing.T) {
+	server := testServer(t)
+	runtime := 30.0
+	if err := server.store.SetMeta("ups_shutdown_policy", `{"enabled":true,"minimumRuntimeSec":60,"minimumCharge":10}`); err != nil {
+		t.Fatal(err)
+	}
+	server.upsDiscover = func(_ context.Context, _ []string) []power.UPS {
+		return []power.UPS{{Name: "ups-failing", Status: "OB", OnBattery: true, RuntimeSec: &runtime}}
+	}
+	server.brokerExec = func(_ context.Context, _ privileged.Request) error {
+		return context.DeadlineExceeded
+	}
+	server.checkUPSShutdown(context.Background())
+	events, err := server.store.Events(20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pending, failed *model.Event
+	for index := range events {
+		event := &events[index]
+		switch event.Type {
+		case "ups.shutdown.pending":
+			pending = event
+		case "ups.shutdown.failed":
+			failed = event
+		}
+	}
+	if pending == nil || failed == nil || pending.CorrelationID == "" || pending.CorrelationID != failed.CorrelationID || failed.OperationID == "" || failed.PlanHash != failed.OperationID || failed.Resource == nil || failed.Resource.ID != "ups-failing" {
+		t.Fatalf("expected correlated UPS shutdown failure events, got pending=%#v failed=%#v", pending, failed)
 	}
 }
 

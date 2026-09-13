@@ -224,6 +224,10 @@ if "/api/v1/ups/config" not in api_smoke_text or '"names":[]' not in api_smoke_t
     raise SystemExit("API smoke does not exercise persisted UPS configuration")
 if "/api/v1/ups/status" not in api_smoke_text:
     raise SystemExit("API smoke does not exercise configured UPS status")
+shutdown_text = (repo_root / "cmd" / "lumonasd" / "shutdown_api.go").read_text(encoding="utf-8")
+for marker in ("ups.shutdown.pending", "ups.shutdown.failed", "context.WithTimeout(context.Background(), 30*time.Second)"):
+    if marker not in shutdown_text:
+        raise SystemExit(f"UPS shutdown observability is missing {marker}")
 if "/api/v1/system/metrics/history" not in api_smoke_text:
     raise SystemExit("API smoke does not exercise persisted system metrics")
 for marker in ("start_privileged_stack()", 'LUMONAS_PRIVD_SOCKET="$PRIVD_DIR/privd.sock"', "-worker \"$worker\""):

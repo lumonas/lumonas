@@ -235,6 +235,9 @@ Pass if:
 
 The status query must use the configured NUT device names after a configuration
 restart; an empty configuration may use NUT auto-discovery.
+The shutdown event sequence must retain one correlation ID across pending and
+started/failed events, and a broker failure must produce a persisted failed
+event without attempting an unbounded shutdown request.
 
 ## O. Notification routing
 

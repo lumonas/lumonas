@@ -3447,6 +3447,7 @@ components:
           type: string
         type:
           type: string
+          description: Event kind, including the correlated ups.shutdown.pending, ups.shutdown.started, and ups.shutdown.failed lifecycle events.
         timestamp:
           type: string
           format: date-time
