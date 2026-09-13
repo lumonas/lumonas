@@ -11,8 +11,11 @@ func FuzzValidateGeneratedShareConfigs(f *testing.F) {
 	f.Add("Subsystem sftp internal-sftp\nMatch User family\nChrootDirectory /srv/media\n")
 	f.Add("[media]\npath = /srv/media\nread only = true\n")
 	f.Fuzz(func(t *testing.T, content string) {
-		if len(content) > maxGeneratedConfigBytes {
-			t.Skip("fixture exceeds generated configuration bound")
+		// Keep the fuzz case below the production parser's bound while avoiding
+		// spending the entire fuzz deadline repeatedly parsing megabyte-sized
+		// inputs through five protocol validators.
+		if len(content) > 64*1024 {
+			t.Skip("fixture exceeds fuzz configuration bound")
 		}
 		path := filepath.Join(t.TempDir(), "generated.conf")
 		if err := os.WriteFile(path, []byte(content), 0o640); err != nil {

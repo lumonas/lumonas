@@ -148,8 +148,7 @@ jobs:
         with:
           go-version: '1.26.x'
           cache: true
-      - run: go test -race ./cmd/lumonasd ./cmd/lumonas-privd ./internal/backup ./internal/diagnostics ./internal/docker ./internal/network ./internal/recovery ./internal/shares ./internal/storage ./internal/store
-      - run: LUMONAS_FUZZ_TIME=5s bash scripts/fuzz-smoke.sh
+      - run: LUMONAS_FUZZ_TIME=5s bash scripts/race-fuzz-smoke.sh
 
   security-controls:
     runs-on: ubuntu-latest

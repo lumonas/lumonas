@@ -75,7 +75,11 @@ func TestDiskReplacementPlanAndConfirmChain(t *testing.T) {
 	if confirm.Code != http.StatusAccepted {
 		t.Fatalf("replacement confirm failed: %d %s", confirm.Code, confirm.Body.String())
 	}
-	if len(operations) != 2 || operations[0] != "filesystem.create" || operations[1] != "snapraid.config.apply" {
+	// The fix and follow-up sync jobs are started asynchronously after the
+	// replacement is accepted, so they may already have reached the broker
+	// while this handler response is being asserted. The synchronous prefix is
+	// the filesystem creation and managed config activation.
+	if len(operations) < 2 || operations[0] != "filesystem.create" || operations[1] != "snapraid.config.apply" {
 		t.Fatalf("unexpected broker chain: %#v", operations)
 	}
 	var result struct {

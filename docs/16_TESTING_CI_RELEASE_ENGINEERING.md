@@ -214,6 +214,9 @@ live runtime status.
 The framed privileged client also rejects oversized JSON requests before
 writing to the Unix socket; broker and worker scanners enforce the same limit
 on inbound frames.
+The release race/fuzz gate is centralized in `scripts/race-fuzz-smoke.sh`,
+which is used by both CI and the local Make target so the package set and fuzz
+harness cannot diverge.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the

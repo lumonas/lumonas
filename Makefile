@@ -109,8 +109,7 @@ container-scan:
 	bash scripts/container-image-scan.sh
 
 race-fuzz:
-	$(GO_ENV) go test -race ./cmd/lumonasd ./cmd/lumonas-privd ./internal/backup ./internal/diagnostics ./internal/docker ./internal/network ./internal/recovery ./internal/storage
-	$(GO_ENV) go test ./cmd/lumonasd ./cmd/lumonas-privd ./internal/backup ./internal/diagnostics ./internal/docker ./internal/network ./internal/recovery ./internal/storage -run 'Fuzz'
+	GOCACHE=$${GOCACHE:-/tmp/lumonas-go-race-cache} GOPATH=$${GOPATH:-/tmp/lumonas-gopath} bash scripts/race-fuzz-smoke.sh
 
 upgrade-compatibility:
 	$(GO_ENV) go test ./internal/store -run 'TestStoreReopenPreservesStateAcrossMigrations|TestOpenMigratesLegacyEventSchema|TestOpenMigratesLegacyRuntimeSchemaAsOneUpgrade'
