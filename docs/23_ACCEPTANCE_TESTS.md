@@ -288,6 +288,9 @@ QEMU fixture files must receive ownership inside the Debian chroot, after the
 package creates the `lumonas` service account; the host builder must not depend
 on a matching account existing on the CI runner.
 
+The QEMU job must provision the pinned Go toolchain before compiling the signed
+fixture, so appliance image construction does not depend on runner preinstalls.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.

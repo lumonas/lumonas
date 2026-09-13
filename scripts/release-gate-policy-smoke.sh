@@ -50,6 +50,10 @@ for job, artifact in (("qemu-smoke", "lumonas-qemu"), ("iso", "lumonas-iso-smoke
     block = job_match.group(0) if job_match else ""
     if "uses: actions/upload-artifact@v4" not in block or "if: always()" not in block or artifact not in block:
         raise SystemExit(f"{job} must retain appliance diagnostics when the gate fails")
+qemu_job = re.search(r"(?ms)^  qemu-smoke:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+qemu_block = qemu_job.group(0) if qemu_job else ""
+if "actions/setup-go@v5" not in qemu_block or "./cmd/lumonas-update-fixture" not in qemu_block:
+    raise SystemExit("QEMU smoke must provision Go and build the signed update fixture")
 race_match = re.search(r"(?ms)^  race-fuzz:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
 if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", race_match.group(0), re.M):
     raise SystemExit("race-fuzz job is not running the centralized race/fuzz harness")
