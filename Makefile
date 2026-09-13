@@ -15,7 +15,7 @@ dev:
 dev-full:
 	bash scripts/dev.sh full
 
-test: test-go test-web check-openapi check-openapi-duplicates check-api-contract
+test: test-go test-web check-openapi check-openapi-duplicates check-api-contract validate-api-response validate-sse
 
 test-go:
 	$(GO_ENV) go test ./...
@@ -150,7 +150,7 @@ interop-smoke:
 	bash scripts/interop/run-all.sh
 
 upgrade-compatibility:
-	$(GO_ENV) go test ./internal/store -run 'TestStoreReopenPreservesStateAcrossMigrations|TestOpenMigratesLegacyEventSchema|TestOpenMigratesLegacyRuntimeSchemaAsOneUpgrade|TestStorageSnapshotMigrationAddsOriginAndPreservesRows'
+	$(GO_ENV) go test ./internal/store -run 'TestStoreReopenPreservesStateAcrossMigrations|TestOpenMigratesLegacyEventSchema|TestOpenMigratesLegacyLanHostSchema|TestOpenMigratesLegacyRuntimeSchemaAsOneUpgrade|TestStorageSnapshotMigrationAddsOriginAndPreservesRows'
 
 release-gate-policy:
 	bash scripts/release-gate-policy-smoke.sh
