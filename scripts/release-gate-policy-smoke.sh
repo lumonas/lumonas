@@ -86,6 +86,8 @@ for marker in (
 qemu_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-smoke.sh"
 if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "validate-sse.py" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU smoke does not validate live API and SSE response contracts")
+if "metrics-history" not in qemu_smoke.read_text(encoding="utf-8"):
+    raise SystemExit("QEMU smoke does not validate retained system metrics")
 for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollback", "activeSlot"):
     if marker not in qemu_smoke.read_text(encoding="utf-8"):
         raise SystemExit(f"QEMU smoke does not exercise signed update rollback: {marker}")
@@ -116,6 +118,8 @@ if "Last-Event-ID" not in api_smoke_text or "cursor event twice" not in api_smok
     raise SystemExit("API smoke does not enforce non-duplicating SSE replay")
 if "/api/v1/ups/config" not in api_smoke_text or '"names":[]' not in api_smoke_text:
     raise SystemExit("API smoke does not exercise persisted UPS configuration")
+if "/api/v1/system/metrics/history" not in api_smoke_text:
+    raise SystemExit("API smoke does not exercise persisted system metrics")
 for marker in ("start_privileged_stack()", 'LUMONAS_PRIVD_SOCKET="$PRIVD_DIR/privd.sock"', "-worker \"$worker\""):
     if marker not in api_smoke_text:
         raise SystemExit(f"API smoke does not start the real privileged stack: {marker}")

@@ -385,6 +385,12 @@ input hashes.
 
 Run the black-box API smoke and `lumonasd` restart/event-stream tests.
 
+The same smoke must wait for a retained `/api/v1/system/metrics/history`
+sample, validate its timestamped metric envelope, and find that sample again
+after restarting the daemon against the same SQLite database. The QEMU smoke
+must repeat the history check after rebooting with reordered virtual data
+disks.
+
 Pass if interrupted queued/preparing/running jobs become failed with a
 completion timestamp, and an SSE client resuming from `Last-Event-ID` receives
 only events after that cursor before live delivery begins. The smoke must do

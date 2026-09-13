@@ -93,6 +93,21 @@ def validate_metrics(value: Any) -> None:
     number_field(net, "downMbps", "metrics.net")
 
 
+def validate_metrics_history(value: Any) -> None:
+    if not isinstance(value, list):
+        fail("metrics-history must be a JSON array")
+    previous = None
+    for index, sample in enumerate(value):
+        label = f"metrics-history[{index}]"
+        obj = object_value(sample, label)
+        required(obj, ("capturedAt", "metrics"), label)
+        string_field(obj, "capturedAt", label)
+        validate_metrics(obj["metrics"])
+        if previous is not None and obj["capturedAt"] > previous:
+            fail("metrics-history must be ordered newest first")
+        previous = obj["capturedAt"]
+
+
 def validate_jobs(value: Any) -> None:
     if not isinstance(value, list):
         fail("jobs must be a JSON array")
@@ -135,6 +150,14 @@ def self_test() -> None:
         "ramTotalBytes": 2, "cpuTempC": 0.0, "uptimeSeconds": 1,
         "net": {"interface": "", "upMbps": 0.0, "downMbps": 0.0},
     })
+    validate_metrics_history([{
+        "capturedAt": "2026-01-02T00:00:00Z",
+        "metrics": {
+            "cpuPercent": 1.0, "load": [0.0, 0.0, 0.0], "ramUsedBytes": 1,
+            "ramTotalBytes": 2, "cpuTempC": 0.0, "uptimeSeconds": 1,
+            "net": {"interface": "", "upMbps": 0.0, "downMbps": 0.0},
+        },
+    }])
     validate_jobs([{"id": "job-1", "type": "smart.short", "title": "SMART", "state": "queued", "progress": None, "createdAt": "now"}])
     validate_events([{"schemaVersion": 1, "id": "evt-1", "type": "system.metrics", "timestamp": "now", "severity": "info", "data": {}}])
 
@@ -143,6 +166,7 @@ VALIDATORS = {
     "server": validate_server,
     "disks": validate_disks,
     "metrics": validate_metrics,
+    "metrics-history": validate_metrics_history,
     "jobs": validate_jobs,
     "events": validate_events,
 }

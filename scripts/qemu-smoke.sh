@@ -117,6 +117,7 @@ for attempt in $(seq 1 60); do
      curl -kfsS https://127.0.0.1:18080/api/v1/server >"$LOG.server" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.metrics" 2>/dev/null && \
+     curl -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
      curl -kfsS https://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
@@ -147,6 +148,8 @@ for attempt in $(seq 1 60); do
       python3 "$ROOT/scripts/validate-api-response.py" server "$LOG.server"
       python3 "$ROOT/scripts/validate-api-response.py" disks "$LOG.disks"
       python3 "$ROOT/scripts/validate-api-response.py" metrics "$LOG.metrics"
+      grep -F '"capturedAt"' "$LOG.metrics-history" >/dev/null 2>&1 || continue
+      python3 "$ROOT/scripts/validate-api-response.py" metrics-history "$LOG.metrics-history"
       python3 "$ROOT/scripts/validate-api-response.py" jobs "$LOG.jobs"
       EVENTS_LOG="$LOG.events"
       curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
@@ -207,7 +210,10 @@ PY
         QEMU_PID=$!
         for reorder_attempt in $(seq 1 60); do
           if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
-             curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null; then
+             curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null && \
+             curl -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history.reordered" 2>/dev/null; then
+            grep -F '"capturedAt"' "$LOG.metrics-history.reordered" >/dev/null 2>&1 || continue
+            python3 "$ROOT/scripts/validate-api-response.py" metrics-history "$LOG.metrics-history.reordered"
             snapshot_disk_identities "$LOG.disks.reordered" "$LOG.identities.reordered"
             cut -f1 "$LOG.identities.initial" >"$LOG.ids.initial"
             cut -f1 "$LOG.identities.reordered" >"$LOG.ids.reordered"

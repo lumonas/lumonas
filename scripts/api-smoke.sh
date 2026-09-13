@@ -296,6 +296,19 @@ status=$(curl -sS -o "$TEMP_DIR/metrics.json" -w '%{http_code}' \
 [ "$status" = 200 ] || { echo "authenticated metrics request failed (HTTP $status)" >&2; exit 1; }
 validate_response metrics "$TEMP_DIR/metrics.json"
 
+METRICS_HISTORY_READY=false
+for attempt in $(seq 1 30); do
+	status=$(curl -sS -o "$TEMP_DIR/metrics-history.json" -w '%{http_code}' \
+		-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/system/metrics/history?hours=1&limit=10")
+	if [ "$status" = 200 ] && grep -F '"capturedAt"' "$TEMP_DIR/metrics-history.json" >/dev/null 2>&1; then
+		METRICS_HISTORY_READY=true
+		break
+	fi
+	sleep 0.2
+done
+[ "$METRICS_HISTORY_READY" = true ] || { echo "system metrics history did not persist a sample" >&2; cat "$TEMP_DIR/metrics-history.json" >&2; exit 1; }
+validate_response metrics-history "$TEMP_DIR/metrics-history.json"
+
 status=$(curl -sS -o "$TEMP_DIR/jobs.json" -w '%{http_code}' \
 	-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/jobs")
 [ "$status" = 200 ] || { echo "authenticated jobs request failed (HTTP $status)" >&2; exit 1; }
@@ -391,6 +404,12 @@ else
 	[ "$RESTARTED_JOB_STATUS" = 200 ] || { echo "restarted job lookup failed (HTTP $RESTARTED_JOB_STATUS)" >&2; exit 1; }
 	grep -F '"state":"failed"' "$RESTARTED_JOB_PATH" >/dev/null
 	grep -F 'daemon restarted before the job completed' "$RESTARTED_JOB_PATH" >/dev/null
+	RESTARTED_METRICS_HISTORY_PATH="$TEMP_DIR/restarted-metrics-history.json"
+	RESTARTED_METRICS_STATUS=$(curl -sS -o "$RESTARTED_METRICS_HISTORY_PATH" -w '%{http_code}' \
+		-c "$COOKIE_JAR" -b "$COOKIE_JAR" "$BASE_URL/api/v1/system/metrics/history?hours=1&limit=10")
+	[ "$RESTARTED_METRICS_STATUS" = 200 ] || { echo "restarted metrics history lookup failed (HTTP $RESTARTED_METRICS_STATUS)" >&2; exit 1; }
+	grep -F '"capturedAt"' "$RESTARTED_METRICS_HISTORY_PATH" >/dev/null
+	validate_response metrics-history "$RESTARTED_METRICS_HISTORY_PATH"
 	REPLAY_PATH="$TEMP_DIR/replayed-events.sse"
 	curl -sS --max-time 5 -N -b "$COOKIE_JAR" -H "Last-Event-ID: $LAST_EVENT_ID" "$BASE_URL/api/v1/events/stream" >"$REPLAY_PATH" 2>/dev/null || true
 	grep -F 'retry: 3000' "$REPLAY_PATH" >/dev/null

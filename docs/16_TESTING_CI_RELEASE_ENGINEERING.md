@@ -366,6 +366,11 @@ state event. The restart probe is assertion-required in Ubuntu CI; macOS
 development runs without Linux block-device discovery and reports that
 disk-dependent probe as skipped.
 
+It also waits for a persisted system-metrics sample, validates the timestamped
+history response, and requires that sample to remain available after the
+daemon restart. The Debian QEMU smoke repeats the history check after rebooting
+with reordered data disks.
+
 The QEMU reorder assertion compares each disk's stable identity tuple (ID,
 serial, WWN/UUID fields, and capacity) independently of `currentPath`, then
 requires at least one transient device path to change after the virtual disk
