@@ -1,10 +1,10 @@
 package privileged
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
@@ -96,7 +96,7 @@ func (c Client) Execute(ctx context.Context, request Request) (Response, error) 
 		return Response{}, fmt.Errorf("send privileged request: %w", err)
 	}
 	var response Response
-	if err := json.NewDecoder(bufio.NewReader(connection)).Decode(&response); err != nil {
+	if err := json.NewDecoder(io.LimitReader(connection, MaxIPCMessageBytes)).Decode(&response); err != nil {
 		return Response{}, fmt.Errorf("read privileged response: %w", err)
 	}
 	return response, nil

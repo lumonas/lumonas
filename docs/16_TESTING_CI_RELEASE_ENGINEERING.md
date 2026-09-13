@@ -478,6 +478,9 @@ transfers inherit a finite deadline; NetworkManager checkpoints additionally
 remain bounded by their requested confirmation timeout.
 The privileged Unix-socket client applies the same fail-closed deadline to
 connected request/response streams.
+Privileged IPC frames are also bounded to one MiB on both the client response
+reader and broker/worker scanners, with oversized response tests running in the
+release-blocking Go safety suite.
 
 The protection-config API test uses a generated configuration and stable disk
 identities, so the endpoint’s read-only discovery path is exercised separately

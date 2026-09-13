@@ -25,6 +25,7 @@ import (
 	"github.com/lumonas/lumonas/internal/model"
 	"github.com/lumonas/lumonas/internal/network"
 	"github.com/lumonas/lumonas/internal/power"
+	"github.com/lumonas/lumonas/internal/privileged"
 	commandrunner "github.com/lumonas/lumonas/internal/runner"
 	"github.com/lumonas/lumonas/internal/storage"
 )
@@ -144,7 +145,7 @@ func main() {
 
 func serve(conn net.Conn) {
 	defer conn.Close()
-	scanner := bufio.NewScanner(conn)
+	scanner := privilegedScanner(conn)
 	encoder := json.NewEncoder(conn)
 	for scanner.Scan() {
 		var req request
@@ -164,7 +165,7 @@ func serve(conn net.Conn) {
 
 func serveWorker(conn net.Conn, worker string) {
 	defer conn.Close()
-	scanner := bufio.NewScanner(conn)
+	scanner := privilegedScanner(conn)
 	encoder := json.NewEncoder(conn)
 	for scanner.Scan() {
 		var req request
@@ -179,6 +180,12 @@ func serveWorker(conn net.Conn, worker string) {
 		privilegedLogger.Info("worker result", resultAttrs...)
 		_ = encoder.Encode(result)
 	}
+}
+
+func privilegedScanner(conn net.Conn) *bufio.Scanner {
+	scanner := bufio.NewScanner(conn)
+	scanner.Buffer(make([]byte, 64*1024), privileged.MaxIPCMessageBytes)
+	return scanner
 }
 
 // privilegedRequestAttrs deliberately excludes RequestedState and ExpectedIdentity:
@@ -215,7 +222,7 @@ func forwardToWorker(req request, worker string) response {
 		return response{Error: "privileged worker request failed"}
 	}
 	var result response
-	if err := json.NewDecoder(bufio.NewReader(connection)).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(connection, privileged.MaxIPCMessageBytes)).Decode(&result); err != nil {
 		return response{Error: "privileged worker response failed"}
 	}
 	return result

@@ -635,3 +635,12 @@ cannot start, while package installation remains usable in chroots without
 `/run/systemd/system`.
 Upgrade removal must likewise fail on a live systemd host when an ordered
 service cannot stop, while retaining the chroot compatibility path.
+
+## BE. Privileged IPC frame bounds
+
+Run the privileged client and worker forwarding tests with an oversized JSON
+response.
+
+Pass if both the management client and root-owned broker reject responses above
+the one-MiB frame limit without returning success or retaining an unbounded
+buffer.
