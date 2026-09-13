@@ -71,6 +71,8 @@ require_line "$ROOT/internal/docker/engine_proxy.go" 'ValidateReadOnlyEnginePath
 require_line "$ROOT/internal/docker/docker.go" 'ValidateComposeStructure'
 require_line "$ROOT/internal/recovery/bundle.go" 'ValidateComposeStructure(string(content))'
 require_line "$ROOT/cmd/lumonas-privd/docker.go" 'validateDockerCommand'
+require_line "$ROOT/cmd/lumonas-privd/docker.go" 'maxDockerBrokerResponse = 1 << 20'
+require_line "$ROOT/cmd/lumonas-privd/docker.go" 'validateDockerReadResponse'
 require_line "$ROOT/cmd/lumonasd/docker_privileged.go" 'Operation:      "docker.read"'
 if grep -F 'usermod -aG docker lumonas' "$ROOT/packaging/debian/postinst" >/dev/null 2>&1; then
 	echo "package postinst must not grant lumonas direct Docker socket access" >&2

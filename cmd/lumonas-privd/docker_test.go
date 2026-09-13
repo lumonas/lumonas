@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,5 +95,25 @@ func TestDockerReadRequiresAllowListedPath(t *testing.T) {
 	result := executeDockerRead(request{RequestedState: map[string]any{"path": "/containers/container-1/exec"}})
 	if result.OK || !strings.Contains(result.Error, "not allow-listed") {
 		t.Fatalf("unsafe Docker read was accepted: %#v", result)
+	}
+}
+
+func TestDockerReadRejectsOversizedOrMalformedResponses(t *testing.T) {
+	original := readDockerEngine
+	t.Cleanup(func() { readDockerEngine = original })
+	readDockerEngine = func(context.Context, string, string) ([]byte, error) {
+		return []byte("{" + strings.Repeat("x", maxDockerBrokerResponse) + "}"), nil
+	}
+	result := executeDockerRead(request{RequestedState: map[string]any{"path": "/version"}})
+	if result.OK || !strings.Contains(result.Error, "size limit") {
+		t.Fatalf("oversized Docker response was accepted: %#v", result)
+	}
+
+	readDockerEngine = func(context.Context, string, string) ([]byte, error) {
+		return []byte("not-json"), nil
+	}
+	result = executeDockerRead(request{RequestedState: map[string]any{"path": "/version"}})
+	if result.OK || !strings.Contains(result.Error, "valid JSON") {
+		t.Fatalf("malformed Docker response was accepted: %#v", result)
 	}
 }

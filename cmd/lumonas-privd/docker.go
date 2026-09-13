@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -12,16 +13,33 @@ import (
 	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 )
 
+const maxDockerBrokerResponse = 1 << 20
+
+var readDockerEngine = dockerruntime.ReadOnlyEngineRequest
+
 func executeDockerRead(req request) response {
 	path := requestedString(req.RequestedState, "path")
 	if err := dockerruntime.ValidateReadOnlyEnginePath(path); err != nil {
 		return response{Error: err.Error()}
 	}
-	body, err := dockerruntime.ReadOnlyEngineRequest(context.Background(), os.Getenv("LUMONAS_DOCKER_SOCKET"), path)
+	body, err := readDockerEngine(context.Background(), os.Getenv("LUMONAS_DOCKER_SOCKET"), path)
 	if err != nil {
 		return response{Error: "Docker Engine read failed"}
 	}
+	if err := validateDockerReadResponse(body); err != nil {
+		return response{Error: err.Error()}
+	}
 	return response{OK: true, Data: jsonRawMessage(body)}
+}
+
+func validateDockerReadResponse(body []byte) error {
+	if len(body) > maxDockerBrokerResponse {
+		return errors.New("Docker Engine response exceeded privileged IPC size limit")
+	}
+	if !json.Valid(body) {
+		return errors.New("Docker Engine response was not valid JSON")
+	}
+	return nil
 }
 
 func executeDockerCommand(req request, run command) response {
