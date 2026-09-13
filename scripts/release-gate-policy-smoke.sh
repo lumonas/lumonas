@@ -360,7 +360,7 @@ for marker in ("package-arm64:", "LUMONAS_CC=aarch64-linux-gnu-gcc", "name: lumo
     if marker not in workflow_text:
         raise SystemExit(f"CI does not build and verify the arm64 package: {marker}")
 slot_source = (repo_root / "cmd" / "lumonas-privd" / "system_slots.go").read_text(encoding="utf-8")
-for marker in ("slotTargetStat", "ModeCharDevice", "slot image digest does not match", "could not verify slot target mount state"):
+for marker in ("slotTargetStat", "ModeCharDevice", "slot image digest does not match", "could not verify slot target mount state", "could not verify slot target is a whole disk", "ValidateSlotDevicePath"):
     if marker not in slot_source:
         raise SystemExit(f"slot writer safety guard is missing {marker}")
 slot_tests = (repo_root / "cmd" / "lumonas-privd" / "system_slots_test.go").read_text(encoding="utf-8")

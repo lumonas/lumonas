@@ -157,7 +157,7 @@ func ValidateSlotDevicePath(device string) error {
 	if device == "" || filepath.Clean(device) != device || strings.Contains(device, "..") {
 		return errors.New("slot device path is invalid")
 	}
-	for _, prefix := range []string{"/dev/disk/by-id/", "/dev/disk/by-partlabel/", "/dev/disk/by-partuuid/"} {
+	for _, prefix := range []string{"/dev/disk/by-id/", "/dev/disk/by-partlabel/"} {
 		if strings.HasPrefix(device, prefix) && len(device) > len(prefix) {
 			return nil
 		}

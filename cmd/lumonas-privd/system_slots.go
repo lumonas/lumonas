@@ -73,6 +73,10 @@ func applySlotWrite(req request, run command) response {
 	if targetStat, statErr := slotTargetStat(target); statErr != nil || targetStat.Mode()&os.ModeDevice == 0 || targetStat.Mode()&os.ModeCharDevice != 0 {
 		return response{Error: "slot target is not a block device"}
 	}
+	targetType, typeErr := run("lsblk", "-nrpo", "TYPE", "--", target)
+	if typeErr != nil || strings.TrimSpace(string(targetType)) != "disk" {
+		return response{Error: "could not verify slot target is a whole disk"}
+	}
 	if mounted, mountErr := deviceHasMounts(target, run); mountErr != nil {
 		return response{Error: "could not verify slot target mount state"}
 	} else if mounted {

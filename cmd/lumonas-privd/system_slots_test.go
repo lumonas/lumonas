@@ -108,6 +108,20 @@ func TestSlotWriteRejectsNonBlockTarget(t *testing.T) {
 	}
 }
 
+func TestSlotWriteRejectsPartitionTarget(t *testing.T) {
+	imagePath, digest := stagedSlotImage(t, "payload")
+	allowFakeSlotBlockDevice(t)
+	result := execute(slotWriteRequest(imagePath, "/dev/disk/by-id/virtio-LUMONAS-SLOTB", digest), slotTestDiscover, func(name string, _ ...string) ([]byte, error) {
+		if name == "lsblk" {
+			return []byte("part\n"), nil
+		}
+		return []byte(""), nil
+	})
+	if result.OK || !strings.Contains(result.Error, "whole disk") {
+		t.Fatalf("expected partition rejection, got %#v", result)
+	}
+}
+
 func TestSlotWriteVerifiesDigestBeforeWrite(t *testing.T) {
 	imagePath, _ := stagedSlotImage(t, "payload")
 	allowFakeSlotBlockDevice(t)
