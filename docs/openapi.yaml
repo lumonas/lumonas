@@ -65,8 +65,16 @@ paths:
       responses:
         '200':
           description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
         '503':
           description: Not ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
 
   /server:
     get:
@@ -3132,6 +3140,22 @@ components:
           type: string
         id:
           type: string
+
+    ReadinessStatus:
+      type: object
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        checks:
+          type: object
+          required: [database, privilegedBroker]
+          properties:
+            database:
+              type: boolean
+            privilegedBroker:
+              type: boolean
 
     HealthState:
       type: string

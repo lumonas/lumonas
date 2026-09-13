@@ -155,6 +155,7 @@ assert_authenticated_status_and_body() {
 wait_for_status /healthz 200
 assert_status_and_body GET /healthz 200 '"status":"ok"'
 assert_status_and_body GET /readyz 200 '"status":"ready"'
+assert_status_and_body GET /readyz 200 '"privilegedBroker":true'
 assert_status_and_body GET /api/v1/auth/status 200 '"required":true'
 
 # Health stays public, while the normal API is protected when authentication

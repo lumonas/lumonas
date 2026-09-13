@@ -105,6 +105,36 @@ func TestAPIHealthAndDiskIdentity(t *testing.T) {
 	}
 }
 
+func TestReadyRequiresDatabaseIdentityAndPrivilegedBroker(t *testing.T) {
+	server := testServer(t)
+	ready := httptest.NewRecorder()
+	server.routes().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusOK || !strings.Contains(ready.Body.String(), `"database":true`) || !strings.Contains(ready.Body.String(), `"privilegedBroker":true`) {
+		t.Fatalf("expected ready checks to pass, got %d: %s", ready.Code, ready.Body.String())
+	}
+
+	server.brokerExec = func(context.Context, privileged.Request) error {
+		return errors.New("broker unavailable")
+	}
+	notReady := httptest.NewRecorder()
+	server.routes().ServeHTTP(notReady, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if notReady.Code != http.StatusServiceUnavailable || !strings.Contains(notReady.Body.String(), `"privilegedBroker":false`) {
+		t.Fatalf("expected broker failure to make readiness fail, got %d: %s", notReady.Code, notReady.Body.String())
+	}
+}
+
+func TestReadyRejectsEmptyNASIdentity(t *testing.T) {
+	server := testServer(t)
+	if err := server.store.SetMeta("nas_uuid", "  "); err != nil {
+		t.Fatal(err)
+	}
+	ready := httptest.NewRecorder()
+	server.routes().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	if ready.Code != http.StatusServiceUnavailable || !strings.Contains(ready.Body.String(), `"database":false`) {
+		t.Fatalf("expected empty NAS identity to fail readiness, got %d: %s", ready.Code, ready.Body.String())
+	}
+}
+
 func TestSnapraidJobIsQueuedAndFailsThroughUnavailableBroker(t *testing.T) {
 	server := testServer(t)
 	request := httptest.NewRequest(http.MethodPost, "/api/v1/jobs", io.NopCloser(strings.NewReader(`{"type":"snapraid.sync"}`)))

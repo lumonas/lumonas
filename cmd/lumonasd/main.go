@@ -228,11 +228,19 @@ func (s *apiServer) healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 func (s *apiServer) readyz(w http.ResponseWriter, _ *http.Request) {
-	if _, ok := s.store.Meta("nas_uuid"); !ok {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "not_ready"})
+	nasUUID, hasNASUUID := s.store.Meta("nas_uuid")
+	checks := map[string]bool{"database": hasNASUUID && strings.TrimSpace(nasUUID) != "", "privilegedBroker": false}
+	if checks["database"] {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		result, err := s.executePrivileged(ctx, privileged.Request{Operation: "ping", PlanHash: "readiness"})
+		cancel()
+		checks["privilegedBroker"] = err == nil && result.OK
+	}
+	if !checks["database"] || !checks["privilegedBroker"] {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "not_ready", "checks": checks})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ready", "checks": checks})
 }
 
 func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
