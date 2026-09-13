@@ -285,7 +285,9 @@ writing to the Unix socket; broker and worker scanners enforce the same limit
 on inbound frames.
 The release race/fuzz gate is centralized in `scripts/race-fuzz-smoke.sh`,
 which is used by both CI and the local Make target so the package set and fuzz
-harness cannot diverge.
+harness cannot diverge. It runs the race detector across every Go package
+before the bounded fuzz suite, including collectors, event delivery, stores,
+and all three runtime services.
 Debian packaging also normalizes package-entry mtimes and builds the artifact
 twice with the same source provenance. CI and `make package` fail if the two
 `.deb` files differ byte-for-byte.

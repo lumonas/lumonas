@@ -74,6 +74,8 @@ if not race_match or not re.search(r"^\s+- run: .*scripts/race-fuzz-smoke\.sh", 
 race_script = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "race-fuzz-smoke.sh"
 if "scripts/fuzz-smoke.sh" not in race_script.read_text(encoding="utf-8"):
     raise SystemExit("race/fuzz harness does not delegate to the bounded fuzz suite")
+if "go test -race ./..." not in race_script.read_text(encoding="utf-8"):
+    raise SystemExit("race/fuzz harness does not cover every Go package")
 installer = pathlib.Path(sys.argv[1]).parent.parent.parent / "installer" / "build-iso.sh"
 installer_text = installer.read_text(encoding="utf-8")
 for marker in (

@@ -293,6 +293,7 @@ require_line "$ROOT/.github/workflows/ci.yml" 'LUMONAS_FUZZ_TIME=5s bash scripts
 require_line "$ROOT/scripts/fuzz-smoke.sh" 'FuzzValidateGeneratedShareConfigs'
 require_line "$ROOT/scripts/fuzz-smoke.sh" 'FuzzStoragePlanValidation'
 require_line "$ROOT/scripts/race-fuzz-smoke.sh" 'go test -race'
+require_line "$ROOT/scripts/race-fuzz-smoke.sh" 'go test -race ./...'
 require_line "$ROOT/.github/workflows/ci.yml" 'LUMONAS_FUZZ_TIME=5s bash scripts/race-fuzz-smoke.sh'
 [ -x "$ROOT/scripts/race-fuzz-smoke.sh" ] || { echo "race and fuzz smoke test must be executable" >&2; exit 1; }
 require_line "$ROOT/scripts/fuzz-smoke.sh" 'FuzzNetworkConnectionValidation'

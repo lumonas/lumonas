@@ -116,6 +116,9 @@ Release CI also starts the real root-owned storage worker against a disposable l
 
 Event, audit, capacity, and job history retention are bounded so long-running appliances do not grow SQLite state without limit.
 
+The release race/fuzz gate runs `go test -race ./...` across the complete Go
+runtime before executing the bounded validation fuzzers.
+
 Tagged releases run a Debian 13 previous-to-current package upgrade smoke test and verify that administrator configuration survives the upgrade.
 
 The ISO pipeline boots the generated offline image under QEMU with a blank replacement disk and checks the real health, readiness, frontend document, and server endpoints before publishing the artifact. Release CI also performs a full offline system-disk recovery: it supplies a separate recovery medium, installs a bootable Debian runtime onto the blank disk, restores state, powers the guest off, and boots the recovered disk without the ISO to verify its real API.

@@ -7,6 +7,9 @@ GOPATH="${GOPATH:-/tmp/lumonas-gopath}"
 export GOCACHE GOPATH
 
 cd "$ROOT"
-go test -race ./cmd/lumonasd ./cmd/lumonas-privd ./internal/backup ./internal/diagnostics ./internal/docker ./internal/network ./internal/recovery ./internal/shares ./internal/storage ./internal/store
+# Race every Go package so a release cannot hide a concurrency regression in
+# a collector, event hub, migration, or command service omitted from a hand-
+# maintained package allow-list.
+go test -race ./...
 LUMONAS_FUZZ_TIME="${LUMONAS_FUZZ_TIME:-5s}" bash scripts/fuzz-smoke.sh
 echo "LumoNAS race and fuzz smoke checks passed"

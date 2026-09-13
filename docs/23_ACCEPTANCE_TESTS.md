@@ -745,7 +745,8 @@ fixtures pass, and the scan runs in the release-blocking security-controls job.
 Run `LUMONAS_FUZZ_TIME=5s bash scripts/fuzz-smoke.sh`.
 
 The release gate invokes this through `scripts/race-fuzz-smoke.sh`, which runs
-the selected Go race packages first and then the bounded fuzz suite.
+the Go race detector across every package first and then the bounded fuzz
+suite.
 
 Pass if the release-blocking fuzz job exercises Compose/YAML transformations,
 backup and recovery manifests, path and storage-plan validation, generated
