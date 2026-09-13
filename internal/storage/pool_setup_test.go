@@ -58,6 +58,19 @@ func TestPoolSetupPlanRejectsKernelPathIdentity(t *testing.T) {
 	}
 }
 
+func TestPoolSetupPlanRejectsSanitizedBranchCollision(t *testing.T) {
+	dataOne := poolSetupTestDisk("serial:a:b", "", false)
+	dataTwo := poolSetupTestDisk("serial:a_b", "", false)
+	if _, err := NewPoolSetupPlan("setup-collision", "media", []model.Disk{dataOne, dataTwo}, []string{dataOne.ID, dataTwo.ID}, "", "ext4", true, 7, time.Now().UTC()); err == nil || !strings.Contains(err.Error(), "same branch path") {
+		t.Fatalf("pool setup accepted colliding branch identities: %v", err)
+	}
+	parity := poolSetupTestDisk("serial:a_b", "", false)
+	parity.Role = "parity"
+	if _, err := NewPoolSetupPlan("setup-parity-collision", "media", []model.Disk{dataOne, parity}, []string{dataOne.ID}, parity.ID, "ext4", true, 7, time.Now().UTC()); err == nil || !strings.Contains(err.Error(), "same branch path") {
+		t.Fatalf("pool setup accepted parity/data branch collision: %v", err)
+	}
+}
+
 func TestPoolSetupPlanFailsClosedOnReplacementGenerationAndExpiry(t *testing.T) {
 	now := time.Now().UTC()
 	disk := poolSetupTestDisk("data", "", false)

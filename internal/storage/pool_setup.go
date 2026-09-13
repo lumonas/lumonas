@@ -77,6 +77,7 @@ func NewPoolSetupPlan(id, name string, disks []model.Disk, dataIDs []string, par
 		byID[disk.ID] = disk
 	}
 	seenData := make(map[string]bool, len(dataIDs))
+	branches := make(map[string]string, len(dataIDs)+1)
 	formatIDs := make([]string, 0, len(dataIDs))
 	mountIDs := make([]string, 0, len(dataIDs)+1)
 	expected := make([]PoolSetupIdentity, 0, len(dataIDs)+1)
@@ -91,6 +92,11 @@ func NewPoolSetupPlan(id, name string, disks []model.Disk, dataIDs []string, par
 		if seenData[id] {
 			return PoolSetupPlan{}, fmt.Errorf("data disk %q is listed more than once", id)
 		}
+		branch := DiskBranchPath(id)
+		if previous, exists := branches[branch]; exists {
+			return PoolSetupPlan{}, fmt.Errorf("disk identities %q and %q resolve to the same branch path %q", previous, id, branch)
+		}
+		branches[branch] = id
 		if parityID == id {
 			return PoolSetupPlan{}, errors.New("a disk cannot be both parity and pool data")
 		}
@@ -123,6 +129,11 @@ func NewPoolSetupPlan(id, name string, disks []model.Disk, dataIDs []string, par
 		if parity.PoolID != "" {
 			return PoolSetupPlan{}, fmt.Errorf("parity disk %q is already assigned to pool %q", parityID, parity.PoolID)
 		}
+		parityBranch := DiskBranchPath(parityID)
+		if previous, exists := branches[parityBranch]; exists {
+			return PoolSetupPlan{}, fmt.Errorf("disk identities %q and %q resolve to the same branch path %q", previous, parityID, parityBranch)
+		}
+		branches[parityBranch] = parityID
 		expected = append(expected, poolSetupIdentity(parity))
 		if parity.Health == model.Critical {
 			return PoolSetupPlan{}, fmt.Errorf("parity disk %q is critically unhealthy", parityID)
@@ -191,6 +202,9 @@ func ValidatePoolSetupPlan(plan PoolSetupPlan, actual []model.Disk, now time.Tim
 	if plan.ConfigGeneration != generation {
 		return errors.New("configuration generation changed after planning")
 	}
+	if err := validatePoolSetupBranches(plan.DataDiskIDs, plan.ParityDiskID); err != nil {
+		return err
+	}
 	byID := make(map[string]model.Disk, len(actual))
 	for _, disk := range actual {
 		byID[disk.ID] = disk
@@ -248,6 +262,32 @@ func ValidatePoolSetupPlan(plan PoolSetupPlan, actual []model.Disk, now time.Tim
 		}
 		if disk.PoolID != "" {
 			return fmt.Errorf("parity disk %q became a member of pool %q", plan.ParityDiskID, disk.PoolID)
+		}
+	}
+	return nil
+}
+
+func validatePoolSetupBranches(dataIDs []string, parityID string) error {
+	owners := make(map[string]string, len(dataIDs)+1)
+	add := func(id string) error {
+		if !model.HasStableDiskIdentity(id) {
+			return fmt.Errorf("disk %q has no stable identity", id)
+		}
+		branch := DiskBranchPath(id)
+		if previous, exists := owners[branch]; exists {
+			return fmt.Errorf("disk identities %q and %q resolve to the same branch path %q", previous, id, branch)
+		}
+		owners[branch] = id
+		return nil
+	}
+	for _, id := range dataIDs {
+		if err := add(id); err != nil {
+			return err
+		}
+	}
+	if parityID != "" {
+		if err := add(parityID); err != nil {
+			return err
 		}
 	}
 	return nil
