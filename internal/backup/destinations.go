@@ -150,6 +150,10 @@ func Download(ctx context.Context, destination Destination, credentials Credenti
 			_ = output.Close()
 			return err
 		}
+		if err := output.Sync(); err != nil {
+			_ = output.Close()
+			return err
+		}
 		return output.Close()
 	case DestinationSFTP:
 		return downloadSFTP(ctx, destination.Target, credentials, object, target)
@@ -188,6 +192,10 @@ func uploadLocal(root, source, object string) error {
 		cleanup()
 		return err
 	}
+	if err := temporary.Sync(); err != nil {
+		cleanup()
+		return err
+	}
 	if err := temporary.Chmod(0o600); err != nil || temporary.Close() != nil {
 		cleanup()
 		return errors.New("close local backup copy")
@@ -196,7 +204,16 @@ func uploadLocal(root, source, object string) error {
 		cleanup()
 		return err
 	}
-	return nil
+	return syncDirectory(filepath.Dir(target))
+}
+
+func syncDirectory(directory string) error {
+	handle, err := os.Open(directory)
+	if err != nil {
+		return err
+	}
+	defer handle.Close()
+	return handle.Sync()
 }
 
 func uploadSFTP(ctx context.Context, target string, credentials Credentials, source, object string) error {

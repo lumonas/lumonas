@@ -79,3 +79,26 @@ func TestLocalUploadAndDownloadVerificationChecksThePromotedCopy(t *testing.T) {
 		t.Fatal("expected unsafe remote object to be rejected")
 	}
 }
+
+func TestLocalUploadPublishesDurableMode0600Copy(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "source.mrb")
+	if err := os.WriteFile(source, []byte("durable bundle"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := t.TempDir()
+	destination := Destination{ID: "local", Name: "Local", Type: DestinationLocal, Target: target, Retention: DefaultRetention()}
+	if err := Upload(context.Background(), destination, Credentials{}, source, "recovery/durable.mrb"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(target, "recovery", "durable.mrb")
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("local recovery copy mode = %o, want 600", info.Mode().Perm())
+	}
+	if data, err := os.ReadFile(path); err != nil || string(data) != "durable bundle" {
+		t.Fatalf("unexpected durable copy %q: %v", data, err)
+	}
+}

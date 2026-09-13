@@ -176,6 +176,11 @@ disk, metrics, and jobs endpoints, plus the JSON envelope of streamed SSE
 events. This catches runtime serialization regressions that static route and
 type checks cannot see.
 
+Local recovery uploads use a temporary mode-0600 file, sync the file before
+promotion, atomically rename it into place, and sync the containing directory.
+Downloads are synced before close as well, so a successful local backup copy
+has an explicit durability boundary in addition to checksum verification.
+
 The SSE envelope test round-trips an event containing correlation, operation,
 plan, actor, generation, resource, and payload data. This keeps the fields
 needed to trace a destructive operation from the initiating request through
