@@ -12,6 +12,17 @@ if LUMONAS_REQUIRE_REPO_SIGNATURE=true LUMONAS_REPO_SIGN_KEY= \
 	exit 1
 fi
 grep -F 'LUMONAS_REPO_SIGN_KEY is required' "$ERROR_FILE" >/dev/null
+
+# Local builds can opt into tagged-CI strictness: enforcement without a key
+# must fail exactly like an explicit signature requirement.
+if LUMONAS_ENFORCE_SIGNING=true LUMONAS_REPO_SIGN_KEY= \
+	sh "$ROOT/installer/build-iso.sh" policy-test 2>"$ERROR_FILE"; then
+	echo "installer accepted enforced signing without a key" >&2
+	exit 1
+fi
+grep -F 'LUMONAS_REPO_SIGN_KEY is required' "$ERROR_FILE" >/dev/null
+
+grep -F 'LUMONAS_ENFORCE_SIGNING' "$ROOT/installer/build-iso.sh" >/dev/null
 grep -F 'REPO_SIGNATURE_REQUIRED' "$ROOT/installer/build-iso.sh" >/dev/null
 grep -F 'signed LumoNAS repository metadata could not be verified' "$ROOT/installer/build-iso.sh" >/dev/null
 grep -F 'signed LumoNAS repository package installation failed' "$ROOT/installer/build-iso.sh" >/dev/null

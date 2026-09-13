@@ -48,6 +48,12 @@ if [ -n "$ISO_CACHE_SOURCE" ]; then
 		"$WORK"|"$WORK"/*) echo "LUMONAS_ISO_CACHE_SOURCE must not be inside the ISO workdir" >&2; exit 1 ;;
 	esac
 fi
+if [ "${LUMONAS_ENFORCE_SIGNING:-false}" = "true" ]; then
+	# Local builds may opt into the same strictness tagged CI applies: with
+	# enforcement on, an unsigned offline repository fails the build instead
+	# of being embedded with [trusted=yes].
+	LUMONAS_REQUIRE_REPO_SIGNATURE=true
+fi
 if [ "${LUMONAS_REQUIRE_REPO_SIGNATURE:-false}" = "true" ] && [ -z "$REPO_SIGN_KEY" ]; then
 	echo "LUMONAS_REPO_SIGN_KEY is required for a signed offline repository" >&2
 	exit 1

@@ -19,7 +19,9 @@ release-only `LUMONAS_REPO_SIGN_KEY` fingerprint and
 into an ephemeral GnuPG home before building. Such builds fail closed unless
 the embedded repository contains `Release.gpg`, `InRelease`, and the exported
 archive keyring. Local development builds may omit the key and use the
-explicitly marked unsigned repository path. During the live-build hook, a
+explicitly marked unsigned repository path; `LUMONAS_ENFORCE_SIGNING=true`
+applies the tagged-CI strictness to local builds on demand, failing the build
+when `LUMONAS_REPO_SIGN_KEY` is absent. During the live-build hook, a
 required signature also makes APT metadata refresh and package installation
 fail closed; direct `dpkg` fallback is available only for unsigned local
 development images.
