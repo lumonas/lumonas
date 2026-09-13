@@ -452,7 +452,7 @@ func validStackName(name string) bool {
 }
 
 func (s Service) ValidateCompose(ctx context.Context, compose string) error {
-	if err := validateComposeStructure(compose); err != nil {
+	if err := ValidateComposeStructure(compose); err != nil {
 		return err
 	}
 	temporaryRoot := s.Root
@@ -475,6 +475,13 @@ func (s Service) ValidateCompose(ctx context.Context, compose string) error {
 		return fmt.Errorf("compose validation failed: %w", err)
 	}
 	return nil
+}
+
+// ValidateComposeStructure checks the untrusted Compose payload without
+// invoking Docker. Recovery verification uses this read-only form so a
+// non-root daemon never needs direct access to the Docker socket or CLI.
+func ValidateComposeStructure(compose string) error {
+	return validateComposeStructure(compose)
 }
 
 func validateComposeStructure(compose string) error {

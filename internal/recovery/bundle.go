@@ -3,7 +3,6 @@ package recovery
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -371,7 +370,7 @@ func Plan(bundle, key []byte) (RestorePlan, error) {
 		if !strings.HasPrefix(name, "docker/stacks/") || !strings.HasSuffix(name, "/compose.yaml") {
 			continue
 		}
-		if err := (dockerruntime.New("", nil)).ValidateCompose(context.Background(), string(content)); err != nil {
+		if err := dockerruntime.ValidateComposeStructure(string(content)); err != nil {
 			plan.ComposeValid = false
 			plan.Warnings = append(plan.Warnings, "invalid Docker Compose payload: "+name)
 		}

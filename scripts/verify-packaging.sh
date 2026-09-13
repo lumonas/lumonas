@@ -68,6 +68,8 @@ require_line "$ROOT/packaging/debian/postinst" 'failed to provision the web TLS 
 require_line "$ROOT/packaging/debian/postinst" 'web TLS certificate pair is incomplete'
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd'
 require_line "$ROOT/internal/docker/engine_proxy.go" 'ValidateReadOnlyEnginePath'
+require_line "$ROOT/internal/docker/docker.go" 'ValidateComposeStructure'
+require_line "$ROOT/internal/recovery/bundle.go" 'ValidateComposeStructure(string(content))'
 require_line "$ROOT/cmd/lumonas-privd/docker.go" 'validateDockerCommand'
 require_line "$ROOT/cmd/lumonasd/docker_privileged.go" 'Operation:      "docker.read"'
 if grep -F 'usermod -aG docker lumonas' "$ROOT/packaging/debian/postinst" >/dev/null 2>&1; then
