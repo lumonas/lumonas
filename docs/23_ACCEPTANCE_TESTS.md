@@ -304,6 +304,10 @@ partitions for active mounts. If mount-state discovery cannot be completed, the
 privileged operation must fail closed before invoking a formatting or erase
 command.
 
+The privileged loopback smoke must exercise this with a real partitioned
+loopback disk: mounting its partition must block an erase request targeting the
+parent disk.
+
 ## U. Dependency and image security
 
 Run the release dependency controls on a clean checkout.

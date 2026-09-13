@@ -11,7 +11,7 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 0
 fi
 
-for command in go lsblk losetup mount umount mkfs.ext4 wipefs findmnt blkid mktemp python3 truncate; do
+for command in go lsblk losetup mount umount mkfs.ext4 wipefs findmnt blkid mktemp python3 truncate sfdisk partprobe; do
 	command -v "$command" >/dev/null 2>&1 || {
 		echo "$command is required for privileged storage loopback assertions" >&2
 		exit 1
@@ -21,10 +21,16 @@ done
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-privileged-storage.XXXXXX")"
 LOOP=""
+PARTITION_LOOP=""
 WORKER_PID=""
 MOUNT_PATH=""
+PARTITION_MOUNT_PATH=""
 cleanup() {
 	set +e
+	if [ -n "$PARTITION_MOUNT_PATH" ]; then
+		umount "$PARTITION_MOUNT_PATH" 2>/dev/null || true
+		rmdir "$PARTITION_MOUNT_PATH" 2>/dev/null || true
+	fi
 	if [ -n "$MOUNT_PATH" ]; then
 		umount "$MOUNT_PATH" 2>/dev/null || true
 		rmdir "$MOUNT_PATH" 2>/dev/null || true
@@ -36,15 +42,33 @@ cleanup() {
 	if [ -n "$LOOP" ]; then
 		losetup -d "$LOOP" 2>/dev/null || true
 	fi
+	if [ -n "$PARTITION_LOOP" ]; then
+		losetup -d "$PARTITION_LOOP" 2>/dev/null || true
+	fi
 	rm -rf "$WORK"
 }
 trap cleanup EXIT INT TERM
 
 SOCKET="$WORK/storage.sock"
 IMAGE="$WORK/storage.img"
+PARTITION_IMAGE="$WORK/partitioned-storage.img"
 WORKER_LOG="$WORK/privd-storage.log"
 truncate -s 96M "$IMAGE"
 LOOP="$(losetup --find --show "$IMAGE")"
+truncate -s 128M "$PARTITION_IMAGE"
+PARTITION_LOOP="$(losetup --find --show --partscan "$PARTITION_IMAGE")"
+printf 'label: gpt\n,96M,L\n' | sfdisk --no-reread "$PARTITION_LOOP" >/dev/null
+partprobe "$PARTITION_LOOP" || true
+PARTITION_DEVICE="${PARTITION_LOOP}p1"
+for attempt in $(seq 1 10); do
+	[ -b "$PARTITION_DEVICE" ] && break
+	sleep 1
+done
+[ -b "$PARTITION_DEVICE" ] || { echo "partition device did not appear: $PARTITION_DEVICE" >&2; exit 1; }
+PARTITION_MOUNT_PATH="$WORK/partition-mount"
+mkdir -p "$PARTITION_MOUNT_PATH"
+mkfs.ext4 -F "$PARTITION_DEVICE" >/dev/null
+mount "$PARTITION_DEVICE" "$PARTITION_MOUNT_PATH"
 
 PRIVD_BIN="${LUMONAS_PRIVD_BIN:-$WORK/lumonas-privd}"
 if [ -z "${LUMONAS_PRIVD_BIN:-}" ]; then
@@ -61,9 +85,10 @@ done
 [ -S "$SOCKET" ] || { echo "storage worker socket did not appear" >&2; cat "$WORKER_LOG" >&2 || true; exit 1; }
 
 discover_identity() {
-	state_file=$1
-	lsblk -J -b -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,UUID,PARTUUID,PTUUID "$LOOP" >"$WORK/disks.json"
-	python3 - "$WORK/disks.json" "$LOOP" "$state_file" <<'PY'
+	loop_device=$1
+	state_file=$2
+	lsblk -J -b -o NAME,PATH,TYPE,SIZE,MODEL,SERIAL,WWN,UUID,PARTUUID,PTUUID "$loop_device" >"$WORK/disks.json"
+	python3 - "$WORK/disks.json" "$loop_device" "$state_file" <<'PY'
 import json
 import sys
 
@@ -161,7 +186,7 @@ if payload.get("ok") or sys.argv[2] not in payload.get("error", ""):
 PY
 }
 
-discover_identity "$WORK/identity-before-format.json"
+discover_identity "$LOOP" "$WORK/identity-before-format.json"
 DISK_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$WORK/identity-before-format.json")"
 DISK_SIZE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sizeBytes"])' "$WORK/identity-before-format.json")"
 [ -n "$DISK_ID" ] && [ "$DISK_SIZE" -gt 0 ]
@@ -169,7 +194,7 @@ DISK_SIZE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["si
 send_request filesystem.format loop-format "$WORK/identity-before-format.json" '{"filesystem":"ext4"}' "$WORK/format.json"
 assert_ok "$WORK/format.json"
 
-discover_identity "$WORK/identity-after-format.json"
+discover_identity "$LOOP" "$WORK/identity-after-format.json"
 mkdir -p /srv/disks
 MOUNT_PATH="$(mktemp -d /srv/disks/lumonas-privileged-loopback.XXXXXX)"
 MOUNT_REQUEST="$(python3 -c 'import json,sys; print(json.dumps({"filesystem":"ext4","mountPath":sys.argv[1],"readOnly":True}))' "$MOUNT_PATH")"
@@ -196,6 +221,10 @@ PY
 send_request disk.erase loop-stale "$WORK/identity-stale.json" '{}' "$WORK/stale.json"
 assert_error "$WORK/stale.json" "identity mismatch"
 
+discover_identity "$PARTITION_LOOP" "$WORK/partition-identity.json"
+send_request disk.erase partition-mounted "$WORK/partition-identity.json" '{}' "$WORK/partition-mounted.json"
+assert_error "$WORK/partition-mounted.json" "mounted"
+
 send_request disk.erase '' "$WORK/identity-after-format.json" '{}' "$WORK/missing-operation-id.json"
 assert_error "$WORK/missing-operation-id.json" "operationId is required"
 send_request disk.erase loop-expired "$WORK/identity-after-format.json" '{}' "$WORK/expired.json" "2000-01-01T00:00:00Z"
@@ -208,4 +237,4 @@ if blkid "$LOOP" >/dev/null 2>&1; then
 	exit 1
 fi
 
-echo "privileged storage loopback smoke passed (format, read-only mount, mounted-disk rejection, stale identity, missing operation ID, expiry, erase)"
+echo "privileged storage loopback smoke passed (format, read-only mount, mounted-disk rejection, mounted-partition rejection, stale identity, missing operation ID, expiry, erase)"

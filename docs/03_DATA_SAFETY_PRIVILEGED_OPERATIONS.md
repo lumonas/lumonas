@@ -99,6 +99,11 @@ Examples:
 
 Requires storage safety unlock, a signed immutable operation plan, reauthentication, and strong physical identity confirmation.
 
+Before formatting or erasing a disk, the privileged worker checks both the
+whole-disk source and all child partitions for active mounts. If either the
+partition scan or its fallback mount query cannot establish a safe unmounted
+state, the operation is rejected before the destructive utility runs.
+
 ## Stable disk identity
 
 Persist a composite identity:
