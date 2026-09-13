@@ -19,6 +19,7 @@ import {
   findContainer,
   findStack,
   images,
+  imagePacks,
   seedLogs,
   stacks,
   volumes,
@@ -568,6 +569,25 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/docker/images`, () => HttpResponse.json(images)),
+
+  http.get(`${BASE}/docker/images/packs`, () => HttpResponse.json(imagePacks)),
+
+  http.post(`${BASE}/docker/images/packs/import`, async ({ request }) => {
+    const payload = (await request.json()) as { name?: string }
+    const name = payload.name
+    const pack = imagePacks.find((p) => p.name === name)
+    if (!pack) return new HttpResponse(null, { status: 404 })
+    createJob('docker.import', `Import pack ${pack.name}`, pack.name)
+    pushActivity({
+      category: 'docker',
+      title: `Image pack imported — ${pack.name}`,
+      description: `${pack.imageCount} images verified and loaded`,
+    })
+    return HttpResponse.json({
+      pack: pack.name,
+      imported: Array.from({ length: pack.imageCount }, (_, i) => `${pack.name}/image-${i + 1}:latest`),
+    })
+  }),
 
   http.post(`${BASE}/docker/images/check-updates`, () => {
     const updated = images.map((image, index) => ({

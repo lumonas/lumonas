@@ -1,6 +1,13 @@
 import { useRef, useState } from 'react'
-import { ArrowUpCircle, FileUp, RefreshCw } from 'lucide-react'
-import { useCheckImageUpdates, useDockerImages, useImportDockerImage, useUpdateImage } from '@/api/queries'
+import { ArrowUpCircle, FileUp, PackageOpen, RefreshCw } from 'lucide-react'
+import {
+  useCheckImageUpdates,
+  useDockerImagePacks,
+  useDockerImages,
+  useImagePackImport,
+  useImportDockerImage,
+  useUpdateImage,
+} from '@/api/queries'
 import { EmptyState } from '@/components/core/empty-state'
 import { ResourceTable, type Column } from '@/components/core/resource-table'
 import { Badge } from '@/components/ui/badge'
@@ -11,8 +18,10 @@ import type { DockerImage } from '@/api/types'
 
 export function ImagesTab() {
   const { data: images, isLoading } = useDockerImages()
+  const { data: packs } = useDockerImagePacks()
   const updateImage = useUpdateImage()
   const importImage = useImportDockerImage()
+  const importPack = useImagePackImport()
   const checkUpdates = useCheckImageUpdates()
   const fileInput = useRef<HTMLInputElement>(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -92,6 +101,41 @@ export function ImagesTab() {
           />
         }
       />
+      {packs && packs.length > 0 ? (
+        <div className="rounded-xl border p-4">
+          <div className="flex items-center gap-2">
+            <PackageOpen className="size-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Offline image packs</h3>
+            <span className="text-xs text-muted-foreground">Verified bundles for air-gapped installs</span>
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {packs.map((pack) => (
+              <div key={pack.name} className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {pack.name}
+                    {pack.version ? <span className="ml-2 font-mono text-xs text-muted-foreground">{pack.version}</span> : null}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {pack.imageCount} image{pack.imageCount === 1 ? '' : 's'} · {formatBytes(pack.totalSizeBytes)}
+                    {pack.description ? ` · ${pack.description}` : ''}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 gap-1.5 text-xs"
+                  disabled={importPack.isPending}
+                  onClick={() => importPack.mutate(pack.name)}
+                >
+                  {importPack.isPending ? 'Importing…' : 'Import pack'}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex justify-end gap-2">
         <Button
           variant="outline"

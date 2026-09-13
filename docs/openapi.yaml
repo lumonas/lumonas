@@ -582,6 +582,23 @@ paths:
                 items:
                   $ref: '#/components/schemas/DockerImage'
 
+  /docker/images/packs:
+    get:
+      tags: [Docker]
+      summary: List validated offline Docker image packs
+      operationId: listDockerImagePacks
+      responses:
+        '200':
+          description: Valid image packs under the configured import root
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DockerImagePackSummary'
+        '503':
+          description: Image pack root unavailable
+
   /docker/volumes:
     get:
       tags: [Docker]
@@ -1803,6 +1820,32 @@ paths:
       responses:
         '200':
           description: Image archive imported
+        '4XX':
+          description: Client error
+
+  /docker/images/packs/import:
+    post:
+      tags: [Docker]
+      summary: Import a validated offline Docker image pack
+      operationId: importDockerImagePack
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: Validated pack directory name under the configured image-pack root
+      responses:
+        '200':
+          description: Image pack imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DockerImagePackImportResult'
         '4XX':
           description: Client error
 
@@ -3428,6 +3471,42 @@ components:
           type: string
         sizeBytes:
           type: integer
+
+    DockerImagePackSummary:
+      type: object
+      required: [name, imageCount, totalSizeBytes]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        imageCount:
+          type: integer
+        totalSizeBytes:
+          type: integer
+
+    DockerImagePackImportResult:
+      type: object
+      required: [pack, imported]
+      properties:
+        pack:
+          type: string
+        imported:
+          type: array
+          items:
+            type: string
+        failed:
+          type: array
+          items:
+            type: object
+            required: [file, reason]
+            properties:
+              file:
+                type: string
+              reason:
+                type: string
 
     RecoveryContract:
       type: object

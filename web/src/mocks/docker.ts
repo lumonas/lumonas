@@ -3,6 +3,7 @@ import type {
   DockerContainer,
   DockerDeployment,
   DockerImage,
+  DockerImagePackSummary,
   DockerStack,
   DockerVolume,
   LogLine,
@@ -785,6 +786,23 @@ export const dockerDeployments: DockerDeployment[] = [
     error: 'stack update failed its health gate: DNS resolution probe never passed',
     createdAt: daysAgo(3),
     updatedAt: daysAgo(3),
+  },
+]
+
+export const imagePacks: DockerImagePackSummary[] = [
+  {
+    name: 'media-essentials',
+    version: '2024.09',
+    description: 'Common media apps for air-gapped installs',
+    imageCount: 4,
+    totalSizeBytes: 2.4 * GB,
+  },
+  {
+    name: 'home-basics',
+    version: '2024.09',
+    description: 'Home Assistant, Mosquitto, Node-RED',
+    imageCount: 3,
+    totalSizeBytes: 1.1 * GB,
   },
 ]
 

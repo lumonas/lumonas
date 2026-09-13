@@ -580,10 +580,14 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.dockerContainerAction(w, r, endpoint)
 	case r.Method == http.MethodGet && endpoint == "/docker/images":
 		s.dockerImages(w, r)
+	case r.Method == http.MethodGet && endpoint == "/docker/images/packs":
+		s.dockerImagePacks(w, r)
 	case r.Method == http.MethodPost && endpoint == "/docker/images/check-updates":
 		s.dockerImagesCheckUpdates(w, r)
 	case r.Method == http.MethodPost && endpoint == "/docker/images/import":
 		s.dockerImageImport(w, r)
+	case r.Method == http.MethodPost && endpoint == "/docker/images/packs/import":
+		s.dockerImagePackImport(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/images/"):
 		s.dockerImageAction(w, r, endpoint)
 	case r.Method == http.MethodGet && endpoint == "/docker/volumes":

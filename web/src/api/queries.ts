@@ -14,6 +14,8 @@ import type {
   ConfigGeneration,
   DockerContainer,
   DockerImage,
+  DockerImagePackSummary,
+  DockerImagePackImportResult,
   DockerStack,
   DockerDeployment,
   DockerSummary,
@@ -259,6 +261,20 @@ export function useDockerImages() {
     queryKey: queryKeys.dockerImages,
     queryFn: () => apiGet<DockerImage[]>('/docker/images'),
   })
+}
+
+export function useDockerImagePacks() {
+  return useQuery({
+    queryKey: [...queryKeys.dockerImages, 'packs'],
+    queryFn: () => apiGet<DockerImagePackSummary[]>('/docker/images/packs'),
+    throwOnError: false,
+  })
+}
+
+export function useImagePackImport() {
+  return useDockerMutation((pack: string) =>
+    apiPost<DockerImagePackImportResult>('/docker/images/packs/import', { name: pack }),
+  )
 }
 
 export function useCheckImageUpdates() {

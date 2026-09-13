@@ -765,6 +765,20 @@ export interface DockerImage {
   inUse: boolean
 }
 
+export interface DockerImagePackSummary {
+  name: string
+  version?: string
+  description?: string
+  imageCount: number
+  totalSizeBytes: number
+}
+
+export interface DockerImagePackImportResult {
+  pack: string
+  imported: string[]
+  failed?: { file: string; reason: string }[]
+}
+
 export interface DockerVolume {
   id: string
   name: string
