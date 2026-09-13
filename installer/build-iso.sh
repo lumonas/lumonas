@@ -7,6 +7,7 @@ WORK="${LUMONAS_ISO_WORKDIR:-$ROOT/build/iso-live}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${VERSION}_amd64.deb}"
 REPO_ORIGIN="LumoNAS"
 REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY:-}"
+DEBIAN_MIRROR="${LUMONAS_DEBIAN_MIRROR:-http://deb.debian.org/debian}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || date +%s)}"
 SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
 case "$SOURCE_DATE_EPOCH" in
@@ -318,6 +319,10 @@ EOF
 (cd "$WORK" && lb config \
 	--distribution trixie \
 	--architectures amd64 \
+	--mirror-bootstrap "$DEBIAN_MIRROR" \
+	--mirror-chroot "$DEBIAN_MIRROR" \
+	--mirror-binary "$DEBIAN_MIRROR" \
+	--mirror-debian-installer "$DEBIAN_MIRROR" \
 	--binary-images iso-hybrid \
 	--debian-installer live \
 	--archive-areas "main contrib non-free-firmware" \
