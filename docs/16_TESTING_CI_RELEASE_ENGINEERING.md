@@ -373,6 +373,10 @@ history response, and requires that sample to remain available after the
 daemon restart. The Debian QEMU smoke repeats the history check after rebooting
 with reordered data disks.
 
+The same runtime checks validate `/health/components`; Docker Engine
+availability is reported as an explicit attention component instead of being
+silently represented as zero containers.
+
 The QEMU reorder assertion compares each disk's stable identity tuple (ID,
 serial, WWN/UUID fields, and capacity) independently of `currentPath`, then
 requires at least one transient device path to change after the virtual disk

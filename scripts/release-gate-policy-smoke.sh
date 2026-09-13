@@ -94,6 +94,9 @@ for script in ("scripts/api-smoke.sh", "scripts/qemu-smoke.sh", "scripts/qemu-re
         for marker in ("docker/containers", "docker/images", "docker/volumes"):
             if marker not in script_text:
                 raise SystemExit(f"Docker inventory smoke is missing {marker}: {script}")
+for script in ("scripts/api-smoke.sh", "scripts/qemu-smoke.sh", "scripts/qemu-recovery-smoke.sh"):
+    if "health/components" not in (repo_root / script).read_text(encoding="utf-8"):
+        raise SystemExit(f"health component smoke is missing from {script}")
 collector_text = (repo_root / "internal/collector/docker.go").read_text(encoding="utf-8")
 if "dockerruntime.New(\"\", nil)" not in collector_text or "DockerSummaryFromService" not in collector_text:
     raise SystemExit("legacy Docker collector is not delegated to the controlled runtime service")

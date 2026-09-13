@@ -3329,6 +3329,7 @@ components:
 
     HealthComponent:
       type: object
+      required: [id, label, status]
       properties:
         id:
           type: string
@@ -3343,6 +3344,7 @@ components:
 
     HealthBreakdown:
       type: object
+      required: [status, score, components]
       properties:
         status:
           $ref: '#/components/schemas/HealthState'

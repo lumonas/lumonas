@@ -117,6 +117,9 @@ func (s Service) Available(ctx context.Context) bool {
 	if s.engine != nil {
 		return s.engine.available(ctx)
 	}
+	if s.Run == nil {
+		return false
+	}
 	_, err := s.Run(ctx, "docker", "version", "--format", "{{.Server.Version}}")
 	return err == nil
 }

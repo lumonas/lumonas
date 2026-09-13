@@ -33,6 +33,12 @@ func TestDiscoverStacksPreservesComposeAndFlagsRisks(t *testing.T) {
 	}
 }
 
+func TestUnavailableServiceWithNilRunnerFailsClosed(t *testing.T) {
+	if (Service{}).Available(context.Background()) {
+		t.Fatal("zero-value Docker service reported availability")
+	}
+}
+
 func TestContainerOutputIsNormalized(t *testing.T) {
 	service := New(t.TempDir(), func(context.Context, string, ...string) ([]byte, error) {
 		return []byte(`{"ID":"abc","Names":"jellyfin","Image":"jellyfin:latest","State":"Up 2 hours","Ports":"0.0.0.0:8096->8096/tcp","Labels":"com.docker.compose.project=media"}` + "\n"), nil

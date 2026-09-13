@@ -185,6 +185,7 @@ for attempt in $(seq 1 120); do
 	if curl -kfsS https://127.0.0.1:18084/healthz >/dev/null 2>&1 && \
 		curl -kfsS https://127.0.0.1:18084/readyz >"$WORK/recovered-ready.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null && \
+		curl -kfsS https://127.0.0.1:18084/api/v1/health/components >"$WORK/recovered-health.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/docker/summary >"$WORK/recovered-docker-summary.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/docker/containers >"$WORK/recovered-docker-containers.json" 2>/dev/null && \
 		curl -kfsS https://127.0.0.1:18084/api/v1/docker/images >"$WORK/recovered-docker-images.json" 2>/dev/null && \
@@ -205,6 +206,7 @@ done
 }
 grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
+python3 "$ROOT/scripts/validate-api-response.py" health "$WORK/recovered-health.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-summary "$WORK/recovered-docker-summary.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-containers "$WORK/recovered-docker-containers.json"
 python3 "$ROOT/scripts/validate-api-response.py" docker-images "$WORK/recovered-docker-images.json"

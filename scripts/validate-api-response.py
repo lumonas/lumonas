@@ -182,6 +182,22 @@ def validate_docker_volumes(value: Any) -> None:
             fail(f"{label}.usedBytes must be a non-negative integer")
 
 
+def validate_health(value: Any) -> None:
+    obj = object_value(value, "health")
+    required(obj, ("status", "score", "components"), "health")
+    string_field(obj, "status", "health")
+    if not isinstance(obj["score"], int) or isinstance(obj["score"], bool) or not 0 <= obj["score"] <= 100:
+        fail("health.score must be an integer between 0 and 100")
+    if not isinstance(obj["components"], list):
+        fail("health.components must be a JSON array")
+    for index, component in enumerate(obj["components"]):
+        label = f"health.components[{index}]"
+        item = object_value(component, label)
+        required(item, ("id", "label", "status"), label)
+        for field in ("id", "label", "status"):
+            string_field(item, field, label)
+
+
 def validate_events(value: Any) -> None:
     if not isinstance(value, list):
         fail("events must be a JSON array")
@@ -223,6 +239,7 @@ def self_test() -> None:
     validate_docker_containers([])
     validate_docker_images([])
     validate_docker_volumes([])
+    validate_health({"status": "healthy", "score": 100, "components": []})
     validate_events([{"schemaVersion": 1, "id": "evt-1", "type": "system.metrics", "timestamp": "now", "severity": "info", "data": {}}])
 
 
@@ -236,6 +253,7 @@ VALIDATORS = {
     "docker-containers": validate_docker_containers,
     "docker-images": validate_docker_images,
     "docker-volumes": validate_docker_volumes,
+    "health": validate_health,
     "events": validate_events,
 }
 

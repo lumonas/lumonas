@@ -940,6 +940,19 @@ func (s *apiServer) healthComponents(w http.ResponseWriter) {
 		Recommended: protRecommended,
 	})
 
+	dockerStatus := model.Attention
+	dockerMessage := "Docker Engine is unavailable"
+	dockerRecommended := "Start docker.service and check the Docker socket"
+	if s.dockerService.Available(ctx) {
+		dockerStatus = model.Healthy
+		dockerMessage = "Docker Engine is available"
+		dockerRecommended = ""
+	}
+	components = append(components, model.HealthComponent{
+		ID: "docker", Label: "Docker Engine", Status: dockerStatus, Message: dockerMessage,
+		Recommended: dockerRecommended,
+	})
+
 	score := 100
 	for _, c := range components {
 		switch c.Status {

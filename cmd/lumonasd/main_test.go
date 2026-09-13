@@ -105,6 +105,31 @@ func TestAPIHealthAndDiskIdentity(t *testing.T) {
 	}
 }
 
+func TestHealthComponentsReportDockerAvailability(t *testing.T) {
+	server := testServer(t)
+	server.dockerService = dockerruntime.New(t.TempDir(), func(context.Context, string, ...string) ([]byte, error) {
+		return nil, errors.New("Docker Engine unavailable")
+	})
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/health/components", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected health components 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var breakdown model.HealthBreakdown
+	if err := json.NewDecoder(response.Body).Decode(&breakdown); err != nil {
+		t.Fatal(err)
+	}
+	for _, component := range breakdown.Components {
+		if component.ID == "docker" {
+			if component.Status != model.Attention || component.Message != "Docker Engine is unavailable" || component.Recommended == "" {
+				t.Fatalf("unexpected Docker health component: %#v", component)
+			}
+			return
+		}
+	}
+	t.Fatalf("Docker health component was not reported: %#v", breakdown.Components)
+}
+
 func TestReadyRequiresDatabaseIdentityAndPrivilegedBroker(t *testing.T) {
 	server := testServer(t)
 	ready := httptest.NewRecorder()
