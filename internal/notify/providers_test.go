@@ -3,6 +3,9 @@ package notify
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,4 +31,20 @@ func TestSendWithRetryHonorsContextCancellation(t *testing.T) {
 	if err == nil {
 		t.Fatal("cancelled retry returned success")
 	}
+}
+
+func TestSendChannelRejectsOversizedProviderResponse(t *testing.T) {
+	client := &http.Client{Transport: providerRoundTripper(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(strings.Repeat("x", MaxProviderResponseBytes+1))), Request: request}, nil
+	})}
+	err := SendChannel(context.Background(), client, Channel{ID: "provider-test", Label: "Provider test", Type: "webhook", Target: "https://provider.test/webhook"}, Credentials{}, Message{Title: "test", Body: "payload"})
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("expected oversized provider response rejection, got %v", err)
+	}
+}
+
+type providerRoundTripper func(*http.Request) (*http.Response, error)
+
+func (roundTrip providerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
 }

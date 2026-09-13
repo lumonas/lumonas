@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const MaxProviderResponseBytes = 64 << 10
+
 func SendChannel(ctx context.Context, client *http.Client, channel Channel, credentials Credentials, message Message) error {
 	if err := channel.Validate(); err != nil {
 		return err
@@ -104,7 +106,13 @@ func doChannelRequest(client *http.Client, request *http.Request) error {
 		return err
 	}
 	defer response.Body.Close()
-	_, _ = io.Copy(io.Discard, response.Body)
+	body, err := io.ReadAll(io.LimitReader(response.Body, MaxProviderResponseBytes+1))
+	if err != nil {
+		return fmt.Errorf("read notification provider response: %w", err)
+	}
+	if len(body) > MaxProviderResponseBytes {
+		return fmt.Errorf("notification provider response exceeds %d bytes", MaxProviderResponseBytes)
+	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return fmt.Errorf("notification provider returned HTTP %d", response.StatusCode)
 	}

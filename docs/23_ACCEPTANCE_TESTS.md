@@ -653,3 +653,10 @@ Pass if recovery export returns an error instead of creating a verified bundle
 when required stable-disk or appliance identity metadata is unavailable.
 The successful export path must also leave a separately named, checksum-verified
 generation copy that can be opened independently of `latest.mrb`.
+
+## BG. Notification provider response bounds
+
+Run the security smoke tests against a provider returning more than 64 KiB.
+
+Pass if delivery rejects the response within the bounded read and records a
+failure eligible for the existing retry/suppression path.

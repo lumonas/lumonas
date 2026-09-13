@@ -484,6 +484,8 @@ release-blocking Go safety suite.
 Recovery export now fails closed when stable disk identity collection, NAS
 identity, Docker stack discovery, bundle verification, or versioned-copy
 persistence fails; the API cannot report a verified bundle for partial state.
+Notification provider responses are bounded to 64 KiB before status handling,
+and the security gate exercises the oversized-response rejection path.
 
 The protection-config API test uses a generated configuration and stable disk
 identities, so the endpoint’s read-only discovery path is exercised separately

@@ -41,6 +41,7 @@ Deliver:
   exported through the declared stop-backup contract.
 - recovery export requires stable disk and NAS identity, verifies the bundle,
   and persists a versioned copy before reporting success.
+- notification provider responses are bounded before retry/error handling.
 
 Exit criteria:
 
