@@ -306,9 +306,25 @@ func (s *apiServer) requestAutomaticBackup(trigger string) {
 	}()
 }
 
+func (s *apiServer) persistBackupRun(run backup.Run) error {
+	if err := s.store.SaveBackupRun(run); err != nil {
+		if s.log != nil {
+			s.log.Warn("backup state persistence failed", "run", run.ID, "state", run.State, "error", err)
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *apiServer) executeBackup(run backup.Run) {
 	run.State = "running"
-	_ = s.store.SaveBackupRun(run)
+	// Do not touch the recovery bundle or remote destinations until the
+	// authoritative running state is durable. If the database is unavailable,
+	// leaving the queued row for restart reconciliation is safer than doing
+	// work that cannot be audited or failed closed.
+	if err := s.persistBackupRun(run); err != nil {
+		return
+	}
 	if os.Getenv("LUMONAS_AUTO_BACKUP_DISABLED") == "true" {
 		s.finishBackup(run, "skipped", errors.New("automatic backups are disabled"))
 		return
@@ -352,7 +368,8 @@ func (s *apiServer) executeBackup(run backup.Run) {
 		return
 	}
 	run.Generation, run.BundlePath, run.Checksum, run.Bytes = manifest.Generation, bundlePath, digest, size
-	if err := s.store.SaveBackupRun(run); err != nil {
+	if err := s.persistBackupRun(run); err != nil {
+		s.finishBackup(run, "failed", fmt.Errorf("persist backup bundle metadata: %w", err))
 		return
 	}
 	destinations, err := s.store.ListBackupDestinations()
@@ -380,13 +397,19 @@ func (s *apiServer) executeBackup(run backup.Run) {
 			now := time.Now().UTC()
 			copy.FinishedAt = &now
 		}
-		_ = s.store.SaveBackupCopy(copy)
+		if err := s.store.SaveBackupCopy(copy); err != nil {
+			s.finishBackup(run, "failed", fmt.Errorf("persist backup copy for %s: %w", destination.ID, err))
+			return
+		}
 		verification := backup.Verification{ID: newID("backup-verification"), RunID: run.ID, DestinationID: destination.ID, State: copy.State, Error: copy.Error}
 		if copy.Verified {
 			now := time.Now().UTC()
 			verification.VerifiedAt = &now
 		}
-		_ = s.store.SaveBackupVerification(verification)
+		if err := s.store.SaveBackupVerification(verification); err != nil {
+			s.finishBackup(run, "failed", fmt.Errorf("persist backup verification for %s: %w", destination.ID, err))
+			return
+		}
 	}
 	if enabled == 0 {
 		s.finishBackup(run, "failed", errors.New("no enabled backup destination is configured"))
@@ -440,11 +463,15 @@ func (s *apiServer) finishBackup(run backup.Run, state string, failure error) {
 	run.FinishedAt = &now
 	if failure != nil {
 		run.Error = failure.Error()
+	}
+	if err := s.persistBackupRun(run); err != nil {
+		return
+	}
+	if failure != nil {
 		s.publishActor(run.Actor, "recovery.backup.failed", "warning", nil, map[string]any{"runId": run.ID, "error": run.Error})
 	} else if state == "verified" {
 		s.publishActor(run.Actor, "recovery.backup.completed", "info", nil, map[string]any{"runId": run.ID})
 	}
-	_ = s.store.SaveBackupRun(run)
 }
 
 func (s *apiServer) verifyBackupNow(w http.ResponseWriter, r *http.Request) {

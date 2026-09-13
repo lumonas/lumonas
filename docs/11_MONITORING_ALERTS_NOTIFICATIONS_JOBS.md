@@ -240,4 +240,10 @@ running at the time of interruption. In-flight destination copies are marked
 failed as well, and the backup health response reports the failure instead of
 leaving stale work appearing active.
 
+Backup execution is also fail-closed around SQLite persistence: the daemon must
+durably record `running`, bundle metadata, each copy, and each verification
+before continuing. Completion or failure events are published only after the
+final run state is persisted, so a database write failure cannot produce a
+false-success event.
+
 - Metrics retention does not generate unbounded SQLite growth.

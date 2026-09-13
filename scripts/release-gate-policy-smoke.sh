@@ -81,6 +81,8 @@ if "TestRunDueSchedulesFiresSnapshotScheduleAndPersistsOrigin" not in safety_blo
     raise SystemExit("safety-recovery gate is missing scheduled snapshot coverage")
 if "TestFailInterruptedBackupRunsClosesRunsAndCopies" not in safety_block:
     raise SystemExit("safety-recovery gate is missing interrupted backup reconciliation coverage")
+if "TestBackupCompletionEventRequiresDurableState" not in safety_block or "TestBackupDoesNotStartWhenRunningStateCannotPersist" not in safety_block:
+    raise SystemExit("safety-recovery gate is missing backup persistence fail-closed coverage")
 security_smoke = (pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "security-smoke.sh").read_text(encoding="utf-8")
 if "TestRequestAuditPersistsTypedObservabilityFields" not in security_smoke:
     raise SystemExit("security-controls gate is missing typed audit observability coverage")

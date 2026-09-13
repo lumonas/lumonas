@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -94,6 +96,36 @@ func TestBackupStatusReportsInterruptedFailure(t *testing.T) {
 	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/backups/status", nil))
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "latest backup failed") {
 		t.Fatalf("backup status omitted the failure warning: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestBackupCompletionEventRequiresDurableState(t *testing.T) {
+	server := testServer(t)
+	events, unsubscribe := server.hub.Subscribe()
+	defer unsubscribe()
+	if err := server.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	server.finishBackup(backup.Run{ID: "not-durable", Actor: "admin"}, "verified", nil)
+	select {
+	case event := <-events:
+		t.Fatalf("published backup event after state persistence failed: %#v", event)
+	default:
+	}
+}
+
+func TestBackupDoesNotStartWhenRunningStateCannotPersist(t *testing.T) {
+	server := testServer(t)
+	var logs bytes.Buffer
+	server.log = slog.New(slog.NewJSONHandler(&logs, nil))
+	if err := server.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	server.executeBackup(backup.Run{ID: "blocked", Actor: "system", State: "queued", StartedAt: time.Now().UTC()})
+	if !strings.Contains(logs.String(), `"msg":"backup state persistence failed"`) {
+		t.Fatalf("backup start did not record the persistence failure: %s", logs.String())
 	}
 }
 
