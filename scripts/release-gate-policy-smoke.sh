@@ -85,8 +85,8 @@ for marker in ("LUMONAS_UPDATE_FIXTURE", "LUMONAS_UPDATE_PUBLIC_KEY", "update-fi
     if marker not in qemu_builder.read_text(encoding="utf-8"):
         raise SystemExit(f"QEMU builder does not stage the signed update fixture: {marker}")
 for builder, markers in (
-    (qemu_builder, ("snapshot.debian.org/archive/debian/20260201T000000Z", "LUMONAS_DEBIAN_MIRROR", "debianMirror=$LUMONAS_DEBIAN_MIRROR", "Acquire::Check-Valid-Until")),
-    (pathlib.Path(sys.argv[1]).parent.parent.parent / "installer" / "build-iso.sh", ("snapshot.debian.org/archive/debian/20260201T000000Z", "LUMONAS_DEBIAN_MIRROR", "debianMirror=$DEBIAN_MIRROR", "Acquire::Check-Valid-Until")),
+    (qemu_builder, ("snapshot.debian.org/archive/debian/20260201T000000Z", "LUMONAS_DEBIAN_MIRROR", "LUMONAS_DEBIAN_MIRROR must use HTTPS", "debianMirror=$LUMONAS_DEBIAN_MIRROR", "Acquire::Check-Valid-Until")),
+    (pathlib.Path(sys.argv[1]).parent.parent.parent / "installer" / "build-iso.sh", ("snapshot.debian.org/archive/debian/20260201T000000Z", "LUMONAS_DEBIAN_MIRROR", "LUMONAS_DEBIAN_MIRROR must use HTTPS", "debianMirror=$DEBIAN_MIRROR", "Acquire::Check-Valid-Until")),
 ):
     builder_text = builder.read_text(encoding="utf-8")
     for marker in markers:

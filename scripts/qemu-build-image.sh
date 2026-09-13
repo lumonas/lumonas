@@ -15,6 +15,10 @@ case "$SOURCE_DATE_EPOCH" in
 esac
 [ -n "$SOURCE_COMMIT" ] || { echo "LUMONAS_SOURCE_COMMIT must not be empty" >&2; exit 1; }
 [ -n "$DEBIAN_MIRROR" ] || { echo "LUMONAS_DEBIAN_MIRROR must not be empty" >&2; exit 1; }
+case "$DEBIAN_MIRROR" in
+	https://*) ;;
+	*) echo "LUMONAS_DEBIAN_MIRROR must use HTTPS" >&2; exit 1 ;;
+esac
 export SOURCE_DATE_EPOCH
 
 for command in debootstrap qemu-img mkfs.ext4 grub-install; do

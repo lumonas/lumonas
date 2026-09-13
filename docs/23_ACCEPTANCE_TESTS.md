@@ -293,7 +293,9 @@ fixture, so appliance image construction does not depend on runner preinstalls.
 
 The QEMU and ISO builders must use the pinned Debian snapshot recorded in their
 package manifests. Snapshot metadata expiry is explicitly disabled for that
-immutable input; builds must not silently fall back to a moving mirror.
+immutable input; builds must not silently fall back to a moving mirror. Any
+explicit mirror override must use HTTPS and otherwise be rejected before the
+builder mutates its work directory.
 
 When recovery fails, the release job must retain the source-guest, ISO-guest,
 and replacement-boot logs before temporary files are removed. Successful runs
