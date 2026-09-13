@@ -388,6 +388,8 @@ Good candidates:
 - YAML transformations;
 - API payload validation;
 - path sanitization;
+- generated share protocol configuration validation;
+- network connection and storage plan validation;
 - backup manifests;
 - destructive plan invariants.
 

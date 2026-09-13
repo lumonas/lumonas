@@ -25,8 +25,12 @@ run_fuzz ./internal/diagnostics FuzzSupportBundleNames
 run_fuzz ./internal/docker FuzzComposeStructure
 run_fuzz ./internal/docker FuzzBuildCompose
 run_fuzz ./internal/network FuzzWiFiPSKValidation
+run_fuzz ./internal/network FuzzNetworkConnectionValidation
 run_fuzz ./internal/recovery FuzzVerifyBundle
 run_fuzz ./internal/recovery FuzzPlanBundle
 run_fuzz ./internal/storage FuzzValidateSnapraidConfig
 run_fuzz ./internal/storage FuzzRenderMountUnits
+run_fuzz ./internal/storage FuzzStoragePlanValidation
+run_fuzz ./internal/shares FuzzValidateGeneratedShareConfigs
+run_fuzz ./internal/shares FuzzManagedShareValidation
 echo "LumoNAS fuzz smoke checks passed"

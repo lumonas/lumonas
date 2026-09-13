@@ -602,3 +602,12 @@ Run `scripts/secret-scan-smoke.sh`.
 Pass if tracked files are scanned for high-confidence private-key, cloud-token,
 package-token, and credential-URL formats, synthetic leaks are rejected, safe
 fixtures pass, and the scan runs in the release-blocking security-controls job.
+
+## BA. Release-blocking fuzz coverage
+
+Run `LUMONAS_FUZZ_TIME=5s bash scripts/fuzz-smoke.sh`.
+
+Pass if the release-blocking fuzz job exercises Compose/YAML transformations,
+backup and recovery manifests, path and storage-plan validation, generated
+share protocol configuration, network connection payloads, and API-adjacent
+credential/path validation without panics.
