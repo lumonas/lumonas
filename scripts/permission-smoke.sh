@@ -58,6 +58,9 @@ runuser -u lumonas -- sh -eu -c "
 
 test "$(id -u lumonas)" -ne 0
 test "$(id -g lumonas)" -ne 0
+if getent group docker >/dev/null 2>&1; then
+	! id -Gn lumonas | tr " " "\n" | grep -qx docker
+fi
 systemctl list-unit-files lumonas-web.service lumonasd.service >/dev/null
 dpkg --audit
 '

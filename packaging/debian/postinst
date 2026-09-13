@@ -7,7 +7,10 @@ install -d -o root -g lumonas -m 0750 /etc/lumonas
 install -d -o root -g root -m 0755 /etc/exports.d /etc/ssh/sshd_config.d /etc/docker
 install -d -o lumonas -g lumonas -m 0750 /var/lib/lumonas /var/lib/lumonas/secrets /var/lib/lumonas/generated /var/lib/lumonas/recovery /srv/lumonas /srv/lumonas/docker /srv/disks /srv/pools
 install -d -o root -g root -m 0755 /var/tmp/lumonas-transcode
-if getent group docker >/dev/null 2>&1; then usermod -aG docker lumonas || true; fi
+
+# Do not grant the daemon direct Docker socket access. The Docker socket is
+# root-equivalent; lumonasd reaches it only through the typed read-only and
+# command allow-lists in lumonas-privd.
 
 # Keep administrator-owned configuration across upgrades, but create a usable
 # first-boot baseline when this is a fresh installation. Authentication is
@@ -54,9 +57,15 @@ fi
 command -v openssl >/dev/null 2>&1 || { echo "openssl is required to provision the web certificate" >&2; exit 1; }
 if [ ! -e /etc/lumonas/tls/server.key ]; then
 	install -d -o root -g lumonas -m 0750 /etc/lumonas/tls
+	cert_san='DNS:lumonas.local,DNS:localhost,IP:127.0.0.1'
+	for address in $(hostname -I 2>/dev/null || true); do
+		case "$address" in
+			*.*) cert_san="$cert_san,IP:$address" ;;
+		esac
+	done
 	if ! openssl req -x509 -newkey rsa:2048 -nodes -days 825 \
 		-subj '/CN=lumonas.local' \
-		-addext 'subjectAltName=DNS:lumonas.local,DNS:localhost,IP:127.0.0.1' \
+		-addext "subjectAltName=$cert_san" \
 		-keyout /etc/lumonas/tls/server.key -out /etc/lumonas/tls/server.crt >/dev/null 2>&1; then
 		echo "failed to provision the web TLS certificate" >&2
 		exit 1

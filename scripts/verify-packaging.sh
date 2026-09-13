@@ -66,6 +66,14 @@ require_line "$ROOT/packaging/debian/postinst" 'LUMONAS_WEB_LISTEN=0.0.0.0:8081'
 require_line "$ROOT/packaging/debian/postinst" '/etc/lumonas/tls/server.key'
 require_line "$ROOT/packaging/debian/postinst" 'failed to provision the web TLS certificate'
 require_line "$ROOT/packaging/debian/postinst" 'web TLS certificate pair is incomplete'
+require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd'
+require_line "$ROOT/internal/docker/engine_proxy.go" 'ValidateReadOnlyEnginePath'
+require_line "$ROOT/cmd/lumonas-privd/docker.go" 'validateDockerCommand'
+require_line "$ROOT/cmd/lumonasd/docker_privileged.go" 'Operation:      "docker.read"'
+if grep -F 'usermod -aG docker lumonas' "$ROOT/packaging/debian/postinst" >/dev/null 2>&1; then
+	echo "package postinst must not grant lumonas direct Docker socket access" >&2
+	exit 1
+fi
 require_line "$ROOT/packaging/build-deb.sh" 'build-manifest.json'
 require_line "$ROOT/packaging/build-deb.sh" 'sourceDateEpoch'
 require_line "$ROOT/installer/build-iso.sh" 'SOURCE_DATE_EPOCH'

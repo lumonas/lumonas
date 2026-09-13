@@ -19,6 +19,9 @@ boundary because the Engine API does not replace Compose project operations.
 Container resource status uses the read-only `/containers/{id}/json` inspect
 and `/containers/{id}/stats?stream=false` endpoints; failures in optional
 enrichment do not hide the base inventory.
+The appliance daemon does not join the broad `docker` group: the root-owned
+`lumonas-privd` broker exposes only the typed Engine reads and Docker commands
+needed by the management API.
 
 - https://docs.docker.com/reference/api/engine/
 - https://docs.docker.com/compose/

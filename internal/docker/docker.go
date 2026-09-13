@@ -455,7 +455,13 @@ func (s Service) ValidateCompose(ctx context.Context, compose string) error {
 	if err := validateComposeStructure(compose); err != nil {
 		return err
 	}
-	directory, err := os.MkdirTemp("", "lumonas-compose-")
+	temporaryRoot := s.Root
+	if temporaryRoot != "" {
+		if err := os.MkdirAll(temporaryRoot, 0o750); err != nil {
+			return err
+		}
+	}
+	directory, err := os.MkdirTemp(temporaryRoot, ".validation-")
 	if err != nil {
 		return err
 	}

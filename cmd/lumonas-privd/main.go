@@ -294,6 +294,10 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 	switch req.Operation {
 	case "ping":
 		return response{OK: true, Data: map[string]string{"service": "lumonas-privd"}}
+	case "docker.read":
+		return executeDockerRead(req)
+	case "docker.command":
+		return executeDockerCommand(req, run)
 	case "disk.read-identities":
 		disks, err := discover(nil)
 		if err != nil {

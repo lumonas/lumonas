@@ -94,6 +94,35 @@ func TestImageIDNormalization(t *testing.T) {
 	}
 }
 
+func TestValidateReadOnlyEnginePath(t *testing.T) {
+	allowed := []string{
+		"/version",
+		"/containers/json?all=true",
+		"/containers/container-1/json",
+		"/containers/container-1/stats?stream=false",
+		"/containers/container-1/logs?stdout=1&stderr=1&timestamps=1&tail=25",
+		"/images/json",
+		"/volumes",
+		"/system/df",
+	}
+	for _, path := range allowed {
+		if err := ValidateReadOnlyEnginePath(path); err != nil {
+			t.Errorf("allowed path %q rejected: %v", path, err)
+		}
+	}
+	for _, path := range []string{
+		"/containers/json",
+		"/containers/container-1/stats?stream=true",
+		"/containers/container-1/logs?stdout=1&stderr=1&timestamps=1&tail=5000",
+		"/containers/container-1/exec",
+		"http://127.0.0.1/containers/json?all=true",
+	} {
+		if err := ValidateReadOnlyEnginePath(path); err == nil {
+			t.Errorf("unsafe path %q was accepted", path)
+		}
+	}
+}
+
 func TestVolumeUsageFailureKeepsInventory(t *testing.T) {
 	client := testEngineClient(func(path string) (int, string) {
 		if path == "/volumes" {

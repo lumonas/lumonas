@@ -178,6 +178,13 @@ authenticated management users.
 
 ## Docker security
 
+The Docker Engine socket remains root-owned and is never granted directly to
+the `lumonas` service user. Read-only Engine requests and approved Compose,
+image, volume, and container actions cross `lumonas-privd` through typed
+allow-lists with bounded paths, references, and output sizes. The package
+must not add `lumonas` to the broad `docker` group, because that group is
+equivalent to root access on a Docker host.
+
 Warn on high-risk Compose:
 
 - privileged containers;

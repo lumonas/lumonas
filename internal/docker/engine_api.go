@@ -26,7 +26,8 @@ const (
 // remains a separate CLI concern, but normal status collection must not parse
 // human-oriented docker ps/images/volume output.
 type engineClient struct {
-	client *http.Client
+	client    *http.Client
+	requester EngineRequester
 }
 
 func newEngineClient(socket string) *engineClient {
@@ -37,6 +38,10 @@ func newEngineClient(socket string) *engineClient {
 		DisableKeepAlives: true,
 	}
 	return &engineClient{client: &http.Client{Transport: transport, Timeout: 30 * time.Second}}
+}
+
+func newEngineClientWithRequester(requester EngineRequester) *engineClient {
+	return &engineClient{requester: requester}
 }
 
 func dockerSocket() string {
@@ -63,6 +68,19 @@ func (c *engineClient) get(ctx context.Context, path string, destination any) er
 func (c *engineClient) request(ctx context.Context, method, path string) ([]byte, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if c.requester != nil {
+		if method != http.MethodGet {
+			return nil, errors.New("Docker Engine proxy only permits GET requests")
+		}
+		body, err := c.requester(ctx, path)
+		if err != nil {
+			return nil, err
+		}
+		if len(body) > maxEngineResponse {
+			return nil, errors.New("Docker Engine proxy response exceeded size limit")
+		}
+		return body, nil
 	}
 	request, err := http.NewRequestWithContext(ctx, method, "http://docker"+path, nil)
 	if err != nil {
