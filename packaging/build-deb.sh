@@ -13,6 +13,24 @@ case "$GOARCH" in
 	amd64|arm64) ;;
 	*) echo "unsupported Go package architecture: $GOARCH" >&2; exit 1 ;;
 esac
+CGO_ENABLED_VALUE="${LUMONAS_CGO_ENABLED:-1}"
+case "$CGO_ENABLED_VALUE" in
+	0|1) ;;
+	*) echo "LUMONAS_CGO_ENABLED must be 0 or 1" >&2; exit 1 ;;
+esac
+BUILD_CC="${LUMONAS_CC:-}"
+if [ "$CGO_ENABLED_VALUE" = "1" ] && [ "$GOARCH" != "$(go env GOARCH)" ] && [ -z "$BUILD_CC" ]; then
+	case "$GOARCH" in
+		arm64) BUILD_CC=aarch64-linux-gnu-gcc ;;
+		amd64) BUILD_CC=x86_64-linux-gnu-gcc ;;
+	esac
+fi
+if [ -n "$BUILD_CC" ]; then
+	command -v "$BUILD_CC" >/dev/null 2>&1 || {
+		echo "C compiler $BUILD_CC is required for GOARCH=$GOARCH (set LUMONAS_CC to override)" >&2
+		exit 1
+	}
+fi
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/build/package"
 GIT_COMMIT="${LUMONAS_GIT_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf '%s' unknown)}"
@@ -30,11 +48,20 @@ rm -rf "$OUT"
 mkdir -p "$OUT/DEBIAN" "$OUT/usr/lib/lumonas" "$OUT/usr/share/lumonas/web" "$OUT/usr/share/lumonas/catalog" "$OUT/lib/systemd/system" "$OUT/etc/lumonas" "$OUT/etc/docker" "$OUT/etc/systemd/journald.conf.d"
 mkdir -p "$OUT/lib/systemd/system/smbd.service.d" "$OUT/lib/systemd/system/rsync.service.d" "$OUT/lib/systemd/system/vsftpd.service.d" "$OUT/lib/systemd/system/docker.service.d" "$OUT/lib/systemd/system/nfs-server.service.d" "$OUT/lib/systemd/system/ssh.service.d" "$OUT/lib/systemd/system/avahi-daemon.service.d"
 
-GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${GOARCH}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonasd" "$ROOT/cmd/lumonasd"
-GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${GOARCH}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-web" "$ROOT/cmd/lumonas-web"
-GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${GOARCH}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-privd" "$ROOT/cmd/lumonas-privd"
-GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${GOARCH}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-recover" "$ROOT/cmd/lumonas-recover"
-GOOS="${LUMONAS_GOOS:-linux}" GOARCH="${GOARCH}" CGO_ENABLED="${LUMONAS_CGO_ENABLED:-1}" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$OUT/usr/lib/lumonas/lumonas-migrate" "$ROOT/cmd/lumonas-migrate"
+build_binary() {
+	output=$1
+	package=$2
+	if [ -n "$BUILD_CC" ]; then
+		GOOS="${LUMONAS_GOOS:-linux}" GOARCH="$GOARCH" CGO_ENABLED="$CGO_ENABLED_VALUE" CC="$BUILD_CC" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$output" "$package"
+	else
+		GOOS="${LUMONAS_GOOS:-linux}" GOARCH="$GOARCH" CGO_ENABLED="$CGO_ENABLED_VALUE" GOCACHE="${GOCACHE:-/tmp/lumonas-go-build}" GOPATH="${GOPATH:-/tmp/lumonas-gopath}" go build -trimpath -ldflags "-s -w" -o "$output" "$package"
+	fi
+}
+build_binary "$OUT/usr/lib/lumonas/lumonasd" "$ROOT/cmd/lumonasd"
+build_binary "$OUT/usr/lib/lumonas/lumonas-web" "$ROOT/cmd/lumonas-web"
+build_binary "$OUT/usr/lib/lumonas/lumonas-privd" "$ROOT/cmd/lumonas-privd"
+build_binary "$OUT/usr/lib/lumonas/lumonas-recover" "$ROOT/cmd/lumonas-recover"
+build_binary "$OUT/usr/lib/lumonas/lumonas-migrate" "$ROOT/cmd/lumonas-migrate"
 (cd "$ROOT/web" && pnpm build)
 bash "$ROOT/scripts/frontend-runtime-smoke.sh"
 cp -R "$ROOT/web/dist/." "$OUT/usr/share/lumonas/web/"

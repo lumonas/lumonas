@@ -7,7 +7,10 @@
 - `make package` builds the amd64 Debian package (the release default).
 - `make package-arm64` builds the arm64 Debian package; the build pipeline
   (`packaging/build-deb.sh`, `scripts/verify-deb.sh`) is architecture
-  parameterized via `LUMONAS_DEB_ARCH`/`LUMONAS_GOARCH`.
+  parameterized via `LUMONAS_DEB_ARCH`/`LUMONAS_GOARCH`. Because the runtime
+  uses CGO SQLite, a cross-build host must provide
+  `aarch64-linux-gnu-gcc` (or set `LUMONAS_CC`); a native arm64 host uses its
+  default compiler.
 - `make arm64-image` builds a generic arm64 UEFI disk image with
   `installer/build-arm64.sh` (mmdebstrap + the arm64 package). It requires an
   arm64-capable Debian host or `qemu-user-static` and is exercised in CI with

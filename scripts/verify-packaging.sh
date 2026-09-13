@@ -188,6 +188,8 @@ require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_ISO_CACHE_SOURCE must not b
 require_line "$ROOT/scripts/installer-workdir-policy-smoke.sh" 'assert_rejected'
 require_line "$ROOT/.github/workflows/ci.yml" 'bash scripts/installer-workdir-policy-smoke.sh'
 require_line "$ROOT/packaging/build-deb.sh" 'LUMONAS_DEB_ARCH'
+require_line "$ROOT/packaging/build-deb.sh" 'LUMONAS_CC'
+require_line "$ROOT/packaging/build-deb.sh" 'aarch64-linux-gnu-gcc'
 require_line "$ROOT/scripts/reproducible-package-smoke.sh" 'DEB_ARCH'
 require_line "$ROOT/scripts/verify-deb.sh" 'EXPECTED_ARCH'
 require_line "$ROOT/installer/build-arm64.sh" 'grub-install --target=arm64-efi'
