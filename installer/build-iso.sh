@@ -12,11 +12,16 @@ SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/
 SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
 INSTALL_PASSWORD="${LUMONAS_INSTALL_PASSWORD:-}"
 INSTALL_PRESEED="${LUMONAS_INSTALL_PRESEED:-false}"
+ISO_CACHE_SOURCE="${LUMONAS_ISO_CACHE_SOURCE:-}"
 case "$SOURCE_DATE_EPOCH" in
 	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
 esac
 [ -n "$SOURCE_COMMIT" ] || { echo "LUMONAS_SOURCE_COMMIT must not be empty" >&2; exit 1; }
 export SOURCE_DATE_EPOCH
+case "$DEBIAN_MIRROR" in
+	https://*) ;;
+	*) echo "LUMONAS_DEBIAN_MIRROR must use HTTPS" >&2; exit 1 ;;
+esac
 if [ "${LUMONAS_REQUIRE_REPO_SIGNATURE:-false}" = "true" ] && [ -z "$REPO_SIGN_KEY" ]; then
 	echo "LUMONAS_REPO_SIGN_KEY is required for a signed offline repository" >&2
 	exit 1
@@ -34,6 +39,11 @@ command -v apt-ftparchive >/dev/null 2>&1 || { echo "apt-ftparchive (apt-utils) 
 
 rm -rf "$WORK"
 mkdir -p "$WORK/config/package-lists" "$WORK/config/hooks/live" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas" "$WORK/config/includes.chroot/usr/share/doc/lumonas" "$WORK/config/includes.chroot/etc/apt/preferences.d" "$WORK/config/includes.binary/opt/lumonas-repo/pool/main/l/lumonas"
+if [ -n "$ISO_CACHE_SOURCE" ]; then
+	[ -d "$ISO_CACHE_SOURCE" ] || { echo "LUMONAS_ISO_CACHE_SOURCE is not a directory: $ISO_CACHE_SOURCE" >&2; exit 1; }
+	mkdir -p "$WORK/cache"
+	cp -a "$ISO_CACHE_SOURCE"/. "$WORK/cache/"
+fi
 cp "$DEB" "$WORK/config/includes.chroot/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb"
 cp "$DEB" "$WORK/config/includes.binary/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb"
 REPO_DIR="$WORK/config/includes.chroot/opt/lumonas-repo"
