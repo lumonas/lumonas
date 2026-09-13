@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { ResourceTable, type Column } from '@/components/core/resource-table'
+import { AlertHistoryCard } from '@/features/monitoring/alert-history-card'
 import { timeAgo } from '@/lib/format'
 import type { AlertRule, NotificationChannel } from '@/api/types'
 
@@ -127,6 +128,7 @@ export function AlertsTab() {
   return (
     <div className="flex flex-col gap-4">
       <ResourceTable columns={columns} rows={rules ?? []} loading={isLoading} />
+      <AlertHistoryCard />
 
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">

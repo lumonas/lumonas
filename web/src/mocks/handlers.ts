@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw'
 import {
   activity,
+  alertHistory,
   alerts,
   disks,
   findDisk,
@@ -322,6 +323,8 @@ export const handlers = [
   }),
 
   http.get(`${BASE}/alerts`, () => HttpResponse.json(alerts)),
+
+  http.get(`${BASE}/alerts/history`, () => HttpResponse.json(alertHistory)),
 
   http.patch(`${BASE}/alerts/:id/ack`, ({ params }) => {
     const alert = alerts.find((a) => a.id === params.id)

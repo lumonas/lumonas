@@ -117,6 +117,7 @@ export interface Alert {
   resource?: { type: string; id: string; label: string }
   state: 'firing' | 'acknowledged' | 'resolved'
   startedAt: string
+  resolvedAt?: string
 }
 
 export type ActivityCategory =

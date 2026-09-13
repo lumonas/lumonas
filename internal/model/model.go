@@ -204,6 +204,7 @@ type Alert struct {
 	Resource    *ResourceRef `json:"resource,omitempty"`
 	State       string       `json:"state"`
 	StartedAt   time.Time    `json:"startedAt"`
+	ResolvedAt  *time.Time   `json:"resolvedAt,omitempty"`
 }
 
 type HealthComponent struct {

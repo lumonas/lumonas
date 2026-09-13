@@ -155,6 +155,14 @@ export function useAlerts() {
   return useQuery({ queryKey: queryKeys.alerts, queryFn: () => apiGet<Alert[]>('/alerts') })
 }
 
+export function useAlertHistory(limit = 50) {
+  return useQuery({
+    queryKey: [...queryKeys.alerts, 'history', limit],
+    queryFn: () => apiGet<Alert[]>(`/alerts/history?limit=${limit}`),
+    throwOnError: false,
+  })
+}
+
 export function useActivity() {
   return useQuery({
     queryKey: queryKeys.activity,

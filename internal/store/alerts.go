@@ -121,6 +121,40 @@ func (s *Store) GeneratedAlerts() ([]model.Alert, error) {
 	return result, rows.Err()
 }
 
+// GeneratedAlertHistory lists resolved rule-fired alerts, most recently
+// resolved first, so operators can see what fired and when it cleared.
+func (s *Store) GeneratedAlertHistory(limit int) ([]model.Alert, error) {
+	if err := s.ensureAlertsSchema(); err != nil {
+		return nil, err
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`SELECT id,severity,title,description,COALESCE(resource_type,''),COALESCE(resource_id,''),state,started_at,updated_at FROM generated_alerts WHERE state='resolved' ORDER BY updated_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]model.Alert, 0)
+	for rows.Next() {
+		var alert model.Alert
+		var resourceType, resourceID string
+		var started, updated string
+		if err := rows.Scan(&alert.ID, &alert.Severity, &alert.Title, &alert.Description, &resourceType, &resourceID, &alert.State, &started, &updated); err != nil {
+			return nil, err
+		}
+		if resourceType != "" {
+			alert.Resource = &model.ResourceRef{Type: resourceType, ID: resourceID}
+		}
+		alert.StartedAt, _ = parseTime(started)
+		if resolvedAt, err := parseTime(updated); err == nil {
+			alert.ResolvedAt = &resolvedAt
+		}
+		result = append(result, alert)
+	}
+	return result, rows.Err()
+}
+
 // ResolveGeneratedAlerts marks open alerts for the rule/resource as resolved
 // and reports whether anything changed.
 func (s *Store) ResolveGeneratedAlerts(ruleID, resourceID string) (bool, error) {

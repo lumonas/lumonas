@@ -298,6 +298,19 @@ export const alerts: Alert[] = [
   },
 ]
 
+export const alertHistory: Alert[] = [
+  {
+    id: 'alert-history-1',
+    severity: 'warning',
+    title: 'Disk temperature recovered',
+    description: 'Disk sdc returned below the configured temperature threshold.',
+    resource: { type: 'disk', id: 'disk-data-2', label: 'Disk sdc' },
+    state: 'resolved',
+    startedAt: daysAgo(4),
+    resolvedAt: daysAgo(3),
+  },
+]
+
 export const activity: ActivityEvent[] = [
   {
     id: 'act-1',

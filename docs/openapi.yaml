@@ -3700,6 +3700,9 @@ components:
         startedAt:
           type: string
           format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
 
     Job:
       type: object

@@ -410,6 +410,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.cancelACLJob(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/alerts":
 		s.alerts(w)
+	case r.Method == http.MethodGet && endpoint == "/alerts/history":
+		s.alertHistory(w, r)
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alerts/"):
 		// Accept both /alerts/{id}/ack (web client) and /alerts/{id}.
 		s.ackAlert(w, strings.TrimSuffix(strings.TrimPrefix(endpoint, "/alerts/"), "/ack"))
@@ -2000,6 +2002,26 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 		alerts = append(alerts, generated...)
 	}
 	writeJSON(w, http.StatusOK, alerts)
+}
+
+// alertHistory serves recently resolved rule-fired alerts so operators can
+// audit what fired and when it cleared.
+func (s *apiServer) alertHistory(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			return
+		}
+		limit = value
+	}
+	history, err := s.store.GeneratedAlertHistory(limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, history)
 }
 
 func (s *apiServer) ackAlert(w http.ResponseWriter, id string) {
