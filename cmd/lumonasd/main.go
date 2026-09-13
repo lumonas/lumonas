@@ -2870,6 +2870,8 @@ func metricsData(metrics model.SystemMetrics) map[string]any {
 	}
 }
 
+var sseHeartbeatInterval = 15 * time.Second
+
 func (s *apiServer) stream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -2892,12 +2894,23 @@ func (s *apiServer) stream(w http.ResponseWriter, r *http.Request) {
 	}
 	ch, unsubscribe := s.hub.Subscribe()
 	defer unsubscribe()
+	heartbeat := time.NewTicker(sseHeartbeatInterval)
+	defer heartbeat.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case event := <-ch:
+		case event, ok := <-ch:
+			if !ok {
+				return
+			}
 			s.writeSSEEvent(w, flusher, event)
+		case <-heartbeat.C:
+			// A comment is valid SSE and keeps proxies, browsers, and the
+			// daemon's own connection state alive without becoming an event
+			// that clients need to process or replay.
+			_, _ = fmt.Fprint(w, ": keep-alive\n\n")
+			flusher.Flush()
 		}
 	}
 }
@@ -2913,12 +2926,10 @@ func (s *apiServer) writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, e
 
 func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, data map[string]any) {
 	event := model.Event{SchemaVersion: events.SchemaVersion, ID: newID("evt"), Type: kind, Timestamp: time.Now().UTC(), Severity: severity, Actor: "system", Generation: s.currentGeneration(), Resource: resource, Data: data}
-	event.CorrelationID = eventDataString(data, "correlationId")
-	event.OperationID = eventDataString(data, "operationId")
-	if event.OperationID == "" {
-		event.OperationID = eventDataString(data, "jobId")
-	}
-	event.PlanHash = eventDataString(data, "planHash")
+	metadata := events.MetadataFromData(data)
+	event.CorrelationID = metadata.CorrelationID
+	event.OperationID = metadata.OperationID
+	event.PlanHash = metadata.PlanHash
 	if err := s.store.SaveEvent(event); err != nil {
 		if s.log != nil {
 			s.log.Warn("persist event failed", "error", err)
@@ -2950,14 +2961,6 @@ func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, 
 	}
 	s.hub.Publish(event)
 	s.evaluateEventAlert(kind, data)
-}
-
-func eventDataString(data map[string]any, key string) string {
-	if data == nil {
-		return ""
-	}
-	value, _ := data[key].(string)
-	return value
 }
 
 func (s *apiServer) sendConfiguredNotifications(eventType, severity string, message notify.Message) {

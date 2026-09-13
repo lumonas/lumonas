@@ -8,6 +8,23 @@ import (
 	"github.com/lumonas/lumonas/internal/model"
 )
 
+func TestUnsubscribeClosesClientAndFuturePublishRemainsSafe(t *testing.T) {
+	hub := NewHub()
+	channel, unsubscribe := hub.Subscribe()
+	unsubscribe()
+
+	select {
+	case _, ok := <-channel:
+		if ok {
+			t.Fatal("unsubscribed event channel remained open")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("unsubscribed event channel did not close")
+	}
+
+	hub.Publish(model.Event{Type: "after-unsubscribe", Timestamp: time.Now().UTC(), Data: map[string]any{}})
+}
+
 func TestHubPublishesToSubscribers(t *testing.T) {
 	hub := NewHub()
 	channel, unsubscribe := hub.Subscribe()
