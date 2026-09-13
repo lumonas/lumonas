@@ -90,6 +90,17 @@ WHERE state NOT IN ('firing','acknowledged')
 // PruneOperationalHistory applies one bounded policy to operational tables.
 // It is safe to call at startup and periodically while the daemon is running.
 func (s *Store) PruneOperationalHistory(now time.Time) error {
+	// Keep the scheduled pass authoritative even for rows created by recovery,
+	// migrations, or administrative tooling that bypasses normal write helpers.
+	if err := s.PruneEvents(10000); err != nil {
+		return err
+	}
+	if err := s.PruneAudit(10000); err != nil {
+		return err
+	}
+	if err := s.PruneJobs(defaultJobRetention); err != nil {
+		return err
+	}
 	if err := s.PruneConfigGenerations(defaultOperationalRetention); err != nil {
 		return err
 	}
@@ -108,5 +119,8 @@ func (s *Store) PruneOperationalHistory(now time.Time) error {
 	if err := s.PruneNetworkCheckpoints(defaultOperationalRetention); err != nil {
 		return err
 	}
-	return s.PruneGeneratedAlerts(defaultOperationalRetention)
+	if err := s.PruneGeneratedAlerts(defaultOperationalRetention); err != nil {
+		return err
+	}
+	return s.PruneCapacitySnapshots(now.UTC().Add(-180 * 24 * time.Hour))
 }

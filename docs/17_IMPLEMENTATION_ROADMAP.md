@@ -39,6 +39,8 @@ Deliver:
   byte-for-byte reproducibility before publication.
 - Every packaged service has an explicit journald destination and stable
   `SyslogIdentifier`, including typed privileged workers and runtime setup.
+- Scheduled retention revalidates events, audit rows, terminal jobs, and
+  capacity snapshots in addition to write-time pruning.
 - Debian integration dependencies are parity-checked across package metadata,
   the no-recommends QEMU appliance image, and the offline installer ISO.
 - Boot-critical resolver dependencies are explicit in both appliance images;

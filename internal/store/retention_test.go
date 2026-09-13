@@ -128,6 +128,57 @@ func TestPruneOperationalHistoryRunsWithDefaultPolicy(t *testing.T) {
 	}
 }
 
+func TestPruneOperationalHistoryBoundsCoreHistoryTables(t *testing.T) {
+	database, err := Open(t.TempDir() + "/lumonas.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+
+	now := time.Now().UTC()
+	transaction, err := database.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := 0; index < 10005; index++ {
+		created := now.Add(-time.Duration(index) * time.Second).Format(timeFormat)
+		if _, err := transaction.Exec(`INSERT INTO events(id,type,timestamp,severity,data_json) VALUES(?,?,?,?,?)`, fmt.Sprintf("event-retention-%05d", index), "retention", created, "info", "{}"); err != nil {
+			transaction.Rollback()
+			t.Fatal(err)
+		}
+		if _, err := transaction.Exec(`INSERT INTO audit_log(id,timestamp,actor,action,outcome,metadata_json) VALUES(?,?,?,?,?,?)`, fmt.Sprintf("audit-retention-%05d", index), created, "system", "retention", "recorded", "{}"); err != nil {
+			transaction.Rollback()
+			t.Fatal(err)
+		}
+		if _, err := transaction.Exec(`INSERT INTO jobs(id,type,title,state,created_at) VALUES(?,?,?,?,?)`, fmt.Sprintf("job-retention-%05d", index), "retention", "retention", "completed", created); err != nil {
+			transaction.Rollback()
+			t.Fatal(err)
+		}
+	}
+	if err := transaction.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SaveCapacitySnapshot(model.CapacitySnapshot{ResourceID: "pool", CapturedAt: now.Add(-181 * 24 * time.Hour), TotalBytes: 100, UsedBytes: 50}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SaveCapacitySnapshot(model.CapacitySnapshot{ResourceID: "pool", CapturedAt: now, TotalBytes: 100, UsedBytes: 60}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := database.PruneOperationalHistory(now); err != nil {
+		t.Fatal(err)
+	}
+	for table, want := range map[string]int{"events": 10000, "audit_log": 10000, "jobs": 1000, "capacity_snapshots": 1} {
+		var count int
+		if err := database.db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count != want {
+			t.Fatalf("unexpected %s count: got %d want %d", table, count, want)
+		}
+	}
+}
+
 func TestOperationalRetentionPrunesExpiredSessionsAndResolvedAlerts(t *testing.T) {
 	database, err := Open(t.TempDir() + "/lumonas.db")
 	if err != nil {

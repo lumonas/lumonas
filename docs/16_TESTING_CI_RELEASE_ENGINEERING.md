@@ -30,6 +30,9 @@ removed. Committed configuration-generation history is bounded while pending
 generations remain available for recovery diagnosis. The
 release security-controls job runs `scripts/retention-smoke.sh` so an
 unbounded operational table cannot silently ship.
+That scheduled pass also rechecks events, audit rows, terminal jobs, and
+capacity snapshots, covering rows created by migrations, recovery tooling, or
+other administrative paths that bypass normal write-time pruning.
 The dedicated generation-retention smoke test is also release-blocking.
 The package post-install policy is release-blocking as well: live systemd
 hosts fail the transaction when an enabled LumoNAS unit cannot start, while

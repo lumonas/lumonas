@@ -584,6 +584,8 @@ available. Expired sessions and resolved alert history must be removed. The
 daemon must bound committed configuration generations while preserving
 pending generations, and run the same policy at startup and periodically
 while serving requests.
+The scheduled pass must also bound events, audit rows, terminal jobs, and
+capacity snapshots when those rows were created outside normal write helpers.
 
 ## AY. Generated share protocol validation
 
