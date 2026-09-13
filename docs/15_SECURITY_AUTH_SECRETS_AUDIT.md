@@ -176,6 +176,11 @@ authenticated management users.
 
 `lumonas-privd` has no network API.
 
+Its Unix socket is protected by filesystem ownership/mode and, on Linux, a
+kernel `SO_PEERCRED` check before request parsing. Only root or the configured
+`lumonas` service group is accepted; wrong-group and non-Unix peers are
+release-tested as rejection cases.
+
 ## Docker security
 
 The Docker Engine socket remains root-owned and is never granted directly to

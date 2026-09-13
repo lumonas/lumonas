@@ -221,6 +221,7 @@ jobs:
           go-version: '1.26.x'
           cache: true
       - run: bash scripts/security-smoke.sh
+      - run: go test -count=1 ./cmd/lumonas-privd -run 'TestPeerAllowedRejectsNonUnixConnections|TestPeerAllowedAcceptsCurrentUnixPeer|TestPeerAllowedRejectsUnixPeerOutsideServiceGroup'
       - run: bash scripts/secret-scan-smoke.sh
       - run: bash scripts/command-boundary-smoke.sh
       - run: bash scripts/request-limits-smoke.sh

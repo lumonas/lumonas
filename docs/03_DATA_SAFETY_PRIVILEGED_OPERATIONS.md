@@ -320,6 +320,9 @@ Never implement:
 The Unix socket is protected by ownership and mode, and Linux builds also
 verify `SO_PEERCRED` before parsing a request. Only UID 0 or the `lumonas`
 service group may connect; unrelated local processes are closed immediately.
+The release security gate tests both a valid service-group peer and rejection
+of a Unix peer presented with a different configured group, in addition to
+rejecting non-Unix connections.
 
 If an advanced terminal is offered, it is a separate explicitly authenticated admin feature, not the control channel used by normal product functions.
 

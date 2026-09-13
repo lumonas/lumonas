@@ -597,7 +597,9 @@ The `security-controls` job is also release-blocking. A dedicated scanner
 checks tracked files for high-confidence private-key, cloud-token, package
 token, and credential-URL formats; its smoke test proves both detection and
 safe-fixture behavior. The job then runs the diagnostics redaction and
-privileged-operation rejection tests with a clean checkout.
+privileged-operation rejection tests with a clean checkout. It also runs the
+Linux `SO_PEERCRED` peer-boundary tests; wrong-group Unix peers and non-Unix
+connections must be rejected before request parsing.
 Support bundle redaction also covers structured recovery-key fields, raw PEM
 private-key blocks, and entries whose filenames identify recovery keys or
 private keys.

@@ -92,6 +92,12 @@ if "TestBackupCompletionEventRequiresDurableState" not in safety_block or "TestB
 security_smoke = (pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "security-smoke.sh").read_text(encoding="utf-8")
 if "TestRequestAuditPersistsTypedObservabilityFields" not in security_smoke:
     raise SystemExit("security-controls gate is missing typed audit observability coverage")
+for marker in ("TestPeerAllowedRejectsNonUnixConnections", "TestPeerAllowedAcceptsCurrentUnixPeer", "TestPeerAllowedRejectsUnixPeerOutsideServiceGroup"):
+    if marker not in security_smoke:
+        raise SystemExit(f"security-controls gate is missing privileged peer-boundary coverage: {marker}")
+security_job = re.search(r"(?ms)^  security-controls:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+if not security_job or "TestPeerAllowedRejectsUnixPeerOutsideServiceGroup" not in security_job.group(0):
+    raise SystemExit("security-controls CI job does not explicitly run peer-credential rejection coverage")
 api_smoke_text = (repo_root / "scripts/api-smoke.sh").read_text(encoding="utf-8")
 if "audit response did not include typed trace fields after a mutation" not in api_smoke_text:
     raise SystemExit("API smoke does not require typed audit trace fields after a mutation")
