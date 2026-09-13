@@ -137,6 +137,9 @@ the web service is owned by the unprivileged `lumonas` user.
 Each Debian package includes a verified build manifest with source, toolchain,
 lockfile, catalog, and dependency metadata.
 
+Release verification also hashes SBOM, signature, and Cosign bundle sidecars;
+tampering with release metadata fails verification.
+
 Generated ISO and QEMU appliances also include versioned Debian package
 inventories with the source commit, reproducible epoch, and exact installed
 versions.

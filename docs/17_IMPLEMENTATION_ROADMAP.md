@@ -36,6 +36,8 @@ Deliver:
   records.
 - release verification validates Cosign bundles and GitHub Actions provenance,
   not only signature-file presence.
+- Release manifests and checksum files cover SBOM, signature, and Cosign
+  bundle sidecars, with tamper detection for each published artifact.
 - Debian package builds normalize entry timestamps and are checked for
   byte-for-byte reproducibility before publication.
 - Every packaged service has an explicit journald destination and stable

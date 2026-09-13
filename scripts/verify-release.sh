@@ -52,6 +52,19 @@ for item in manifest.get("artifacts", []):
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     if item.get("sha256") != digest:
         raise SystemExit(f"release manifest checksum mismatch: {name}")
+    for key in ("sbom", "signature", "bundle"):
+        sidecar = item.get(key)
+        if sidecar is None:
+            continue
+        if not isinstance(sidecar, dict) or not isinstance(sidecar.get("name"), str):
+            raise SystemExit(f"release manifest {key} metadata is invalid: {name}")
+        sidecar_path = release_dir / sidecar["name"]
+        if not sidecar_path.is_file() or sidecar_path.parent != release_dir:
+            raise SystemExit(f"release manifest {key} is missing: {sidecar['name']}")
+        if sidecar.get("sizeBytes") != sidecar_path.stat().st_size:
+            raise SystemExit(f"release manifest {key} size mismatch: {sidecar['name']}")
+        if sidecar.get("sha256") != hashlib.sha256(sidecar_path.read_bytes()).hexdigest():
+            raise SystemExit(f"release manifest {key} checksum mismatch: {sidecar['name']}")
     expected[name] = item
 
 actual = sorted(path.name for pattern in ("*.deb", "*.iso", "*.qcow2", "*.raw") for path in release_dir.glob(pattern))

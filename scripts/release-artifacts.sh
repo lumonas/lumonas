@@ -9,13 +9,6 @@ case "$SOURCE_DATE_EPOCH" in
 	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
 esac
 mkdir -p "$RELEASE_DIR"
-(
-	cd "$RELEASE_DIR"
-	for artifact in *.deb *.iso *.qcow2 *.raw; do
-		[ -f "$artifact" ] || continue
-		sha256sum "$artifact"
-	done
-) > "$RELEASE_DIR/SHA256SUMS"
 if command -v syft >/dev/null 2>&1; then
 	for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw; do
 		[ -f "$artifact" ] || continue
@@ -39,6 +32,16 @@ if [ "${LUMONAS_SIGN_ARTIFACTS:-false}" = "true" ]; then
   done
 fi
 
+# Generate checksums after SBOMs and signatures so the release checksum file
+# covers every published payload and its verification metadata.
+(
+	cd "$RELEASE_DIR"
+	for artifact in *.deb *.iso *.qcow2 *.raw *.sbom.json *.sig *.bundle; do
+		[ -f "$artifact" ] || continue
+		sha256sum "$artifact"
+	done
+) > "$RELEASE_DIR/SHA256SUMS"
+
 python3 - "$RELEASE_DIR" "$SOURCE_COMMIT" "$SOURCE_DATE_EPOCH" <<'PY'
 import hashlib
 import json
@@ -49,6 +52,15 @@ release_dir = pathlib.Path(sys.argv[1])
 source_commit = sys.argv[2]
 source_date_epoch = int(sys.argv[3])
 artifacts = []
+def sidecar(path):
+    if not path.is_file():
+        return None
+    return {
+        "name": path.name,
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "sizeBytes": path.stat().st_size,
+    }
+
 for pattern in ("*.deb", "*.iso", "*.qcow2", "*.raw"):
     for path in release_dir.glob(pattern):
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -56,9 +68,9 @@ for pattern in ("*.deb", "*.iso", "*.qcow2", "*.raw"):
             "name": path.name,
             "sha256": digest,
             "sizeBytes": path.stat().st_size,
-            "sbom": f"{path.name}.sbom.json" if path.with_name(path.name + ".sbom.json").is_file() else None,
-            "signature": f"{path.name}.sig" if path.with_name(path.name + ".sig").is_file() else None,
-            "bundle": f"{path.name}.bundle" if path.with_name(path.name + ".bundle").is_file() else None,
+            "sbom": sidecar(path.with_name(path.name + ".sbom.json")),
+            "signature": sidecar(path.with_name(path.name + ".sig")),
+            "bundle": sidecar(path.with_name(path.name + ".bundle")),
         })
 artifacts.sort(key=lambda item: item["name"])
 if not artifacts:

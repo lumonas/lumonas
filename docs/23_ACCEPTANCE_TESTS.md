@@ -553,6 +553,8 @@ epoch, SHA-256 digest, and byte size for every Debian package, ISO, and QEMU
 image, strict verification matches the source commit and reproducible epoch to
 the tagged GitHub revision, and an artifact added without regenerating the
 manifest is rejected.
+SBOM, signature, and Cosign bundle sidecars must also have recorded digests and
+sizes; modifying one without regenerating the release metadata must fail.
 
 The generated ISO and QEMU images must also expose their versioned Debian
 package inventories under `/usr/share/doc/lumonas/`, including the source
