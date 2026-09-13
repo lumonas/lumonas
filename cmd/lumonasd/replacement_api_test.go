@@ -102,7 +102,9 @@ func TestDiskReplacementPlanAndConfirmChain(t *testing.T) {
 	for _, job := range jobs {
 		if job.Type == "snapraid.fix" {
 			fixFound = true
-			if job.State != "queued" && job.State != "running" && job.State != "failed" && job.State != "completed" {
+			// The job runs async, so any lifecycle state is acceptable here;
+			// what matters is that it was persisted with the recovery slot.
+			if job.State != "queued" && job.State != "preparing" && job.State != "running" && job.State != "successful" && job.State != "failed" {
 				t.Fatalf("unexpected fix job state %q", job.State)
 			}
 		}
