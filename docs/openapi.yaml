@@ -919,6 +919,12 @@ paths:
       responses:
         '200':
           description: Run list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BackupRun'
 
   /backups/run:
     post:
@@ -4119,6 +4125,22 @@ components:
             status: {$ref: '#/components/schemas/HealthState'}
             at: {type: string, format: date-time}
             detail: {type: string}
+
+    BackupRun:
+      type: object
+      required: [id, trigger, generation, state, startedAt]
+      properties:
+        id: {type: string}
+        actor: {type: string}
+        trigger: {type: string}
+        generation: {type: integer, format: int64}
+        state: {type: string}
+        bundlePath: {type: string}
+        checksum: {type: string}
+        bytes: {type: integer, format: int64}
+        startedAt: {type: string, format: date-time}
+        finishedAt: {type: string, format: date-time}
+        error: {type: string}
 
     CapacityForecast:
       type: object

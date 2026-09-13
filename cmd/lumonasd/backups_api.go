@@ -258,7 +258,7 @@ func (s *apiServer) runBackupNow(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	run := backup.Run{ID: newID("backup-run"), Trigger: "manual", Generation: s.currentGeneration(), State: "queued", StartedAt: time.Now().UTC()}
+	run := backup.Run{ID: newID("backup-run"), Actor: actor, Trigger: "manual", Generation: s.currentGeneration(), State: "queued", StartedAt: time.Now().UTC()}
 	if err := s.store.SaveBackupRun(run); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -281,7 +281,7 @@ func (s *apiServer) requestAutomaticBackup(trigger string) {
 	automaticBackupMu.Unlock()
 	go func() {
 		defer func() { automaticBackupMu.Lock(); automaticBackupPending = false; automaticBackupMu.Unlock() }()
-		run := backup.Run{ID: newID("backup-run"), Trigger: trigger, Generation: s.currentGeneration(), State: "queued", StartedAt: time.Now().UTC()}
+		run := backup.Run{ID: newID("backup-run"), Actor: "system", Trigger: trigger, Generation: s.currentGeneration(), State: "queued", StartedAt: time.Now().UTC()}
 		if err := s.store.SaveBackupRun(run); err == nil {
 			s.executeBackup(run)
 		}
@@ -301,7 +301,7 @@ func (s *apiServer) executeBackup(run backup.Run) {
 		return
 	}
 	recorder := httptest.NewRecorder()
-	s.recoveryExport(recorder, context.Background())
+	s.recoveryExport(recorder, context.Background(), run.Actor)
 	if recorder.Code < 200 || recorder.Code >= 300 {
 		s.finishBackup(run, "failed", fmt.Errorf("recovery export failed: %s", strings.TrimSpace(recorder.Body.String())))
 		return
@@ -380,7 +380,7 @@ func (s *apiServer) executeBackup(run backup.Run) {
 	}
 	s.finishBackup(run, "verified", nil)
 	s.pruneBackupCopies(destinations, []byte(key))
-	s.publish("recovery.backup.verified", "info", nil, map[string]any{"runId": run.ID, "generation": run.Generation, "destinations": len(destinations)})
+	s.publishActor(run.Actor, "recovery.backup.verified", "info", nil, map[string]any{"runId": run.ID, "generation": run.Generation, "destinations": len(destinations)})
 }
 
 func (s *apiServer) pruneBackupCopies(destinations []backup.Destination, key []byte) {
@@ -422,9 +422,9 @@ func (s *apiServer) finishBackup(run backup.Run, state string, failure error) {
 	run.FinishedAt = &now
 	if failure != nil {
 		run.Error = failure.Error()
-		s.publish("recovery.backup.failed", "warning", nil, map[string]any{"runId": run.ID, "error": run.Error})
+		s.publishActor(run.Actor, "recovery.backup.failed", "warning", nil, map[string]any{"runId": run.ID, "error": run.Error})
 	} else if state == "verified" {
-		s.publish("recovery.backup.completed", "info", nil, map[string]any{"runId": run.ID})
+		s.publishActor(run.Actor, "recovery.backup.completed", "info", nil, map[string]any{"runId": run.ID})
 	}
 	_ = s.store.SaveBackupRun(run)
 }

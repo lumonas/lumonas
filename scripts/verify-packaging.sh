@@ -308,6 +308,7 @@ require_line "$ROOT/scripts/check-openapi-duplicates.py" 'duplicate path'
 require_line "$ROOT/Makefile" 'upgrade-smoke:'
 require_line "$ROOT/Makefile" 'race-fuzz:'
 require_line "$ROOT/Makefile" 'upgrade-compatibility:'
+require_line "$ROOT/.github/workflows/ci.yml" 'TestOpenMigratesLegacyBackupRunActorColumn'
 require_line "$ROOT/Makefile" 'release-gate-policy:'
 [ -x "$ROOT/scripts/upgrade-smoke.sh" ] || { echo "upgrade smoke test must be executable" >&2; exit 1; }
 [ -x "$ROOT/scripts/upgrade-service-order-smoke.sh" ] || { echo "upgrade service ordering smoke test must be executable" >&2; exit 1; }

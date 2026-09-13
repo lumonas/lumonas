@@ -1,10 +1,13 @@
 package store
 
 import (
+	"database/sql"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/backup"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func TestBackupDestinationsEncryptCredentialsAndPersistRuns(t *testing.T) {
@@ -25,9 +28,13 @@ func TestBackupDestinationsEncryptCredentialsAndPersistRuns(t *testing.T) {
 	if err != nil || loaded.ID != "local" || credentials.SecretKey != "secret" {
 		t.Fatalf("credential load failed: %#v %#v %v", loaded, credentials, err)
 	}
-	run := backup.Run{ID: "run-1", Trigger: "manual", Generation: 7, State: "verified", StartedAt: time.Now().UTC()}
+	run := backup.Run{ID: "run-1", Actor: "admin", Trigger: "manual", Generation: 7, State: "verified", StartedAt: time.Now().UTC()}
 	if err := database.SaveBackupRun(run); err != nil {
 		t.Fatal(err)
+	}
+	runs, err := database.BackupRuns(10)
+	if err != nil || len(runs) != 1 || runs[0].Actor != run.Actor {
+		t.Fatalf("backup run actor was not persisted: %#v %v", runs, err)
 	}
 	copy := backup.Copy{ID: "copy-1", RunID: run.ID, DestinationID: destination.ID, Object: "recovery/generation-7.mrb", Checksum: "abc", Bytes: 3, State: "verified", Verified: true, CreatedAt: time.Now().UTC()}
 	if err := database.SaveBackupCopy(copy); err != nil {
@@ -65,5 +72,37 @@ func TestBackupScheduleRejectsUnboundedIntervals(t *testing.T) {
 	defer database.Close()
 	if _, err := database.SaveBackupSchedule(backup.Schedule{ID: "default", Enabled: true, IntervalSeconds: 1}); err == nil {
 		t.Fatal("expected schedule interval validation")
+	}
+}
+
+func TestOpenMigratesLegacyBackupRunActorColumn(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	legacy, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacy.Exec(`CREATE TABLE backup_runs (
+id TEXT PRIMARY KEY, trigger_name TEXT NOT NULL, generation INTEGER NOT NULL,
+state TEXT NOT NULL, bundle_path TEXT, checksum TEXT, bytes INTEGER NOT NULL DEFAULT 0,
+started_at TEXT NOT NULL, finished_at TEXT, error TEXT
+)`); err != nil {
+		legacy.Close()
+		t.Fatal(err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatal(err)
+	}
+	database, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	run := backup.Run{ID: "legacy-run", Actor: "admin", Trigger: "manual", Generation: 1, State: "queued", StartedAt: time.Now().UTC()}
+	if err := database.SaveBackupRun(run); err != nil {
+		t.Fatal(err)
+	}
+	runs, err := database.BackupRuns(10)
+	if err != nil || len(runs) != 1 || runs[0].Actor != run.Actor {
+		t.Fatalf("legacy backup run actor migration failed: %#v %v", runs, err)
 	}
 }

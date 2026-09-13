@@ -570,7 +570,7 @@ func (s *apiServer) runUpdateCheck(job model.Job) model.Job {
 			if feedErr := s.checkUpdateFeed(core); feedErr != nil {
 				core["lastError"] = feedErr.Error()
 				stage = "Feed check failed — kept last known state"
-				s.publish("updates.check.failed", "warning", nil, map[string]any{"jobId": job.ID, "error": feedErr.Error()})
+				s.publishActor(job.Actor, "updates.check.failed", "warning", nil, map[string]any{"jobId": job.ID, "error": feedErr.Error()})
 			} else {
 				delete(core, "lastError")
 			}

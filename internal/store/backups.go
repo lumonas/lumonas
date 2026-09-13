@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS backup_destinations (
   credentials_ciphertext BLOB, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS backup_runs (
-  id TEXT PRIMARY KEY, trigger_name TEXT NOT NULL, generation INTEGER NOT NULL,
+  id TEXT PRIMARY KEY, actor TEXT, trigger_name TEXT NOT NULL, generation INTEGER NOT NULL,
   state TEXT NOT NULL, bundle_path TEXT, checksum TEXT, bytes INTEGER NOT NULL DEFAULT 0,
   started_at TEXT NOT NULL, finished_at TEXT, error TEXT
 );
@@ -43,7 +43,34 @@ func (s *Store) ensureBackupSchema() error {
 	if _, err := s.db.Exec(backupSchema); err != nil {
 		return err
 	}
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?)`, time.Now().UTC().Format(timeFormat))
+	rows, err := s.db.Query(`PRAGMA table_info(backup_runs)`)
+	if err != nil {
+		return err
+	}
+	hasActor := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, dataType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "actor" {
+			hasActor = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	if !hasActor {
+		if _, err := s.db.Exec(`ALTER TABLE backup_runs ADD COLUMN actor TEXT`); err != nil {
+			return err
+		}
+	}
+	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?), (8, ?)`, time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat))
 	return err
 }
 
@@ -179,7 +206,7 @@ func (s *Store) SaveBackupRun(value backup.Run) error {
 	if err := s.ensureBackupSchema(); err != nil {
 		return err
 	}
-	_, err := s.db.Exec(`INSERT INTO backup_runs(id,trigger_name,generation,state,bundle_path,checksum,bytes,started_at,finished_at,error) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,bundle_path=excluded.bundle_path,checksum=excluded.checksum,bytes=excluded.bytes,finished_at=excluded.finished_at,error=excluded.error`, value.ID, value.Trigger, value.Generation, value.State, nullable(value.BundlePath), nullable(value.Checksum), value.Bytes, value.StartedAt.Format(timeFormat), timeValue(value.FinishedAt), nullable(value.Error))
+	_, err := s.db.Exec(`INSERT INTO backup_runs(id,actor,trigger_name,generation,state,bundle_path,checksum,bytes,started_at,finished_at,error) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET actor=excluded.actor,state=excluded.state,bundle_path=excluded.bundle_path,checksum=excluded.checksum,bytes=excluded.bytes,finished_at=excluded.finished_at,error=excluded.error`, value.ID, nullable(value.Actor), value.Trigger, value.Generation, value.State, nullable(value.BundlePath), nullable(value.Checksum), value.Bytes, value.StartedAt.Format(timeFormat), timeValue(value.FinishedAt), nullable(value.Error))
 	return err
 }
 
@@ -198,7 +225,7 @@ func (s *Store) BackupRuns(limit int) ([]backup.Run, error) {
 	if limit < 1 || limit > 500 {
 		limit = 50
 	}
-	rows, err := s.db.Query(`SELECT id,trigger_name,generation,state,COALESCE(bundle_path,''),COALESCE(checksum,''),bytes,started_at,finished_at,COALESCE(error,'') FROM backup_runs ORDER BY started_at DESC LIMIT ?`, limit)
+	rows, err := s.db.Query(`SELECT id,COALESCE(actor,''),trigger_name,generation,state,COALESCE(bundle_path,''),COALESCE(checksum,''),bytes,started_at,finished_at,COALESCE(error,'') FROM backup_runs ORDER BY started_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +235,7 @@ func (s *Store) BackupRuns(limit int) ([]backup.Run, error) {
 		var value backup.Run
 		var started string
 		var finished, bundlePath, checksum, runError sql.NullString
-		if err := rows.Scan(&value.ID, &value.Trigger, &value.Generation, &value.State, &bundlePath, &checksum, &value.Bytes, &started, &finished, &runError); err != nil {
+		if err := rows.Scan(&value.ID, &value.Actor, &value.Trigger, &value.Generation, &value.State, &bundlePath, &checksum, &value.Bytes, &started, &finished, &runError); err != nil {
 			return nil, err
 		}
 		value.BundlePath, value.Checksum, value.Error = bundlePath.String, checksum.String, runError.String

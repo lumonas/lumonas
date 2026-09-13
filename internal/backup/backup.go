@@ -55,6 +55,7 @@ type Credentials struct {
 
 type Run struct {
 	ID         string     `json:"id"`
+	Actor      string     `json:"actor,omitempty"`
 	Trigger    string     `json:"trigger"`
 	Generation int64      `json:"generation"`
 	State      string     `json:"state"`

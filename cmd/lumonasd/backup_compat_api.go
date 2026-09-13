@@ -169,14 +169,14 @@ func (s *apiServer) runBackupJob(w http.ResponseWriter, r *http.Request, id stri
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "backup job not found"})
 		return
 	}
-	run := backup.Run{ID: newID("backup-run"), Trigger: "manual", Generation: s.currentGeneration(), State: "queued", StartedAt: time.Now().UTC()}
+	run := backup.Run{ID: newID("backup-run"), Actor: actor, Trigger: "manual", Generation: s.currentGeneration(), State: "queued", StartedAt: time.Now().UTC()}
 	if err := s.store.SaveBackupRun(run); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	s.recordRequestAudit(r, actor, "backup.run.request", run.ID, map[string]any{"operationId": run.ID, "destinationId": id})
 	go s.executeBackup(run)
-	writeJSON(w, http.StatusAccepted, map[string]any{"id": run.ID, "type": "backup", "title": "Configuration backup", "resourceId": id, "state": "queued", "progress": 0, "createdAt": run.StartedAt})
+	writeJSON(w, http.StatusAccepted, map[string]any{"id": run.ID, "actor": run.Actor, "type": "backup", "title": "Configuration backup", "resourceId": id, "state": "queued", "progress": 0, "createdAt": run.StartedAt})
 }
 
 func (s *apiServer) backupGenerations(w http.ResponseWriter, r *http.Request) {

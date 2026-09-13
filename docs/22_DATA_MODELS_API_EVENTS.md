@@ -11,6 +11,10 @@ scheduled and daemon-created work uses `system`. Resource type and ID remain
 explicit fields; the original metadata/data payloads are retained for backward
 compatibility.
 
+Recovery backup runs follow the same rule: manually queued runs persist the
+authenticated actor and carry it through export, verification, and failure
+events, while automatic scheduled runs are attributed to `system`.
+
 ## Core entities
 
 ### Server
