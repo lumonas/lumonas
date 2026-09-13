@@ -161,6 +161,8 @@ require_line "$ROOT/packaging/debian/prerm" 'systemd host must not continue an u
 require_line "$ROOT/packaging/debian/prerm" 'systemctl stop "$unit"'
 require_line "$ROOT/scripts/permission-smoke.sh" '/etc/lumonas/runtime.env'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'lumonas-runtime.service'
+require_line "$ROOT/internal/services/status.go" 'lumonas-privd-general.service'
+require_line "$ROOT/internal/services/status_test.go" 'TestDefaultNamesExposeCompleteApplianceTopology'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'qemu-package-manifest.txt'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'dpkg-query -W'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'sourceCommit=$LUMONAS_SOURCE_COMMIT'

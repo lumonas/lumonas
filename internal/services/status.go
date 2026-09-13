@@ -16,7 +16,27 @@ type Status struct {
 	User   string `json:"user,omitempty"`
 }
 
-var DefaultNames = []string{"lumonas-privd.service", "lumonasd.service", "lumonas-web.service", "docker.service", "smbd.service", "nfs-server.service", "ssh.service", "lumonas-jobs.target", "lumonas-services.target", "lumonas-storage.target"}
+// DefaultNames is the complete appliance service inventory exposed to the UI.
+// Keep restricted workers and runtime provisioning here: release smokes use
+// this endpoint to prove that the installed dependency graph is active, not
+// merely that the public daemon is reachable.
+var DefaultNames = []string{
+	"lumonas-runtime.service",
+	"lumonas-privd.service",
+	"lumonas-privd-storage.service",
+	"lumonas-privd-network.service",
+	"lumonas-privd-power.service",
+	"lumonas-privd-general.service",
+	"lumonasd.service",
+	"lumonas-web.service",
+	"docker.service",
+	"smbd.service",
+	"nfs-server.service",
+	"ssh.service",
+	"lumonas-jobs.target",
+	"lumonas-services.target",
+	"lumonas-storage.target",
+}
 
 // normalizeState maps raw "systemctl is-active" output onto the state
 // vocabulary the web interface understands: running, stopped, degraded.

@@ -5,6 +5,34 @@ import (
 	"testing"
 )
 
+func TestDefaultNamesExposeCompleteApplianceTopology(t *testing.T) {
+	want := []string{
+		"lumonas-runtime.service",
+		"lumonas-privd.service",
+		"lumonas-privd-storage.service",
+		"lumonas-privd-network.service",
+		"lumonas-privd-power.service",
+		"lumonas-privd-general.service",
+		"lumonasd.service",
+		"lumonas-web.service",
+		"lumonas-jobs.target",
+		"lumonas-services.target",
+		"lumonas-storage.target",
+	}
+	seen := make(map[string]bool, len(DefaultNames))
+	for _, name := range DefaultNames {
+		seen[name] = true
+	}
+	for _, name := range want {
+		if !seen[name] {
+			t.Errorf("DefaultNames is missing %q", name)
+		}
+	}
+	if len(seen) != len(DefaultNames) {
+		t.Fatal("DefaultNames contains duplicate service identifiers")
+	}
+}
+
 func TestCollectReturnsEveryRequestedService(t *testing.T) {
 	values := Collect(context.Background(), []string{"service-that-does-not-exist.service"})
 	if len(values) != 1 || values[0].Name == "" || values[0].Active {
