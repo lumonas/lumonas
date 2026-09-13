@@ -187,7 +187,7 @@ func (s *apiServer) confirmStoragePoolSetup(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.advanceGeneration("storage.pool.setup")
-	s.publish("storage.pool.setup.completed", "info", &model.ResourceRef{Type: "pool", ID: plan.Name}, map[string]any{"operationId": plan.OperationID, "formatted": len(formatted), "members": len(plan.DataDiskIDs)})
+	s.publishActor(actor, "storage.pool.setup.completed", "info", &model.ResourceRef{Type: "pool", ID: plan.Name}, map[string]any{"operationId": plan.OperationID, "formatted": len(formatted), "members": len(plan.DataDiskIDs)})
 	s.persistMountState("storage.pool.setup")
 	protectionConfigured := false
 	if plan.ParityDiskID != "" {

@@ -62,3 +62,18 @@ func TestEnsureRestartedJobsFailsClosedForInterruptedWork(t *testing.T) {
 		t.Fatalf("restart reconciliation emitted %d duplicate events", count)
 	}
 }
+
+func TestPublishActorSetsEventEnvelopeWithoutPayloadMutation(t *testing.T) {
+	server := testServer(t)
+	server.publishActor("admin", "settings.changed", "info", nil, map[string]any{"section": "runtime"})
+	events, err := server.store.Events(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].Actor != "admin" {
+		t.Fatalf("event actor was not promoted: %#v", events)
+	}
+	if _, ok := events[0].Data["actor"]; ok {
+		t.Fatalf("actor leaked into event payload: %#v", events[0].Data)
+	}
+}

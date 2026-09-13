@@ -152,6 +152,6 @@ func (s *apiServer) confirmDiskReplacement(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	go s.runProtectionJob(fixJob)
-	s.publish("storage.disk.replacement.started", "warning", &model.ResourceRef{Type: "disk", ID: plan.ReplacementDiskID}, map[string]any{"operationId": plan.OperationID, "jobId": fixJob.ID, "slot": plan.RetiredDataName})
+	s.publishActor(actor, "storage.disk.replacement.started", "warning", &model.ResourceRef{Type: "disk", ID: plan.ReplacementDiskID}, map[string]any{"operationId": plan.OperationID, "jobId": fixJob.ID, "slot": plan.RetiredDataName})
 	writeJSON(w, http.StatusAccepted, map[string]any{"ok": true, "jobId": fixJob.ID, "slot": plan.RetiredDataName, "next": "parity recovery will be followed by an automatic sync"})
 }

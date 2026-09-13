@@ -82,7 +82,7 @@ func (s *apiServer) createNetworkConnection(w http.ResponseWriter, r *http.Reque
 		_ = s.store.SetMeta(idempotencyMetaKey("network.connection.create", idempotencyKey), value.ID)
 	}
 	s.advanceGeneration("network.connection.create")
-	s.publish("network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: value.ID}, map[string]any{"requiresCheckpoint": true})
+	s.publishActor(actor, "network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: value.ID}, map[string]any{"requiresCheckpoint": true})
 	writeJSON(w, http.StatusCreated, value)
 }
 
@@ -120,7 +120,7 @@ func (s *apiServer) updateNetworkConnection(w http.ResponseWriter, r *http.Reque
 	}
 	s.recordRequestAudit(r, actor, "network.connection.update", id, map[string]any{"interface": value.Interface})
 	s.advanceGeneration("network.connection.update")
-	s.publish("network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"requiresCheckpoint": true})
+	s.publishActor(actor, "network.connection.updated", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"requiresCheckpoint": true})
 	writeJSON(w, http.StatusOK, value)
 }
 
@@ -212,7 +212,7 @@ func (s *apiServer) applyNetworkConnection(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	s.recordRequestAudit(r, actor, "network.connection.apply", id, map[string]any{"operationId": operationID})
-	s.publish("network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
+	s.publishActor(actor, "network.checkpoint.created", "warning", &model.ResourceRef{Type: "network-connection", ID: id}, map[string]any{"operationId": operationID, "timeoutSeconds": input.TimeoutSeconds})
 	writeJSON(w, http.StatusAccepted, result)
 }
 

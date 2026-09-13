@@ -2939,8 +2939,18 @@ func (s *apiServer) writeSSEEvent(w http.ResponseWriter, flusher http.Flusher, e
 }
 
 func (s *apiServer) publish(kind, severity string, resource *model.ResourceRef, data map[string]any) {
+	s.publishWithActor("", kind, severity, resource, data)
+}
+
+func (s *apiServer) publishActor(actor, kind, severity string, resource *model.ResourceRef, data map[string]any) {
+	s.publishWithActor(actor, kind, severity, resource, data)
+}
+
+func (s *apiServer) publishWithActor(actor, kind, severity string, resource *model.ResourceRef, data map[string]any) {
 	metadata := events.MetadataFromData(data)
-	actor := metadata.Actor
+	if metadata.Actor != "" {
+		actor = metadata.Actor
+	}
 	if actor == "" {
 		actor = "system"
 	}

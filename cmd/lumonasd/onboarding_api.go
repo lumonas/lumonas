@@ -152,7 +152,7 @@ func (s *apiServer) completeOnboarding(w http.ResponseWriter, r *http.Request) {
 	}
 	s.applyOnboardingSchedules(input.Protection.SyncTime, input.Protection.ScrubDay)
 	s.advanceGeneration("onboarding.complete")
-	s.publish("onboarding.completed", "info", &model.ResourceRef{Type: "server", ID: "server-1"}, nil)
+	s.publishActor(actor, "onboarding.completed", "info", &model.ResourceRef{Type: "server", ID: "server-1"}, nil)
 	initialSyncStarted := false
 	// Do not start SnapRAID while onboarding has only assigned roles to
 	// unmounted or blank disks. The storage workflow formats/imports and mounts

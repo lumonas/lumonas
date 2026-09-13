@@ -92,7 +92,7 @@ func (s *apiServer) applyUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordRequestAudit(r, actor, "update.stage", input.Manifest.Version, map[string]any{"slot": state.PendingSlot})
-	s.publish("update.staged", "warning", nil, map[string]any{"version": input.Manifest.Version, "slot": state.PendingSlot})
+	s.publishActor(actor, "update.staged", "warning", nil, map[string]any{"version": input.Manifest.Version, "slot": state.PendingSlot})
 	writeJSON(w, http.StatusAccepted, state)
 }
 
@@ -120,7 +120,7 @@ func (s *apiServer) rollbackUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordRequestAudit(r, actor, "update.rollback", state.ActiveSlot, map[string]any{"reason": reason})
-	s.publish("update.rolled_back", "critical", nil, map[string]any{"slot": state.ActiveSlot, "reason": reason})
+	s.publishActor(actor, "update.rolled_back", "critical", nil, map[string]any{"slot": state.ActiveSlot, "reason": reason})
 	writeJSON(w, http.StatusOK, state)
 }
 
@@ -142,7 +142,7 @@ func (s *apiServer) updateHealth(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.recordRequestAudit(r, actor, "update.health.rollback", state.ActiveSlot, map[string]any{"reason": input.Reason})
-		s.publish("update.health_failed", "critical", nil, map[string]any{"slot": state.ActiveSlot, "reason": input.Reason})
+		s.publishActor(actor, "update.health_failed", "critical", nil, map[string]any{"slot": state.ActiveSlot, "reason": input.Reason})
 		writeJSON(w, http.StatusOK, state)
 		return
 	}
@@ -152,6 +152,6 @@ func (s *apiServer) updateHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordRequestAudit(r, actor, "update.health.confirm", state.ActiveSlot, map[string]any{"version": state.ActiveVersion})
-	s.publish("update.healthy", "info", nil, map[string]any{"version": state.ActiveVersion, "slot": state.ActiveSlot})
+	s.publishActor(actor, "update.healthy", "info", nil, map[string]any{"version": state.ActiveVersion, "slot": state.ActiveSlot})
 	writeJSON(w, http.StatusOK, state)
 }

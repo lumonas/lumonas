@@ -199,7 +199,7 @@ func (s *apiServer) deleteFiles(w http.ResponseWriter, r *http.Request) {
 	job := s.queueFileJob(actor, requestCorrelationID(r), "delete files", share.ID, func() (map[string]any, error) {
 		deleted, err := fileops.Delete(share.Path, share.ID, input.Path, input.Names)
 		if err == nil {
-			s.publish("file.changed", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"operation": "delete", "path": input.Path, "deleted": deleted})
+			s.publishActor(actor, "file.changed", "info", &model.ResourceRef{Type: "share", ID: share.ID}, map[string]any{"operation": "delete", "path": input.Path, "deleted": deleted})
 		}
 		return map[string]any{"deleted": deleted}, err
 	})
