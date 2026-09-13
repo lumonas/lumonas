@@ -147,6 +147,10 @@ system and runtime logs bounded and expires old files, preventing appliance
 logs from consuming the data volume without an explicit operator choice.
 It also validates the packaged Docker `json-file` baseline with 10 MiB files
 and three retained files.
+The companion log-identity smoke test requires explicit journald output and a
+stable `SyslogIdentifier` for the web service, daemon, broker, each typed
+privileged worker, and runtime provisioner. This keeps structured operational
+records searchable after an appliance reboot or upgrade.
 
 The disk API contract test populates every stable identity field and verifies
 that `/api/v1/disks` serializes those fields, including the current device

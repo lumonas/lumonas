@@ -6,6 +6,9 @@ Requires=lumonas-privd.service
 [Service]
 Type=simple
 ExecStart=/usr/lib/lumonas/lumonas-privd --worker general --socket /run/lumonas/general.sock
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lumonas-privd-general
 User=root
 Group=lumonas
 RuntimeDirectory=lumonas

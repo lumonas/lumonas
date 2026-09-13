@@ -37,6 +37,8 @@ Deliver:
   not only signature-file presence.
 - Debian package builds normalize entry timestamps and are checked for
   byte-for-byte reproducibility before publication.
+- Every packaged service has an explicit journald destination and stable
+  `SyslogIdentifier`, including typed privileged workers and runtime setup.
 - Debian integration dependencies are parity-checked across package metadata,
   the no-recommends QEMU appliance image, and the offline installer ISO.
 - Boot-critical resolver dependencies are explicit in both appliance images;
