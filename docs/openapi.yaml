@@ -508,9 +508,49 @@ paths:
                   type: array
                   items:
                     type: object
+                composeYaml:
+                  type: string
+                env:
+                  type: object
+                  additionalProperties:
+                    type: string
+                deploy:
+                  type: boolean
       responses:
         '201':
           description: Stack created
+
+  /docker/deployments:
+    get:
+      tags: [Docker]
+      summary: List Docker deployment transactions
+      operationId: listDockerDeployments
+      parameters:
+        - name: stack
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: Deployment history, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DockerDeployment'
+        '400':
+          description: Invalid limit
+        '500':
+          description: Deployment history unavailable
 
   /docker/containers:
     get:
@@ -3331,6 +3371,33 @@ components:
           $ref: '#/components/schemas/RecoveryContract'
         recoveryCoverage:
           type: number
+
+    DockerDeployment:
+      type: object
+      required: [id, stackName, kind, state, composeAfter, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        stackName:
+          type: string
+        kind:
+          type: string
+          enum: [install, update, rollback]
+        state:
+          type: string
+          enum: [pending, committed, rolled_back, failed]
+        composeBefore:
+          type: string
+        composeAfter:
+          type: string
+        error:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     DockerContainer:
       type: object

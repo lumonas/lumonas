@@ -32,6 +32,13 @@ Appdata defaults to a configurable Apps storage resource, not necessarily the sy
 
 `compose.yaml` is the authoritative Docker stack definition.
 
+LumoNAS records each install and update as a deployment transaction. Updates
+capture the previous Compose content before changing the staged file and only
+commit after the stack passes a bounded health gate. A failed gate restores
+the previous Compose content and image references; a daemon restart reconciles
+any transaction still marked `pending`. Review recent outcomes through
+`GET /api/v1/docker/deployments`.
+
 LumoNAS metadata is separate.
 
 Never regenerate the complete YAML from a simple form and discard unknown options.

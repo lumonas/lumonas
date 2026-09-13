@@ -187,6 +187,18 @@ type DockerSummary struct {
 	UpdatesAvailable int `json:"updatesAvailable"`
 }
 
+type DockerDeployment struct {
+	ID            string    `json:"id"`
+	StackName     string    `json:"stackName"`
+	Kind          string    `json:"kind"`
+	State         string    `json:"state"`
+	ComposeBefore *string   `json:"composeBefore,omitempty"`
+	ComposeAfter  string    `json:"composeAfter"`
+	Error         string    `json:"error,omitempty"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}
+
 type ActivityEvent struct {
 	ID          string       `json:"id"`
 	Timestamp   time.Time    `json:"timestamp"`

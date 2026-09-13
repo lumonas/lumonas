@@ -95,6 +95,21 @@ WHERE state NOT IN ('firing','acknowledged')
 	return err
 }
 
+// PruneDockerDeployments bounds terminal deployment history while preserving
+// pending transactions for startup reconciliation.
+func (s *Store) PruneDockerDeployments(keep int) error {
+	keep = retentionLimit(keep)
+	_, err := s.db.Exec(`DELETE FROM docker_deployments
+WHERE state <> 'pending'
+  AND id NOT IN (
+    SELECT id FROM docker_deployments
+    WHERE state <> 'pending'
+    ORDER BY updated_at DESC
+    LIMIT ?
+  )`, keep)
+	return err
+}
+
 // PruneOperationalHistory applies one bounded policy to operational tables.
 // It is safe to call at startup and periodically while the daemon is running.
 func (s *Store) PruneOperationalHistory(now time.Time) error {
@@ -131,6 +146,9 @@ func (s *Store) PruneOperationalHistory(now time.Time) error {
 		return err
 	}
 	if err := s.PruneGeneratedAlerts(defaultOperationalRetention); err != nil {
+		return err
+	}
+	if err := s.PruneDockerDeployments(defaultOperationalRetention); err != nil {
 		return err
 	}
 	return s.PruneCapacitySnapshots(now.UTC().Add(-180 * 24 * time.Hour))

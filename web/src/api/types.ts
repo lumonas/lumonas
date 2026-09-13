@@ -728,6 +728,18 @@ export interface DockerStack {
   recoveryCoverage: number
 }
 
+export interface DockerDeployment {
+  id: string
+  stackName: string
+  kind: 'install' | 'update' | 'rollback'
+  state: 'pending' | 'committed' | 'rolled_back' | 'failed'
+  composeBefore?: string
+  composeAfter: string
+  error?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type ContainerState = 'running' | 'exited' | 'restarting' | 'unhealthy' | 'created'
 
 export interface DockerContainer {

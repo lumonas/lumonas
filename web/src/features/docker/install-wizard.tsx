@@ -87,6 +87,7 @@ function WizardBody({ app, onClose }: { app: CatalogApp; onClose: () => void }) 
         catalogId: app.id,
         name: name.trim(),
         env: values,
+        deploy: true,
         storageMap: app.form
           .filter((f) => f.type === 'storage_ref')
           .map((f) => ({

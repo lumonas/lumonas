@@ -40,6 +40,18 @@ type UpdateResult struct {
 	Images     []string `json:"images,omitempty"` // repo:tag values that participated
 }
 
+// UpdateFailure marks an error raised by the health-gated update flow and
+// carries the outcome so callers can distinguish staging failures (nothing
+// was touched) from gate failures that may have rolled the stack back.
+type UpdateFailure struct {
+	Result UpdateResult
+	err    error
+}
+
+func (f *UpdateFailure) Error() string { return f.err.Error() }
+
+func (f *UpdateFailure) Unwrap() error { return f.err }
+
 // imageSnapshot records the image ID a tag pointed at before an update so the
 // tag can be re-pointed back if the update fails its health gate.
 type imageSnapshot struct {
@@ -73,7 +85,7 @@ func (s Service) UpdateStack(ctx context.Context, stack Stack, probe func(contex
 
 	before, err := s.composeImages(ctx, composePath)
 	if err != nil {
-		return UpdateResult{}, err
+		return UpdateResult{}, &UpdateFailure{Result: UpdateResult{Reason: err.Error()}, err: err}
 	}
 	refs := make([]string, 0, len(before))
 	for _, image := range before {
@@ -81,10 +93,10 @@ func (s Service) UpdateStack(ctx context.Context, stack Stack, probe func(contex
 	}
 
 	if _, err := s.Run(ctx, "docker", "compose", "-f", composePath, "pull"); err != nil {
-		return UpdateResult{}, fmt.Errorf("image pull failed: %w", err)
+		return UpdateResult{}, &UpdateFailure{Result: UpdateResult{Reason: "image pull failed: " + err.Error()}, err: fmt.Errorf("image pull failed: %w", err)}
 	}
 	if _, err := s.Run(ctx, "docker", "compose", "-f", composePath, "up", "-d", "--remove-orphans"); err != nil {
-		return UpdateResult{}, fmt.Errorf("stack recreation failed: %w", err)
+		return UpdateResult{}, &UpdateFailure{Result: UpdateResult{Reason: "stack recreation failed: " + err.Error()}, err: fmt.Errorf("stack recreation failed: %w", err)}
 	}
 
 	if err := s.probeUntilHealthy(ctx, probe, options); err != nil {
@@ -93,7 +105,7 @@ func (s Service) UpdateStack(ctx context.Context, stack Stack, probe func(contex
 		if rollbackErr != nil {
 			result.Reason = err.Error() + "; rollback failed: " + rollbackErr.Error()
 		}
-		return result, fmt.Errorf("stack update failed its health gate: %w", err)
+		return result, &UpdateFailure{Result: result, err: fmt.Errorf("stack update failed its health gate: %w", err)}
 	}
 	return UpdateResult{Updated: true, Images: refs}, nil
 }

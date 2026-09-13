@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -76,6 +77,7 @@ type apiServer struct {
 	rateMu                      sync.Mutex
 	rateAttempts                map[string][]time.Time
 	clock                       func() time.Time
+	deploymentOptions           deploymentOptions
 }
 
 var version = "0.1.0-dev"
@@ -169,6 +171,9 @@ func main() {
 	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", dynamicAuth: true, corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]csrfBinding), rateAttempts: make(map[string][]time.Time)}
 	server.dockerService = dockerruntime.New(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"), nil)
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
+	reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	server.reconcilePendingDeployments(reconcileCtx)
+	reconcileCancel()
 	server.reconcileUpdateBoot()
 	server.ensureRestartedJobs()
 	go server.persistMountState("startup")
@@ -563,6 +568,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.dockerStacks(w, r)
 	case r.Method == http.MethodPost && endpoint == "/docker/stacks":
 		s.createDockerStack(w, r)
+	case r.Method == http.MethodGet && endpoint == "/docker/deployments":
+		s.dockerDeploymentsHandler(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/stacks/"):
 		s.dockerStackAction(w, r, endpoint)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/docker/stacks/"):
@@ -2213,6 +2220,7 @@ func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
 		CatalogID   string            `json:"catalogId"`
 		ComposeYAML string            `json:"composeYaml"`
 		Env         map[string]string `json:"env"`
+		Deploy      bool              `json:"deploy"`
 		StorageMap  []struct {
 			FieldID       string `json:"fieldId"`
 			ContainerPath string `json:"containerPath"`
@@ -2260,6 +2268,18 @@ func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
 	s.advanceGeneration("docker.stack.create")
 	s.recordRequestAudit(r, actor, "docker.stack.create", stack.ID, map[string]any{"name": stack.Name})
 	s.publish("docker.stack.created", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID})
+	if input.Deploy {
+		deployCtx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+		defer cancel()
+		deployed, deployErr := s.runStackInstallDeployment(deployCtx, stack, func(probeCtx context.Context) error {
+			return s.probeStackHealth(probeCtx, stack.Name)
+		})
+		if deployErr != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": deployErr.Error(), "stack": deployed})
+			return
+		}
+		stack = deployed
+	}
 	writeJSON(w, http.StatusCreated, stack)
 }
 
@@ -2317,7 +2337,7 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 			// before touching a running stack.
 			s.requestAutomaticBackup("pre-stack-update")
 		}
-		if input.ComposeYAML != "" {
+		if input.ComposeYAML != "" && action != "update" {
 			updated, updateErr := s.dockerService.UpdateCompose(stack.Name, input.ComposeYAML)
 			if updateErr != nil {
 				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": updateErr.Error()})
@@ -2327,18 +2347,25 @@ func (s *apiServer) dockerStackAction(w http.ResponseWriter, r *http.Request, en
 			s.advanceGeneration("docker.stack.compose.update")
 		}
 		if action == "update" {
-			result, updateErr := s.dockerService.UpdateStack(ctx, stack, func(probeCtx context.Context) error {
+			updated, updateErr := s.runStackUpdateDeployment(ctx, stack, input.ComposeYAML, func(probeCtx context.Context) error {
 				return s.probeStackHealth(probeCtx, stack.Name)
-			}, dockerruntime.UpdateOptions{})
+			})
 			if updateErr != nil {
+				var failure *dockerruntime.UpdateFailure
+				if !errors.As(updateErr, &failure) {
+					// Staging or persistence failures carry no health-gate result.
+					writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": updateErr.Error()})
+					return
+				}
 				eventKind := "docker.stack.update.failed"
-				if result.RolledBack {
+				if failure.Result.RolledBack {
 					eventKind = "docker.stack.rollback"
 				}
-				s.publish(eventKind, "warning", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "reason": result.Reason})
-				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": updateErr.Error(), "rolledBack": result.RolledBack, "reason": result.Reason})
+				s.publish(eventKind, "warning", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "reason": failure.Result.Reason})
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": updateErr.Error(), "rolledBack": failure.Result.RolledBack, "reason": failure.Result.Reason})
 				return
 			}
+			stack = updated
 			s.recordRequestAudit(r, actor, "docker.stack.action", stack.ID, map[string]any{"action": action, "healthGated": true})
 			s.publish("docker.stack.action", "info", &model.ResourceRef{Type: "stack", ID: stack.ID}, map[string]any{"stackId": stack.ID, "action": action})
 			writeJSON(w, http.StatusAccepted, stack)

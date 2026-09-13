@@ -15,6 +15,7 @@ import type {
   DockerContainer,
   DockerImage,
   DockerStack,
+  DockerDeployment,
   DockerSummary,
   DockerVolume,
   Disk,
@@ -238,6 +239,14 @@ export function useDockerStack(id: string | null) {
   })
 }
 
+export function useDockerDeployments(stack?: string) {
+  const endpoint = stack ? `/docker/deployments?stack=${encodeURIComponent(stack)}` : '/docker/deployments'
+  return useQuery({
+    queryKey: ['docker', 'deployments', stack ?? 'all'],
+    queryFn: () => apiGet<DockerDeployment[]>(endpoint),
+  })
+}
+
 export function useDockerContainers() {
   return useQuery({
     queryKey: queryKeys.dockerContainers,
@@ -272,6 +281,7 @@ export interface InstallPayload {
   composeYaml?: string
   env?: Record<string, string>
   storageMap?: { fieldId: string; containerPath: string; resourceId: string }[]
+  deploy?: boolean
 }
 
 function useDockerMutation<TInput, TResult>(fn: (input: TInput) => Promise<TResult>) {

@@ -135,6 +135,27 @@ backup_policy_id
 last_deploy
 ```
 
+### DockerDeployment
+
+```text
+id
+stack_name
+kind=install|update|rollback
+state=pending|committed|rolled_back|failed
+compose_before
+compose_after
+error
+created_at
+updated_at
+```
+
+Docker stack installation and updates are recorded as transactions. The
+daemon reconciles pending transactions during startup: interrupted installs
+are stopped and interrupted updates restore the last known Compose content.
+Cleanup failures remain `failed` so the UI cannot report an unsafe rollback as
+successful. Terminal history is bounded by operational retention; pending
+transactions are retained until reconciliation.
+
 ### Variable
 
 ```text
@@ -243,6 +264,7 @@ PATCH /shares/{id}
 
 GET  /docker/stacks
 POST /docker/stacks
+GET  /docker/deployments?stack=<name>&limit=<n>
 POST /docker/stacks/{id}/deploy
 
 GET  /network/interfaces

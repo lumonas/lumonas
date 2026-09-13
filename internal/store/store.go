@@ -117,6 +117,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate passkey schema: %w", err)
 	}
+	if err := s.ensureDeploymentsSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate Docker deployment schema: %w", err)
+	}
 	return s, nil
 }
 
