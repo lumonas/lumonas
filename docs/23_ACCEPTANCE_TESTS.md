@@ -291,6 +291,10 @@ on a matching account existing on the CI runner.
 The QEMU job must provision the pinned Go toolchain before compiling the signed
 fixture, so appliance image construction does not depend on runner preinstalls.
 
+The QEMU and ISO builders must use the pinned Debian snapshot recorded in their
+package manifests. Snapshot metadata expiry is explicitly disabled for that
+immutable input; builds must not silently fall back to a moving mirror.
+
 When recovery fails, the release job must retain the source-guest, ISO-guest,
 and replacement-boot logs before temporary files are removed. Successful runs
 may clean up the disposable recovery workspace.

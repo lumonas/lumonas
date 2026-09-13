@@ -84,6 +84,14 @@ qemu_builder = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qem
 for marker in ("LUMONAS_UPDATE_FIXTURE", "LUMONAS_UPDATE_PUBLIC_KEY", "update-fixture/package", "chown -R lumonas:lumonas /var/lib/lumonas/update-fixture"):
     if marker not in qemu_builder.read_text(encoding="utf-8"):
         raise SystemExit(f"QEMU builder does not stage the signed update fixture: {marker}")
+for builder, markers in (
+    (qemu_builder, ("snapshot.debian.org/archive/debian/20260201T000000Z", "LUMONAS_DEBIAN_MIRROR", "debianMirror=$LUMONAS_DEBIAN_MIRROR", "Acquire::Check-Valid-Until")),
+    (pathlib.Path(sys.argv[1]).parent.parent.parent / "installer" / "build-iso.sh", ("snapshot.debian.org/archive/debian/20260201T000000Z", "LUMONAS_DEBIAN_MIRROR", "debianMirror=$DEBIAN_MIRROR", "Acquire::Check-Valid-Until")),
+):
+    builder_text = builder.read_text(encoding="utf-8")
+    for marker in markers:
+        if marker not in builder_text:
+            raise SystemExit(f"Debian appliance builder is missing reproducibility marker: {marker}")
 api_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "api-smoke.sh"
 api_smoke_text = api_smoke.read_text(encoding="utf-8")
 if "Last-Event-ID" not in api_smoke_text or "cursor event twice" not in api_smoke_text:

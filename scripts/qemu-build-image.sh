@@ -7,12 +7,14 @@ WORK="${LUMONAS_QEMU_WORKDIR:-$ROOT/build/qemu/work}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${LUMONAS_VERSION:-0.1.0-dev}_amd64.deb}"
 UPDATE_FIXTURE="${LUMONAS_UPDATE_FIXTURE:-}"
 SIZE="${LUMONAS_QEMU_DISK_SIZE:-4G}"
+DEBIAN_MIRROR="${LUMONAS_DEBIAN_MIRROR:-https://snapshot.debian.org/archive/debian/20260201T000000Z/}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"
 SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
 case "$SOURCE_DATE_EPOCH" in
 	''|*[!0-9]*) echo "SOURCE_DATE_EPOCH must be a non-negative integer" >&2; exit 1 ;;
 esac
 [ -n "$SOURCE_COMMIT" ] || { echo "LUMONAS_SOURCE_COMMIT must not be empty" >&2; exit 1; }
+[ -n "$DEBIAN_MIRROR" ] || { echo "LUMONAS_DEBIAN_MIRROR must not be empty" >&2; exit 1; }
 export SOURCE_DATE_EPOCH
 
 for command in debootstrap qemu-img mkfs.ext4 grub-install; do
@@ -37,7 +39,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-debootstrap --arch=amd64 --variant=minbase trixie "$WORK/mnt" https://deb.debian.org/debian
+debootstrap --arch=amd64 --variant=minbase trixie "$WORK/mnt" "$DEBIAN_MIRROR"
 mount --rbind /dev "$WORK/mnt/dev"
 mount --make-rslave "$WORK/mnt/dev"
 mount -t proc proc "$WORK/mnt/proc"
@@ -77,8 +79,11 @@ PY
 	chmod 0640 "$WORK/mnt/var/lib/lumonas/update-fixture/package"
 fi
 
-chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_COMMIT="$SOURCE_COMMIT" LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" /bin/sh -eux <<'EOF'
+chroot "$WORK/mnt" /usr/bin/env LUMONAS_SOURCE_COMMIT="$SOURCE_COMMIT" LUMONAS_SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" LUMONAS_DEBIAN_MIRROR="$DEBIAN_MIRROR" /bin/sh -eux <<'EOF'
 export DEBIAN_FRONTEND=noninteractive
+cat >/etc/apt/apt.conf.d/99lumonas-snapshot <<'APT'
+Acquire::Check-Valid-Until "false";
+APT
 apt-get update
 apt-get install -y --no-install-recommends \
   systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc openssh-server curl ca-certificates openssl \
@@ -96,6 +101,7 @@ mkdir -p /usr/share/doc/lumonas
   echo "formatVersion=1"
   echo "sourceCommit=$LUMONAS_SOURCE_COMMIT"
   echo "sourceDateEpoch=$LUMONAS_SOURCE_DATE_EPOCH"
+  echo "debianMirror=$LUMONAS_DEBIAN_MIRROR"
   echo "packages:"
   dpkg-query -W -f='${Package}\t${Version}\n' | sort
 } >/usr/share/doc/lumonas/qemu-package-manifest.txt

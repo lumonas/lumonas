@@ -7,7 +7,7 @@ WORK="${LUMONAS_ISO_WORKDIR:-$ROOT/build/iso-live}"
 DEB="${LUMONAS_DEB:-$ROOT/lumonas_${VERSION}_amd64.deb}"
 REPO_ORIGIN="LumoNAS"
 REPO_SIGN_KEY="${LUMONAS_REPO_SIGN_KEY:-}"
-DEBIAN_MIRROR="${LUMONAS_DEBIAN_MIRROR:-http://deb.debian.org/debian}"
+DEBIAN_MIRROR="${LUMONAS_DEBIAN_MIRROR:-https://snapshot.debian.org/archive/debian/20260201T000000Z/}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || date +%s)}"
 SOURCE_COMMIT="${LUMONAS_SOURCE_COMMIT:-$(git -C "$ROOT" log -1 --format=%H 2>/dev/null || printf '%s' unknown)}"
 INSTALL_PASSWORD="${LUMONAS_INSTALL_PASSWORD:-}"
@@ -112,6 +112,9 @@ EOF
 cat > "$WORK/config/hooks/live/020-install-lumonas.hook.chroot" <<EOF
 #!/bin/sh
 set -eu
+cat >/etc/apt/apt.conf.d/99lumonas-snapshot <<'APT'
+Acquire::Check-Valid-Until "false";
+APT
 cat >/etc/apt/sources.list.d/lumonas-local.list <<'APT'
 $REPO_SOURCE
 APT
@@ -134,6 +137,7 @@ mkdir -p /usr/share/doc/lumonas
   echo "formatVersion=1"
   echo "sourceCommit=$SOURCE_COMMIT"
   echo "sourceDateEpoch=$SOURCE_DATE_EPOCH"
+  echo "debianMirror=$DEBIAN_MIRROR"
   echo "packages:"
   dpkg-query -W -f='\${Package}\t\${Version}\n' | sort
 } >/usr/share/doc/lumonas/iso-package-manifest.txt
@@ -373,7 +377,7 @@ lb_config() {
 	--debian-installer live \
 	--archive-areas "main contrib non-free-firmware" \
 	--apt-indices false \
-	--apt-options "-o APT::Get::Assume-Yes=true -o Acquire::ForceIPv4=true -o Acquire::Retries=5" \
+	--apt-options "-o APT::Get::Assume-Yes=true -o Acquire::ForceIPv4=true -o Acquire::Retries=5 -o Acquire::Check-Valid-Until=false" \
 	--firmware-binary false \
 	--firmware-chroot false \
 	"$@"
