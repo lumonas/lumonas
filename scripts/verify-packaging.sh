@@ -235,6 +235,8 @@ require_line "$ROOT/.github/workflows/ci.yml" 'scripts/reproducible-package-smok
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-migrate'
 require_line "$ROOT/packaging/debian/postinst" 'runuser -u lumonas'
 require_line "$ROOT/packaging/debian/control" 'avahi-daemon'
+require_line "$ROOT/cmd/lumonas-web/main.go" 'X-Forwarded-Proto'
+require_line "$ROOT/cmd/lumonas-web/main_test.go" 'TestHandlerMarksHTTPSProxyRequestsAndStaticResponses'
 require_line "$ROOT/scripts/package-dependency-parity-smoke.sh" 'no-install-recommends'
 require_line "$ROOT/Makefile" 'package-dependency-parity:'
 require_line "$ROOT/.github/workflows/ci.yml" 'scripts/package-dependency-parity-smoke.sh'

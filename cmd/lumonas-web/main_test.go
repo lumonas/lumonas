@@ -34,6 +34,39 @@ func TestHandlerProxiesAPIAndHealthRequests(t *testing.T) {
 		if response.Code != http.StatusOK || response.Body.String() != `{"status":"ok"}` {
 			t.Fatalf("unexpected response for %s: %d %q", path, response.Code, response.Body.String())
 		}
+		if response.Header().Get("X-Content-Type-Options") != "nosniff" || response.Header().Get("X-Frame-Options") != "DENY" {
+			t.Fatalf("proxy response lost baseline security headers: %v", response.Header())
+		}
+	}
+}
+
+func TestHandlerMarksHTTPSProxyRequestsAndStaticResponses(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.html"), []byte("index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target, err := url.Parse("http://backend.invalid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if got := r.Header.Get("X-Forwarded-Proto"); got != "https" {
+			t.Fatalf("expected HTTPS forwarding marker, got %q", got)
+		}
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`ok`)), Header: make(http.Header), Request: r}, nil
+	})
+	handler := newHandlerWithTransport(root, target, transport)
+
+	apiResponse := httptest.NewRecorder()
+	handler.ServeHTTP(apiResponse, httptest.NewRequest(http.MethodGet, "https://lumonas.local/api/v1/server", nil))
+	if apiResponse.Header().Get("Strict-Transport-Security") == "" {
+		t.Fatal("HTTPS API response is missing HSTS")
+	}
+
+	staticResponse := httptest.NewRecorder()
+	handler.ServeHTTP(staticResponse, httptest.NewRequest(http.MethodGet, "https://lumonas.local/", nil))
+	if staticResponse.Header().Get("Strict-Transport-Security") == "" || staticResponse.Header().Get("Content-Security-Policy") != "frame-ancestors 'none'" {
+		t.Fatalf("HTTPS static response is missing security headers: %v", staticResponse.Header())
 	}
 }
 

@@ -69,6 +69,13 @@ func newHandlerWithTransport(root string, target *url.URL, transport http.RoundT
 	proxy.Transport = transport
 	static := http.FileServer(http.Dir(root))
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		if r.TLS != nil {
+			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		}
 		if r.URL.Path == "/healthz" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
@@ -76,6 +83,13 @@ func newHandlerWithTransport(root string, target *url.URL, transport http.RoundT
 			return
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/readyz" {
+			proto := "http"
+			if r.TLS != nil {
+				proto = "https"
+			}
+			// lumonasd listens on loopback and only lumonas-web is allowed to
+			// supply this hop metadata. Overwrite client-provided values.
+			r.Header.Set("X-Forwarded-Proto", proto)
 			proxy.ServeHTTP(w, r)
 			return
 		}

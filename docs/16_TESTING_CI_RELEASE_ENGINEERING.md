@@ -302,7 +302,10 @@ The QEMU smoke fetches `/` through `lumonas-web` and checks the compiled title
 and React root markers, so a package with a healthy API but missing frontend
 assets fails the release gate. Because the Debian package enables local HTTPS
 by default, the QEMU image installs `openssl` before `postinst` runs and the
-smoke uses `curl -k` only for the generated self-signed certificate.
+smoke uses `curl -k` only for the generated self-signed certificate. The web
+boundary applies the browser security headers to both static and proxied
+responses and overwrites the forwarded scheme before reaching the loopback
+daemon, so HTTPS behavior is covered outside the API process as well.
 `openssl` is a hard Debian dependency, so `--no-install-recommends` installs
 cannot leave the active TLS configuration without its certificate generator.
 Maintainer-script certificate failures are fatal before service startup, so a
