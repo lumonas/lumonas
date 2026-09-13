@@ -154,6 +154,9 @@ for attempt in $(seq 1 60); do
       EVENTS_LOG="$LOG.events"
       curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events/stream >"$EVENTS_LOG" 2>/dev/null || true
       python3 "$ROOT/scripts/validate-sse.py" "$EVENTS_LOG" system.metrics
+      EVENTS_COMPAT_LOG="$LOG.events.compat"
+      curl -kfsS --max-time 5 -N https://127.0.0.1:18080/api/v1/events >"$EVENTS_COMPAT_LOG" 2>/dev/null || true
+      python3 "$ROOT/scripts/validate-sse.py" "$EVENTS_COMPAT_LOG" system.metrics
       RECOVERY_KEY_LOG="$LOG.recovery-key"
       RECOVERY_EXPORT_LOG="$LOG.recovery-export"
       RECOVERY_STATUS_LOG="$LOG.recovery-status"

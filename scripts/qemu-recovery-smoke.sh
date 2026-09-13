@@ -203,4 +203,9 @@ grep -F '"privilegedBroker":true' "$WORK/recovered-ready.json" >/dev/null
 grep -F '"nasUuid"' "$WORK/recovered-server.json" >/dev/null
 grep -F '"id":"lumonasd.service","name":"lumonasd.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
 grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$WORK/recovered-services.json" >/dev/null
+grep -F '"id":"lumonas-privd.service","name":"lumonas-privd.service","active":true,"state":"running"' "$WORK/recovered-services.json" >/dev/null
+grep -F '"id":"lumonas-privd-storage.service","name":"lumonas-privd-storage.service","active":true,"state":"running"' "$WORK/recovered-services.json" >/dev/null
+RECOVERED_EVENTS_LOG="$WORK/recovered-events.sse"
+curl -kfsS --max-time 5 -N https://127.0.0.1:18084/api/v1/events >"$RECOVERED_EVENTS_LOG" 2>/dev/null || true
+python3 "$ROOT/scripts/validate-sse.py" "$RECOVERED_EVENTS_LOG" system.metrics
 echo "LumoNAS recovered replacement disk boot passed"

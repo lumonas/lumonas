@@ -528,6 +528,10 @@ and the frontend event type exposes the same optional metadata. Restart
 reconciliation must emit only one persisted failure event per interrupted job,
 including the job correlation and operation IDs.
 
+The API, Debian appliance, offline ISO, and recovered-disk smoke tests must
+exercise both routes. A route that only returns a successful HTTP status but
+does not deliver a validated `system.metrics` SSE frame fails the gate.
+
 The daemon must also emit one structured HTTP request log per request with the
 method, URL path, response status, response bytes, duration, and correlation
 ID, without logging query strings or request bodies. The observer must preserve

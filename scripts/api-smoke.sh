@@ -351,6 +351,13 @@ if ! grep -F 'retry: 3000' "$SSE_PATH" >/dev/null 2>&1 || ! grep -F 'system.metr
 fi
 python3 "$ROOT_DIR/scripts/validate-sse.py" "$SSE_PATH" system.metrics
 
+# The original /events route is a documented compatibility alias. It must
+# carry the same replay-safe envelope as /events/stream, not merely return a
+# successful status.
+SSE_COMPAT_PATH="$TEMP_DIR/events-compat.sse"
+curl -sS --max-time 5 -N -b "$COOKIE_JAR" "$BASE_URL/api/v1/events" >"$SSE_COMPAT_PATH" 2>/dev/null || true
+python3 "$ROOT_DIR/scripts/validate-sse.py" "$SSE_COMPAT_PATH" system.metrics
+
 # Restart the real daemon against the same SQLite state. The metrics event is
 # the replay cursor; the short SMART job is deliberately interrupted while it
 # is queued/running, and its persisted event must be replayable after restart.
