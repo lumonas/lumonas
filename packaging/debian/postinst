@@ -90,12 +90,19 @@ esac
 runuser -u lumonas -- /usr/lib/lumonas/lumonas-migrate --db "$database_path"
 
 # prerm stops the dependency graph before an upgrade so the newly unpacked
-# binaries are used immediately. Start in dependency order after reloading the
-# units; the || true behavior keeps dpkg usable in chroots without PID 1.
-systemctl daemon-reload || true
-systemctl try-reload-or-restart systemd-journald.service || true
-systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
-for unit in lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service; do
-	systemctl start "$unit" || true
-done
+# binaries are used immediately. A live systemd host must fail the package
+# transaction when the appliance cannot start; chroots without PID 1 retain a
+# tolerant path so package extraction and image construction still work.
+if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
+	systemctl daemon-reload
+	systemctl try-reload-or-restart systemd-journald.service
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service
+	for unit in lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service; do
+		systemctl start "$unit"
+	done
+else
+	systemctl daemon-reload || true
+	systemctl try-reload-or-restart systemd-journald.service || true
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonasd.service lumonas-web.service || true
+fi
 exit 0

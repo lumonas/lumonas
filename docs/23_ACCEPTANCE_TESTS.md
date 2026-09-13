@@ -627,3 +627,9 @@ Pass if system-user, Samba-user, and ACL mutations are rejected without an
 operation ID and production provisioning requests include operation IDs.
 The same invariant applies to network checkpoint/Wi-Fi/WOL changes, service
 reloads, and power actions.
+
+## BD. Package service-start failure policy
+
+Pass if `postinst` fails on a live systemd host when a required LumoNAS unit
+cannot start, while package installation remains usable in chroots without
+`/run/systemd/system`.

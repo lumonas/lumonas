@@ -31,6 +31,9 @@ generations remain available for recovery diagnosis. The
 release security-controls job runs `scripts/retention-smoke.sh` so an
 unbounded operational table cannot silently ship.
 The dedicated generation-retention smoke test is also release-blocking.
+The package post-install policy is release-blocking as well: live systemd
+hosts fail the transaction when an enabled LumoNAS unit cannot start, while
+chroot/image builds retain their explicit no-PID-1 compatibility path.
 
 ### Integration
 
