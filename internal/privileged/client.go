@@ -92,8 +92,20 @@ func (c Client) Execute(ctx context.Context, request Request) (Response, error) 
 		_ = connection.SetDeadline(time.Now())
 	})
 	defer stopCancellation()
-	if err := json.NewEncoder(connection).Encode(request); err != nil {
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return Response{}, fmt.Errorf("encode privileged request: %w", err)
+	}
+	if len(payload)+1 > MaxIPCMessageBytes {
+		return Response{}, fmt.Errorf("privileged request exceeds %d bytes", MaxIPCMessageBytes)
+	}
+	payload = append(payload, '\n')
+	written, err := connection.Write(payload)
+	if err != nil {
 		return Response{}, fmt.Errorf("send privileged request: %w", err)
+	}
+	if written != len(payload) {
+		return Response{}, io.ErrShortWrite
 	}
 	var response Response
 	if err := json.NewDecoder(io.LimitReader(connection, MaxIPCMessageBytes)).Decode(&response); err != nil {

@@ -36,6 +36,20 @@ func TestClientRejectsOversizedResponse(t *testing.T) {
 	}
 }
 
+func TestClientRejectsOversizedRequestBeforeWriting(t *testing.T) {
+	server, client := net.Pipe()
+	defer server.Close()
+	defer client.Close()
+
+	result, err := (Client{Dialer: pipeDialer{connection: client}}).Execute(context.Background(), Request{
+		Operation: "filesystem.mount", PlanHash: "hash",
+		RequestedState: map[string]any{"payload": strings.Repeat("x", MaxIPCMessageBytes)},
+	})
+	if err == nil || !strings.Contains(err.Error(), "request exceeds") {
+		t.Fatalf("expected oversized privileged request rejection, got response=%#v err=%v", result, err)
+	}
+}
+
 func TestClientRoundTrip(t *testing.T) {
 	server, client := net.Pipe()
 	defer server.Close()

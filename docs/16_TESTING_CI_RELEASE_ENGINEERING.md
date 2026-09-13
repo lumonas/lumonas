@@ -211,6 +211,9 @@ tests.
 All other `lumonasd` privileged calls use that same execution helper as well,
 including storage mounts/pools, SnapRAID, ACL jobs, runtime provisioning, and
 live runtime status.
+The framed privileged client also rejects oversized JSON requests before
+writing to the Unix socket; broker and worker scanners enforce the same limit
+on inbound frames.
 
 The command-boundary policy smoke scans production Go code for raw command
 construction. Ordinary integrations must use the shared bounded runner; the

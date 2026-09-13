@@ -235,6 +235,7 @@ require_line "$ROOT/internal/privileged/client.go" 'io.LimitReader(connection, M
 require_line "$ROOT/cmd/lumonas-privd/main.go" 'scanner.Buffer(make([]byte, 64*1024), privileged.MaxIPCMessageBytes)'
 require_line "$ROOT/cmd/lumonas-privd/main.go" 'io.LimitReader(connection, privileged.MaxIPCMessageBytes)'
 require_line "$ROOT/internal/privileged/client_test.go" 'TestClientRejectsOversizedResponse'
+require_line "$ROOT/internal/privileged/client_test.go" 'TestClientRejectsOversizedRequestBeforeWriting'
 require_line "$ROOT/cmd/lumonas-privd/worker_test.go" 'TestBrokerRejectsOversizedWorkerResponse'
 require_line "$ROOT/cmd/lumonasd/main.go" 'disk identity export failed'
 require_line "$ROOT/cmd/lumonasd/main.go" 'NAS identity is not configured'
