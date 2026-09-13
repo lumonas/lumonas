@@ -391,6 +391,8 @@ jobs:
       - run: bash scripts/release-gate-policy-smoke.sh
       - run: bash scripts/package-dependency-parity-smoke.sh
       - run: bash scripts/command-boundary-smoke.sh
+      - run: bash -n scripts/interop/*.sh
+      - run: bash scripts/interop/run-all.sh
       - run: python3 scripts/check-api-contract.py
       - run: bash scripts/log-retention-smoke.sh
       - run: bash scripts/log-identity-smoke.sh
