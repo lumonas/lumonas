@@ -192,7 +192,21 @@ The settings toggle is backed by `ethtool` discovery and the typed
 `network.wol.set` privileged operation. Unsupported interfaces are shown as
 read-only, and interface names are validated before any command is started.
 
-Future: LAN device list + wake known hosts.
+### LAN device discovery and wake-known-hosts
+
+LumoNAS samples the kernel neighbor table (`ip neigh show`) on a background
+interval (`LUMONAS_LAN_SCAN_INTERVAL`, default 600s; `0` disables the loop)
+and after an on-demand `POST /network/lan/scan`:
+
+- only entries with a valid MAC and a usable neighbor state are recorded;
+- the inventory is persisted in SQLite keyed by MAC and interface, so a host
+  seen on two segments stays distinct;
+- operator-assigned hostnames (`POST /network/lan/hosts/rename`) survive
+  every scan; scans only refresh IP and recency;
+- `POST /network/lan/hosts/wake` sends a magic packet through the typed
+  `network.wol.wake` privileged operation (`etherwake` bound to the named
+  interface) with management authorization, a confirmed plan, and an
+  operation ID; MAC and interface are validated before any command runs.
 
 ## mDNS
 

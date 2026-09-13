@@ -639,6 +639,10 @@ Pass if `ethtool` capability discovery distinguishes supported and enabled
 states, settings changes use the typed `network.wol.set` broker operation, and
 unsafe interface names are rejected before command execution.
 
+The LAN inventory path additionally permits wake and hostname changes only for
+MAC/interface pairs previously observed by the read-only neighbor scan; an
+undiscovered target must fail with no privileged command invocation.
+
 ## AQ. Scheduled power safety
 
 Run the power schedule and settings API tests.

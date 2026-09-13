@@ -97,7 +97,7 @@ export function LanHostsSection() {
                   onClick={() => wake.mutate({ mac: host.mac, interface: host.interface })}
                 >
                   <Power className="size-3.5" />
-                  Wake
+                  {wake.isSuccess && wake.variables?.mac === host.mac ? 'Sent' : 'Wake'}
                 </Button>
               </div>
             )

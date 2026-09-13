@@ -27,6 +27,7 @@ for variable, marker in (
     if marker not in makefile_text:
         raise SystemExit(f"Makefile does not define a deterministic default for {variable}")
 match = re.search(r"(?ms)^  release:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?^    needs: \[([^\]]+)\]", workflow)
+repo_root = pathlib.Path(sys.argv[1]).parent.parent.parent
 if not match:
     raise SystemExit("release job needs list is missing")
 
@@ -41,6 +42,11 @@ actual = {item.strip() for item in match.group(1).split(",") if item.strip()}
 missing = sorted(needed - actual)
 if missing:
     raise SystemExit("release job is missing blocking gates: " + ", ".join(missing))
+frontend_e2e = re.search(r"(?ms)^  frontend-e2e:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
+if not frontend_e2e or "pnpm test:e2e" not in frontend_e2e.group(0):
+    raise SystemExit("frontend-e2e job is not running the browser smoke suite")
+if not (repo_root / "web/e2e/network-lan.spec.ts").is_file():
+    raise SystemExit("LAN browser smoke coverage is missing")
 for job in ("qemu-smoke", "package-permissions"):
     job_match = re.search(rf"(?ms)^  {job}:\n(?:(?!^  [A-Za-z0-9_-]+:).)*?(?=^  [A-Za-z0-9_-]+:|\Z)", workflow)
     if not job_match or not re.search(r"^    needs: \[package, deb-verify\]$", job_match.group(0), re.M):
@@ -73,7 +79,6 @@ if "TestRunDueSchedulesFiresSnapshotScheduleAndPersistsOrigin" not in safety_blo
 security_smoke = (pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "security-smoke.sh").read_text(encoding="utf-8")
 if "TestRequestAuditPersistsTypedObservabilityFields" not in security_smoke:
     raise SystemExit("security-controls gate is missing typed audit observability coverage")
-repo_root = pathlib.Path(sys.argv[1]).parent.parent.parent
 api_smoke_text = (repo_root / "scripts/api-smoke.sh").read_text(encoding="utf-8")
 if "audit response did not include typed trace fields after a mutation" not in api_smoke_text:
     raise SystemExit("API smoke does not require typed audit trace fields after a mutation")
