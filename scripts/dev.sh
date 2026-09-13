@@ -82,6 +82,7 @@ full)
 	require_command go
 	require_command curl
 	require_command pnpm
+	cd "$ROOT_DIR"
 	mkdir -p "$DEV_DIR" "$LOG_DIR" "$PRIVD_DIR" "$BIN_DIR"
 
 	if [ ! -d "$ROOT_DIR/web/node_modules" ]; then
