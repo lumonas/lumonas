@@ -34,6 +34,22 @@ func TestNotificationChannelAPIStoresSecretsWithoutReturningThem(t *testing.T) {
 	}
 }
 
+func TestSMTPNotificationChannelAPIStoresSenderCredentialsWithoutReturningThem(t *testing.T) {
+	server := testServer(t)
+	t.Setenv("LUMONAS_RECOVERY_KEY", "smtp-notification-key")
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/notification-channels", strings.NewReader(`{"type":"smtp","label":"Email","target":"smtp://mail.example:587?to=alerts@example.com","enabled":true,"credentials":{"username":"nas@example.com","password":"smtp-secret"}}`))
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || strings.Contains(response.Body.String(), "smtp-secret") || !strings.Contains(response.Body.String(), `"configured":true`) {
+		t.Fatalf("unexpected SMTP save response %d: %s", response.Code, response.Body.String())
+	}
+	list := httptest.NewRecorder()
+	server.routes().ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/api/v1/notification-channels", nil))
+	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), "Email") || strings.Contains(list.Body.String(), "smtp-secret") || strings.Contains(list.Body.String(), "nas@example.com") {
+		t.Fatalf("unexpected SMTP channel list %d: %s", list.Code, list.Body.String())
+	}
+}
+
 func TestNotificationRuleAPIValidatesRequiredFields(t *testing.T) {
 	server := testServer(t)
 	invalid := httptest.NewRecorder()

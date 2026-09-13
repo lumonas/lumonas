@@ -43,6 +43,15 @@ func TestSendChannelRejectsOversizedProviderResponse(t *testing.T) {
 	}
 }
 
+func TestSendChannelSMTPRequiresSenderCredentials(t *testing.T) {
+	err := SendChannel(context.Background(), nil, Channel{
+		ID: "smtp-test", Label: "SMTP", Type: "smtp", Target: "smtp://mail.example:587?to=alerts@example.com",
+	}, Credentials{Password: "secret"}, Message{Title: "test", Body: "payload"})
+	if err == nil || !strings.Contains(err.Error(), "smtp username is required") {
+		t.Fatalf("expected SMTP sender validation, got %v", err)
+	}
+}
+
 type providerRoundTripper func(*http.Request) (*http.Response, error)
 
 func (roundTrip providerRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {

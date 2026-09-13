@@ -950,7 +950,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/NotificationChannelInput'
       responses:
         '200':
           description: OK
@@ -2262,7 +2262,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/NotificationChannelPatch'
       responses:
         '200':
           description: OK
@@ -4026,6 +4026,37 @@ components:
         target: {type: string}
         configured: {type: boolean}
         enabled: {type: boolean}
+
+    NotificationChannelInput:
+      type: object
+      required: [type, label, target, enabled]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [webhook, ntfy, telegram, slack, discord, gotify, smtp]}
+        label: {type: string}
+        target: {type: string}
+        enabled: {type: boolean}
+        credentials:
+          type: object
+          properties:
+            token: {type: string, writeOnly: true}
+            username: {type: string, writeOnly: true}
+            password: {type: string, writeOnly: true}
+            address: {type: string, writeOnly: true}
+
+    NotificationChannelPatch:
+      type: object
+      properties:
+        label: {type: string}
+        target: {type: string}
+        enabled: {type: boolean}
+        credentials:
+          type: object
+          properties:
+            token: {type: string, writeOnly: true}
+            username: {type: string, writeOnly: true}
+            password: {type: string, writeOnly: true}
+            address: {type: string, writeOnly: true}
 
     NotificationDelivery:
       type: object

@@ -380,12 +380,19 @@ export function useNotificationChannels() {
   })
 }
 
+export interface NotificationCredentials {
+	 token?: string
+	 username?: string
+	 password?: string
+	 address?: string
+}
+
 export interface NotificationChannelInput {
-  type: Exclude<NotificationChannel['type'], 'web'>
-  label: string
-  target: string
-  enabled: boolean
-  credentials?: { token?: string; username?: string; password?: string; address?: string }
+	type: Exclude<NotificationChannel['type'], 'web'>
+	label: string
+	target: string
+	enabled: boolean
+	credentials?: NotificationCredentials
 }
 
 export function useSaveNotificationChannel() {
@@ -1186,7 +1193,7 @@ export function useUpdateNotificationChannel() {
       label?: string
       target?: string
       enabled?: boolean
-      credentials?: { token?: string; username?: string; password?: string; address?: string }
+		credentials?: NotificationCredentials
     }) => apiPatch<NotificationChannel>(`/notification-channels/${input.id}`, input),
     onSuccess: (channel) => {
       toast.success(`Notification channel saved — ${channel.label}`)

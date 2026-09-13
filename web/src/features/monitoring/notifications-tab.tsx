@@ -9,8 +9,9 @@ import {
   useSaveNotificationRule,
   useTestNotificationChannel,
   useToggleNotificationRule,
-  useUpdateNotificationChannel,
-  type NotificationChannelInput,
+	useUpdateNotificationChannel,
+	type NotificationCredentials,
+	type NotificationChannelInput,
 } from '@/api/queries'
 import { AlertBanner } from '@/components/core/alert-banner'
 import { Badge } from '@/components/ui/badge'
@@ -51,16 +52,32 @@ function ChannelDialog({
 }) {
   const save = useSaveNotificationChannel()
   const update = useUpdateNotificationChannel()
-  const [type, setType] = useState<NotificationChannelInput['type']>('webhook')
-  const [label, setLabel] = useState('')
-  const [target, setTarget] = useState('')
-  const [token, setToken] = useState('')
+	const [type, setType] = useState<NotificationChannelInput['type']>(() => editing?.type && editing.type !== 'web' ? editing.type : 'webhook')
+	const [label, setLabel] = useState(() => editing?.label ?? '')
+	const [target, setTarget] = useState(() => editing?.target ?? '')
+	const [token, setToken] = useState('')
+	const [username, setUsername] = useState('')
+	const [password, setPassword] = useState('')
 
-  function reset() {
-    setLabel('')
-    setTarget('')
-    setToken('')
-  }
+	function reset() {
+		setLabel('')
+		setTarget('')
+		setToken('')
+		setUsername('')
+		setPassword('')
+	}
+
+	function credentials(): NotificationCredentials | undefined {
+		if (type === 'smtp') {
+			return username || password ? { username: username || undefined, password: password || undefined } : undefined
+		}
+		return token ? { token } : undefined
+	}
+
+	function handleOpenChange(nextOpen: boolean) {
+		if (!nextOpen) reset()
+		onOpenChange(nextOpen)
+	}
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -70,20 +87,20 @@ function ChannelDialog({
           id: editing.id,
           label: label || undefined,
           target: target || undefined,
-          credentials: token ? { token } : undefined,
+			credentials: credentials(),
         },
         { onSuccess: () => { onOpenChange(false); reset() } },
       )
       return
     }
     save.mutate(
-      { type, label, target, enabled: true, credentials: token ? { token } : undefined },
+		{ type, label, target, enabled: true, credentials: credentials() },
       { onSuccess: () => { onOpenChange(false); reset() } },
     )
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+	    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>{editing ? `Edit channel — ${editing.label}` : 'Add a notification channel'}</DialogTitle>
@@ -113,17 +130,30 @@ function ChannelDialog({
             <Label htmlFor="channel-label">Label</Label>
             <Input id="channel-label" value={label} onChange={(event) => setLabel(event.target.value)} placeholder={editing?.label ?? 'Ops Telegram'} />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="channel-target">Target</Label>
-            <Input id="channel-target" value={target} onChange={(event) => setTarget(event.target.value)} placeholder={editing?.target ?? 'https://hooks.example/…'} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="channel-token">Credential {editing ? '(leave empty to keep)' : ''}</Label>
-            <Input id="channel-token" type="password" value={token} onChange={(event) => setToken(event.target.value)} placeholder="token / password / key" />
-          </div>
+		  <div className="grid gap-2">
+			<Label htmlFor="channel-target">{type === 'smtp' ? 'SMTP target' : 'Target'}</Label>
+			<Input id="channel-target" value={target} onChange={(event) => setTarget(event.target.value)} placeholder={type === 'smtp' ? 'smtp://mail.example:587?to=you@example.com' : editing?.target ?? 'https://hooks.example/…'} />
+		  </div>
+		  {type === 'smtp' ? (
+			<>
+			  <div className="grid gap-2">
+				<Label htmlFor="channel-username">SMTP username / sender</Label>
+				<Input id="channel-username" type="email" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="nas@example.com" />
+			  </div>
+			  <div className="grid gap-2">
+				<Label htmlFor="channel-password">SMTP password {editing ? '(leave empty to keep)' : ''}</Label>
+				<Input id="channel-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="SMTP password" />
+			  </div>
+			</>
+		  ) : (
+			<div className="grid gap-2">
+			  <Label htmlFor="channel-token">Credential {editing ? '(leave empty to keep)' : ''}</Label>
+			  <Input id="channel-token" type="password" value={token} onChange={(event) => setToken(event.target.value)} placeholder="token / password / key" />
+			</div>
+		  )}
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={!label || (!editing && !target)}>
+			<Button type="submit" disabled={!label || (!editing && !target) || (!editing && type === 'smtp' && !username)}>
               {editing ? 'Save changes' : 'Add channel'}
             </Button>
           </DialogFooter>
@@ -153,7 +183,7 @@ function ChannelsCard() {
           Add channel
         </Button>
       </CardHeader>
-      <CardContent>
+	  <CardContent>
         <ul className="flex flex-col divide-y rounded-lg border">
           {(channels ?? []).map((channel) => (
             <li key={channel.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
@@ -199,7 +229,7 @@ function ChannelsCard() {
             </li>
           ))}
         </ul>
-        <ChannelDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
+		<ChannelDialog key={editing?.id ?? 'new'} open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
       </CardContent>
     </Card>
   )

@@ -126,10 +126,11 @@ The current runtime provides native adapters for:
 - ntfy;
 - generic webhook.
 
-SMTP is the email transport. All provider credentials are encrypted with the
-recovery key and are omitted from API responses, exports, audit metadata, and
-support bundles. Provider responses are bounded and delivery attempts are
-retried with exponential backoff.
+SMTP is the email transport; its target uses `smtp://host:port?to=address` and
+the encrypted credentials contain the sender/username and password. All
+provider credentials are encrypted with the recovery key and are omitted from
+API responses, exports, audit metadata, and support bundles. Provider responses
+are bounded and delivery attempts are retried with exponential backoff.
 
 Keep the provider abstraction independent from LumoNAS alert routing so a
 future provider can be added without changing alert semantics.
