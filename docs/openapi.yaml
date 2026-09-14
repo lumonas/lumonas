@@ -463,6 +463,77 @@ paths:
         '422':
           description: Invalid pool name or layout
 
+  /storage/pools/membership/plan:
+    post:
+      tags: [Storage]
+      summary: Plan growing a mounted pool with additional member disks
+      operationId: planPoolMembership
+      description: >-
+        Seals which disks join an existing MergerFS pool, which of them need
+        formatting, and the resulting branch list. Shrink/drain is not
+        supported.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pool, addDiskIds]
+              properties:
+                pool:
+                  type: string
+                addDiskIds:
+                  type: array
+                  items:
+                    type: string
+                filesystem:
+                  type: string
+                  enum: [ext4, xfs]
+                forceFormat:
+                  type: boolean
+      responses:
+        '201':
+          description: Membership plan
+        '404':
+          description: Pool is not mounted
+        '422':
+          description: Invalid grow request
+
+  /storage/pools/membership/confirm:
+    post:
+      tags: [Storage]
+      summary: Execute a confirmed pool membership plan
+      operationId: confirmPoolMembership
+      description: >-
+        Formats new members, unmounts the pool, re-mounts over the full
+        branch list, extends the managed SnapRAID layout with fresh data
+        slots, and queues a sync.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [operationId, planHash]
+              properties:
+                operationId:
+                  type: string
+                planHash:
+                  type: string
+                reauthenticated:
+                  type: boolean
+                storageSafetyUnlocked:
+                  type: boolean
+      responses:
+        '202':
+          description: Pool grown (protectionUpdated reports SnapRAID outcome)
+        '404':
+          description: Membership plan not found
+        '409':
+          description: Plan hash or identity revalidation failed
+        '423':
+          description: Reauthentication and storage safety unlock required
+
   /storage/pools/setup/confirm:
     post:
       tags: [Storage]

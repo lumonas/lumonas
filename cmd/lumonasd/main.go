@@ -79,6 +79,7 @@ type apiServer struct {
 	runtimeStateFunc     func() map[string]any
 	debianUpdatesFunc    func() map[string]any
 	dockerLoggingFunc    func() map[string]any
+	discoverPoolsFunc    func(disks []model.Disk) []model.Pool
 	rateMu                      sync.Mutex
 	rateAttempts                map[string][]time.Time
 	clock                       func() time.Time
@@ -360,6 +361,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.planStoragePoolSetup(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/pools/setup/confirm":
 		s.confirmStoragePoolSetup(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/pools/membership/plan":
+		s.planPoolMembership(w, r)
+	case r.Method == http.MethodPost && endpoint == "/storage/pools/membership/confirm":
+		s.confirmPoolMembership(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/protection/replacement/plan":
 		s.planDiskReplacement(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/protection/replacement/confirm":

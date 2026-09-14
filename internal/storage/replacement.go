@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -311,4 +312,35 @@ func ValidateReplacementPlan(plan ReplacementPlan, actual []model.Disk, now time
 		return nil
 	}
 	return fmt.Errorf("replacement disk %q is no longer present", plan.ReplacementDiskID)
+}
+
+// ExtendSnapraidSlots appends new data disks to a pinned mapping using the
+// next free dN names. Ids are stored in branch-sanitized form, consistent
+// with names parsed from an existing managed configuration.
+func ExtendSnapraidSlots(slots []DataSlot, addDiskIDs []string) ([]DataSlot, error) {
+	used := make(map[int]bool, len(slots))
+	paths := make(map[string]bool, len(slots)+len(addDiskIDs))
+	highest := 0
+	for _, slot := range slots {
+		number := numericSuffix(slot.Name)
+		if used[number] {
+			return nil, fmt.Errorf("duplicate data name %q", slot.Name)
+		}
+		used[number] = true
+		if number > highest {
+			highest = number
+		}
+		paths[DiskBranchPath(slot.DiskID)] = true
+	}
+	updated := append([]DataSlot(nil), slots...)
+	for _, id := range addDiskIDs {
+		branch := DiskBranchPath(id)
+		if paths[branch] {
+			return nil, fmt.Errorf("disk %q is already in the mapping", id)
+		}
+		paths[branch] = true
+		highest++
+		updated = append(updated, DataSlot{Name: "d" + strconv.Itoa(highest), DiskID: strings.TrimPrefix(branch, "/srv/disks/")})
+	}
+	return updated, nil
 }
