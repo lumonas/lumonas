@@ -137,7 +137,10 @@ export function UpdatesTab() {
             <span className="text-sm font-medium">{updates.debian.release}</span>
             {updates.debian.pendingCount > 0 ? (
               <Badge variant="attention">
-                {updates.debian.pendingCount} security packages pending
+                {updates.debian.pendingCount} packages pending
+                {typeof updates.debian.securityCount === 'number' && updates.debian.securityCount > 0
+                  ? ` · ${updates.debian.securityCount} security`
+                  : ''}
               </Badge>
             ) : (
               <Badge variant="success">All applied</Badge>

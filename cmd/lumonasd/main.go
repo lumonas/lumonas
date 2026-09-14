@@ -76,7 +76,9 @@ type apiServer struct {
 	fixStageMu                  sync.Mutex
 	passkeyCeremonies           map[string]passkeyCeremony
 	passkeyMu                   sync.Mutex
-	runtimeStateFunc            func() map[string]any
+	runtimeStateFunc     func() map[string]any
+	debianUpdatesFunc    func() map[string]any
+	dockerLoggingFunc    func() map[string]any
 	rateMu                      sync.Mutex
 	rateAttempts                map[string][]time.Time
 	clock                       func() time.Time

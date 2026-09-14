@@ -232,7 +232,130 @@ func (s *apiServer) refreshDynamicSettings(value map[string]any) {
 				runtime["tmpfs"] = tmpfs
 			}
 		}
+		if logging, ok := runtime["dockerLogging"].(map[string]any); ok {
+			s.applyDockerLoggingState(logging)
+		}
 	}
+	// Pending Debian package upgrades come from the APT cache via the
+	// privileged worker; a failure keeps the persisted (or zero) value.
+	if updates, ok := value["updates"].(map[string]any); ok {
+		if debian, ok := updates["debian"].(map[string]any); ok {
+			if state := s.debianUpdatesState(); state != nil {
+				if pending, ok := state["pendingCount"]; ok {
+					debian["pendingCount"] = pending
+				}
+				if security, ok := state["securityCount"]; ok {
+					debian["securityCount"] = security
+				}
+				debian["lastCheckedAt"] = time.Now().UTC()
+			}
+		}
+	}
+}
+
+// brokerQuery runs a read-only privileged operation and returns its data.
+func (s *apiServer) brokerQuery(operation string) map[string]any {
+	request := privileged.Request{Operation: operation, PlanHash: operation + "-read", ExpiresAt: time.Now().UTC().Add(10 * time.Second), Confirmed: true}
+	result, err := (privileged.Client{Socket: envOr("LUMONAS_PRIVD_SOCKET", "/run/lumonas/privd.sock")}).Execute(context.Background(), request)
+	if err != nil || !result.OK {
+		return nil
+	}
+	data, _ := result.Data.(map[string]any)
+	return data
+}
+
+// debianUpdatesState queries pending package upgrades; nil when unavailable.
+func (s *apiServer) debianUpdatesState() map[string]any {
+	if s.debianUpdatesFunc != nil {
+		return s.debianUpdatesFunc()
+	}
+	return s.brokerQuery("updates.debian.status")
+}
+
+// applyDockerLoggingState overwrites the docker logging card with the live
+// daemon.json configuration and the largest container log consumers.
+func (s *apiServer) applyDockerLoggingState(logging map[string]any) {
+	if loggingState := s.dockerLoggingState(); loggingState != nil {
+		if driver, ok := loggingState["driver"].(string); ok && driver != "" {
+			logging["driver"] = driver
+		}
+		if maxSize, ok := loggingState["maxSizeMb"]; ok {
+			logging["maxSizeMb"] = maxSize
+		}
+		if maxFiles, ok := loggingState["maxFiles"]; ok {
+			logging["maxFiles"] = maxFiles
+		}
+		if consumers, ok := loggingState["topConsumers"]; ok {
+			logging["topConsumers"] = consumers
+		}
+	}
+}
+
+// dockerLoggingState reads the effective Docker daemon logging configuration
+// and on-disk log usage. The seam keeps tests hermetic.
+func (s *apiServer) dockerLoggingState() map[string]any {
+	if s.dockerLoggingFunc != nil {
+		return s.dockerLoggingFunc()
+	}
+	state := map[string]any{}
+	if raw, err := os.ReadFile(envOr("LUMONAS_DOCKER_DAEMON_JSON", "/etc/docker/daemon.json")); err == nil {
+		var config struct {
+			LogDriver string            `json:"log-driver"`
+			LogOpts   map[string]string `json:"log-opts"`
+		}
+		if json.Unmarshal(raw, &config) == nil {
+			if config.LogDriver != "" {
+				state["driver"] = config.LogDriver
+			}
+			if rawSize, ok := config.LogOpts["max-size"]; ok {
+				if sizeMB, err := parseDockerSizeMB(rawSize); err == nil {
+					state["maxSizeMb"] = sizeMB
+				}
+			}
+			if rawFiles, ok := config.LogOpts["max-file"]; ok {
+				if files, err := strconv.Atoi(rawFiles); err == nil {
+					state["maxFiles"] = files
+				}
+			}
+		}
+	}
+	if usage := s.brokerQuery("docker.logs.usage"); usage != nil {
+		if consumers, ok := usage["topConsumers"]; ok {
+			state["topConsumers"] = consumers
+		}
+	}
+	if len(state) == 0 {
+		return nil
+	}
+	return state
+}
+
+// parseDockerSizeMB converts Docker size strings (10m, 100k, 1g, 52428800b)
+// into megabytes.
+func parseDockerSizeMB(raw string) (int, error) {
+	value := strings.TrimSpace(strings.ToLower(raw))
+	multiplier := 1
+	switch {
+	case strings.HasSuffix(value, "gb"):
+		multiplier, value = 1024, strings.TrimSuffix(value, "gb")
+	case strings.HasSuffix(value, "g"):
+		multiplier, value = 1024, strings.TrimSuffix(value, "g")
+	case strings.HasSuffix(value, "mb"):
+		multiplier, value = 1, strings.TrimSuffix(value, "mb")
+	case strings.HasSuffix(value, "m"):
+		multiplier, value = 1, strings.TrimSuffix(value, "m")
+	case strings.HasSuffix(value, "kb"):
+		multiplier, value = 0, strings.TrimSuffix(value, "kb")
+	case strings.HasSuffix(value, "k"):
+		multiplier, value = 0, strings.TrimSuffix(value, "k")
+	case strings.HasSuffix(value, "b"):
+		multiplier, value = 0, strings.TrimSuffix(value, "b")
+	}
+	number, err := strconv.Atoi(value)
+	if err != nil {
+		return 0, err
+	}
+	return number * multiplier, nil
 }
 
 // runtimeState queries the privileged worker for live zram/tmpfs status.

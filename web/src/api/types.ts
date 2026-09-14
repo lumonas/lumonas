@@ -375,7 +375,7 @@ export interface SettingsUpdatesCore {
 export interface AppSettings {
   updates: {
     core: SettingsUpdatesCore
-    debian: { release: string; pendingCount: number; lastCheckedAt: string; autoUpdate: boolean }
+    debian: { release: string; pendingCount: number; securityCount?: number; lastCheckedAt: string; autoUpdate: boolean }
     docker: { availableCount: number; autoUpdate: boolean }
   }
   runtime: {

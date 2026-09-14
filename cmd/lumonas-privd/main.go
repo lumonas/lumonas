@@ -250,7 +250,7 @@ func operationWorker(operation string) string {
 		return "network"
 	case "worker.ping.power", "power.action", "power.shutdown":
 		return "power"
-	case "worker.ping.general", "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "avahi.config.apply":
+	case "worker.ping.general", "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "avahi.config.apply", "updates.debian.status", "docker.logs.usage":
 		return "general"
 	default:
 		return ""
@@ -370,6 +370,10 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return applySnapraidConfig(req, discover, run)
 	case "runtime.status":
 		return runtimeStatus(run)
+	case "updates.debian.status":
+		return debianUpdatesStatus(run)
+	case "docker.logs.usage":
+		return dockerLogUsage(run)
 	case "runtime.zram.apply":
 		return applyZram(req, run)
 	case "runtime.zram.disable":
