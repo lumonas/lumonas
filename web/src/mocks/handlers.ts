@@ -1276,6 +1276,54 @@ export const handlers = [
     return HttpResponse.json(updateSlots)
   }),
 
+  http.post(`${BASE}/updates/slot/stage`, async ({ request }) => {
+    const body = (await request.json()) as {
+      imagePath?: string
+      manifest?: { version?: string }
+      signature?: string
+    }
+    if (!body.imagePath || !body.manifest?.version || !body.signature) {
+      return new HttpResponse(null, { status: 422 })
+    }
+    updateSlots.pendingSlot = updateSlots.activeSlot === 'a' ? 'b' : 'a'
+    updateSlots.pendingVersion = body.manifest.version
+    updateSlots.bootAttempts = 0
+    updateSlots.updatedAt = new Date().toISOString()
+    pushActivity({
+      category: 'update',
+      title: `OS image staged — ${body.manifest.version}`,
+      description: 'Verified for the inactive slot',
+    })
+    return HttpResponse.json(updateSlots, { status: 202 })
+  }),
+
+  http.post(`${BASE}/updates/slot/activate`, () => {
+    if (!updateSlots.pendingSlot) return new HttpResponse(null, { status: 409 })
+    pushActivity({
+      category: 'update',
+      title: `Slot image written — ${updateSlots.pendingVersion}`,
+      description: 'BootNext armed; reboot to start the new slot',
+    })
+    return HttpResponse.json({ status: 'activated', slot: updateSlots.pendingSlot, version: updateSlots.pendingVersion }, { status: 202 })
+  }),
+
+  http.post(`${BASE}/updates/slot/confirm`, () => {
+    if (!updateSlots.pendingSlot) return new HttpResponse(null, { status: 409 })
+    updateSlots.activeSlot = updateSlots.pendingSlot
+    updateSlots.activeVersion = updateSlots.pendingVersion ?? updateSlots.activeVersion
+    updateSlots.previousSlot = updateSlots.activeSlot === 'a' ? 'b' : 'a'
+    updateSlots.pendingSlot = undefined
+    updateSlots.pendingVersion = undefined
+    updateSlots.bootAttempts = 0
+    updateSlots.updatedAt = new Date().toISOString()
+    pushActivity({
+      category: 'update',
+      title: `OS slot committed — ${updateSlots.activeVersion}`,
+      description: `Now active on slot ${updateSlots.activeSlot}`,
+    })
+    return HttpResponse.json(updateSlots)
+  }),
+
   http.post(`${BASE}/updates/rollback`, async () => {
     if (!updateSlots.previousSlot) return new HttpResponse(null, { status: 409 })
     const previous = updateSlots.previousSlot

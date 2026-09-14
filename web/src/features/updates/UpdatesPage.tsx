@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Download, RotateCcw, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, Download, HardDrive, RotateCcw, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiGet, apiPost } from '@/api/client'
 import { PageHeader } from '@/components/core/page-header'
@@ -28,6 +28,14 @@ interface ManifestForm {
   backupPath: string
 }
 
+interface ImageSlotForm {
+  imagePath: string
+  version: string
+  imageSha256: string
+  imageSize: string
+  signature: string
+}
+
 const initialForm: ManifestForm = {
   version: '',
   packageSha256: '',
@@ -37,9 +45,18 @@ const initialForm: ManifestForm = {
   backupPath: '',
 }
 
+const initialImageForm: ImageSlotForm = {
+  imagePath: '',
+  version: '',
+  imageSha256: '',
+  imageSize: '',
+  signature: '',
+}
+
 export function UpdatesPage() {
   const [state, setState] = useState<UpdateState | null>(null)
   const [form, setForm] = useState(initialForm)
+  const [imageForm, setImageForm] = useState(initialImageForm)
   const [busy, setBusy] = useState(false)
 
   const refresh = () => apiGet<UpdateState>('/updates/status').then(setState)
@@ -48,6 +65,7 @@ export function UpdatesPage() {
   }, [])
 
   const update = (key: keyof ManifestForm, value: string) => setForm((current) => ({ ...current, [key]: value }))
+  const updateImage = (key: keyof ImageSlotForm, value: string) => setImageForm((current) => ({ ...current, [key]: value }))
 
   async function apply() {
     setBusy(true)
@@ -99,6 +117,58 @@ export function UpdatesPage() {
     }
   }
 
+  async function stageImage() {
+    setBusy(true)
+    try {
+      await apiPost('/updates/slot/stage', {
+        imagePath: imageForm.imagePath,
+        manifest: {
+          formatVersion: 1,
+          version: imageForm.version,
+          packageSha256: imageForm.imageSha256,
+          packageSize: Number(imageForm.imageSize),
+          publishedAt: new Date().toISOString(),
+        },
+        signature: imageForm.signature,
+      })
+      toast.success('OS image staged for the inactive slot')
+      await refresh()
+    } catch {
+      toast.error('OS image was not staged')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function activateImage() {
+    if (!window.confirm('Write the staged OS image to the inactive slot device and arm BootNext? The next reboot starts the new slot.')) {
+      return
+    }
+    setBusy(true)
+    try {
+      await apiPost('/updates/slot/activate', {})
+      toast.success('Slot image written — reboot to start the new slot')
+      await refresh()
+    } catch {
+      toast.error('Slot activation failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmImage() {
+    setBusy(true)
+    try {
+      await apiPost('/updates/slot/confirm', {})
+      toast.success('New slot committed as active')
+      await refresh()
+    } catch {
+      toast.error('Slot confirmation failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="System updates" description="Install signed packages into an inactive A/B slot and confirm health before making it active." />
@@ -138,6 +208,53 @@ export function UpdatesPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><HardDrive className="size-4 text-primary" />OS image slots (immutable A/B)</CardTitle>
+          <CardDescription>
+            Writes a full signed root-filesystem image to the inactive slot device and boots it once via BootNext.
+            The slot becomes active only after the new image reports healthy. Slot devices are configured server-side.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-5">
+            {(['imagePath', 'version', 'imageSha256', 'imageSize', 'signature'] as const).map((key) => (
+              <div key={key} className="space-y-1">
+                <Label htmlFor={`slot-${key}`}>
+                  {key === 'imageSha256' ? 'Image SHA-256' : key === 'imageSize' ? 'Image size (bytes)' : key}
+                </Label>
+                <Input
+                  id={`slot-${key}`}
+                  value={imageForm[key]}
+                  onChange={(event) => updateImage(key, event.target.value)}
+                  placeholder={key === 'signature' ? 'base64 Ed25519 signature' : undefined}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={busy || !imageForm.imagePath || !imageForm.version || !imageForm.imageSha256 || !imageForm.signature}
+              onClick={() => void stageImage()}
+            >
+              <Download />
+              Stage image
+            </Button>
+            {state?.pendingSlot ? (
+              <Button variant="destructive" disabled={busy} onClick={() => void activateImage()}>
+                Write to inactive slot and arm BootNext
+              </Button>
+            ) : null}
+            {state?.pendingSlot && state.pendingVersion ? (
+              <Button variant="outline" disabled={busy} onClick={() => void confirmImage()}>
+                <CheckCircle2 />
+                Commit healthy slot
+              </Button>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
