@@ -40,21 +40,19 @@ mkdir -p "$WORK/ext4-mount" "$WORK/xfs-mount" "$WORK/branch-a" "$WORK/branch-b" 
 make_disk() {
 	image=$1
 	filesystem=$2
-	truncate -s 64M "$image"
+	# mkfs.xfs refuses any filesystem smaller than 300MB, so size the backing
+	# image per filesystem before the loop device is attached.
+	case "$filesystem" in
+		ext4) truncate -s 64M "$image" ;;
+		xfs) truncate -s 512M "$image" ;;
+		*) echo "unsupported test filesystem: $filesystem" >&2; exit 1 ;;
+	esac
 	loop=$(losetup --find --show "$image")
 	LOOPS="$LOOPS $loop"
 	LAST_LOOP=$loop
 	case "$filesystem" in
-		ext4)
-		mkfs.ext4 -F -L lumonas-test "$loop" >/dev/null
-		;;
-		xfs)
-		mkfs.xfs -f -L lumonas-test "$loop" >/dev/null
-		;;
-		*)
-			echo "unsupported test filesystem: $filesystem" >&2
-			exit 1
-		;;
+		ext4) mkfs.ext4 -F -L lumonas-test "$loop" >/dev/null ;;
+		xfs) mkfs.xfs -f -L lumonas-test "$loop" >/dev/null ;;
 	esac
 	LAST_UUID=$(blkid -s UUID -o value "$loop")
 }

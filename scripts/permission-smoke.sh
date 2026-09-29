@@ -17,11 +17,14 @@ else
 	exit 1
 fi
 
-ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+# Mount the directory that actually contains the package rather than the
+# repository root. CI downloads the artifact into build/package, so mounting
+# the root would leave the .deb outside the container's view.
+PACKAGE_DIR="$(CDPATH= cd -- "$(dirname -- "$PACKAGE")" && pwd)"
 PACKAGE_NAME=$(basename "$PACKAGE")
 
 "$RUNTIME" run --rm \
-	-v "$ROOT:/packages:ro" \
+	-v "$PACKAGE_DIR:/packages:ro" \
 	-e PACKAGE_NAME="$PACKAGE_NAME" \
 	debian:trixie-slim \
 	/bin/sh -euxc '
