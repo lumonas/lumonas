@@ -87,6 +87,52 @@ baseline.
    # Actions -> Sign catalog -> Run workflow, then open the branch it pushes.
    ```
 
+## Baseline drift is expected, not an incident
+
+The scanner's vulnerability database is live. New advisories are published for
+packages that are already in these images all the time, so **this gate going red
+does not by itself mean a catalog change went wrong.** A finding appearing that
+is not in `catalog-image-baseline.json` means the database learned about it
+after the baseline was written, not that the catalog pulled something new.
+
+That is the gate doing its job in the sense that matters: it is telling you the
+accepted set no longer matches reality and needs a decision. The response is
+usually to review and refresh, not to be alarmed.
+
+What is *not* acceptable is refreshing without reading the diff. A refresh that
+silently accepts a hundred new findings has quietly undone the control, so the
+procedure below asks for the added and removed identifiers explicitly.
+
+## Refreshing after drift
+
+1. Reproduce the failure and see which findings are new:
+
+   ```sh
+   bash scripts/container-image-scan.sh
+   ```
+
+   It names the image and lists every finding missing from the baseline.
+
+2. For each newly reported finding, decide whether to accept it or fix the
+   underlying image. Fixing means updating the pin in `catalog/apps.json` and
+   re-signing; accepting means recording it in the baseline with a reason.
+
+3. Re-measure that one image and confirm the count moves in the right direction:
+
+   ```sh
+   docker run --rm aquasec/trivy:0.58.1 image --scanners vuln \
+     --severity HIGH,CRITICAL --ignore-unfixed --no-progress --format json IMAGE:TAG
+   ```
+
+4. Update the entry in `catalog-image-baseline.json`. A refresh that only *adds*
+   identifiers is suspicious: the database also retires findings, so an entry
+   that only ever grows is a sign the set is being rubber-stamped rather than
+   reviewed. Check that resolved findings come off the list.
+
+5. Commit the baseline on its own, and state in the message which findings were
+   added, which were removed, and why the new ones are acceptable. Re-signing is
+   not needed unless `catalog/apps.json` also changed.
+
 ## Regenerating the file
 
 `catalog-image-baseline.json` is generated, but commit it deliberately rather
