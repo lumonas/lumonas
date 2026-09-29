@@ -110,6 +110,45 @@ done
 # --root already sets the unit search path, so do not also point
 # SYSTEMD_UNIT_PATH at the staged directory: systemd would then look for units
 # under <root><path> and fail to resolve the staged .target files.
+# --root resolves unit files inside the staged tree, but systemd still checks
+# whether an ExecStart target is executable on the host, which it cannot be for
+# binaries that only exist once the package is installed. Treat exactly that
+# class of finding as "not verifiable here" and keep every other diagnostic
+# fatal, so a malformed unit, a bad directive, a missing dependency, or a
+# misspelled ExecStart outside /usr/lib/lumonas still fails this gate.
+#
+# The authoritative check, against the installed package and its real binaries,
+# runs in scripts/permission-smoke.sh.
 # shellcheck disable=SC2086
-systemd-analyze --root="$STAGE" verify $LUMONAS_VERIFY_UNITS
+verify_output="$(systemd-analyze --root="$STAGE" verify $LUMONAS_VERIFY_UNITS 2>&1)" || true
+
+deferred=0
+unexpected=""
+# Iterate line by line without a subshell so the counters survive.
+old_ifs=$IFS
+IFS='
+'
+for line in $verify_output; do
+	[ -n "$line" ] || continue
+	case "$line" in
+		*"Command /usr/lib/lumonas/"*"is not executable"*)
+			deferred=$((deferred + 1))
+			;;
+		*)
+			unexpected="$unexpected$line
+"
+			;;
+	esac
+done
+IFS=$old_ifs
+
+if [ -n "$unexpected" ]; then
+	printf '%s' "$unexpected" >&2
+	echo "systemd unit verification failed" >&2
+	exit 1
+fi
+if [ "$deferred" -gt 0 ]; then
+	echo "NOTE: $deferred ExecStart target(s) under /usr/lib/lumonas are not installed here;" >&2
+	echo "      they are verified against the installed package by scripts/permission-smoke.sh" >&2
+fi
 echo "LumoNAS systemd units verified"

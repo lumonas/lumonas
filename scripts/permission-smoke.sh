@@ -79,6 +79,27 @@ if getent group docker >/dev/null 2>&1; then
 	! id -Gn lumonas | tr " " "\n" | grep -qx docker
 fi
 systemctl list-unit-files lumonas-web.service lumonasd.service >/dev/null
+
+# Verify the units that were actually installed, against the binaries the
+# package actually installed. This is the authoritative systemd gate: unlike a
+# verification staged outside a package context, every ExecStart target here
+# really exists, so a wrong path or a missing binary is caught. The optional
+# distro services are Recommends and are not installed in this container, so
+# provide stubs for them to satisfy the dependency graph.
+for optional in avahi-daemon docker nfs-server rsync smbd ssh vsftpd; do
+	cat > "/etc/systemd/system/$optional.service" <<STUB
+[Unit]
+Description=Stub $optional for unit verification
+[Service]
+Type=oneshot
+ExecStart=/bin/true
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
+STUB
+done
+systemd-analyze verify /lib/systemd/system/lumonas*.service /lib/systemd/system/lumonas*.target
+
 dpkg --audit
 '
 

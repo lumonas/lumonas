@@ -1,0 +1,63 @@
+name: Sign catalog
+
+# The app catalog ships as a detached Ed25519 signature that lumonasd verifies
+# before allowing a catalog app to be installed. The private key lives only in
+# the release secret store, so the signature cannot be regenerated on a
+# developer machine. This workflow re-signs catalog/apps.json with the release
+# key and commits the result.
+#
+# Run it (Actions -> Sign catalog -> Run workflow) after editing the catalog.
+# Editing the catalog without re-signing fails CI, because the backend job runs
+# `make catalog-verify` on every push.
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why the catalog is being re-signed (recorded in the commit message)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+
+      - name: Re-sign the app catalog
+        env:
+          LUMONAS_CATALOG_PRIVATE_KEY: ${{ secrets.LUMONAS_CATALOG_PRIVATE_KEY }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -eu
+          if [ -z "${LUMONAS_CATALOG_PRIVATE_KEY:-}" ]; then
+            echo "LUMONAS_CATALOG_PRIVATE_KEY is not configured" >&2
+            exit 1
+          fi
+          make catalog-sign
+
+      - name: Verify the new signature
+        run: make catalog-verify
+
+      - name: Commit the signature
+        env:
+          REASON: ${{ inputs.reason }}
+        run: |
+          set -eu
+          if git diff --quiet -- catalog/apps.json.sig; then
+            echo "catalog/apps.json.sig is already current; nothing to commit" >&2
+            exit 1
+          fi
+          git config user.name 'lumonas-release-bot'
+          git config user.email 'release@lumonas.local'
+          git add catalog/apps.json.sig
+          git commit -m "chore(catalog): re-sign app catalog" -m "${REASON}"
+          git push origin HEAD:main
