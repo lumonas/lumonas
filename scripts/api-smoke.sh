@@ -508,9 +508,26 @@ else
 	grep -F '"capturedAt"' "$RESTARTED_METRICS_HISTORY_PATH" >/dev/null
 	validate_response metrics-history "$RESTARTED_METRICS_HISTORY_PATH"
 	REPLAY_PATH="$TEMP_DIR/replayed-events.sse"
+	# The replayed stream is produced by a daemon that was just restarted, so
+	# the response can arrive slower than the local request does. Poll for the
+	# expected content within a bound instead of asserting on the first packet,
+	# which failed intermittently under runner load.
+	replay_until() {
+		pattern=$1
+		attempts=0
+		while [ "$attempts" -lt 10 ]; do
+			if grep -F "$pattern" "$REPLAY_PATH" >/dev/null 2>&1; then
+				return 0
+			fi
+			attempts=$((attempts + 1))
+			sleep 1
+		done
+		echo "SSE replay did not contain $pattern within the expected window" >&2
+		return 1
+	}
 	curl -sS --max-time 5 -N -b "$COOKIE_JAR" -H "Last-Event-ID: $LAST_EVENT_ID" "$BASE_URL/api/v1/events/stream" >"$REPLAY_PATH" 2>/dev/null || true
-	grep -F 'retry: 3000' "$REPLAY_PATH" >/dev/null
-	grep -F '"type":"job.state_changed"' "$REPLAY_PATH" >/dev/null
+	replay_until 'retry: 3000'
+	replay_until '"type":"job.state_changed"'
 	if grep -F "id: $LAST_EVENT_ID" "$REPLAY_PATH" >/dev/null 2>&1; then
 		echo "SSE replay returned the Last-Event-ID cursor event twice" >&2
 		exit 1
