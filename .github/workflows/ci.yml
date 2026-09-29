@@ -364,6 +364,15 @@ jobs:
       - run: sudo env LUMONAS_DEB="$PWD/$(ls *.deb | head -n1)" LUMONAS_UPDATE_FIXTURE="$RUNNER_TEMP/lumonas-update-fixture.json" LUMONAS_QEMU_SSH_PUBLIC_KEY="$LUMONAS_QEMU_SSH_PUBLIC_KEY" LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" bash scripts/qemu-build-image.sh
         env:
           RUNNER_TEMP: ${{ runner.temp }}
+      # The build runs as root, so it leaves the image and its directory owned
+      # by root. The smoke steps that follow run as the runner user and have to
+      # write to both: QEMU opens the image read-write, and the serial log goes
+      # to build/qemu. Hand ownership back, or the smoke step fails with a bare
+      # "Permission denied" that says nothing about the image.
+      - name: Hand the built image back to the runner
+        run: |
+          test -f build/qemu/lumonas-debian13.raw
+          sudo chown "$(id -u):$(id -g)" build/qemu build/qemu/lumonas-debian13.raw
       - run: LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_PRIVATE_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_QEMU_SSH_ASSERT=true LUMONAS_QEMU_UPDATE_FIXTURE="$RUNNER_TEMP/lumonas-update-fixture.json" LUMONAS_QEMU_UPDATE_ASSERT=true LUMONAS_QEMU_LOG="$PWD/build/qemu/qemu-smoke.log" LUMONAS_QEMU_ASSERT=true bash scripts/qemu-smoke.sh
       - run: LUMONAS_AB_ASSERT=true LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_AB_SSH_PORT=18023 bash scripts/qemu-ab-smoke.sh
       - run: LUMONAS_UEFI_AB_ASSERT=true LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_UEFI_AB_SSH_PORT=18024 LUMONAS_UEFI_AB_WEB_PORT=18025 bash scripts/qemu-uefi-ab-smoke.sh

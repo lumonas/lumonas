@@ -227,6 +227,18 @@ for marker in ("losetup --find --show --partscan", "the ephemeral SSH key is sti
         raise SystemExit(f"QEMU image cleanup cannot clean a partitioned image, or does not verify it: {marker}")
 if "mount -o loop" in workflow:
     raise SystemExit("QEMU CI job must not clean the image with 'mount -o loop', which cannot mount a partitioned GPT disk")
+# The image build runs as root, so it leaves the image and build/qemu owned by
+# root. The smoke steps after it run as the runner user and must write to both:
+# QEMU opens the disk image read-write, and the serial log is written into
+# build/qemu. Without handing ownership back, the smoke step fails immediately
+# with a bare "Permission denied" that gives no hint about the image.
+if "Hand the built image back to the runner" not in qemu_block:
+    raise SystemExit("QEMU CI job does not hand the root-built image back to the runner")
+for marker in ('sudo chown "$(id -u):$(id -g)" build/qemu build/qemu/lumonas-debian13.raw',):
+    if marker not in qemu_block:
+        raise SystemExit(
+            "QEMU CI job must chown both build/qemu and the image back to the runner: " + marker
+        )
 if "metrics-history" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU smoke does not validate retained system metrics")
 for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollback", "activeSlot"):
