@@ -208,6 +208,26 @@ require_line "$ROOT/scripts/qemu-build-image.sh" '21686148-6449-6E6F-744E-656564
 reject_line "$ROOT/scripts/qemu-build-image.sh" ',bios_grub' \
 	'sfdisk rejects the bios_grub type name; use the 21686148-6449-6E6F-744E-656564454649 type GUID'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'sfdisk --verify'
+# The appliance boots both UEFI and BIOS. grub-pc Conflicts grub-efi-amd64, so
+# asking apt for both aborts the whole image build; grub-efi-amd64-bin provides
+# the same EFI modules without the conflict. Match the bare metapackage as a
+# package token, since grub-efi-amd64-bin has it as a prefix. Comment lines are
+# excluded so the rationale above can name the package it warns about.
+package_lines=$(grep -v '^[[:space:]]*#' "$ROOT/scripts/qemu-build-image.sh")
+if printf '%s\n' "$package_lines" | grep -E '(^|[[:space:]])grub-efi-amd64($|[[:space:]])' >/dev/null 2>&1; then
+	echo "scripts/qemu-build-image.sh installs grub-efi-amd64, which conflicts with grub-pc; use grub-efi-amd64-bin" >&2
+	exit 1
+fi
+# The appliance needs a BIOS bootloader and an EFI one, so both must be asked
+# for, and grub-efi-amd64-bin is the only way to ask for the EFI side.
+if ! printf '%s\n' "$package_lines" | grep -E '(^|[[:space:]])grub-pc($|[[:space:]])' >/dev/null 2>&1; then
+	echo "scripts/qemu-build-image.sh no longer installs grub-pc; the appliance would not boot via BIOS" >&2
+	exit 1
+fi
+if ! printf '%s\n' "$package_lines" | grep -E '(^|[[:space:]])grub-efi-amd64-bin($|[[:space:]])' >/dev/null 2>&1; then
+	echo "scripts/qemu-build-image.sh no longer installs grub-efi-amd64-bin; the appliance would not boot via UEFI" >&2
+	exit 1
+fi
 # The QEMU smoke tests install a throwaway SSH key and update fixture that must
 # not survive into the uploaded artifact. The image is a partitioned GPT disk,
 # so it cannot be cleaned with "mount -o loop": that attaches the whole-disk

@@ -130,8 +130,15 @@ cat >/etc/apt/apt.conf.d/99lumonas-snapshot <<'APT'
 Acquire::Check-Valid-Until "false";
 APT
 apt-get update
+# The appliance boots both UEFI and BIOS, and grub-install is run for each
+# target below. grub-pc and grub-efi-amd64 declare a Conflicts relationship, so
+# installing both in one transaction fails outright and the image is never
+# built. grub-pc does not conflict with grub-efi-amd64-bin, which supplies the
+# same /usr/lib/grub/x86_64-efi modules that grub-install --target=x86_64-efi
+# needs. The unsigned build is the right one here: the UEFI smoke test boots
+# OVMF_CODE.fd rather than OVMF_CODE.secboot.fd, so Secure Boot is not in play.
 apt-get install -y --no-install-recommends \
-  systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc grub-efi-amd64 dosfstools efibootmgr gdisk openssh-server curl ca-certificates openssl certbot \
+  systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc grub-efi-amd64-bin dosfstools efibootmgr gdisk openssh-server curl ca-certificates openssl certbot \
   iproute2 util-linux smartmontools lm-sensors nut nut-client e2fsprogs xfsprogs cryptsetup mergerfs snapraid \
   network-manager docker.io docker-compose samba samba-common-bin samba-vfs-modules nfs-kernel-server rsync rclone vsftpd \
   avahi-daemon nftables

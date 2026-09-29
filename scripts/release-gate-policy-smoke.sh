@@ -202,9 +202,31 @@ if "validate-api-response.py" not in qemu_smoke.read_text(encoding="utf-8") or "
 for marker in ("LUMONAS_QEMU_SSH_ASSERT", "systemctl restart lumonasd.service", "REPLAY_AFTER_RESTART", "Last-Event-ID: $RESTART_EVENT_ID"):
     if marker not in qemu_smoke.read_text(encoding="utf-8"):
         raise SystemExit(f"QEMU smoke does not validate daemon restart persistence: {marker}")
-for marker in ("Create ephemeral QEMU SSH key", "LUMONAS_QEMU_SSH_PUBLIC_KEY", "LUMONAS_QEMU_SSH_PRIVATE_KEY", "Remove ephemeral QEMU SSH access", "authorized_keys", "update-fixture/package", "LUMONAS_UPDATE_PUBLIC_KEY"):
+for marker in ("Create ephemeral QEMU SSH key", "LUMONAS_QEMU_SSH_PUBLIC_KEY", "LUMONAS_QEMU_SSH_PRIVATE_KEY", "Remove ephemeral QEMU SSH access"):
     if marker not in workflow:
         raise SystemExit(f"QEMU CI job is missing ephemeral guest control: {marker}")
+# The removal itself lives in qemu-clean-image.sh, because a partitioned GPT
+# image cannot be cleaned with "mount -o loop": that attaches the whole-disk
+# device, which has no filesystem, so the step fails and leaves the ephemeral
+# SSH key and update fixture in the image that gets uploaded as an artifact.
+clean_image = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-clean-image.sh"
+clean_text = clean_image.read_text(encoding="utf-8")
+for marker in ("scripts/qemu-clean-image.sh",):
+    if marker not in workflow:
+        raise SystemExit(f"QEMU CI job does not run the image cleanup script: {marker}")
+for marker in (
+    'rm -f "$CLEAN_MOUNT/root/.ssh/authorized_keys"',
+    'rm -f "$CLEAN_MOUNT/etc/systemd/system/multi-user.target.wants/ssh.service"',
+    'rm -f "$CLEAN_MOUNT/var/lib/lumonas/update-fixture/package"',
+    "sed -i '/^LUMONAS_UPDATE_PUBLIC_KEY=/d'",
+):
+    if marker not in clean_text:
+        raise SystemExit(f"QEMU image cleanup does not remove ephemeral guest state: {marker}")
+for marker in ("losetup --find --show --partscan", "the ephemeral SSH key is still present after cleaning"):
+    if marker not in clean_text:
+        raise SystemExit(f"QEMU image cleanup cannot clean a partitioned image, or does not verify it: {marker}")
+if "mount -o loop" in workflow:
+    raise SystemExit("QEMU CI job must not clean the image with 'mount -o loop', which cannot mount a partitioned GPT disk")
 if "metrics-history" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU smoke does not validate retained system metrics")
 for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollback", "activeSlot"):
