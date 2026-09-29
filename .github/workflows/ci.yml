@@ -11,7 +11,7 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -36,7 +36,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # pnpm must be installed before setup-node, because setup-node resolves the
       # pnpm store path itself when its pnpm cache is enabled.
       - uses: pnpm/action-setup@v4
@@ -61,7 +61,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # pnpm must be installed before setup-node, because setup-node resolves the
       # pnpm store path itself when its pnpm cache is enabled.
       - uses: pnpm/action-setup@v4
@@ -83,7 +83,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -103,7 +103,7 @@ jobs:
   workstation-clients:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -114,7 +114,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -124,14 +124,14 @@ jobs:
   compose-validation:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: bash scripts/compose-smoke.sh
 
   docker-engine-api:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -154,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -177,7 +177,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -188,7 +188,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sudo apt-get update && sudo apt-get install -y e2fsprogs xfsprogs util-linux mount mergerfs snapraid
       - run: sudo modprobe loop || true
       - run: sudo LUMONAS_STORAGE_ASSERT=true bash scripts/storage-loopback-smoke.sh
@@ -197,7 +197,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -210,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -223,7 +223,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -251,7 +251,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -281,7 +281,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend, frontend, runtime-smoke]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -304,7 +304,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -332,7 +332,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [package-arm64]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: lumonas-deb-arm64
@@ -343,7 +343,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [package, deb-verify]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -394,7 +394,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [package, deb-verify]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: lumonas-deb
@@ -405,7 +405,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [package]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v4
         with:
           name: lumonas-deb
@@ -416,7 +416,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [qemu-smoke]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -476,7 +476,7 @@ jobs:
   installer-scripts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: sh -n installer/build-iso.sh installer/build-arm64.sh installer/build-netboot.sh packaging/build-deb.sh packaging/debian/postinst packaging/debian/prerm scripts/api-smoke.sh scripts/compose-smoke.sh scripts/container-image-scan.sh scripts/dependency-smoke.sh scripts/disk-full-smoke.sh scripts/disk-identity-smoke.sh scripts/frontend-runtime-smoke.sh scripts/fuzz-smoke.sh scripts/iso-smoke.sh scripts/qemu-ab-smoke.sh scripts/qemu-uefi-ab-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/qemu-installer-smoke.sh scripts/qemu-recovery-smoke.sh scripts/qemu-live-recovery-source.sh scripts/recovery-api-smoke.sh scripts/recovery-bundle-smoke.sh scripts/recovery-persistence-smoke.sh scripts/request-limits-smoke.sh scripts/security-smoke.sh scripts/secret-scan-smoke.sh scripts/command-boundary-smoke.sh scripts/storage-loopback-smoke.sh scripts/privileged-storage-loopback-smoke.sh scripts/systemd-smoke.sh scripts/permission-smoke.sh scripts/postinst-policy-smoke.sh scripts/log-retention-smoke.sh scripts/log-identity-smoke.sh scripts/retention-smoke.sh scripts/generation-retention-smoke.sh scripts/share-protocol-smoke.sh scripts/upgrade-smoke.sh scripts/upgrade-service-order-smoke.sh scripts/build-workstation-clients.sh scripts/release-artifacts.sh scripts/release-artifacts-smoke.sh scripts/installer-signature-policy-smoke.sh scripts/installer-workdir-policy-smoke.sh scripts/verify-deb.sh scripts/verify-release.sh scripts/arm64-image-smoke.sh scripts/netboot-smoke.sh
       - run: make arm64-image-smoke netboot-smoke
       - run: bash scripts/upgrade-service-order-smoke.sh
@@ -502,7 +502,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
@@ -514,7 +514,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [package, deb-verify]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
@@ -546,7 +546,7 @@ jobs:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
