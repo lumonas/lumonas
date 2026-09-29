@@ -212,6 +212,30 @@ GRUB
 update-grub
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=LumoNAS --removable --no-nvram
 grub-install --target=i386-pc --recheck "$LUMONAS_LOOP_DEVICE"
+
+# Prove the boot chain this image claims to have, while it can still be fixed.
+# Both grub-install calls report "Installation finished. No error reported."
+# even when the result is unusable, and a BIOS image whose /boot/grub/i386-pc is
+# empty still boots: SeaBIOS loads the embedded core.img, GRUB reports
+# "file `/boot/grub/i386-pc/normal.mod' not found" and drops to "grub rescue>",
+# which the smoke test sees only as "the appliance did not become ready".
+# Check the artefacts the firmware will actually look for, and retry the BIOS
+# install once before giving up, so a bad image fails the build rather than
+# being published.
+verify_boot_chain() {
+	[ -s /boot/grub/grub.cfg ] || { echo "verify_boot_chain: /boot/grub/grub.cfg is missing or empty" >&2; return 1; }
+	[ -f /boot/grub/i386-pc/normal.mod ] || { echo "verify_boot_chain: /boot/grub/i386-pc/normal.mod is missing" >&2; return 1; }
+	[ -f /boot/grub/i386-pc/linux.mod ] || { echo "verify_boot_chain: /boot/grub/i386-pc/linux.mod is missing" >&2; return 1; }
+	[ -s /boot/efi/EFI/BOOT/BOOTX64.EFI ] || { echo "verify_boot_chain: the EFI fallback loader is missing" >&2; return 1; }
+	return 0
+}
+if ! verify_boot_chain; then
+	echo "boot chain incomplete after the first install; retrying the BIOS install" >&2
+	grub-install --target=i386-pc --recheck "$LUMONAS_LOOP_DEVICE"
+	update-grub
+	verify_boot_chain
+fi
+echo "boot chain verified: BIOS (i386-pc) and UEFI (BOOTX64.EFI) loaders present"
 EOF
 
 if [ -n "$UPDATE_FIXTURE" ]; then

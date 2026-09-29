@@ -208,6 +208,18 @@ require_line "$ROOT/scripts/qemu-build-image.sh" '21686148-6449-6E6F-744E-656564
 reject_line "$ROOT/scripts/qemu-build-image.sh" ',bios_grub' \
 	'sfdisk rejects the bios_grub type name; use the 21686148-6449-6E6F-744E-656564454649 type GUID'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'sfdisk --verify'
+# grub-install reports "Installation finished. No error reported." even when the
+# result is unusable, and an image with an empty /boot/grub/i386-pc still boots
+# as far as a "grub rescue>" prompt, which the smoke test can only report as
+# "the appliance did not become ready". Require the build to check the artefacts
+# the firmware will look for.
+for boot_marker in 'verify_boot_chain' \
+	'[ -f /boot/grub/i386-pc/normal.mod ]' \
+	'[ -f /boot/grub/i386-pc/linux.mod ]' \
+	'[ -s /boot/efi/EFI/BOOT/BOOTX64.EFI ]' \
+	'[ -s /boot/grub/grub.cfg ]'; do
+	require_line "$ROOT/scripts/qemu-build-image.sh" "$boot_marker"
+done
 # The appliance boots both UEFI and BIOS. grub-pc Conflicts grub-efi-amd64, so
 # asking apt for both aborts the whole image build; grub-efi-amd64-bin provides
 # the same EFI modules without the conflict. Match the bare metapackage as a

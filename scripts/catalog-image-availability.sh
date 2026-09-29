@@ -71,10 +71,31 @@ PY
 	# A floating tag makes an install irreproducible and makes the accepted
 	# vulnerability baseline unstable, because the image behind the tag changes
 	# without the catalog changing.
+	#
+	# A bare major version floats in exactly the same way as "latest": a tag like
+	# "30" means "whatever 30.x is newest", so an upstream re-push of the series
+	# changes the image under a catalog that did not change. Reject those too.
 	case "${image##*:}" in
 		latest | stable | main | edge | nightly | develop | edge-dev)
 			echo "floating tag: $image" >&2
 			floating=$((floating + 1))
+			;;
+		v[0-9]* | [0-9]*)
+			case "${image##*:}" in
+				v[0-9]* | [0-9]*)
+					# Accept a leading "v" and reject only a bare major number.
+					tag=${image##*:}
+					tag=${tag#v}
+					case "$tag" in
+						*[!0-9]* | '') : ;;
+						*)
+							echo "floating major-version tag: $image" >&2
+							echo "  a bare major means 'newest in this series'; pin a full version" >&2
+							floating=$((floating + 1))
+							;;
+					esac
+					;;
+			esac
 			;;
 	esac
 	case "$(resolve_image "$image")" in
