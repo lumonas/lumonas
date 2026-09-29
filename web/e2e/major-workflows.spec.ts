@@ -352,7 +352,10 @@ test('Docker container actions update the reported state', async ({ page }) => {
 test('Virtual machines report host readiness and support graceful controls', async ({ page }) => {
   await page.goto('/docker?tab=vms')
   await expect(page.getByText('KVM acceleration available')).toBeVisible()
-  const machine = page.locator('div').filter({ hasText: 'home-lab' }).filter({ has: page.getByRole('button', { name: 'Shut down' }) }).last()
+  // The component already stamps each machine row with data-testid, so select
+  // that. A broad 'div' filter plus .last() resolves to whichever matching
+  // ancestor rendered last, which made this click timing-dependent.
+  const machine = page.getByTestId('vm-home-lab')
   await machine.getByRole('button', { name: 'Shut down' }).click()
   await expect(page.getByText('stopped', { exact: true })).toBeVisible()
 
