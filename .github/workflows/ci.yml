@@ -272,6 +272,8 @@ jobs:
         run: PATH="$RUNNER_TEMP/lumonas-tools:$PATH" LUMONAS_REQUIRE_DEPENDENCY_TOOLS=true bash scripts/dependency-smoke.sh
       - name: Pull pinned Trivy scanner
         run: docker pull aquasec/trivy:0.58.1
+      - name: Verify every catalog image still resolves
+        run: LUMONAS_CATALOG_IMAGES_REQUIRED=true bash scripts/catalog-image-availability.sh
       - name: Scan repository and catalog images
         run: LUMONAS_CONTAINER_SCAN_REQUIRED=true bash scripts/container-image-scan.sh
 

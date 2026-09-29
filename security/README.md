@@ -22,6 +22,33 @@ the build and must be triaged before the baseline changes. An image that is
 absent from the baseline entirely is held to the strict zero-finding standard,
 so adding a new catalog entry cannot quietly admit findings.
 
+## Catalog image availability
+
+`scripts/catalog-image-availability.sh` verifies that every pinned image still
+resolves upstream. A deleted tag or a removed repository otherwise breaks
+silently, because scanning a missing image returns no findings rather than an
+error, so a broken pin reads exactly like a clean image.
+
+Eleven catalog entries pointed at images that no longer exist:
+
+| Entry | Old pin | Outcome |
+|---|---|---|
+| radarr | `linuxserver/radarr:5.17` | repointed to `6.4.4` |
+| sonarr | `linuxserver/sonarr:4.0` | repointed to `4.0.20` |
+| tautulli | `linuxserver/tautulli:2.15` | repointed to `2.18.2` |
+| bazarr | `linuxserver/bazarr:1.5` | repointed to `1.6.2` |
+| uptime-kuma | `louislam/uptime-kuma:1.21` | repointed to `2.5.5` |
+| watchtower | `containrrr/watchtower:1.7` | repointed to `1.7.1` |
+| organizr | `linuxserver/organizr:2.1` | repointed to `latest`; upstream publishes no stable tag |
+| homarr | `ghcr.io/homarr-labs/homarr:1.0` | repointed to `latest` |
+| pihole | `pihole/pihole:2024.11.0` | repointed to `2026.09.0` |
+| minio | `minio/minio:RELEASE.2025-02-28T09-55-16Z` | **removed**, repository no longer exists on Docker Hub |
+| vaultwarden-backup | `tigattack/vaultwarden-backup:1.8` | **removed**, repository no longer exists |
+
+MinIO and Vaultwarden Backup were removed rather than repointed because no
+replacement image could be verified as existing. Re-adding either entry needs a
+source that actually resolves.
+
 ## Changing the baseline
 
 Prefer fixing the image over accepting the finding. The catalog pins have
