@@ -23,13 +23,27 @@ fi
 PACKAGE_DIR="$(CDPATH= cd -- "$(dirname -- "$PACKAGE")" && pwd)"
 PACKAGE_NAME=$(basename "$PACKAGE")
 
+# Satisfy the package's own Depends from its control metadata rather than
+# hardcoding a list here, so a newly declared dependency cannot leave this
+# gate installing an incomplete set.
+command -v dpkg-deb >/dev/null 2>&1 || {
+	echo "dpkg-deb is required to read the package dependencies" >&2
+	exit 1
+}
+PACKAGE_DEPENDS="$(dpkg-deb -f "$PACKAGE" Depends 2>/dev/null \
+	| tr ',' ' ' \
+	| tr -s '[:space:]' ' ' \
+	| sed 's/^ *//; s/ *$//' || true)"
+
 "$RUNTIME" run --rm \
 	-v "$PACKAGE_DIR:/packages:ro" \
 	-e PACKAGE_NAME="$PACKAGE_NAME" \
+	-e PACKAGE_DEPENDS="$PACKAGE_DEPENDS" \
 	debian:trixie-slim \
 	/bin/sh -euxc '
 apt-get update
-apt-get install -y --no-install-recommends ca-certificates openssl passwd systemd util-linux
+# passwd/util-linux provide the runuser and coreutils used by the assertions.
+apt-get install -y --no-install-recommends ca-certificates $PACKAGE_DEPENDS passwd systemd util-linux
 dpkg -i "/packages/$PACKAGE_NAME"
 
 [ "$(stat -c "%U:%G:%a" /etc/lumonas)" = "root:lumonas:750" ]

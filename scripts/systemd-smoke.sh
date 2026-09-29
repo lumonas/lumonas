@@ -24,13 +24,7 @@ trap cleanup EXIT INT TERM
 mkdir -p "$STAGE/etc/systemd/system" "$STAGE/usr/lib/lumonas" "$STAGE/usr/local/bin" "$STAGE/sbin" "$STAGE/bin"
 for unit in "$ROOT"/packaging/systemd/*.service "$ROOT"/packaging/systemd/*.target; do
 	[ -f "$unit" ] || continue
-	# `systemd-analyze --root` locates unit files inside the given root but
-	# still checks ExecStart against the host filesystem, so absolute ExecStart
-	# paths would never resolve. Point RootDirectory at the staged tree, which
-	# is systemd's own mechanism for making those paths resolve there. Inject
-	# it into a copy so the packaged unit is verified as written and left
-	# untouched on disk.
-	sed -e "s|^ExecStart=|RootDirectory=$STAGE\nExecStart=|" "$unit" >"$STAGE/etc/systemd/system/$(basename "$unit")"
+	cp "$unit" "$STAGE/etc/systemd/system/"
 done
 
 # systemd-analyze needs the boot targets and the distro units the LumoNAS units
@@ -95,6 +89,24 @@ for executable in \
 	chmod 0755 "$target"
 done
 
-systemd-analyze --root="$STAGE" verify \
-	"$STAGE"/etc/systemd/system/*.service "$STAGE"/etc/systemd/system/*.target
+# Pass unit names rather than absolute paths inside the root: a path handed to
+# verify is loaded from the host filesystem, so its absolute ExecStart targets
+# would be resolved against the host and never found. Naming the units lets
+# --root's unit search path load them from the staged tree, which is what makes
+# the stub executables resolve.
+# shellcheck disable=SC2034
+LUMONAS_VERIFY_UNITS=""
+for unit in "$STAGE"/etc/systemd/system/*.service "$STAGE"/etc/systemd/system/*.target; do
+	[ -f "$unit" ] || continue
+	name=$(basename "$unit")
+	# Only the LumoNAS units are under test; the rest exist to satisfy the
+	# dependency graph and are pulled in transitively.
+	case "$name" in
+		lumonas*|lumonasd.*) LUMONAS_VERIFY_UNITS="$LUMONAS_VERIFY_UNITS $name" ;;
+	esac
+done
+# shellcheck disable=SC2086
+[ -n "$LUMONAS_VERIFY_UNITS" ] || { echo "no LumoNAS units were staged" >&2; exit 1; }
+# shellcheck disable=SC2086
+SYSTEMD_UNIT_PATH="$STAGE/etc/systemd/system" systemd-analyze --root="$STAGE" verify $LUMONAS_VERIFY_UNITS
 echo "LumoNAS systemd units verified"
