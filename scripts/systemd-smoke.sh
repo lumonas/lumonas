@@ -24,7 +24,13 @@ trap cleanup EXIT INT TERM
 mkdir -p "$STAGE/etc/systemd/system" "$STAGE/usr/lib/lumonas" "$STAGE/usr/local/bin" "$STAGE/sbin" "$STAGE/bin"
 for unit in "$ROOT"/packaging/systemd/*.service "$ROOT"/packaging/systemd/*.target; do
 	[ -f "$unit" ] || continue
-	cp "$unit" "$STAGE/etc/systemd/system/"
+	# `systemd-analyze --root` locates unit files inside the given root but
+	# still checks ExecStart against the host filesystem, so absolute ExecStart
+	# paths would never resolve. Point RootDirectory at the staged tree, which
+	# is systemd's own mechanism for making those paths resolve there. Inject
+	# it into a copy so the packaged unit is verified as written and left
+	# untouched on disk.
+	sed -e "s|^ExecStart=|RootDirectory=$STAGE\nExecStart=|" "$unit" >"$STAGE/etc/systemd/system/$(basename "$unit")"
 done
 
 # systemd-analyze needs the boot targets and the distro units the LumoNAS units
