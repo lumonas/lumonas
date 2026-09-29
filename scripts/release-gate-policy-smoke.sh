@@ -211,6 +211,8 @@ for marker in ("Create ephemeral QEMU SSH key", "LUMONAS_QEMU_SSH_PUBLIC_KEY", "
 # SSH key and update fixture in the image that gets uploaded as an artifact.
 clean_image = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "qemu-clean-image.sh"
 clean_text = clean_image.read_text(encoding="utf-8")
+loop_lib = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "loop-partition-lib.sh"
+loop_text = loop_lib.read_text(encoding="utf-8")
 for marker in ("scripts/qemu-clean-image.sh",):
     if marker not in workflow:
         raise SystemExit(f"QEMU CI job does not run the image cleanup script: {marker}")
@@ -222,9 +224,15 @@ for marker in (
 ):
     if marker not in clean_text:
         raise SystemExit(f"QEMU image cleanup does not remove ephemeral guest state: {marker}")
-for marker in ("losetup --find --show --partscan", "the ephemeral SSH key is still present after cleaning"):
-    if marker not in clean_text:
-        raise SystemExit(f"QEMU image cleanup cannot clean a partitioned image, or does not verify it: {marker}")
+# Mounting a partitioned appliance needs a partition-scanning loop attach. That
+# lives in the shared helper the cleanup sources, so require the link and the
+# behaviour on both sides rather than in one file.
+if '. "$ROOT/scripts/loop-partition-lib.sh"' not in clean_text:
+    raise SystemExit("QEMU image cleanup does not source the shared loop-partition helper")
+if "losetup --find --show --partscan" not in loop_text:
+    raise SystemExit("the loop-partition helper cannot attach a partitioned image")
+if "the ephemeral SSH key is still present after cleaning" not in clean_text:
+    raise SystemExit("QEMU image cleanup does not verify the ephemeral key is gone")
 if "mount -o loop" in workflow:
     raise SystemExit("QEMU CI job must not clean the image with 'mount -o loop', which cannot mount a partitioned GPT disk")
 # The image build runs as root, so it leaves the image and build/qemu owned by

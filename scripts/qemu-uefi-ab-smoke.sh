@@ -65,9 +65,12 @@ start_guest() {
 		-smp 2 \
 		-drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE" \
 		-drive "if=pflash,format=raw,file=$DATA_DIR/OVMF_VARS.fd" \
-		-drive "file=$IMAGE,if=virtio,format=raw,serial=LUMONAS-SLOTA" \
-		-drive "file=$DATA_DIR/slot-b.qcow2,if=virtio,format=qcow2,serial=LUMONAS-SLOTB" \
-		-drive "file=$DATA_DIR/stage.qcow2,if=virtio,format=qcow2,serial=LUMONAS-STAGE" \
+		-drive "file=$IMAGE,if=none,id=slota,format=raw" \
+		-device "virtio-blk-pci,drive=slota,serial=LUMONAS-SLOTA" \
+		-drive "file=$DATA_DIR/slot-b.qcow2,if=none,id=slotb,format=qcow2" \
+		-device "virtio-blk-pci,drive=slotb,serial=LUMONAS-SLOTB" \
+		-drive "file=$DATA_DIR/stage.qcow2,if=none,id=stage,format=qcow2" \
+		-device "virtio-blk-pci,drive=stage,serial=LUMONAS-STAGE" \
 		-netdev user,id=n1,restrict=on,hostfwd=tcp::"$SSH_PORT"-:22,hostfwd=tcp::"$WEB_PORT"-:8081 \
 		-device virtio-net-pci,netdev=n1 \
 		-nographic \

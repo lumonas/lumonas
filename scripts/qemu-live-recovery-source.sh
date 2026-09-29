@@ -5,7 +5,7 @@ SOURCE_IMAGE=${1:-}
 WORK=${2:-}
 [ -f "$SOURCE_IMAGE" ] || { echo "live recovery source image not found: $SOURCE_IMAGE" >&2; exit 1; }
 [ -n "$WORK" ] || { echo "live recovery source work directory is required" >&2; exit 1; }
-for command in qemu-img qemu-system-x86_64 mount umount curl python3; do
+for command in qemu-img qemu-system-x86_64 mount umount curl python3 losetup partx blkid; do
 	command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 1; }
 done
 
@@ -27,7 +27,12 @@ trap cleanup EXIT INT TERM
 
 cp "$SOURCE_IMAGE" "$SOURCE_RAW"
 mkdir -p "$SOURCE_MOUNT" "$SOURCE_DATA"
-mount -o loop "$SOURCE_RAW" "$SOURCE_MOUNT"
+# The appliance image is a partitioned GPT disk, so it cannot be mounted with
+# "mount -o loop": that attaches the whole-disk device, which has no
+# filesystem of its own and fails with "wrong fs type".
+# shellcheck source=scripts/loop-partition-lib.sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/loop-partition-lib.sh"
+mount_image_root "$SOURCE_RAW" "$SOURCE_MOUNT" >/dev/null
 mkdir -p "$SOURCE_MOUNT/var/lib/lumonas"
 printf '%s\n' 'live-source-recovery-secret' >"$SOURCE_MOUNT/var/lib/lumonas/source-recovery-secret"
 # The file is created from the host before the guest's lumonas UID exists;
@@ -46,11 +51,16 @@ qemu-system-x86_64 \
 	-machine q35,accel=tcg \
 	-m 2048 \
 	-smp 2 \
-	-drive "file=$SOURCE_RAW,if=virtio,format=raw,serial=LUMONAS-SYSTEM" \
-	-drive "file=$SOURCE_DATA/data1.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA1" \
-	-drive "file=$SOURCE_DATA/data2.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA2" \
-	-drive "file=$SOURCE_DATA/data3.qcow2,if=virtio,format=qcow2,serial=LUMONAS-DATA3" \
-	-drive "file=$SOURCE_DATA/parity.qcow2,if=virtio,format=qcow2,serial=LUMONAS-PARITY" \
+	-drive "file=$SOURCE_RAW,if=none,id=system,format=raw" \
+		-device "virtio-blk-pci,drive=system,serial=LUMONAS-SYSTEM" \
+	-drive "file=$SOURCE_DATA/data1.qcow2,if=none,id=data1,format=qcow2" \
+		-device "virtio-blk-pci,drive=data1,serial=LUMONAS-DATA1" \
+	-drive "file=$SOURCE_DATA/data2.qcow2,if=none,id=data2,format=qcow2" \
+		-device "virtio-blk-pci,drive=data2,serial=LUMONAS-DATA2" \
+	-drive "file=$SOURCE_DATA/data3.qcow2,if=none,id=data3,format=qcow2" \
+		-device "virtio-blk-pci,drive=data3,serial=LUMONAS-DATA3" \
+	-drive "file=$SOURCE_DATA/parity.qcow2,if=none,id=parity,format=qcow2" \
+		-device "virtio-blk-pci,drive=parity,serial=LUMONAS-PARITY" \
 	-netdev user,id=n1,restrict=on,hostfwd=tcp::18083-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-nographic \
@@ -200,8 +210,8 @@ fi
 wait "$SOURCE_PID"
 SOURCE_PID=""
 
-mount -o loop,ro "$SOURCE_RAW" "$SOURCE_MOUNT"
+mount_image_root "$SOURCE_RAW" "$SOURCE_MOUNT" -o ro >/dev/null
 cp "$SOURCE_MOUNT/var/lib/lumonas/recovery/latest.mrb" "$WORK/latest.mrb"
 cmp -s "$WORK/recovery.key" "$SOURCE_MOUNT/var/lib/lumonas/recovery/recovery.key"
-umount "$SOURCE_MOUNT"
+unmount_image_root "$SOURCE_MOUNT"
 echo "Live source appliance recovery bundle exported: $WORK/latest.mrb"

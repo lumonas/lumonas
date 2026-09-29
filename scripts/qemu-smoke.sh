@@ -70,15 +70,25 @@ run_qemu() {
     data_c=data2
     parity_disk=parity
   fi
+# Each disk is attached with "if=none" plus an explicit virtio-blk device so
+# the serial can be set on the device. "serial=" is not a -drive option: QEMU
+# rejects it for every block format with "Block format '<fmt>' does not support
+# the option 'serial'". The disks are identified by serial in the assertions
+# below, so the serial has to be set through the device.
 qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -m 2048 \
   -smp 2 \
-  -drive "file=$LUMONAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT,serial=LUMONAS-SYSTEM" \
-  -drive "file=$DATA_DIR/$data_a.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_a" | tr '[:lower:]' '[:upper:]')" \
-  -drive "file=$DATA_DIR/$data_b.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_b" | tr '[:lower:]' '[:upper:]')" \
-  -drive "file=$DATA_DIR/$data_c.qcow2,if=virtio,format=qcow2,serial=LUMONAS-$(printf '%s' "$data_c" | tr '[:lower:]' '[:upper:]')" \
-  -drive "file=$DATA_DIR/$parity_disk.qcow2,if=virtio,format=qcow2,serial=LUMONAS-PARITY" \
+  -drive "file=$LUMONAS_QEMU_IMAGE,if=none,id=system,format=$IMAGE_FORMAT" \
+  -device "virtio-blk-pci,drive=system,serial=LUMONAS-SYSTEM" \
+  -drive "file=$DATA_DIR/$data_a.qcow2,if=none,id=data_a,format=qcow2" \
+  -device "virtio-blk-pci,drive=data_a,serial=LUMONAS-$(printf '%s' "$data_a" | tr '[:lower:]' '[:upper:]')" \
+  -drive "file=$DATA_DIR/$data_b.qcow2,if=none,id=data_b,format=qcow2" \
+  -device "virtio-blk-pci,drive=data_b,serial=LUMONAS-$(printf '%s' "$data_b" | tr '[:lower:]' '[:upper:]')" \
+  -drive "file=$DATA_DIR/$data_c.qcow2,if=none,id=data_c,format=qcow2" \
+  -device "virtio-blk-pci,drive=data_c,serial=LUMONAS-$(printf '%s' "$data_c" | tr '[:lower:]' '[:upper:]')" \
+  -drive "file=$DATA_DIR/$parity_disk.qcow2,if=none,id=parity,format=qcow2" \
+  -device "virtio-blk-pci,drive=parity,serial=LUMONAS-PARITY" \
   -netdev user,id=n1,restrict=on,hostfwd=tcp::18080-:8081${SSH_FORWARD:-} \
   -device virtio-net-pci,netdev=n1 \
   -nographic \

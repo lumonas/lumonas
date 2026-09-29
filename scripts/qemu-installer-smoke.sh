@@ -57,7 +57,8 @@ qemu-system-x86_64 \
 	-m 2048 \
 	-smp 2 \
 	-cdrom "$ISO" \
-	-drive "file=$DISK,if=virtio,format=qcow2,serial=LUMONAS-REPLACEMENT" \
+	-drive "file=$DISK,if=none,id=replacement,format=qcow2" \
+	-device "virtio-blk-pci,drive=replacement,serial=LUMONAS-REPLACEMENT" \
 	-netdev user,id=n1,restrict=on,hostfwd=tcp::18082-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-boot d \
@@ -179,7 +180,8 @@ qemu-system-x86_64 \
 	-machine q35,accel=tcg \
 	-m 2048 \
 	-smp 2 \
-	-drive "file=$DISK,if=virtio,format=qcow2,serial=LUMONAS-INSTALLED" \
+	-drive "file=$DISK,if=none,id=installed,format=qcow2" \
+	-device "virtio-blk-pci,drive=installed,serial=LUMONAS-INSTALLED" \
 	-netdev user,id=n1,restrict=on,hostfwd=tcp::18083-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-nographic \

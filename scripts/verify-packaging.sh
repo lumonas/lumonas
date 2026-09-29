@@ -234,12 +234,38 @@ fi
 # device, fails with "wrong fs type", and leaves the credentials in place. The
 # cleanup therefore lives in a script that attaches partitions and verifies the
 # key is gone, and the job must call that rather than doing it inline.
-require_line "$ROOT/scripts/qemu-clean-image.sh" 'losetup --find --show --partscan'
 require_line "$ROOT/scripts/qemu-clean-image.sh" 'root/.ssh/authorized_keys'
 require_line "$ROOT/scripts/qemu-clean-image.sh" 'the ephemeral SSH key is still present after cleaning'
 require_line "$ROOT/.github/workflows/ci.yml" 'scripts/qemu-clean-image.sh'
 reject_line "$ROOT/.github/workflows/ci.yml" 'mount -o loop' \
 	'a partitioned QEMU image cannot be mounted with -o loop; use scripts/qemu-clean-image.sh'
+# The live recovery source is a copy of the appliance image, so it is a
+# partitioned GPT disk too, and "mount -o loop" fails on it with "wrong fs
+# type". Route it through the shared helper, which handles partitioned and bare
+# filesystem images alike.
+require_line "$ROOT/scripts/loop-partition-lib.sh" 'losetup --find --show --partscan'
+require_line "$ROOT/scripts/loop-partition-lib.sh" 'mount_image_root'
+# "serial=" is a device property, not a -drive option. QEMU refuses to start
+# with "Block format '<fmt>' does not support the option 'serial'" for every
+# block format, and the smoke tests identify their disks by serial, so the
+# serial has to be set through virtio-blk-pci. Comments are stripped so the
+# explanation can name the rejected form.
+for qemu_script in qemu-smoke.sh qemu-ab-smoke.sh qemu-uefi-ab-smoke.sh qemu-recovery-smoke.sh \
+	qemu-installer-smoke.sh qemu-live-recovery-source.sh iso-smoke.sh; do
+	[ -f "$ROOT/scripts/$qemu_script" ] || continue
+	if grep -v '^[[:space:]]*#' "$ROOT/scripts/$qemu_script" | grep -F -- '-drive "file=' | grep -q 'serial='; then
+		echo "scripts/$qemu_script sets serial= on -drive, which QEMU rejects; attach the drive with if=none,id= and set serial on virtio-blk-pci" >&2
+		exit 1
+	fi
+done
+require_line "$ROOT/scripts/qemu-smoke.sh" 'virtio-blk-pci,drive=system,serial=LUMONAS-SYSTEM'
+# Comments are stripped so the explanation of why "mount -o loop" is wrong can
+# name it; only an actual mount command is a violation.
+if grep -v '^[[:space:]]*#' "$ROOT/scripts/qemu-live-recovery-source.sh" | grep -F -- 'mount -o loop' >/dev/null 2>&1; then
+	echo "scripts/qemu-live-recovery-source.sh mounts with -o loop; the recovery source is a copy of the partitioned appliance image, so use scripts/loop-partition-lib.sh" >&2
+	exit 1
+fi
+require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'mount_image_root "$SOURCE_RAW" "$SOURCE_MOUNT" -o ro'
 require_line "$ROOT/installer/build-iso.sh" 'snapshot.debian.org/archive/debian/20260201T000000Z'
 require_line "$ROOT/installer/build-iso.sh" 'Acquire::Check-Valid-Until=false'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_DEBIAN_MIRROR must use HTTPS'

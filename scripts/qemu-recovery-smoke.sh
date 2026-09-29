@@ -83,8 +83,10 @@ qemu-system-x86_64 \
 	-m 2048 \
 	-smp 2 \
 	-cdrom "$ISO" \
-	-drive "file=$TARGET_IMAGE,if=virtio,format=qcow2,serial=LUMONAS-REPLACEMENT" \
-	-drive "file=$RECOVERY_IMAGE,if=virtio,format=raw,serial=LUMONAS-RECOVERY" \
+	-drive "file=$TARGET_IMAGE,if=none,id=replacement,format=qcow2" \
+	-device "virtio-blk-pci,drive=replacement,serial=LUMONAS-REPLACEMENT" \
+	-drive "file=$RECOVERY_IMAGE,if=none,id=recovery,format=raw" \
+	-device "virtio-blk-pci,drive=recovery,serial=LUMONAS-RECOVERY" \
 	-netdev user,id=n1,restrict=on,hostfwd=tcp::18082-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-boot d \
@@ -184,7 +186,8 @@ qemu-system-x86_64 \
 	-machine q35,accel=tcg \
 	-m 2048 \
 	-smp 2 \
-	-drive "file=$TARGET_IMAGE,if=virtio,format=qcow2,serial=LUMONAS-RECOVERED" \
+	-drive "file=$TARGET_IMAGE,if=none,id=recovered,format=qcow2" \
+	-device "virtio-blk-pci,drive=recovered,serial=LUMONAS-RECOVERED" \
 	-netdev user,id=n1,restrict=on,hostfwd=tcp::18084-:8081 \
 	-device virtio-net-pci,netdev=n1 \
 	-nographic \

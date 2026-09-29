@@ -33,7 +33,8 @@ start_guest() {
 		-m 2048 \
 		-smp 2 \
 		-drive "file=$LUMONAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT" \
-		-drive "file=$DATA_DIR/slot-b.qcow2,if=virtio,format=qcow2,serial=LUMONAS-SLOTB" \
+		-drive "file=$DATA_DIR/slot-b.qcow2,if=none,id=slotb,format=qcow2" \
+		-device "virtio-blk-pci,drive=slotb,serial=LUMONAS-SLOTB" \
 		-netdev user,id=n1,restrict=on,hostfwd=tcp::"$SSH_PORT"-:22 \
 		-device virtio-net-pci,netdev=n1 \
 		-nographic \
