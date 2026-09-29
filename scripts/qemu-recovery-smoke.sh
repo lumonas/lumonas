@@ -13,11 +13,14 @@ fi
 
 ISO="${LUMONAS_ISO:-}"
 [ -f "$ISO" ] || { echo "LUMONAS_ISO must point to the offline ISO" >&2; exit 1; }
-for command in go qemu-img qemu-system-x86_64 mkfs.ext4 mount umount curl python3; do
+for command in go qemu-img qemu-system-x86_64 mkfs.ext4 mount umount curl python3 losetup partx blkid; do
 	command -v "$command" >/dev/null 2>&1 || { echo "$command is required" >&2; exit 1; }
 done
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+# shellcheck source=scripts/loop-partition-lib.sh
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/loop-partition-lib.sh"
+
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/lumonas-recovery-qemu.XXXXXX")"
 RECOVERY_IMAGE="$WORK/recovery-media.raw"
 TARGET_IMAGE="$WORK/replacement.qcow2"
@@ -37,8 +40,7 @@ cleanup() {
 		kill "$QEMU_PID" 2>/dev/null || true
 		wait "$QEMU_PID" 2>/dev/null || true
 	fi
-	umount "$TARGET_MOUNT" 2>/dev/null || true
-	umount "$RECOVERY_MOUNT" 2>/dev/null || true
+	unmount_all_image_roots
 	if [ "$status" -ne 0 ] && [ -n "$DEBUG_DIR" ]; then
 		mkdir -p "$DEBUG_DIR"
 		cp -a "$WORK"/. "$DEBUG_DIR"/ 2>/dev/null || true
@@ -70,7 +72,7 @@ grep -F '"composeValid":true' "$PLAN_PATH" >/dev/null
 python3 "$ROOT/scripts/validate-api-response.py" recovery-plan "$PLAN_PATH"
 truncate -s 128M "$RECOVERY_IMAGE"
 mkfs.ext4 -F -L LUMONAS-RECOVERY "$RECOVERY_IMAGE" >/dev/null
-mount -o loop "$RECOVERY_IMAGE" "$RECOVERY_MOUNT"
+mount_image_root "$RECOVERY_IMAGE" "$RECOVERY_MOUNT" >/dev/null
 cp "$WORK/latest.mrb" "$RECOVERY_MOUNT/latest.mrb"
 cp "$WORK/recovery.key" "$RECOVERY_MOUNT/recovery.key"
 touch "$RECOVERY_MOUNT/.lumonas-recovery-test"
@@ -136,7 +138,7 @@ done
 wait "$QEMU_PID"
 QEMU_PID=""
 qemu-img convert -O raw "$TARGET_IMAGE" "$TARGET_RAW" >/dev/null
-mount -o loop,ro "$TARGET_RAW" "$TARGET_MOUNT"
+mount_image_root "$TARGET_RAW" "$TARGET_MOUNT" -o ro >/dev/null
 grep -Fx 'recovery-applied' "$TARGET_MOUNT/recovery-success" >/dev/null
 if [ "$SOURCE_MODE" = true ]; then
 	grep -F 'configGeneration' "$TARGET_MOUNT/var/lib/lumonas/recovery/restored/desired-state.json" >/dev/null
@@ -180,7 +182,7 @@ else
 	grep -F '"interface":"eth0"' "$TARGET_MOUNT/restored-network.json" >/dev/null
 	echo "QEMU recovery smoke test passed (bundle checksums verified, offline ISO, blank replacement disk, users/shares/network/mounts/Compose/appdata/SnapRAID restored, API ready)"
 fi
-umount "$TARGET_MOUNT"
+unmount_image_root "$TARGET_MOUNT"
 QEMU_PID=""
 qemu-system-x86_64 \
 	-machine q35,accel=tcg \

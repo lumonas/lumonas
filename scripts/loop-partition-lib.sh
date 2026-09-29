@@ -14,19 +14,54 @@
 #     cause, so it reads as a corrupt image.
 #
 # mount_image_root <image> <mountpoint> [mount options...]
-#   Mounts the image's root filesystem and records the loop device it attached.
-#   Prints the loop device path on success, nothing on failure. On failure
-#   nothing is left attached.
+#   Mounts the image's root filesystem and records the loop device it attached,
+#   keyed by mountpoint. Prints the loop device path on success, nothing on
+#   failure. On failure nothing is left attached.
 #
 # unmount_image_root <mountpoint>
-#   Unmounts and detaches what mount_image_root attached. Safe to call when
-#   nothing is attached.
+#   Unmounts and detaches what mount_image_root attached for that mountpoint.
+#   Safe to call for a mountpoint that was never mounted, which matters because
+#   cleanup traps call it unconditionally.
 #
 # Callers can source this file:
 #   . "$(dirname "$0")/loop-partition-lib.sh"
 
-LUMONAS_LOOP_DEVICE=""
-LUMONAS_LOOP_MOUNTPOINT=""
+# A script can hold several images mounted at once, so record the pairing
+# rather than a single loop device. Kept as "mountpoint<TAB>loop" lines.
+LUMONAS_LOOP_REGISTRY=""
+
+# _loop_registry_put / _loop_registry_take
+#
+# These iterate the registry with a here-document rather than a pipe on purpose:
+# a pipeline runs the loop body in a subshell, so the rebuilt registry would be
+# discarded and unmount_all_image_roots would never make progress.
+#
+# _loop_registry_take sets LUMONAS_LOOP_TAKEN rather than printing it, for the
+# same reason: a caller that captured stdout with a command substitution would
+# throw the registry update away with the subshell.
+LUMONAS_LOOP_TAKEN=""
+
+_loop_registry_put() {
+	LUMONAS_LOOP_REGISTRY="$LUMONAS_LOOP_REGISTRY$1	$2
+"
+}
+
+_loop_registry_take() {
+	kept=""
+	LUMONAS_LOOP_TAKEN=""
+	while IFS='	' read -r point value; do
+		[ -n "$point" ] || continue
+		if [ "$point" = "$1" ]; then
+			LUMONAS_LOOP_TAKEN=$value
+		else
+			kept="$kept$point	$value
+"
+		fi
+	done <<REGISTRY
+$LUMONAS_LOOP_REGISTRY
+REGISTRY
+	LUMONAS_LOOP_REGISTRY=$kept
+}
 
 mount_image_root() {
 	image=$1
@@ -74,20 +109,29 @@ mount_image_root() {
 		return 1
 	fi
 
-	LUMONAS_LOOP_DEVICE=$LOOP
-	LUMONAS_LOOP_MOUNTPOINT=$mountpoint
+	_loop_registry_put "$mountpoint" "$LOOP"
 	printf '%s' "$LOOP"
 	return 0
 }
 
 unmount_image_root() {
-	mountpoint=${1:-$LUMONAS_LOOP_MOUNTPOINT}
-	if [ -n "$mountpoint" ]; then
-		umount "$mountpoint" 2>/dev/null || true
+	mountpoint=${1:-}
+	[ -n "$mountpoint" ] || return 0
+	_loop_registry_take "$mountpoint"
+	umount "$mountpoint" 2>/dev/null || true
+	if [ -n "$LUMONAS_LOOP_TAKEN" ]; then
+		losetup -d "$LUMONAS_LOOP_TAKEN" 2>/dev/null || true
 	fi
-	if [ -n "$LUMONAS_LOOP_DEVICE" ]; then
-		losetup -d "$LUMONAS_LOOP_DEVICE" 2>/dev/null || true
-	fi
-	LUMONAS_LOOP_DEVICE=""
-	LUMONAS_LOOP_MOUNTPOINT=""
+}
+
+# unmount_all_image_roots releases every mount this helper still holds. Useful in
+# a cleanup trap that may run with several images attached.
+unmount_all_image_roots() {
+	guard=0
+	while [ -n "$LUMONAS_LOOP_REGISTRY" ] && [ "$guard" -lt 64 ]; do
+		guard=$((guard + 1))
+		point=${LUMONAS_LOOP_REGISTRY%%	*}
+		[ -n "$point" ] || break
+		unmount_image_root "$point"
+	done
 }

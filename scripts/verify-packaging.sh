@@ -266,6 +266,16 @@ if grep -v '^[[:space:]]*#' "$ROOT/scripts/qemu-live-recovery-source.sh" | grep 
 	exit 1
 fi
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'mount_image_root "$SOURCE_RAW" "$SOURCE_MOUNT" -o ro'
+# The recovery smoke mounts a bare ext4 recovery image and a replacement disk
+# that the guest formatted, so only the helper can be relied on to attach the
+# right filesystem in both cases.
+if grep -v '^[[:space:]]*#' "$ROOT/scripts/qemu-recovery-smoke.sh" | grep -F -- '-drive "file=' | grep -q 'serial='; then
+	echo "scripts/qemu-recovery-smoke.sh sets serial= on -drive, which QEMU rejects; use virtio-blk-pci" >&2
+	exit 1
+fi
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'mount_image_root "$RECOVERY_IMAGE" "$RECOVERY_MOUNT"'
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'mount_image_root "$TARGET_RAW" "$TARGET_MOUNT" -o ro'
+require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'unmount_all_image_roots'
 require_line "$ROOT/installer/build-iso.sh" 'snapshot.debian.org/archive/debian/20260201T000000Z'
 require_line "$ROOT/installer/build-iso.sh" 'Acquire::Check-Valid-Until=false'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_DEBIAN_MIRROR must use HTTPS'
