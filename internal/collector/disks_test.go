@@ -8,14 +8,13 @@ import (
 )
 
 // TestDisksReadOnlyIdentityAgainstRealDevice runs the production read-only
-// collector against the host's real block devices.
+// collector against the host's real block devices, including the disposable
+// loopback disk the surrounding smoke creates.
 //
-// The disposable loopback device that the surrounding smoke creates is NOT
-// expected here: lsblk reports loopback attachments with type "loop", and the
-// collector intentionally surfaces only type "disk". Offering a loopback file
-// as a manageable import target would be a bug, not a feature. What matters
-// is that every real disk the collector does report carries a stable identity
-// and, when formatted, its filesystem UUID.
+// A loopback attachment only becomes manageable once it carries an identity of
+// its own, so the disposable device may legitimately appear once it has been
+// formatted. What must always hold is that everything the collector reports
+// has a stable identity and retains its filesystem UUID.
 func TestDisksReadOnlyIdentityAgainstRealDevice(t *testing.T) {
 	path := strings.TrimSpace(os.Getenv("LUMONAS_TEST_DISK_PATH"))
 	disks, err := Disks(nil)
@@ -23,14 +22,14 @@ func TestDisksReadOnlyIdentityAgainstRealDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, disk := range disks {
-		if path != "" && disk.CurrentPath == path {
-			t.Fatalf("collector offered loopback device %q as a manageable disk", path)
-		}
 		if disk.ID == "" || strings.HasPrefix(disk.ID, "path:") {
-			t.Fatalf("real disk collector did not retain a stable identity: %#v", disk)
+			t.Fatalf("collector reported a disk without a stable identity: %#v", disk)
 		}
 		if disk.Filesystem != "" && disk.FilesystemUUID == "" {
-			t.Fatalf("real disk collector lost the filesystem UUID: %#v", disk)
+			t.Fatalf("collector lost the filesystem UUID: %#v", disk)
+		}
+		if path != "" && disk.CurrentPath == path && disk.ID != "uuid:"+disk.FilesystemUUID {
+			t.Fatalf("loopback disk %q was not keyed on its filesystem identity: %#v", path, disk)
 		}
 	}
 	if path != "" && len(disks) == 0 {
