@@ -83,6 +83,13 @@ def main() -> int:
         report = json.loads(raw)
     except json.JSONDecodeError as error:
         print(f"scan report is not valid JSON: {error}", file=sys.stderr)
+        print(
+            "An unreadable or empty report is not evidence of a clean image.",
+            file=sys.stderr,
+        )
+        return 1
+    if not isinstance(report, dict) or "Results" not in report:
+        print("scan report is not a Trivy report (no 'Results' key)", file=sys.stderr)
         return 1
 
     # An image with no baseline entry must be clean, so it gets an empty

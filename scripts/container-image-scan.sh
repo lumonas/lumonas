@@ -63,21 +63,36 @@ PY
 	[ -n "$image" ] || continue
 	echo "Scanning container image: $image"
 	report="$(mktemp "${TMPDIR:-/tmp}/lumonas-image-scan.XXXXXX")"
-	trap 'rm -f "$report"' EXIT INT TERM
-	docker run --rm "$SCANNER_IMAGE" image \
+	errors="$(mktemp "${TMPDIR:-/tmp}/lumonas-image-scan-err.XXXXXX")"
+	trap 'rm -f "$report" "$errors"' EXIT INT TERM
+	# Fail closed. A scan that cannot pull the image, or that errors, must not
+	# be read as a clean scan: a missing upstream tag otherwise looks exactly
+	# like an image with no findings.
+	if ! docker run --rm "$SCANNER_IMAGE" image \
 		--scanners vuln \
 		--severity HIGH,CRITICAL \
 		--ignore-unfixed \
 		--exit-code 0 \
 		--no-progress \
 		--format json \
-		"$image" >"$report" 2>/dev/null || true
+		"$image" >"$report" 2>"$errors"; then
+		echo "scanning $image failed:" >&2
+		sed -n '1,20p' "$errors" >&2
+		echo "" >&2
+		echo "This usually means the pinned tag no longer exists upstream." >&2
+		echo "Update the pin in catalog/apps.json, then re-sign the catalog." >&2
+		exit 1
+	fi
+	if [ ! -s "$report" ]; then
+		echo "scanning $image produced no report" >&2
+		exit 1
+	fi
 
 	# An image with no baseline entry is held to the strict zero-finding
 	# standard; check-catalog-baseline.py enforces that by default.
 	python3 "$ROOT/scripts/check-catalog-baseline.py" \
 		--baseline "$BASELINE" --results "$report" --image "$image"
-	rm -f "$report"
+	rm -f "$report" "$errors"
 	trap - EXIT INT TERM
 done
 

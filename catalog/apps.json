@@ -109,7 +109,7 @@
     "description": "Protect your devices from unwanted content by blocking at the DNS level.",
     "accent": "success",
     "upstream": "https://pi-hole.net",
-    "image": "pihole/pihole:2024.11.0",
+    "image": "pihole/pihole:2026.09.0",
     "ports": [80],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"80"},
