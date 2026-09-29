@@ -144,6 +144,18 @@ apt-get install -y --no-install-recommends \
   avahi-daemon nftables
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
+# Stop Debian's own update timers. The image is built from a pinned snapshot, and
+# the package manifest written below is what the signed update path verifies a
+# later system against. If apt-daily runs at boot it fetches the current archive
+# instead of the pinned snapshot, so the running system stops matching the
+# manifest that describes it, and it mutates the system underneath an update
+# mechanism that has its own signing and review. It also competes with first
+# boot for memory, which is enough on its own to have apt-get OOM-killed here.
+# Mask by symlink: systemctl mask in a chroot is not reliable.
+mkdir -p /etc/systemd/system
+ln -sf /dev/null /etc/systemd/system/apt-daily.timer
+ln -sf /dev/null /etc/systemd/system/apt-daily-upgrade.timer
+ln -sf /dev/null /etc/systemd/system/unattended-upgrades.service
 if [ -d /var/lib/lumonas/update-fixture ]; then
   chown -R lumonas:lumonas /var/lib/lumonas/update-fixture
   chmod 0640 /var/lib/lumonas/update-fixture/package

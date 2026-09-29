@@ -228,6 +228,14 @@ if ! printf '%s\n' "$package_lines" | grep -E '(^|[[:space:]])grub-efi-amd64-bin
 	echo "scripts/qemu-build-image.sh no longer installs grub-efi-amd64-bin; the appliance would not boot via UEFI" >&2
 	exit 1
 fi
+# The appliance image is built from a pinned Debian snapshot and records a
+# package manifest that the signed update path verifies against. Debian's own
+# apt timers would fetch the current archive on boot, so the running system
+# would no longer match the snapshot or the manifest, and would be mutated
+# underneath an update mechanism that has its own signing and review.
+for apt_unit in apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service; do
+	require_line "$ROOT/scripts/qemu-build-image.sh" "$apt_unit"
+done
 # The QEMU smoke tests install a throwaway SSH key and update fixture that must
 # not survive into the uploaded artifact. The image is a partitioned GPT disk,
 # so it cannot be cleaned with "mount -o loop": that attaches the whole-disk
