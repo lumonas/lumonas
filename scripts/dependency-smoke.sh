@@ -36,7 +36,7 @@ if command -v govulncheck >/dev/null 2>&1; then
 	attempts=0
 	while [ "$attempts" -lt 3 ]; do
 		attempts=$((attempts + 1))
-		if go mod download all 2>&1; then
+		if go mod download 2>&1; then
 			break
 		fi
 		echo "go mod download failed (attempt $attempts of 3); retrying" >&2
@@ -61,7 +61,7 @@ if command -v govulncheck >/dev/null 2>&1; then
 		echo "NOTE: the module proxy failed while govulncheck was loading" >&2
 		echo "      source, so no result was produced. Retrying once after" >&2
 		echo "      re-downloading the module cache." >&2
-		go mod download all 2>&1 || true
+		go mod download 2>&1 || true
 	done
 elif [ "$REQUIRE_TOOLS" = "true" ]; then
 	echo "govulncheck is required for the dependency gate" >&2
