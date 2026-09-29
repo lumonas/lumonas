@@ -43,4 +43,7 @@ func walkSparseData(file *os.File, size uint64, visit func(uint64, uint64) error
 		}
 		offset = end
 	}
+	// Reached when the final extent ends exactly at size, and also when size is
+	// zero, so there is no data left to visit.
+	return nil
 }
