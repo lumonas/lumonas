@@ -295,7 +295,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
         working-directory: web
       - run: LUMONAS_GIT_COMMIT="$GITHUB_SHA" make package VERSION="${GITHUB_SHA::12}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lumonas-deb
           path: '*.deb'
@@ -323,7 +323,7 @@ jobs:
           LUMONAS_CC=aarch64-linux-gnu-gcc
           LUMONAS_GIT_COMMIT="$GITHUB_SHA"
           make package-arm64 VERSION="${GITHUB_SHA::12}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lumonas-deb-arm64
           path: '*.deb'
@@ -370,7 +370,7 @@ jobs:
       - name: Remove ephemeral QEMU SSH access
         if: always()
         run: sudo env LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" sh scripts/qemu-clean-image.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lumonas-qemu
@@ -445,11 +445,11 @@ jobs:
           source_image="$(find "$PWD/build/qemu" -type f -name '*.raw' -print -quit)"
           test -n "$source_image"
           sudo env LUMONAS_ISO="$PWD/build/releases/$(ls build/releases/*.iso | xargs -n1 basename)" LUMONAS_RECOVERY_ASSERT=true LUMONAS_RECOVERY_SOURCE_IMAGE="$source_image" LUMONAS_RECOVERY_FIXTURE="$RUNNER_TEMP/lumonas-recovery-fixture" LUMONAS_RECOVER_BIN="$RUNNER_TEMP/lumonas-recover" LUMONAS_RECOVERY_LOG="$PWD/build/qemu-recovery.log" LUMONAS_RECOVERY_DEBUG_DIR="$PWD/build/qemu/recovery-debug" bash scripts/qemu-recovery-smoke.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lumonas-iso
           path: build/releases/*
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: lumonas-iso-smoke
