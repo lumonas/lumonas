@@ -33,6 +33,15 @@ if [ -n "$BUILD_CC" ]; then
 fi
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 OUT="$ROOT/build/package"
+# A Debian package version must begin with a digit, so a caller that passes a
+# commit SHA (a common CI convenience) cannot be used verbatim. Prefix such a
+# value rather than rejecting the build; the full commit is already recorded in
+# the build manifest, so nothing is lost.
+case "$VERSION" in
+	[0-9]*) ;;
+	'') echo "a package version is required" >&2; exit 1 ;;
+	*) VERSION="0.0.0-g${VERSION}" ;;
+esac
 GIT_COMMIT="${LUMONAS_GIT_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf '%s' unknown)}"
 GO_VERSION="$(go version)"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT" log -1 --format=%ct 2>/dev/null || printf '%s' 0)}"

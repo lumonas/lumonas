@@ -30,7 +30,15 @@ field() {
 [ "$(field Package)" = "lumonas" ] || { echo "unexpected package name" >&2; exit 1; }
 EXPECTED_ARCH="${LUMONAS_DEB_ARCH:-amd64}"
 [ "$(field Architecture)" = "$EXPECTED_ARCH" ] || { echo "unexpected package architecture" >&2; exit 1; }
-[ -n "$(field Version)" ] || { echo "package version is empty" >&2; exit 1; }
+VERSION_FIELD="$(field Version)"
+[ -n "$VERSION_FIELD" ] || { echo "package version is empty" >&2; exit 1; }
+# dpkg requires a version to start with a digit; build-deb.sh normalises a
+# non-numeric input (such as a commit SHA) rather than failing the build, so
+# assert the normalised form here too.
+case "$VERSION_FIELD" in
+	[0-9]*) ;;
+	*) echo "package version does not start with a digit: $VERSION_FIELD" >&2; exit 1 ;;
+esac
 
 CONTENTS=$(dpkg-deb -c "$PACKAGE")
 require_path() {
