@@ -201,6 +201,21 @@ if payload.get("ok") or sys.argv[2] not in payload.get("error", ""):
 PY
 }
 
+# assert_error_one_of accepts a rejection that names any one of several valid
+# reasons, for cases where the wording depends on host state.
+assert_error_one_of() {
+	response=$1
+	shift
+	python3 - "$response" "$@" <<'PY'
+import json
+import sys
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+needles = sys.argv[2:]
+if payload.get("ok") or not any(needle in payload.get("error", "") for needle in needles):
+    raise SystemExit(f"expected rejection containing one of {needles!r}: {payload}")
+PY
+}
+
 UNSTABLE_IMAGE="$WORK/unstable-identity.img"
 truncate -s 64M "$UNSTABLE_IMAGE"
 UNSTABLE_LOOP="$(losetup --find --show "$UNSTABLE_IMAGE")"
@@ -211,7 +226,11 @@ case "$UNSTABLE_ID" in
 	*) echo "unpartitioned loop fixture unexpectedly has a stable identity: $UNSTABLE_ID" >&2; exit 1 ;;
 esac
 send_request filesystem.format unstable-path "$WORK/unstable-identity.json" '{"filesystem":"ext4"}' "$WORK/unstable-format.json"
-assert_error "$WORK/unstable-format.json" "no stable identity"
+# The invariant is that the operation is refused. The broker may report either an
+# unstable identity or an identity it cannot find, because an unpartitioned
+# loopback attachment is not enumerated as a disk in the first place. Both are
+# fail-closed, so accept either reason.
+assert_error_one_of "$WORK/unstable-format.json" "no stable identity" "identity is no longer present"
 
 discover_identity "$LOOP" "$WORK/identity-before-format.json"
 DISK_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$WORK/identity-before-format.json")"

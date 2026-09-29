@@ -68,10 +68,14 @@ for executable in \
 	/usr/local/bin/fwupdmgr \
 	/usr/bin/docker \
 	/usr/bin/smbd \
+	/usr/bin/rsync \
 	/usr/bin/rsyncd \
 	/usr/bin/vsftpd \
 	/usr/bin/nmbd \
 	/usr/sbin/smbd \
+	/usr/sbin/nmbd \
+	/usr/sbin/rsyncd \
+	/usr/sbin/vsftpd \
 	/usr/bin/systemctl \
 	/usr/bin/apt-get \
 	/bin/true \
