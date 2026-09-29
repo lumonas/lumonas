@@ -69,6 +69,16 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 		}
 		d = enrichFromUdev(run, d)
 		d = inheritFilesystemMetadata(d)
+		id := StableID(d)
+		// A device with no WWN, serial, partition-table GUID, or filesystem UUID
+		// has no identity that survives a reboot or a device-letter change, so
+		// it cannot be the target of a storage plan. Such placeholder entries do
+		// appear on hosts that expose unused network block devices or raw
+		// multipath slots. Drop them here so every disk in the inventory is
+		// something the storage layer can actually key a plan on.
+		if !model.HasStableDiskIdentity(id) {
+			continue
+		}
 		rotational := asBool(d.Rota)
 		iface := d.Tran
 		if iface == "" {
@@ -78,7 +88,6 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 		if d.Size == 0 {
 			health = model.Warning
 		}
-		id := StableID(d)
 		result = append(result, model.Disk{
 			ID: id, Name: d.Name, CurrentPath: d.Path, Model: strings.TrimSpace(d.Model), Serial: strings.TrimSpace(d.Serial), WWN: strings.TrimSpace(d.WWN), GPTDiskGUID: strings.TrimSpace(d.PTUUID), SizeBytes: d.Size,
 			Role: "unknown", Rotational: rotational, Interface: iface, Health: health, Filesystem: d.FSType, FilesystemUUID: strings.TrimSpace(d.UUID), PartitionUUID: strings.TrimSpace(d.PartUUID), Mounted: strings.TrimSpace(d.Mountpoint) != "", LastSeen: time.Now().UTC(),

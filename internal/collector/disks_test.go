@@ -66,6 +66,27 @@ func TestDisksExcludeUnpartitionedLoopbackButKeepPartitioned(t *testing.T) {
 	}
 }
 
+// A device with no WWN, serial, partition-table GUID, or filesystem UUID has
+// no identity that survives a reboot or a device-letter change, so it cannot
+// back a storage plan. Hosts expose such placeholder entries (unused network
+// block devices, empty multipath slots), and they must not be offered.
+func TestDisksExcludeDevicesWithoutStableIdentity(t *testing.T) {
+	payload := []byte(`{"blockdevices":[
+		{"name":"nbd0","path":"/dev/nbd0","type":"disk","size":0,"model":"","serial":"","wwn":"","uuid":""},
+		{"name":"sda","path":"/dev/sda","type":"disk","size":100,"model":"Test","serial":"SERIAL-1","wwn":"","uuid":""}
+	]}`)
+	disks, err := Disks(func(string, ...string) ([]byte, error) { return payload, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(disks) != 1 {
+		t.Fatalf("expected only the device with a stable identity, got %#v", disks)
+	}
+	if disks[0].CurrentPath != "/dev/sda" {
+		t.Fatalf("unexpected disk retained: %#v", disks[0])
+	}
+}
+
 func TestDisksUseStableIdentityAcrossDevicePathChanges(t *testing.T) {
 	first := []byte(`{"blockdevices":[{"name":"sdb","path":"/dev/sdb","type":"disk","size":100,"model":"Test","serial":"SERIAL-1","wwn":"wwn-1","rota":true,"tran":"sata"}]}`)
 	second := []byte(`{"blockdevices":[{"name":"sdc","path":"/dev/sdc","type":"disk","size":100,"model":"Test","serial":"SERIAL-1","wwn":"wwn-1","rota":true,"tran":"sata"}]}`)
