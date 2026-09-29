@@ -13,6 +13,7 @@ func TestDefaultNamesExposeCompleteApplianceTopology(t *testing.T) {
 		"lumonas-privd-network.service",
 		"lumonas-privd-power.service",
 		"lumonas-privd-general.service",
+		"lumonas-privd-acme.service",
 		"lumonasd.service",
 		"lumonas-web.service",
 		"lumonas-jobs.target",

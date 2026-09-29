@@ -54,6 +54,35 @@ type Disk struct {
 	SMART          SmartSummary `json:"smart"`
 }
 
+// SMARTSample is a bounded historical observation for one stable disk.
+// Summary intentionally reuses the live SMART contract so trend calculations
+// remain explainable in the UI.
+type SMARTSample struct {
+	DiskID       string       `json:"diskId"`
+	CapturedAt   time.Time    `json:"capturedAt"`
+	Summary      SmartSummary `json:"summary"`
+	TemperatureC *float64     `json:"temperatureC,omitempty"`
+}
+
+type SMARTTrend struct {
+	DiskID             string      `json:"diskId"`
+	SampleCount        int         `json:"sampleCount"`
+	Since              *time.Time  `json:"since,omitempty"`
+	TemperatureSlope   float64     `json:"temperatureSlope"`
+	ReallocatedSlope   float64     `json:"reallocatedSlope"`
+	PendingSlope       float64     `json:"pendingSlope"`
+	UncorrectableSlope float64     `json:"uncorrectableSlope"`
+	CRCSlope           float64     `json:"crcSlope"`
+	Status             HealthState `json:"status"`
+	Summary            string      `json:"summary"`
+}
+
+type SMARTHistory struct {
+	DiskID  string        `json:"diskId"`
+	Samples []SMARTSample `json:"samples"`
+	Trend   SMARTTrend    `json:"trend"`
+}
+
 type PoolMember struct {
 	DiskID     string `json:"diskId"`
 	Enabled    bool   `json:"enabled"`
@@ -230,14 +259,15 @@ type ActivityEvent struct {
 }
 
 type Alert struct {
-	ID          string       `json:"id"`
-	Severity    string       `json:"severity"`
-	Title       string       `json:"title"`
-	Description string       `json:"description"`
-	Resource    *ResourceRef `json:"resource,omitempty"`
-	State       string       `json:"state"`
-	StartedAt   time.Time    `json:"startedAt"`
-	ResolvedAt  *time.Time   `json:"resolvedAt,omitempty"`
+	ID           string       `json:"id"`
+	Severity     string       `json:"severity"`
+	Title        string       `json:"title"`
+	Description  string       `json:"description"`
+	Resource     *ResourceRef `json:"resource,omitempty"`
+	State        string       `json:"state"`
+	StartedAt    time.Time    `json:"startedAt"`
+	ResolvedAt   *time.Time   `json:"resolvedAt,omitempty"`
+	SnoozedUntil *time.Time   `json:"snoozedUntil,omitempty"`
 }
 
 type HealthComponent struct {
@@ -252,4 +282,76 @@ type HealthBreakdown struct {
 	Status     HealthState       `json:"status"`
 	Score      int               `json:"score"`
 	Components []HealthComponent `json:"components"`
+}
+
+type TroubleshootingLink struct {
+	Label string `json:"label"`
+	Path  string `json:"path"`
+}
+
+type TroubleshootingIssue struct {
+	ID       string                `json:"id"`
+	Severity HealthState           `json:"severity"`
+	Title    string                `json:"title"`
+	Summary  string                `json:"summary"`
+	Cause    string                `json:"cause,omitempty"`
+	Steps    []string              `json:"steps"`
+	Resource *ResourceRef          `json:"resource,omitempty"`
+	Links    []TroubleshootingLink `json:"links,omitempty"`
+}
+
+type TroubleshootingReport struct {
+	Status string                 `json:"status"`
+	Issues []TroubleshootingIssue `json:"issues"`
+}
+
+type GraphNode struct {
+	ID     string      `json:"id"`
+	Type   string      `json:"type"`
+	Label  string      `json:"label"`
+	Status HealthState `json:"status"`
+}
+
+type GraphEdge struct {
+	From         string `json:"from"`
+	To           string `json:"to"`
+	Relationship string `json:"relationship"`
+}
+
+type DependencyGraph struct {
+	GeneratedAt time.Time   `json:"generatedAt"`
+	Nodes       []GraphNode `json:"nodes"`
+	Edges       []GraphEdge `json:"edges"`
+}
+
+type RestoreDrill struct {
+	ID                string     `json:"id"`
+	Trigger           string     `json:"trigger"`
+	State             string     `json:"state"`
+	BundlePath        string     `json:"bundlePath,omitempty"`
+	Generation        int64      `json:"generation"`
+	StartedAt         time.Time  `json:"startedAt"`
+	FinishedAt        *time.Time `json:"finishedAt,omitempty"`
+	Verified          bool       `json:"verified"`
+	DatabaseValid     bool       `json:"databaseValid"`
+	ComposeValid      bool       `json:"composeValid"`
+	SecretsRestored   bool       `json:"secretsRestored"`
+	DatabaseRestored  bool       `json:"databaseRestored"`
+	AppdataRestored   []string   `json:"appdataRestored,omitempty"`
+	SharesRestored    []string   `json:"sharesRestored,omitempty"`
+	ServicesRehearsed []string   `json:"servicesRehearsed,omitempty"`
+	ServicesHealthy   bool       `json:"servicesHealthy"`
+	AppliedFiles      int        `json:"appliedFiles"`
+	Warnings          []string   `json:"warnings,omitempty"`
+	Error             string     `json:"error,omitempty"`
+}
+
+type RestoreDrillSchedule struct {
+	Enabled         bool       `json:"enabled"`
+	IntervalSeconds int64      `json:"intervalSeconds"`
+	RPOHours        int        `json:"rpoHours"`
+	RTOMinutes      int        `json:"rtoMinutes"`
+	LastStartedAt   *time.Time `json:"lastStartedAt,omitempty"`
+	NextDueAt       *time.Time `json:"nextDueAt,omitempty"`
+	UpdatedAt       time.Time  `json:"updatedAt"`
 }

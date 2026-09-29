@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/lumonas/lumonas/internal/identity"
 	"github.com/lumonas/lumonas/internal/store"
@@ -14,6 +16,14 @@ import (
 func (s *apiServer) identityActor(w http.ResponseWriter, r *http.Request, mutate bool) (string, bool) {
 	if !s.authEnabled() {
 		return "local", true
+	}
+	if raw := bearerToken(r); raw != "" {
+		username, scopes, ok := s.store.ResolveAPIToken(raw)
+		if !ok || !apiTokenAllows(scopes, r.Method, r.URL.Path) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "API token does not have permission for this operation"})
+			return "", false
+		}
+		return "token:" + username, true
 	}
 	cookie, err := r.Cookie("lumonas_session")
 	if err != nil {
@@ -35,6 +45,122 @@ func (s *apiServer) identityActor(w http.ResponseWriter, r *http.Request, mutate
 		return "", false
 	}
 	return username, true
+}
+
+func bearerToken(r *http.Request) string {
+	value := strings.TrimSpace(r.Header.Get("Authorization"))
+	if len(value) < 8 || !strings.EqualFold(value[:7], "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(value[7:])
+}
+
+func apiTokenAllows(scopes []string, method, requestPath string) bool {
+	if hasTokenScope(scopes, "fleet:status") {
+		return method == http.MethodGet && requestPath == "/api/v1/fleet/status"
+	}
+	if hasTokenScope(scopes, "replication:receive") {
+		return method == http.MethodPut && requestPath == "/api/v1/replication/receive"
+	}
+	if destination := snapshotReplicationReceiveShare(scopes); destination != "" {
+		return (method == http.MethodPut && requestPath == "/api/v1/replication/snapshots/"+destination+"/receive") ||
+			(method == http.MethodPost && requestPath == "/api/v1/replication/snapshots/"+destination+"/cancel")
+	}
+	if hasWorkstationBackupScope(scopes) {
+		if method == http.MethodPost && requestPath == "/api/v1/files/uploads" {
+			return true
+		}
+		if (method == http.MethodGet || method == http.MethodPut || method == http.MethodPost || method == http.MethodDelete) && strings.HasPrefix(requestPath, "/api/v1/files/uploads/") {
+			return true
+		}
+		return method == http.MethodGet && (requestPath == "/api/v1/files/download" || requestPath == "/api/v1/files")
+	}
+	if method == http.MethodGet || method == http.MethodHead {
+		return hasTokenScope(scopes, "read") || hasTokenScope(scopes, "backup:write")
+	}
+	if hasTokenScope(scopes, "backup:write") && (strings.HasPrefix(requestPath, "/api/v1/backup/") || strings.HasPrefix(requestPath, "/api/v1/backups/")) {
+		return true
+	}
+	return false
+}
+
+var workstationBackupScopePattern = regexp.MustCompile(`^workstation:backup:[A-Za-z0-9_-]{1,128}$`)
+var snapshotReplicationReceiveScopePattern = regexp.MustCompile(`^replication:snapshot:receive:[A-Za-z0-9_-]{1,128}$`)
+
+func snapshotReplicationReceiveShare(scopes []string) string {
+	for _, scope := range scopes {
+		if snapshotReplicationReceiveScopePattern.MatchString(scope) {
+			return strings.TrimPrefix(scope, "replication:snapshot:receive:")
+		}
+	}
+	return ""
+}
+
+func hasWorkstationBackupScope(scopes []string) bool {
+	for _, scope := range scopes {
+		if workstationBackupScopePattern.MatchString(scope) {
+			return true
+		}
+	}
+	return false
+}
+
+func workstationBackupShare(scopes []string) string {
+	for _, scope := range scopes {
+		if workstationBackupScopePattern.MatchString(scope) {
+			return strings.TrimPrefix(scope, "workstation:backup:")
+		}
+	}
+	return ""
+}
+
+// workstationShareAllowed binds workstation tokens to the single share encoded
+// in the token scope. Other authentication modes retain their existing policy.
+func (s *apiServer) workstationShareAllowed(r *http.Request, shareID string) bool {
+	raw := bearerToken(r)
+	if raw == "" {
+		return true
+	}
+	_, scopes, ok := s.store.ResolveAPIToken(raw)
+	if !ok || !hasWorkstationBackupScope(scopes) {
+		return true
+	}
+	return workstationBackupShare(scopes) == shareID
+}
+
+func hasTokenScope(scopes []string, want string) bool {
+	for _, scope := range scopes {
+		if scope == want {
+			return true
+		}
+	}
+	return false
+}
+
+func validTokenScopes(scopes []string) bool {
+	if len(scopes) == 0 || len(scopes) > 4 {
+		return false
+	}
+	for _, scope := range scopes {
+		if scope != "read" && scope != "backup:write" && scope != "replication:receive" && scope != "fleet:status" && !workstationBackupScopePattern.MatchString(scope) && !snapshotReplicationReceiveScopePattern.MatchString(scope) {
+			return false
+		}
+	}
+	if hasTokenScope(scopes, "fleet:status") || hasTokenScope(scopes, "replication:receive") || hasWorkstationBackupScope(scopes) || snapshotReplicationReceiveShare(scopes) != "" {
+		return len(scopes) == 1
+	}
+	return true
+}
+
+func parseTokenExpiry(value string) (*time.Time, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	at, err := time.Parse(time.RFC3339, value)
+	if err != nil || !at.After(time.Now().UTC()) {
+		return nil, errors.New("token expiry must be a future RFC3339 timestamp")
+	}
+	return &at, nil
 }
 
 func (s *apiServer) expectedIdentityGeneration(w http.ResponseWriter, expected *int64) bool {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -37,15 +38,30 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	}
 
 	server := testServer(t)
+	server.catalogFile = filepath.Join("..", "..", "catalog", "apps.json")
 	stackRoot := filepath.Join(root, "stacks")
-	server.dockerService = dockerruntime.New(stackRoot, func(_ context.Context, _ string, _ ...string) ([]byte, error) {
+	server.dockerService = dockerruntime.New(stackRoot, func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		command := strings.Join(args, " ")
+		if strings.Contains(command, "pg_dump") {
+			return []byte("immich-database-dump"), nil
+		}
+		if strings.Contains(command, "config --format json") {
+			return []byte(`{"services":{"media":{"volumes":[{"type":"bind","source":"/srv/lumonas/docker/appdata/media/upload","target":"/usr/src/app/upload"},{"type":"bind","source":"/srv/lumonas/docker/appdata/media/postgres","target":"/var/lib/postgresql/data"}]}}}`), nil
+		}
 		return nil, nil
 	})
+	shareRoot := filepath.Join(root, "shared-media")
+	if err := os.MkdirAll(shareRoot, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shareRoot, "welcome.txt"), []byte("recovery share fixture"), 0o640); err != nil {
+		t.Fatal(err)
+	}
 
 	postRecoveryUser(t, server, `{"name":"operator","password":"operator-password-123","managementRole":"admin"}`, "/api/v1/users", http.StatusCreated)
 	postRecoveryUser(t, server, `{"id":"lan","uuid":"11111111-1111-1111-1111-111111111111","name":"LAN","interface":"eth0","enabled":true,"type":"ethernet","ipv4":{"method":"auto"},"ipv6":{"method":"disabled"},"reauthenticated":true}`, "/api/v1/network/connections", http.StatusCreated)
-	postRecoveryUser(t, server, `{"id":"share-media","name":"Media","path":"/srv/pools/media","enabled":true,"protocols":[{"protocol":"smb","enabled":true},{"protocol":"nfs","enabled":true}],"access":[]}`, "/api/v1/shares", http.StatusCreated)
-	postRecoveryUser(t, server, `{"name":"media","composeYaml":"services:\n  media:\n    image: example/media:latest\n    volumes:\n      - /srv/lumonas/docker/appdata/media:/config\n"}`, "/api/v1/docker/stacks", http.StatusCreated)
+	postRecoveryUser(t, server, fmt.Sprintf(`{"id":"share-media","name":"Media","path":%q,"enabled":true,"protocols":[{"protocol":"smb","enabled":true},{"protocol":"nfs","enabled":true}],"access":[]}`, shareRoot), "/api/v1/shares", http.StatusCreated)
+	postRecoveryUser(t, server, `{"name":"media","catalogId":"immich","composeYaml":"services:\n  media:\n    image: ghcr.io/immich-app/immich-server:v1.116.0\n    volumes:\n      - /srv/lumonas/docker/appdata/media/upload:/usr/src/app/upload\n      - /srv/lumonas/docker/appdata/media/postgres:/var/lib/postgresql/data\n"}`, "/api/v1/docker/stacks", http.StatusCreated)
 
 	exportResponse := httptest.NewRecorder()
 	server.routes().ServeHTTP(exportResponse, httptest.NewRequest(http.MethodPost, "/api/v1/recovery/export", nil))
@@ -71,7 +87,7 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !plan.Verified || !plan.DatabaseValid || !plan.DesiredStateValid || !plan.ComposeValid || !plan.EncryptedSecrets {
+	if !plan.Verified || !plan.DatabaseValid || !plan.DesiredStateValid || !plan.ComposeValid || !plan.EncryptedSecrets || len(plan.Shares) != 1 || len(plan.DatabaseDumps) != 1 || plan.DatabaseDumps[0].Stack != "media" {
 		t.Fatalf("production recovery export was not fully verified: %#v", plan)
 	}
 	for _, file := range []string{
@@ -98,8 +114,11 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	if got, err := os.ReadFile(filepath.Join(restoredRoot, "var/lib/lumonas/secrets/recovered-secrets.bin")); err != nil || string(got) != "configured-runtime-secret" {
 		t.Fatalf("restored encrypted secret = %q, err=%v", got, err)
 	}
+	if got, err := os.ReadFile(filepath.Join(restoredRoot, strings.TrimPrefix(shareRoot, string(filepath.Separator)), "welcome.txt")); err != nil || string(got) != "recovery share fixture" {
+		t.Fatalf("restored share file = %q, err=%v", got, err)
+	}
 	compose, err := os.ReadFile(filepath.Join(restoredRoot, "srv/lumonas/docker/stacks/media/compose.yaml"))
-	if err != nil || !strings.Contains(string(compose), "example/media:latest") {
+	if err != nil || !strings.Contains(string(compose), "ghcr.io/immich-app/immich-server:v1.116.0") {
 		t.Fatalf("restored Compose file = %q, err=%v", compose, err)
 	}
 	networkConfig, err := os.ReadFile(filepath.Join(restoredRoot, "etc/lumonas/recovery/network-connections.json"))

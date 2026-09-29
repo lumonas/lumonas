@@ -6,6 +6,7 @@ import { queryKeys } from '@/api/queries'
 import type { Disk, Job, LogLine, LumoEvent, SystemMetrics } from '@/api/types'
 import { useLogsStore } from '@/stores/logs'
 import { useMetricsStore } from '@/stores/metrics'
+import { useLiveConnection } from '@/stores/live-connection'
 
 function applyEvent(qc: QueryClient, event: LumoEvent) {
   switch (event.type) {
@@ -83,6 +84,10 @@ export function useEventStream() {
   const qc = useQueryClient()
   useEffect(() => {
     const source = connectEventStream()
+    const setState = useLiveConnection.getState().setState
+    setState('connecting')
+    const onOpen = () => setState('live')
+    const onError = () => setState(source.readyState === 2 ? 'offline' : 'reconnecting')
     const handler = (e: { data: string }) => {
       try {
         applyEvent(qc, JSON.parse(e.data) as LumoEvent)
@@ -90,10 +95,15 @@ export function useEventStream() {
         console.debug('ignored malformed event', err)
       }
     }
+    source.addEventListener('open', onOpen)
+    source.addEventListener('error', onError)
     source.addEventListener('message', handler)
     return () => {
+      source.removeEventListener('open', onOpen)
+      source.removeEventListener('error', onError)
       source.removeEventListener('message', handler)
       source.close()
+      setState('offline')
     }
   }, [qc])
 }

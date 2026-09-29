@@ -232,7 +232,7 @@ export const storageSnapshots: StorageSnapshot[] = [
   {
     id: 'snap-1001',
     kind: 'btrfs',
-    source: '/srv/pools/main',
+    source: '/srv/pools/pool-main/Documents',
     name: 'nightly-20260912T020000Z',
     label: 'nightly',
     createdAt: daysAgo(1),
@@ -240,7 +240,7 @@ export const storageSnapshots: StorageSnapshot[] = [
   {
     id: 'snap-1002',
     kind: 'btrfs',
-    source: '/srv/pools/main',
+    source: '/srv/pools/pool-main/Documents',
     name: '20260911T120000Z',
     createdAt: daysAgo(2),
   },
@@ -304,6 +304,15 @@ export const jobs: Job[] = [
     createdAt: daysAgo(2),
     startedAt: daysAgo(2),
     finishedAt: daysAgo(2),
+  },
+  {
+    id: 'job-e2e-cancellable',
+    type: 'smart.short',
+    title: 'E2E SMART short test — sdc',
+    resourceId: 'disk-data-2',
+    state: 'queued',
+    progress: null,
+    createdAt: new Date().toISOString(),
   },
 ]
 

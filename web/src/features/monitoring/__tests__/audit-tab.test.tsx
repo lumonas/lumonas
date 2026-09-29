@@ -7,7 +7,7 @@ import { AuditTab } from '@/features/monitoring/audit-tab'
 
 const server = setupServer(
   http.get('/api/v1/audit', () =>
-    HttpResponse.json([
+    HttpResponse.json({ entries: [
       {
         id: 'audit-1',
         timestamp: '2026-01-01T00:00:00Z',
@@ -21,8 +21,9 @@ const server = setupServer(
         resourceType: 'stack',
         resourceId: 'media',
       },
-    ]),
+    ], hasMore: false }),
   ),
+  http.get('/api/v1/audit/retention', () => HttpResponse.json({ retentionDays: 365 })),
 )
 
 beforeAll(() => server.listen())

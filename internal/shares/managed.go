@@ -58,13 +58,48 @@ func (s ManagedShare) Legacy() Share {
 		access[name] = rule.Level
 	}
 	timemachine := false
+	auditSMB := false
+	auditOps := []string{}
 	for _, protocol := range s.Protocols {
 		if protocol.Name == "timemachine" {
 			timemachine = true
-			break
+		}
+		if protocol.Name == "smb" {
+			auditSMB, _ = protocol.Settings["auditEnabled"].(bool)
+			if raw, ok := protocol.Settings["auditOperations"].([]any); ok {
+				for _, value := range raw {
+					if operation, ok := value.(string); ok {
+						auditOps = append(auditOps, operation)
+					}
+				}
+			} else if raw, ok := protocol.Settings["auditOperations"].([]string); ok {
+				auditOps = append(auditOps, raw...)
+			}
 		}
 	}
-	return Share{ID: s.ID, Name: s.Name, Path: s.Path, Description: s.Description, Enabled: s.Enabled, Protocols: protocols, Access: access, Guest: s.Guest, Timemachine: timemachine}
+	return Share{ID: s.ID, Name: s.Name, Path: s.Path, Description: s.Description, Enabled: s.Enabled, Protocols: protocols, Access: access, Guest: s.Guest, Timemachine: timemachine, AuditSMB: auditSMB, AuditOps: auditOps}
+}
+
+var allowedAuditOperations = map[string]bool{
+	"connect": true, "create_file": true, "mkdirat": true, "renameat": true,
+	"unlinkat": true, "rmdir": true, "pwrite": true, "ftruncate": true,
+}
+
+func ValidateAuditOperations(operations []string) error {
+	if len(operations) == 0 || len(operations) > len(allowedAuditOperations) {
+		return fmt.Errorf("SMB audit must select between 1 and %d operations", len(allowedAuditOperations))
+	}
+	seen := map[string]bool{}
+	for _, operation := range operations {
+		if !allowedAuditOperations[operation] {
+			return fmt.Errorf("unsupported SMB audit operation %q", operation)
+		}
+		if seen[operation] {
+			return fmt.Errorf("duplicate SMB audit operation %q", operation)
+		}
+		seen[operation] = true
+	}
+	return nil
 }
 
 func (s ManagedShare) Validate() error {
@@ -79,6 +114,25 @@ func (s ManagedShare) Validate() error {
 		seen[protocol.Name] = true
 		if err := ValidateProtocolSettings(protocol.Name, protocol.Settings); err != nil {
 			return err
+		}
+		if protocol.Name == "smb" {
+			if enabled, _ := protocol.Settings["auditEnabled"].(bool); enabled {
+				operations := []string{}
+				if raw, ok := protocol.Settings["auditOperations"].([]any); ok {
+					for _, value := range raw {
+						operation, ok := value.(string)
+						if !ok {
+							return fmt.Errorf("SMB audit operations must be strings")
+						}
+						operations = append(operations, operation)
+					}
+				} else if raw, ok := protocol.Settings["auditOperations"].([]string); ok {
+					operations = append(operations, raw...)
+				}
+				if err := ValidateAuditOperations(operations); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	principals := map[string]bool{}

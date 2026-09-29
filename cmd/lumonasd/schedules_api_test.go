@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/monitoring"
 	"github.com/lumonas/lumonas/internal/privileged"
+	"github.com/lumonas/lumonas/internal/store"
 )
 
 func TestSchedulesEndpointsRoundTrip(t *testing.T) {
@@ -63,14 +65,73 @@ func TestSchedulesEndpointsRoundTrip(t *testing.T) {
 		t.Fatalf("expected persisted disable, got %d: %s", reread.Code, reread.Body.String())
 	}
 	snapshot := httptest.NewRecorder()
-	server.routes().ServeHTTP(snapshot, httptest.NewRequest(http.MethodPatch, "/api/v1/schedules/sched-snapshot", strings.NewReader(`{"snapshotKind":"btrfs","snapshotSource":"/srv/pools/media","snapshotLabel":"nightly","snapshotKeep":14}`)))
-	if snapshot.Code != http.StatusOK || !strings.Contains(snapshot.Body.String(), `"snapshotKeep":14`) || !strings.Contains(snapshot.Body.String(), `"snapshotSource":"/srv/pools/media"`) {
+	server.routes().ServeHTTP(snapshot, httptest.NewRequest(http.MethodPatch, "/api/v1/schedules/sched-snapshot", strings.NewReader(`{"snapshotKind":"btrfs","snapshotSource":"/srv/pools/media","snapshotLabel":"nightly","snapshotKeep":14,"snapshotLockDays":90}`)))
+	if snapshot.Code != http.StatusOK || !strings.Contains(snapshot.Body.String(), `"snapshotKeep":14`) || !strings.Contains(snapshot.Body.String(), `"snapshotLockDays":90`) || !strings.Contains(snapshot.Body.String(), `"snapshotSource":"/srv/pools/media"`) {
 		t.Fatalf("expected snapshot policy update, got %d: %s", snapshot.Code, snapshot.Body.String())
 	}
 	invalidSnapshot := httptest.NewRecorder()
 	server.routes().ServeHTTP(invalidSnapshot, httptest.NewRequest(http.MethodPatch, "/api/v1/schedules/sched-snapshot", strings.NewReader(`{"snapshotSource":"relative"}`)))
 	if invalidSnapshot.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("expected invalid snapshot source rejection, got %d: %s", invalidSnapshot.Code, invalidSnapshot.Body.String())
+	}
+}
+
+func TestSnapshotPoliciesCanBeCreatedAndDeleted(t *testing.T) {
+	server := testServer(t)
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/schedules", strings.NewReader(`{"name":"Documents snapshots","kind":"weekly","weekday":"wednesday","timeOfDay":"02:45","snapshotKind":"btrfs","snapshotSource":"/srv/pools/documents","snapshotKeep":30,"snapshotLockDays":90,"enabled":true}`))
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), `"snapshotKeep":30`) || !strings.Contains(response.Body.String(), `"snapshotLockDays":90`) || !strings.Contains(response.Body.String(), `"snapshotSource":"/srv/pools/documents"`) {
+		t.Fatalf("unexpected snapshot policy create: %d %s", response.Code, response.Body.String())
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&created); err != nil || !strings.HasPrefix(created.ID, "schedule-") {
+		t.Fatalf("unexpected generated schedule id %#v: %v", created, err)
+	}
+	list := httptest.NewRecorder()
+	server.routes().ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/api/v1/schedules", nil))
+	if !strings.Contains(list.Body.String(), created.ID) {
+		t.Fatalf("created policy missing from list: %s", list.Body.String())
+	}
+	remove := httptest.NewRecorder()
+	server.routes().ServeHTTP(remove, httptest.NewRequest(http.MethodDelete, "/api/v1/schedules/"+created.ID, nil))
+	if remove.Code != http.StatusNoContent {
+		t.Fatalf("expected policy delete, got %d %s", remove.Code, remove.Body.String())
+	}
+	invalid := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalid, httptest.NewRequest(http.MethodPost, "/api/v1/schedules", strings.NewReader(`{"name":"Unsafe","kind":"daily","timeOfDay":"02:00","snapshotKind":"btrfs","snapshotSource":"/etc","snapshotKeep":3}`)))
+	if invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected managed path validation, got %d %s", invalid.Code, invalid.Body.String())
+	}
+	invalidLock := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalidLock, httptest.NewRequest(http.MethodPost, "/api/v1/schedules", strings.NewReader(`{"name":"Unsafe lock","kind":"daily","timeOfDay":"02:00","snapshotKind":"btrfs","snapshotSource":"/srv/pools/media","snapshotKeep":3,"snapshotLockDays":3651}`)))
+	if invalidLock.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected excessive snapshot lock to be rejected, got %d %s", invalidLock.Code, invalidLock.Body.String())
+	}
+}
+
+func TestFilesystemScrubSchedulesAreValidatedAndPersisted(t *testing.T) {
+	server := testServer(t)
+	create := httptest.NewRecorder()
+	server.routes().ServeHTTP(create, httptest.NewRequest(http.MethodPost, "/api/v1/schedules", strings.NewReader(`{"jobType":"filesystem.scrub","name":"Weekly pool check","kind":"weekly","weekday":"sunday","timeOfDay":"03:00","filesystemKind":"btrfs","filesystemSource":"/srv/pools/media","enabled":true}`)))
+	if create.Code != http.StatusCreated || !strings.Contains(create.Body.String(), `"jobType":"filesystem.scrub"`) || !strings.Contains(create.Body.String(), `"filesystemSource":"/srv/pools/media"`) {
+		t.Fatalf("filesystem scrub schedule was not created: %d %s", create.Code, create.Body.String())
+	}
+	invalid := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalid, httptest.NewRequest(http.MethodPost, "/api/v1/schedules", strings.NewReader(`{"jobType":"filesystem.scrub","name":"Unsafe check","kind":"daily","timeOfDay":"03:00","filesystemKind":"btrfs","filesystemSource":"/etc","enabled":true}`)))
+	if invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unmanaged filesystem scrub target was accepted: %d %s", invalid.Code, invalid.Body.String())
+	}
+	var created monitoring.Schedule
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	updated := httptest.NewRecorder()
+	server.routes().ServeHTTP(updated, httptest.NewRequest(http.MethodPatch, "/api/v1/schedules/"+created.ID, strings.NewReader(`{"filesystemKind":"zfs","filesystemSource":"tank/media"}`)))
+	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"filesystemKind":"zfs"`) {
+		t.Fatalf("filesystem scrub schedule update failed: %d %s", updated.Code, updated.Body.String())
 	}
 }
 
@@ -113,6 +174,7 @@ func TestRunDueSchedulesFiresSnapshotScheduleAndPersistsOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	schedule.Enabled = true
+	schedule.SnapshotLockDays = 30
 	past := time.Now().Add(-time.Minute)
 	schedule.NextDueAt = &past
 	if err := server.store.SaveJobSchedule(schedule); err != nil {
@@ -135,13 +197,37 @@ func TestRunDueSchedulesFiresSnapshotScheduleAndPersistsOrigin(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		records, readErr := server.store.StorageSnapshots(schedule.SnapshotSource, 10)
-		if readErr == nil && len(records) == 1 && records[0].Origin == "scheduled" {
+		if readErr == nil && len(records) == 1 && records[0].Origin == "scheduled" && records[0].ProtectedUntil != nil && records[0].ProtectedUntil.After(time.Now()) {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	records, err := server.store.StorageSnapshots(schedule.SnapshotSource, 10)
 	t.Fatalf("scheduled snapshot was not persisted with origin: %#v err=%v", records, err)
+}
+
+func TestScheduledSnapshotRetentionSkipsLockedSnapshots(t *testing.T) {
+	server := testServer(t)
+	lockedUntil := time.Now().UTC().Add(24 * time.Hour)
+	locked, err := server.store.SaveStorageSnapshot(store.StorageSnapshotRecord{Kind: "btrfs", Source: "/srv/pools/media", Name: "locked-old", Origin: "scheduled", CreatedAt: time.Now().Add(-48 * time.Hour), ProtectedUntil: &lockedUntil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	newest, err := server.store.SaveStorageSnapshot(store.StorageSnapshotRecord{Kind: "btrfs", Source: "/srv/pools/media", Name: "newest", Origin: "scheduled", CreatedAt: time.Now().UTC()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	server.brokerExec = func(context.Context, privileged.Request) error { called = true; return nil }
+	if err := server.pruneScheduledSnapshots(monitoring.Schedule{ID: "schedule-lock", JobType: "snapshot.create", SnapshotKind: "btrfs", SnapshotSource: "/srv/pools/media", SnapshotKeep: 1}, newest); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Fatal("retention cleanup attempted to delete a locked snapshot")
+	}
+	if _, found, err := server.store.StorageSnapshot(locked.ID); err != nil || !found {
+		t.Fatalf("locked snapshot did not survive cleanup: found=%v err=%v", found, err)
+	}
 }
 
 func TestRunDueSchedulesSkipsWhenJobActive(t *testing.T) {

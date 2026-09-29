@@ -5,7 +5,7 @@ GO_ENV := GOCACHE=$${GOCACHE:-/tmp/lumonas-go-build} GOPATH=$${GOPATH:-/tmp/lumo
 LUMONAS_ISO ?= $(CURDIR)/build/releases/lumonas-$(VERSION)-amd64.iso
 LUMONAS_QEMU_IMAGE ?= $(CURDIR)/build/qemu/lumonas-debian13.raw
 
-.PHONY: all dev dev-full test test-go test-web frontend-e2e frontend-live-e2e check-openapi check-openapi-duplicates check-api-contract validate-api-response validate-sse build build-go build-web package package-arm64 package-dependency-parity docker-engine-api iso arm64-image netboot recovery-fixture recovery-api-smoke recovery-bundle-smoke recovery-persistence-smoke api-smoke api-smoke-strict update-fixture disk-identity-smoke storage-loopback privileged-storage-loopback disk-full-smoke share-config-smoke share-protocol-smoke iso-smoke qemu-installer-smoke qemu-recovery-smoke qemu-recovery-live security-smoke secret-scan-smoke command-boundary-smoke request-limits-smoke retention-smoke generation-retention-smoke fuzz-smoke dependency-smoke container-scan race-fuzz interop-smoke upgrade-compatibility release-gate-policy systemd-smoke systemd-security-smoke permission-smoke postinst-policy-smoke log-retention-smoke log-identity-smoke upgrade-smoke release-artifacts-smoke installer-signature-smoke installer-workdir-policy-smoke arm64-image-smoke netboot-smoke qemu-image qemu-smoke qemu-ab-smoke qemu-uefi-ab-smoke verify-release
+.PHONY: all dev dev-full test test-go test-web frontend-e2e frontend-live-e2e check-openapi check-openapi-duplicates check-api-contract validate-api-response validate-sse build build-go build-web package package-arm64 package-dependency-parity docker-engine-api iso arm64-image netboot recovery-fixture recovery-api-smoke recovery-bundle-smoke recovery-persistence-smoke api-smoke api-smoke-strict update-fixture disk-identity-smoke storage-loopback privileged-storage-loopback disk-full-smoke share-config-smoke share-protocol-smoke iso-smoke qemu-installer-smoke qemu-recovery-smoke qemu-recovery-live security-smoke secret-scan-smoke command-boundary-smoke request-limits-smoke retention-smoke generation-retention-smoke fuzz-smoke dependency-smoke container-scan race-fuzz interop-smoke upgrade-compatibility release-gate-policy systemd-smoke systemd-security-smoke permission-smoke postinst-policy-smoke log-retention-smoke log-identity-smoke upgrade-smoke release-artifacts-smoke installer-signature-smoke installer-workdir-policy-smoke arm64-image-smoke netboot-smoke qemu-image qemu-smoke qemu-ab-smoke qemu-uefi-ab-smoke verify-release release-readiness
 
 all: build
 
@@ -56,6 +56,30 @@ build-go:
 
 build-web:
 	cd web && pnpm build
+
+# Sign the built-in app catalog with the release Ed25519 key. The detached
+# signature is packaged as catalog/apps.json.sig and verified by lumonasd
+# before any catalog app may be installed.
+#
+# LUMONAS_CATALOG_PRIVATE_KEY must be a standard-base64 Ed25519 seed or full
+# private key. The matching public key is committed in
+# packaging/debian/lumonasd.env.example.
+catalog-sign:
+	@test -n "$$LUMONAS_CATALOG_PRIVATE_KEY" || { echo "LUMONAS_CATALOG_PRIVATE_KEY is required to sign the catalog" >&2; exit 1; }
+	mkdir -p bin
+	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/lumonas-catalog-sign ./cmd/lumonas-catalog-sign
+	./bin/lumonas-catalog-sign catalog/apps.json
+	@echo "wrote catalog/apps.json.sig"
+
+# Verify the committed catalog signature against the configured public key.
+# This is a release gate: a tampered catalog must never ship.
+catalog-verify:
+	mkdir -p bin
+	$(GO_ENV) go build -trimpath -ldflags "-s -w" -o bin/lumonas-catalog-sign ./cmd/lumonas-catalog-sign
+	@test -f catalog/apps.json.sig || { echo "catalog/apps.json.sig is missing" >&2; exit 1; }
+	@key="$$(sed -n 's/^LUMONAS_CATALOG_PUBLIC_KEY=//p' packaging/debian/lumonasd.env.example | head -n1)"; \
+		test -n "$$key" || { echo "LUMONAS_CATALOG_PUBLIC_KEY is not set in the env example" >&2; exit 1; }; \
+		./bin/lumonas-catalog-sign --verify catalog/apps.json catalog/apps.json.sig "$$key"
 
 package:
 	bash scripts/reproducible-package-smoke.sh $(VERSION)
@@ -220,3 +244,5 @@ qemu-smoke: qemu-image
 
 verify-release:
 	bash scripts/verify-release.sh build/releases
+
+release-readiness: build check-openapi check-openapi-duplicates check-api-contract validate-api-response validate-sse release-gate-policy verify-release

@@ -10,8 +10,8 @@ ISO="$ROOT/installer/build-iso.sh"
 # image deliberately uses --no-install-recommends, so it must list every
 # integration explicitly instead of relying on Debian metadata.
 for package in \
-	network-manager systemd-resolved smartmontools lm-sensors nut-client mergerfs snapraid grub-efi-amd64 dosfstools efibootmgr \
-	e2fsprogs xfsprogs docker.io docker-compose samba samba-common-bin \
+	network-manager systemd-resolved smartmontools lm-sensors nut-client mergerfs snapraid rclone grub-efi-amd64 dosfstools efibootmgr \
+	e2fsprogs xfsprogs cryptsetup certbot docker.io docker-compose samba samba-common-bin samba-vfs-modules \
 	nfs-kernel-server rsync vsftpd avahi-daemon nftables; do
 	if ! grep -Eq "(^|[ ,])${package}([, ]|$)" "$CONTROL"; then
 		echo "package $package is missing from Debian control metadata" >&2

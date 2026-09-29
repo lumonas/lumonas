@@ -1,15 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ApiError, apiDelete, apiGet, apiMultipart, apiPatch, apiPut, apiPost } from '@/api/client'
+import { ApiError, apiDelete, apiDownload, apiGet, apiMultipart, apiPatch, apiPut, apiPost, apiPutChunk } from '@/api/client'
 import { useLogsStore } from '@/stores/logs'
 import type {
   ActivityEvent,
   Alert,
   AlertRule,
-  AuditEntry,
+  AuditPage,
   BackupDestination,
+  BackupPolicyTemplate,
+  BackupSchedule,
   BackupJob,
+  BackupRestoreCheck,
   CapacityForecast,
+  CapacityThreshold,
   CatalogApp,
   ConfigGeneration,
   DockerContainer,
@@ -20,6 +24,14 @@ import type {
   DockerDeployment,
   DockerSummary,
   DockerVolume,
+  CreateVirtualMachineInput,
+  VirtualizationMedia,
+  VirtualMachine,
+  VirtualMachineSnapshot,
+  VirtualMachineConsole,
+  VirtualMachineDeleteResult,
+  RecoverableVirtualMachine,
+  VirtualizationStatus,
   Disk,
   FileEntry,
   FileUser,
@@ -44,13 +56,29 @@ import type {
   RecoveryExportResponse,
   RecoveryReadiness,
   RecoveryStatus,
+  WorkloadRecoveryObjective,
   RestorePlan,
   ServerInfo,
   ServiceStatus,
   Share,
+  ShareStorageResource,
+  ShareRelocationPreview,
+  ShareRelocationScheduleResult,
+  ShareAccessPreview,
+  SharePathAccessCheck,
+  ShareClientsSnapshot,
+  TLSCertificateStatus,
   StorageMount,
   StorageOperationPlan,
   StorageSafety,
+  DiskReplacementPlan,
+  DiskReplacementResult,
+  APITokenCreated,
+  APITokenSummary,
+  ReplicationPeer,
+  SnapshotReplicationTask,
+  SnapshotReplicationRun,
+  SnapshotDiff,
   StorageSnapshot,
   StorageSnapshotFiles,
   SystemMetrics,
@@ -66,6 +94,11 @@ import type {
   LanHost,
   NetworkInterface,
   WiFiScanResult,
+  SMARTHistory,
+  RestoreDrill,
+  RestoreDrillSchedule,
+  TroubleshootingReport,
+  DependencyGraph,
 } from '@/api/types'
 
 export const queryKeys = {
@@ -73,6 +106,7 @@ export const queryKeys = {
   healthComponents: ['health', 'components'] as const,
   disks: ['disks'] as const,
   disk: (id: string) => ['disks', id] as const,
+  smartHistory: (id: string | null) => ['disks', id, 'smart-history'] as const,
   pools: ['pools'] as const,
   protection: ['protection'] as const,
   jobs: ['jobs'] as const,
@@ -83,6 +117,11 @@ export const queryKeys = {
   dockerApps: ['docker', 'apps'] as const,
   dockerStacks: ['docker', 'stacks'] as const,
   dockerStack: (id: string | null) => ['docker', 'stacks', id] as const,
+  virtualizationStatus: ['virtualization', 'status'] as const,
+  virtualMachines: ['virtualization', 'vms'] as const,
+  recoverableVirtualMachines: ['virtualization', 'recoverable-vms'] as const,
+  virtualizationMedia: ['virtualization', 'media'] as const,
+  virtualMachineSnapshots: (name: string | null) => ['virtualization', 'vms', name, 'snapshots'] as const,
   dockerContainers: ['docker', 'containers'] as const,
   dockerImages: ['docker', 'images'] as const,
   dockerVolumes: ['docker', 'volumes'] as const,
@@ -96,6 +135,7 @@ export const queryKeys = {
   files: (shareId: string | null, path: string) => ['files', shareId, path] as const,
   recycle: (shareId: string | null) => ['recycle', shareId] as const,
   backupReadiness: ['backup', 'readiness'] as const,
+  backupSchedule: ['backup', 'schedule'] as const,
   backupJobs: ['backup', 'jobs'] as const,
   backupDestinations: ['backup', 'destinations'] as const,
   generations: ['backup', 'generations'] as const,
@@ -106,6 +146,10 @@ export const queryKeys = {
   protectionConfig: ['storage', 'protection', 'config'] as const,
   recoveryStatus: ['recovery', 'status'] as const,
   recoveryPlan: ['recovery', 'plan'] as const,
+  restoreDrills: ['recovery', 'drills'] as const,
+  restoreDrillSchedule: ['recovery', 'drills', 'schedule'] as const,
+  troubleshooting: ['troubleshooting'] as const,
+  dependencyGraph: ['dependencies', 'graph'] as const,
   notificationDeliveries: ['notifications', 'deliveries'] as const,
   notificationRules: ['notification-rules'] as const,
   audit: ['audit'] as const,
@@ -142,6 +186,22 @@ export function useDisk(id: string | null) {
     queryFn: () => apiGet<Disk>(`/disks/${id}`),
     enabled: id != null,
   })
+}
+
+export function useSMARTHistory(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.smartHistory(id),
+    queryFn: () => apiGet<SMARTHistory>(`/storage/disks/${id}/smart-history?days=90`),
+    enabled: id != null,
+  })
+}
+
+export function useTroubleshooting() {
+  return useQuery({ queryKey: queryKeys.troubleshooting, queryFn: () => apiGet<TroubleshootingReport>('/troubleshooting') })
+}
+
+export function useDependencyGraph() {
+  return useQuery({ queryKey: queryKeys.dependencyGraph, queryFn: () => apiGet<DependencyGraph>('/dependencies/graph') })
 }
 
 export function usePools() {
@@ -239,6 +299,174 @@ export function useDockerSummary() {
   })
 }
 
+export function useVirtualizationStatus() {
+  return useQuery({
+    queryKey: queryKeys.virtualizationStatus,
+    queryFn: () => apiGet<VirtualizationStatus>('/virtualization/status'),
+    staleTime: 30_000,
+  })
+}
+
+export function useVirtualMachines() {
+  return useQuery({
+    queryKey: queryKeys.virtualMachines,
+    queryFn: () => apiGet<VirtualMachine[]>('/virtualization/vms'),
+    refetchInterval: 10_000,
+  })
+}
+
+export function useVirtualizationMedia() {
+  return useQuery({
+    queryKey: queryKeys.virtualizationMedia,
+    queryFn: () => apiGet<VirtualizationMedia[]>('/virtualization/media'),
+  })
+}
+
+export function useUploadVirtualizationMedia() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData()
+      form.set('file', file)
+      return apiMultipart<VirtualizationMedia>('/virtualization/media', form)
+    },
+    onSuccess: (media) => {
+      toast.success(`${media.name} uploaded`)
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualizationMedia })
+    },
+  })
+}
+
+export function useCreateVirtualMachine() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateVirtualMachineInput) => apiPost<VirtualMachine>('/virtualization/vms', input),
+    onSuccess: (machine) => {
+      toast.success(`${machine.name} created`)
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachines })
+    },
+  })
+}
+
+export function useVirtualMachineSnapshots(name: string | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.virtualMachineSnapshots(name),
+    queryFn: () => apiGet<VirtualMachineSnapshot[]>(`/virtualization/vms/${encodeURIComponent(name!)}/snapshots`),
+    enabled: Boolean(name) && enabled,
+  })
+}
+
+export function useCreateVirtualMachineSnapshot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, snapshot }: { name: string; snapshot: string }) =>
+      apiPost<VirtualMachineSnapshot>(`/virtualization/vms/${encodeURIComponent(name)}/snapshots`, { name: snapshot }),
+    onSuccess: (_snapshot, variables) => {
+      toast.success('Virtual machine snapshot created')
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachineSnapshots(variables.name) })
+    },
+  })
+}
+
+export function useRevertVirtualMachineSnapshot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, snapshot }: { name: string; snapshot: string }) =>
+      apiPost<{ status: string }>(`/virtualization/vms/${encodeURIComponent(name)}/snapshots/${encodeURIComponent(snapshot)}/revert`, {}),
+    onSuccess: (_result, variables) => {
+      toast.success('Virtual machine snapshot restore requested')
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachines })
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachineSnapshots(variables.name) })
+    },
+  })
+}
+
+export function useDeleteVirtualMachineSnapshot() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, snapshot }: { name: string; snapshot: string }) =>
+      apiDelete<void>(`/virtualization/vms/${encodeURIComponent(name)}/snapshots/${encodeURIComponent(snapshot)}`),
+    onSuccess: (_result, variables) => {
+      toast.success('Virtual machine snapshot deleted')
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachineSnapshots(variables.name) })
+    },
+  })
+}
+
+export function useVirtualMachineAction() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, action }: { name: string; action: 'start' | 'shutdown' | 'reboot' | 'suspend' | 'resume' }) =>
+      apiPost<VirtualMachine>(`/virtualization/vms/${encodeURIComponent(name)}/action`, { action }),
+    onSuccess: () => {
+      toast.success('Virtual machine action accepted')
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachines })
+    },
+  })
+}
+
+export function useDeleteVirtualMachine() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ name, deleteDisk }: { name: string; deleteDisk: boolean }) =>
+      apiDelete<VirtualMachineDeleteResult>(`/virtualization/vms/${encodeURIComponent(name)}`, { confirmName: name, deleteDisk }),
+    onSuccess: (result) => {
+      toast.success(result.diskRemoved ? `${result.name} and its disk were deleted` : `${result.name} removed; recovery files were kept`)
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachines })
+      void qc.invalidateQueries({ queryKey: queryKeys.recoverableVirtualMachines })
+    },
+  })
+}
+
+export function useRecoverableVirtualMachines() {
+  return useQuery({
+    queryKey: queryKeys.recoverableVirtualMachines,
+    queryFn: () => apiGet<RecoverableVirtualMachine[]>('/virtualization/recoverable-vms'),
+    retry: false,
+  })
+}
+
+export function useRestoreVirtualMachineDefinition() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => apiPost<VirtualMachine>(`/virtualization/vms/${encodeURIComponent(name)}/restore-definition`, {}),
+    onSuccess: (machine) => {
+      toast.success(`${machine.name} definition restored`)
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachines })
+      void qc.invalidateQueries({ queryKey: queryKeys.recoverableVirtualMachines })
+    },
+  })
+}
+
+export function useVirtualMachineConsole(name: string | null) {
+  const queryClient = useQueryClient()
+  const queryKey = ['virtualization', 'vms', name, 'console'] as const
+  return useQuery({
+    queryKey,
+    queryFn: async () => {
+      const previous = queryClient.getQueryData<VirtualMachineConsole>(queryKey)
+      const state = await apiGet<VirtualMachineConsole>(`/virtualization/vms/${encodeURIComponent(name!)}/console?cursor=${previous?.cursor ?? 0}`)
+      return { ...state, output: `${previous?.output ?? ''}${state.output}`.slice(-128 * 1024) }
+    },
+    enabled: name != null,
+    refetchInterval: 750,
+    retry: false,
+  })
+}
+
+export function useWriteVirtualMachineConsole() {
+  return useMutation({
+    mutationFn: ({ name, data }: { name: string; data: string }) =>
+      apiPost<{ status: string }>(`/virtualization/vms/${encodeURIComponent(name)}/console`, { data }),
+  })
+}
+
+export function useCloseVirtualMachineConsole() {
+  return useMutation({
+    mutationFn: (name: string) => apiDelete<void>(`/virtualization/vms/${encodeURIComponent(name)}/console`),
+  })
+}
+
 export function useDockerApps() {
   return useQuery({
     queryKey: queryKeys.dockerApps,
@@ -298,10 +526,15 @@ export function useImagePackImport() {
 }
 
 export function useCheckImageUpdates() {
-  return useDockerMutation(async () => {
-    const images = await apiPost<DockerImage[]>('/docker/images/check-updates')
-    return images.filter((image) => image.updateAvailable).length
-  })
+	const qc = useQueryClient()
+	return useMutation({
+		mutationFn: () => apiPost<DockerImage[]>('/docker/images/check-updates'),
+		onSuccess: (images) => {
+			qc.setQueryData(queryKeys.dockerImages, images)
+			toast.success(`${images.filter((image) => image.updateAvailable).length} image update(s) available with digest details`)
+		},
+		onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not check image updates'),
+	})
 }
 
 export function useDockerVolumes() {
@@ -352,6 +585,20 @@ export function useStackAction() {
   )
 }
 
+export function useUpdateStackRecoveryProfile() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, appdataPaths }: { id: string; appdataPaths: string[] }) =>
+      apiPut<DockerStack>(`/docker/stacks/${encodeURIComponent(id)}/recovery`, { appdataPaths }),
+    onSuccess: (stack) => {
+      toast.success(`Recovery paths saved for ${stack.name}`)
+      void qc.invalidateQueries({ queryKey: queryKeys.dockerStacks })
+      void qc.invalidateQueries({ queryKey: queryKeys.dockerStack(stack.id) })
+      void qc.invalidateQueries({ queryKey: queryKeys.recoveryPlan })
+    },
+  })
+}
+
 export function useContainerAction() {
   return useDockerMutation(({ id, action }: { id: string; action: 'start' | 'stop' | 'restart' }) =>
     apiPost<DockerContainer>(`/docker/containers/${id}/${action}`),
@@ -382,7 +629,7 @@ export function useSeedLogs() {
 export function useCreateJob() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { type: string; resourceId?: string }) =>
+    mutationFn: (input: { type: string; resourceId?: string; correlationId?: string; filesystemKind?: 'btrfs' | 'zfs'; filesystemSource?: string }) =>
       apiPost<Job>('/jobs', input),
     onSuccess: () => {
       toast.success('Job queued', {
@@ -390,6 +637,18 @@ export function useCreateJob() {
       })
       void qc.invalidateQueries({ queryKey: queryKeys.jobs })
     },
+  })
+}
+
+export function useCancelQueuedJob() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiPost<Job>(`/jobs/${id}/cancel`),
+    onSuccess: (job) => {
+      toast.success(job.state === 'running' ? 'Cancellation requested' : 'Queued job cancelled')
+      void qc.invalidateQueries({ queryKey: queryKeys.jobs })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not cancel job'),
   })
 }
 
@@ -477,6 +736,68 @@ export interface SchedulePatch {
   snapshotSource?: string
   snapshotLabel?: string
   snapshotKeep?: number
+  snapshotLockDays?: number
+  filesystemKind?: 'btrfs' | 'zfs'
+  filesystemSource?: string
+}
+
+export type SnapshotScheduleInput = {
+  name: string
+  kind: 'daily' | 'weekly'
+  timeOfDay: string
+  weekday?: string
+  enabled: boolean
+  snapshotKind: 'btrfs' | 'zfs'
+  snapshotSource: string
+  snapshotLabel: string
+  snapshotKeep: number
+  snapshotLockDays: number
+}
+
+export function useCreateSnapshotSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: SnapshotScheduleInput) => apiPost<JobSchedule>('/schedules', { ...input, jobType: 'snapshot.create' }),
+    onSuccess: (schedule) => {
+      toast.success(`Snapshot schedule created — ${schedule.name}`)
+      void qc.invalidateQueries({ queryKey: queryKeys.schedules })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not create snapshot schedule'),
+  })
+}
+
+export type FilesystemScrubScheduleInput = {
+  name: string
+  kind: 'daily' | 'weekly'
+  timeOfDay: string
+  weekday?: string
+  enabled: boolean
+  filesystemKind: 'btrfs' | 'zfs'
+  filesystemSource: string
+}
+
+export function useCreateFilesystemScrubSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: FilesystemScrubScheduleInput) => apiPost<JobSchedule>('/schedules', { ...input, jobType: 'filesystem.scrub' }),
+    onSuccess: (schedule) => {
+      toast.success(`Filesystem scrub scheduled — ${schedule.name}`)
+      void qc.invalidateQueries({ queryKey: queryKeys.schedules })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not create filesystem scrub schedule'),
+  })
+}
+
+export function useDeleteCustomSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/schedules/${encodeURIComponent(id)}`),
+    onSuccess: () => {
+      toast.success('Snapshot schedule deleted')
+      void qc.invalidateQueries({ queryKey: queryKeys.schedules })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not delete schedule'),
+  })
 }
 
 export function useUpdateSchedule() {
@@ -499,6 +820,88 @@ export function useShares() {
     queryKey: queryKeys.shares,
     queryFn: () => apiGet<Share[]>('/shares'),
     throwOnError: false,
+  })
+}
+
+export function useShareStorageResources() {
+  return useQuery({
+    queryKey: ['shares', 'storage-resources'],
+    queryFn: () => apiGet<ShareStorageResource[]>('/shares/storage-resources'),
+  })
+}
+
+export type ShareRelocationTarget = { resourceId: string; relativePath: string }
+
+export function usePreviewShareRelocation() {
+  return useMutation({
+    mutationFn: ({ shareId, target }: { shareId: string; target: ShareRelocationTarget }) =>
+      apiPost<ShareRelocationPreview>(`/shares/${encodeURIComponent(shareId)}/relocation/preview`, target),
+  })
+}
+
+export function useStartShareRelocation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ shareId, target, planHash, scheduleKind, timeOfDay, weekday }: { shareId: string; target: ShareRelocationTarget; planHash: string; scheduleKind?: 'manual' | 'daily' | 'weekly'; timeOfDay?: string; weekday?: string }) =>
+      apiPost<{ jobId: string; state: string; preview: ShareRelocationPreview } | ShareRelocationScheduleResult>(`/shares/${encodeURIComponent(shareId)}/relocation`, { target, planHash, confirmed: true, scheduleKind, timeOfDay, weekday }),
+    onSuccess: (result) => {
+      toast.success('schedule' in result ? 'Share relocation scheduled' : 'Share relocation started')
+      void qc.invalidateQueries({ queryKey: queryKeys.jobs })
+      void qc.invalidateQueries({ queryKey: queryKeys.schedules })
+      void qc.invalidateQueries({ queryKey: queryKeys.shares })
+      void qc.invalidateQueries({ queryKey: [...queryKeys.shares, result.preview.shareId] })
+    },
+  })
+}
+
+export function useShareAccessPreview(shareId: string | null) {
+  return useQuery({
+    queryKey: [...queryKeys.shares, shareId, 'access-preview'],
+    queryFn: () => apiGet<ShareAccessPreview>(`/shares/${encodeURIComponent(shareId!)}/access-preview`),
+    enabled: !!shareId,
+  })
+}
+
+export function useSharePathAccessCheck(shareId: string | null, principalId: string, path: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...queryKeys.shares, shareId, 'access-check', principalId, path],
+    queryFn: () => {
+      const params = new URLSearchParams({ principal: principalId, path })
+      return apiGet<SharePathAccessCheck>(`/shares/${encodeURIComponent(shareId!)}/access-check?${params}`)
+    },
+    enabled: Boolean(shareId && principalId && enabled),
+    retry: false,
+  })
+}
+
+export function useShareClients() {
+  return useQuery({
+    queryKey: [...queryKeys.shares, 'clients'],
+    queryFn: () => apiGet<ShareClientsSnapshot>('/shares/clients'),
+    refetchInterval: 15_000,
+    retry: false,
+  })
+}
+
+export function useDisconnectShareClient() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (address: string) => apiPost<{ address: string; disconnected: boolean }>('/shares/clients/disconnect', { address, confirmed: true }),
+    onSuccess: (result) => {
+      toast.success(`Disconnected SMB client ${result.address}`)
+      void qc.invalidateQueries({ queryKey: [...queryKeys.shares, 'clients'] })
+      void qc.invalidateQueries({ queryKey: queryKeys.audit })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not disconnect SMB client'),
+  })
+}
+
+export function useTLSCertificateStatus() {
+  return useQuery({
+    queryKey: ['security', 'certificate'],
+    queryFn: () => apiGet<TLSCertificateStatus>('/security/certificate'),
+    staleTime: 60_000,
+    retry: false,
   })
 }
 
@@ -570,7 +973,7 @@ export function useShareProtocol() {
     (input: {
       id: string
       protocol: string
-      body: Partial<{ enabled: boolean; hosts: string; readOnly: boolean; quotaBytes: number }>
+      body: Partial<{ enabled: boolean; hosts: string; readOnly: boolean; quotaBytes: number; auditEnabled: boolean; auditOperations: string[] }>
     }) => apiPatch<Share>(`/shares/${input.id}/protocols/${input.protocol}`, input.body),
   )
 }
@@ -666,6 +1069,54 @@ export function useRecycleBin(shareId: string | null, enabled = true) {
   })
 }
 
+export function useFileRequestLinks(shareId: string | null) {
+  return useQuery({
+    queryKey: ['file-requests', shareId],
+    queryFn: () => apiGet<import('@/api/types').FileRequestLink[]>(`/file-requests?shareId=${encodeURIComponent(shareId!)}`),
+    enabled: Boolean(shareId),
+  })
+}
+
+export function useCreateFileRequestLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { shareId: string; path: string; expiresInHours: number; maxFiles: number; maxBytes: number }) => apiPost<{ request: import('@/api/types').FileRequestLink; url: string }>('/file-requests', input),
+    onSuccess: (result) => { void qc.invalidateQueries({ queryKey: ['file-requests', result.request.shareId] }) },
+  })
+}
+
+export function useRevokeFileRequestLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; shareId: string }) => apiDelete(`/file-requests/${encodeURIComponent(input.id)}`),
+    onSuccess: (_result, input) => { void qc.invalidateQueries({ queryKey: ['file-requests', input.shareId] }) },
+  })
+}
+
+export function useFileShareLinks(shareId: string | null) {
+  return useQuery({
+    queryKey: ['file-share-links', shareId],
+    queryFn: () => apiGet<import('@/api/types').FileShareLink[]>(`/file-share-links?shareId=${encodeURIComponent(shareId!)}`),
+    enabled: Boolean(shareId),
+  })
+}
+
+export function useCreateFileShareLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { shareId: string; path: string; expiresInHours: number; password?: string }) => apiPost<{ link: import('@/api/types').FileShareLink; url: string }>('/file-share-links', input),
+    onSuccess: (result) => { void qc.invalidateQueries({ queryKey: ['file-share-links', result.link.shareId] }) },
+  })
+}
+
+export function useRevokeFileShareLink() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { id: string; shareId: string }) => apiDelete(`/file-share-links/${encodeURIComponent(input.id)}`),
+    onSuccess: (_result, input) => { void qc.invalidateQueries({ queryKey: ['file-share-links', input.shareId] }) },
+  })
+}
+
 export function useMkdir() {
   return useFilesMutation((input: { shareId: string; path: string; name: string }) =>
     apiPost('/files/mkdir', input),
@@ -717,11 +1168,38 @@ export function extractConflicts(error: unknown): string[] | null {
 
 export function useUploadFile() {
   return useFilesMutation((input: { shareId: string; path: string; file: File }) => {
-    const body = new FormData()
-    body.set('shareId', input.shareId)
-    body.set('path', input.path)
-    body.set('file', input.file, input.file.name)
-    return apiMultipart<{ jobId: string; name: string }>('/files/upload', body)
+    type UploadSession = { id: string; receivedBytes: number; sizeBytes: number }
+    const fingerprint = `lumonas-upload:${JSON.stringify([input.shareId, input.path, input.file.name, input.file.size, input.file.lastModified])}`
+    return (async () => {
+      let session: UploadSession | undefined
+      const remembered = localStorage.getItem(fingerprint)
+      if (remembered) {
+        try { session = await apiGet<UploadSession>(`/files/uploads/${encodeURIComponent(remembered)}`) } catch { localStorage.removeItem(fingerprint) }
+      }
+      if (!session) {
+        session = await apiPost<UploadSession>('/files/uploads', { shareId: input.shareId, path: input.path, name: input.file.name, sizeBytes: input.file.size })
+        localStorage.setItem(fingerprint, session.id)
+      }
+      let offset = session.receivedBytes
+      const chunkSize = 8 * 1024 * 1024
+      while (offset < input.file.size) {
+        const chunk = input.file.slice(offset, Math.min(input.file.size, offset + chunkSize))
+        try {
+          await apiPutChunk(`/files/uploads/${encodeURIComponent(session.id)}`, chunk, offset)
+          offset += chunk.size
+        } catch (error) {
+          const recovered = await apiGet<UploadSession>(`/files/uploads/${encodeURIComponent(session.id)}`)
+          if (recovered.receivedBytes > offset) {
+            offset = recovered.receivedBytes
+            continue
+          }
+          throw error
+        }
+      }
+      const completed = await apiPost<{ jobId: string; name: string }>(`/files/uploads/${encodeURIComponent(session.id)}/complete`)
+      localStorage.removeItem(fingerprint)
+      return completed
+    })()
   })
 }
 
@@ -741,6 +1219,47 @@ export function useBackupReadiness() {
   return useQuery({
     queryKey: queryKeys.backupReadiness,
     queryFn: () => apiGet<RecoveryReadiness>('/backup/readiness'),
+  })
+}
+
+export function useBackupSchedule() {
+  return useQuery({
+    queryKey: queryKeys.backupSchedule,
+    queryFn: () => apiGet<BackupSchedule>('/backups/schedule'),
+  })
+}
+
+export function useUpdateBackupSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: Pick<BackupSchedule, 'enabled' | 'intervalSeconds' | 'onUsbAttach'>) =>
+      apiPatch<BackupSchedule>('/backups/schedule', input),
+    onSuccess: () => {
+      toast.success('Backup schedule updated')
+      void qc.invalidateQueries({ queryKey: queryKeys.backupSchedule })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Backup schedule update failed'),
+  })
+}
+
+export function useBackupPolicyTemplates() {
+  return useQuery({
+    queryKey: ['backup', 'policy-templates'],
+    queryFn: () => apiGet<BackupPolicyTemplate[]>('/backups/policy-templates'),
+  })
+}
+
+export function useApplyBackupPolicyTemplate() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (templateId: string) => apiPost<BackupSchedule>('/backups/policy-template', { templateId }),
+    onSuccess: () => {
+      toast.success('Backup policy applied', { description: 'Schedule and destination retention were updated. Provider object-lock settings were preserved.' })
+      void qc.invalidateQueries({ queryKey: queryKeys.backupSchedule })
+      void qc.invalidateQueries({ queryKey: queryKeys.backupDestinations })
+      void qc.invalidateQueries({ queryKey: ['backup', 'destinations'] })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not apply backup policy'),
   })
 }
 
@@ -770,12 +1289,61 @@ export function useBackupDestinations() {
   })
 }
 
+export function useBackupDestinationRestoreCheck() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiPost<BackupRestoreCheck>(`/backup/destinations/${id}/restore-check`),
+    onSuccess: (result) => {
+      toast.success(`Restore check passed for ${result.appdataRestored.length} app-data set(s)`)
+      void qc.invalidateQueries({ queryKey: queryKeys.backupDestinations })
+      void qc.invalidateQueries({ queryKey: queryKeys.backupReadiness })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Restore check failed'),
+  })
+}
+
+export interface BackupRunCopy {
+  id: string
+  runId: string
+  destinationId: string
+  object: string
+  state: string
+  verified: boolean
+}
+
+export interface BackupRunEntry {
+  run: { id: string; state: string; generation: number; startedAt: string }
+  copies: BackupRunCopy[]
+}
+
+export function useBackupRuns() {
+  return useQuery({
+    queryKey: ['backups', 'runs'],
+    queryFn: () => apiGet<BackupRunEntry[]>('/backups/runs'),
+  })
+}
+
+export function useRestoreBackupVirtualMachine() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { destinationId: string; runId: string; name: string; confirmName: string }) =>
+      apiPost(`/backup/destinations/${encodeURIComponent(input.destinationId)}/runs/${encodeURIComponent(input.runId)}/virtual-machines/${encodeURIComponent(input.name)}/restore`, { confirmName: input.confirmName }),
+    onSuccess: () => {
+      toast.success('VM restored stopped; review its settings before starting it')
+      void qc.invalidateQueries({ queryKey: queryKeys.virtualMachines })
+      void qc.invalidateQueries({ queryKey: queryKeys.recoverableVirtualMachines })
+      void qc.invalidateQueries({ queryKey: ['backups', 'runs'] })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'VM restore failed'),
+  })
+}
+
 export interface BackupDestinationInput {
   name: string
-  type: 'local' | 's3' | 'sftp'
+  type: 'local' | 's3' | 'sftp' | 'rclone'
   target: string
   enabled: boolean
-  retention: { generations: number; daily: number; monthly: number }
+  retention: { generations: number; daily: number; monthly: number; immutableDays?: number; providerObjectLock?: boolean }
   credentials?: Record<string, string>
 }
 
@@ -816,6 +1384,17 @@ export function useRevokeSession() {
     mutationFn: (id: string) => apiDelete<void>(`/settings/sessions/${id}`),
     onSuccess: () => {
       toast.success('Session revoked')
+      void qc.invalidateQueries({ queryKey: queryKeys.settings })
+    },
+  })
+}
+
+export function useRevokeOtherSessions() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiDelete<{ revoked: number }>('/settings/sessions'),
+    onSuccess: (result) => {
+      toast.success(`${result.revoked} other session${result.revoked === 1 ? '' : 's'} revoked`)
       void qc.invalidateQueries({ queryKey: queryKeys.settings })
     },
   })
@@ -879,6 +1458,14 @@ export function useAcknowledgeAlert() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: queryKeys.alerts })
     },
+  })
+}
+
+export function useSnoozeAlert() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, hours }: { id: string; hours: number }) => apiPost<{ id: string; snoozedUntil: string }>(`/alerts/${id}/snooze`, { hours }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: queryKeys.alerts }),
   })
 }
 
@@ -1104,10 +1691,39 @@ export function useStorageSnapshotFiles(snapshotId: string | null, path = '') {
   })
 }
 
+export function useStorageSnapshotDiff(snapshotId: string | null) {
+  return useQuery({
+    queryKey: ['storage', 'snapshots', snapshotId, 'compare'],
+    queryFn: () => apiGet<SnapshotDiff>(`/storage/snapshots/${encodeURIComponent(snapshotId!)}/compare`),
+    enabled: snapshotId != null,
+    throwOnError: false,
+  })
+}
+
+export function useRestoreSnapshotEntries() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { snapshotId: string; shareId: string; snapshotPath: string; targetPath: string; names: string[]; createTargetDirectories?: boolean }) =>
+      apiPost<{ jobId: string; state: string; restoring: number }>(`/storage/snapshots/${encodeURIComponent(input.snapshotId)}/restore`, {
+        shareId: input.shareId,
+        snapshotPath: input.snapshotPath,
+        targetPath: input.targetPath,
+        names: input.names,
+        createTargetDirectories: input.createTargetDirectories ?? false,
+      }),
+    onSuccess: (_result, input) => {
+      toast.success('Snapshot restore queued')
+      void qc.invalidateQueries({ queryKey: ['files', input.shareId] })
+      void qc.invalidateQueries({ queryKey: queryKeys.jobs })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not restore snapshot entry'),
+  })
+}
+
 export function useCreateStorageSnapshot() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { kind: 'btrfs' | 'zfs'; source: string; label?: string }) =>
+    mutationFn: (input: { kind: 'btrfs' | 'zfs'; source: string; label?: string; retentionLockDays?: number }) =>
       apiPost<StorageSnapshot>('/storage/snapshots', input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['storage', 'snapshots'] })
@@ -1136,6 +1752,64 @@ export function useStorageSafety() {
   })
 }
 
+export function usePlanDiskReplacement() {
+  return useMutation({
+    mutationFn: (input: { retiredDiskId: string; replacementDiskId: string }) =>
+      apiPost<DiskReplacementPlan>('/storage/protection/replacement/plan', input),
+  })
+}
+
+export function useConfirmDiskReplacement() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { operationId: string; planHash: string }) =>
+      apiPost<DiskReplacementResult>('/storage/protection/replacement/confirm', {
+        ...input,
+        reauthenticated: true,
+        storageSafetyUnlocked: true,
+      }),
+    onSuccess: () => {
+      toast.success('Disk replacement started — parity recovery is queued')
+      void qc.invalidateQueries({ queryKey: queryKeys.jobs })
+      void qc.invalidateQueries({ queryKey: queryKeys.disks })
+      void qc.invalidateQueries({ queryKey: queryKeys.protection })
+    },
+  })
+}
+
+export function useAPITokens() {
+  return useQuery({ queryKey: ['api-tokens'], queryFn: () => apiGet<APITokenSummary[]>('/api-tokens') })
+}
+
+export function useCreateAPIToken() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string; scopes: ('read' | 'backup:write' | 'replication:receive' | 'fleet:status' | `workstation:backup:${string}` | `replication:snapshot:receive:${string}`)[]; expiresAt?: string }) => apiPost<APITokenCreated>('/api-tokens', input),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['api-tokens'] }),
+  })
+}
+
+export function useDeleteAPIToken() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => apiDelete(`/api-tokens/${id}`),
+    onSuccess: () => { toast.success('API token revoked'); void qc.invalidateQueries({ queryKey: ['api-tokens'] }) },
+  })
+}
+
+export function useReplicationPeers() { return useQuery({ queryKey: ['replication', 'peers'], queryFn: () => apiGet<ReplicationPeer[]>('/replication/peers'), refetchInterval: 30_000 }) }
+export function useSaveReplicationPeer() { const qc = useQueryClient(); return useMutation({ mutationFn: (input: { name: string; url: string; token: string; statusToken?: string }) => apiPost<ReplicationPeer>('/replication/peers', input), onSuccess: () => void qc.invalidateQueries({ queryKey: ['replication', 'peers'] }) }) }
+export function useRunReplicationPeer() { const qc = useQueryClient(); return useMutation({ mutationFn: (id: string) => apiPost<{ ok: boolean; peerId: string; bytes: number }>(`/replication/peers/${id}/run`), onSuccess: () => { toast.success('Recovery bundle replicated'); void qc.invalidateQueries({ queryKey: ['replication', 'peers'] }) } }) }
+export function useDeleteReplicationPeer() { const qc = useQueryClient(); return useMutation({ mutationFn: (id: string) => apiDelete(`/replication/peers/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ['replication', 'peers'] }) }) }
+
+export function useSnapshotReplicationTasks(peerId?: string) { return useQuery({ queryKey: ['replication', 'snapshot-tasks', peerId ?? 'all'], queryFn: () => apiGet<SnapshotReplicationTask[]>(`/replication/snapshot-tasks?peerId=${encodeURIComponent(peerId ?? '')}`), refetchInterval: 10_000 }) }
+export function useCreateSnapshotReplicationTask() { const qc=useQueryClient(); return useMutation({ mutationFn:(input:{peerId:string;name:string;sourceShareId:string;destinationShareId:string;receiveToken:string;scheduleKind:'manual'|'daily'|'weekly';timeOfDay:string;weekday?:string})=>apiPost<SnapshotReplicationTask>('/replication/snapshot-tasks',input),onSuccess:()=>{toast.success('Snapshot replication task created');void qc.invalidateQueries({queryKey:['replication','snapshot-tasks']})} }) }
+export function useUpdateSnapshotReplicationTask() { const qc=useQueryClient(); return useMutation({mutationFn:(input:{id:string;name:string;scheduleKind:'manual'|'daily'|'weekly';timeOfDay:string;weekday?:string;receiveToken?:string})=>apiPut<SnapshotReplicationTask>(`/replication/snapshot-tasks/${input.id}`,{name:input.name,scheduleKind:input.scheduleKind,timeOfDay:input.timeOfDay,weekday:input.weekday,receiveToken:input.receiveToken}),onSuccess:()=>{toast.success('Snapshot replication task updated');void qc.invalidateQueries({queryKey:['replication','snapshot-tasks']})}}) }
+export function useRunSnapshotReplicationTask() { const qc=useQueryClient(); return useMutation({mutationFn:(id:string)=>apiPost<{ok:boolean;run:SnapshotReplicationRun;jobId:string}>(`/replication/snapshot-tasks/${id}/run`),onSuccess:()=>{toast.success('Snapshot replication started');void qc.invalidateQueries({queryKey:['replication','snapshot-tasks']})} }) }
+export function useCancelSnapshotReplicationTask() { const qc=useQueryClient(); return useMutation({mutationFn:(id:string)=>apiPost<{status:string}>(`/replication/snapshot-tasks/${id}/cancel`),onSuccess:()=>{toast.info('Cancellation requested');void qc.invalidateQueries({queryKey:['replication','snapshot-tasks']})} }) }
+export function useDeleteSnapshotReplicationTask() { const qc=useQueryClient(); return useMutation({mutationFn:(id:string)=>apiDelete(`/replication/snapshot-tasks/${id}`),onSuccess:()=>{toast.success('Snapshot replication task removed');void qc.invalidateQueries({queryKey:['replication','snapshot-tasks']})} }) }
+export function useSnapshotReplicationRuns(taskId:string) { return useQuery({queryKey:['replication','snapshot-runs',taskId],queryFn:()=>apiGet<SnapshotReplicationRun[]>(`/replication/snapshot-tasks/${taskId}/runs`),enabled:Boolean(taskId),refetchInterval:5_000}) }
+
 export function useUnlockStorageSafety() {
   const qc = useQueryClient()
   return useMutation({
@@ -1143,6 +1817,20 @@ export function useUnlockStorageSafety() {
     onSuccess: (safety) => {
       toast.success('Storage safety unlocked for 15 minutes')
       qc.setQueryData(queryKeys.storageSafety, safety)
+    },
+  })
+}
+
+export function useUnlockEncryptedDisk() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { diskId: string; passphrase: string }) =>
+      apiPost<{ ok: boolean; mountPath: string }>(`/storage/disks/${input.diskId}/unlock`, { passphrase: input.passphrase }),
+    onSuccess: () => {
+      toast.success('Encrypted disk unlocked and mounted')
+      void qc.invalidateQueries({ queryKey: queryKeys.disks })
+      void qc.invalidateQueries({ queryKey: queryKeys.storageMounts })
+      void qc.invalidateQueries({ queryKey: queryKeys.pools })
     },
   })
 }
@@ -1255,11 +1943,12 @@ export function usePlanStorageOperation() {
 export function useConfirmStorageOperation() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { operationId: string; planHash: string }) =>
+    mutationFn: (input: { operationId: string; planHash: string; encryptionPassphrase?: string }) =>
       apiPost<{ ok: boolean }>(`/storage/operations/${input.operationId}/confirm`, {
         planHash: input.planHash,
         reauthenticated: true,
         storageSafetyUnlocked: true,
+        ...(input.encryptionPassphrase ? { encryptionPassphrase: input.encryptionPassphrase } : {}),
       }),
     onSuccess: () => {
       toast.success('Storage operation completed')
@@ -1303,6 +1992,21 @@ export function useExportRecovery() {
   })
 }
 
+export function useDownloadRecovery() {
+  return useMutation({
+    mutationFn: () => apiDownload('/recovery/download'),
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'lumonas-recovery.mrb'
+      link.click()
+      URL.revokeObjectURL(url)
+    },
+    onError: () => toast.error('Recovery bundle could not be downloaded'),
+  })
+}
+
 export function useStageRestore() {
   return useMutation({
     mutationFn: () =>
@@ -1310,6 +2014,60 @@ export function useStageRestore() {
         '/recovery/restore/stage',
         { confirmed: true, reauthenticated: true },
       ),
+  })
+}
+
+export function useStageAppdata() {
+  return useMutation({
+    mutationFn: (stack: string) => apiPost<{ scope: 'appdata'; stack: string; directory: string; files: string[]; verified: boolean; generation: number }>(
+      '/recovery/restore/stage-appdata',
+      { stack, confirmed: true, reauthenticated: true },
+    ),
+    onSuccess: (result) => toast.success(`${result.stack} app data staged for offline recovery`),
+  })
+}
+
+export function useRestoreDrills() {
+  return useQuery({ queryKey: queryKeys.restoreDrills, queryFn: () => apiGet<RestoreDrill[]>('/recovery/drills'), refetchInterval: 5000 })
+}
+
+export function useRestoreDrillSchedule() {
+  return useQuery({ queryKey: queryKeys.restoreDrillSchedule, queryFn: () => apiGet<RestoreDrillSchedule>('/recovery/drills/schedule') })
+}
+
+export function useUpdateRestoreDrillSchedule() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: Partial<RestoreDrillSchedule>) => apiPatch<RestoreDrillSchedule>('/recovery/drills/schedule', input),
+    onSuccess: (value) => qc.setQueryData(queryKeys.restoreDrillSchedule, value),
+  })
+}
+
+export function useWorkloadRecoveryObjectives() {
+  return useQuery({ queryKey: ['recovery', 'workload-objectives'], queryFn: () => apiGet<WorkloadRecoveryObjective[]>('/recovery/workload-objectives') })
+}
+
+export function useSetWorkloadRecoveryObjective() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: WorkloadRecoveryObjective) => apiPut<WorkloadRecoveryObjective>('/recovery/workload-objectives', input),
+    onSuccess: () => {
+      toast.success('Workload recovery objectives saved')
+      void qc.invalidateQueries({ queryKey: ['recovery', 'workload-objectives'] })
+      void qc.invalidateQueries({ queryKey: queryKeys.alerts })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not save workload objectives'),
+  })
+}
+
+export function useRunRestoreDrill() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiPost<RestoreDrill>('/recovery/drills/run', {}),
+    onSuccess: () => {
+      toast.success('Restore drill started')
+      void qc.invalidateQueries({ queryKey: queryKeys.restoreDrills })
+    },
   })
 }
 
@@ -1383,10 +2141,31 @@ export function useToggleNotificationRule() {
 
 // --- Admin extras ---
 
-export function useAudit() {
+export function useAudit(filters: { actor?: string; action?: string; outcome?: string; q?: string; from?: string; to?: string }, cursor?: string) {
   return useQuery({
-    queryKey: queryKeys.audit,
-    queryFn: () => apiGet<AuditEntry[]>('/audit?limit=100'),
+    queryKey: [...queryKeys.audit, filters, cursor],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: '1', limit: '100' })
+      for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
+      if (cursor) params.set('cursor', cursor)
+      return apiGet<AuditPage>(`/audit?${params.toString()}`)
+    },
+  })
+}
+
+export function useAuditRetention() {
+  return useQuery({ queryKey: [...queryKeys.audit, 'retention'], queryFn: () => apiGet<{ retentionDays: number }>('/audit/retention') })
+}
+
+export function useSetAuditRetention() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (retentionDays: number) => apiPut<{ retentionDays: number }>('/audit/retention', { retentionDays }),
+    onSuccess: () => {
+      toast.success('Audit retention updated')
+      void qc.invalidateQueries({ queryKey: [...queryKeys.audit, 'retention'] })
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not update audit retention'),
   })
 }
 
@@ -1395,6 +2174,21 @@ export function useCapacityForecast(days = 30) {
     queryKey: [...queryKeys.capacityForecast, days],
     queryFn: () => apiGet<CapacityForecast[]>(`/capacity/forecast?days=${days}`),
     throwOnError: false,
+  })
+}
+
+export function useCapacityThresholds() {
+  return useQuery({ queryKey: ['capacity', 'thresholds'], queryFn: () => apiGet<CapacityThreshold[]>('/capacity/thresholds') })
+}
+
+export function useSetCapacityThreshold() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { resourceId: string; thresholdPercent: number }) => apiPut<CapacityThreshold>('/capacity/thresholds', input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['capacity', 'thresholds'] })
+      void qc.invalidateQueries({ queryKey: queryKeys.alerts })
+    },
   })
 }
 
@@ -1482,6 +2276,54 @@ export function useFileSearch(shareId: string | null, query: string) {
     },
     enabled: Boolean(shareId) && query.trim().length >= 2,
     throwOnError: false,
+  })
+}
+
+export function useFileContentSearch(shareId: string | null, query: string) {
+  return useQuery({
+    queryKey: ['file-content-search', shareId, query],
+    queryFn: () => apiGet<{ shareId: string; indexedAt: string | null; results: import('@/api/types').FileContentResult[] }>(`/files/content-search?share=${encodeURIComponent(shareId!)}&q=${encodeURIComponent(query)}`),
+    enabled: Boolean(shareId) && query.trim().length >= 3,
+    retry: false,
+    throwOnError: false,
+  })
+}
+
+export function useFileContentIndexStatus(shareId: string | null) {
+  return useQuery({
+    queryKey: ['file-content-index', shareId],
+    queryFn: () => apiGet<import('@/api/types').FileContentIndexStatus>(`/files/search-index?shareId=${encodeURIComponent(shareId!)}`),
+    enabled: Boolean(shareId),
+    retry: false,
+  })
+}
+
+export function useBuildFileContentIndex() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (shareId: string) => apiPost<import('@/api/types').FileContentIndexBuildResult>('/files/search-index', { shareId }),
+    onSuccess: (result) => { toast.success(`Indexed ${result.documents.toLocaleString()} text files`, { description: result.skipped ? `${result.skipped.toLocaleString()} files were skipped by the safety limits or file type.` : undefined }); void qc.invalidateQueries({ queryKey: ['file-content-index', result.shareId] }); void qc.invalidateQueries({ queryKey: ['file-content-search', result.shareId] }) },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not index share contents'),
+  })
+}
+
+export function useFileIntegrityStatus(shareId: string | null) {
+  return useQuery({
+    queryKey: ['file-integrity', shareId],
+    queryFn: () => apiGet<import('@/api/types').FileIntegrityStatus>(`/files/integrity?shareId=${encodeURIComponent(shareId!)}`),
+    enabled: Boolean(shareId),
+    refetchInterval: (query) => query.state.data?.running ? 3000 : false,
+  })
+}
+
+export function useStartFileIntegrityScan(action: 'baseline' | 'verify') {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (shareId: string) => action === 'baseline'
+      ? apiPost<Job>('/files/integrity/baseline', { shareId })
+      : apiPost<Job>('/files/integrity/verify', { shareId }),
+    onSuccess: (_job, shareId) => { toast.success(action === 'baseline' ? 'Integrity baseline scan queued' : 'Integrity verification queued'); void qc.invalidateQueries({ queryKey: ['file-integrity', shareId] }); void qc.invalidateQueries({ queryKey: queryKeys.jobs }) },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Could not start integrity scan'),
   })
 }
 

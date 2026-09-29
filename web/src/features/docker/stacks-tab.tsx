@@ -19,6 +19,7 @@ export function StacksTab() {
       id: 'name',
       header: 'Stack',
       sortValue: (s) => s.name,
+      searchValue: (s) => `${s.name} ${s.category} ${s.images.join(' ')}`,
       cell: (s) => (
         <div className="flex flex-col">
           <span className="font-mono text-[13px] font-medium">{s.name}</span>

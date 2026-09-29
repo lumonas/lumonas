@@ -91,6 +91,10 @@ export function apiMultipart<T>(path: string, body: FormData): Promise<T> {
   return request<T>(path, { method: 'POST', body })
 }
 
+export function apiPutChunk(path: string, body: Blob, offset: number): Promise<void> {
+  return request<void>(path, { method: 'PUT', body, headers: { 'Content-Type': 'application/offset+octet-stream', 'Upload-Offset': String(offset) } })
+}
+
 export async function apiDownload(path: string): Promise<Blob> {
   const response = await fetch(`${API_BASE}${path}`)
   if (!response.ok) {

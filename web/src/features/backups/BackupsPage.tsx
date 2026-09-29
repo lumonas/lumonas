@@ -6,6 +6,9 @@ import { BackupJobsTab } from '@/features/backups/jobs-tab'
 import { DestinationsTab } from '@/features/backups/destinations-tab'
 import { HistoryTab } from '@/features/backups/history-tab'
 import { RecoveryTab } from '@/features/backups/recovery-tab'
+import { ReplicationTab } from '@/features/backups/replication-tab'
+import { FolderSyncTab } from '@/features/backups/folder-sync-tab'
+import { WorkstationTab } from '@/features/backups/workstation-tab'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
@@ -13,6 +16,9 @@ const TABS = [
   { value: 'history', label: 'History' },
   { value: 'destinations', label: 'Destinations' },
   { value: 'recovery', label: 'Recovery' },
+  { value: 'replication', label: 'Replication' },
+  { value: 'sync', label: 'Folder sync' },
+  { value: 'workstations', label: 'Workstations' },
 ] as const
 
 export function BackupsPage() {
@@ -56,6 +62,15 @@ export function BackupsPage() {
         </TabsContent>
         <TabsContent value="recovery">
           <RecoveryTab />
+        </TabsContent>
+        <TabsContent value="replication">
+          <ReplicationTab />
+        </TabsContent>
+        <TabsContent value="sync">
+          <FolderSyncTab />
+        </TabsContent>
+        <TabsContent value="workstations">
+          <WorkstationTab />
         </TabsContent>
       </Tabs>
     </div>

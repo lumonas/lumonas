@@ -7,13 +7,13 @@ export default defineConfig({
   retries: 0,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://127.0.0.1:5173',
     headless: true,
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'pnpm dev --strictPort --port 5173',
-    url: 'http://localhost:5173',
+    command: 'pnpm dev --host 127.0.0.1 --strictPort --port 5173',
+    url: 'http://127.0.0.1:5173',
     reuseExistingServer: false,
     timeout: 120_000,
     env: {

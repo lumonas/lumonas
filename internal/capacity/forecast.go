@@ -10,15 +10,20 @@ import (
 )
 
 type Forecast struct {
-	ResourceID          string   `json:"resourceId"`
-	TotalBytes          uint64   `json:"totalBytes"`
-	UsedBytes           uint64   `json:"usedBytes"`
-	SampleCount         int      `json:"sampleCount"`
-	WindowDays          float64  `json:"windowDays"`
-	GrowthBytesPerDay   float64  `json:"growthBytesPerDay"`
-	DaysToNinetyPercent *float64 `json:"daysToNinetyPercent,omitempty"`
-	Available           bool     `json:"available"`
-	Message             string   `json:"message,omitempty"`
+	ResourceID          string     `json:"resourceId"`
+	TotalBytes          uint64     `json:"totalBytes"`
+	UsedBytes           uint64     `json:"usedBytes"`
+	SampleCount         int        `json:"sampleCount"`
+	WindowDays          float64    `json:"windowDays"`
+	GrowthBytesPerDay   float64    `json:"growthBytesPerDay"`
+	DaysToNinetyPercent *float64   `json:"daysToNinetyPercent,omitempty"`
+	DaysToFull          *float64   `json:"daysToFull,omitempty"`
+	EstimatedFullAt     *time.Time `json:"estimatedFullAt,omitempty"`
+	SampleAgeHours      float64    `json:"sampleAgeHours"`
+	Stale               bool       `json:"stale"`
+	Confidence          string     `json:"confidence"`
+	Available           bool       `json:"available"`
+	Message             string     `json:"message,omitempty"`
 }
 
 // Build returns a deliberately conservative linear forecast. It does not
@@ -35,12 +40,25 @@ func Build(resourceID string, snapshots []model.CapacitySnapshot, now time.Time)
 	sort.Slice(samples, func(i, j int) bool { return samples[i].CapturedAt.Before(samples[j].CapturedAt) })
 	latest := samples[len(samples)-1]
 	forecast.TotalBytes, forecast.UsedBytes = latest.TotalBytes, latest.UsedBytes
+	forecast.SampleAgeHours = math.Max(0, now.Sub(latest.CapturedAt).Hours())
+	forecast.Stale = forecast.SampleAgeHours > 24
 	if len(samples) < 3 {
 		forecast.Message = "not enough capacity history"
 		return forecast
 	}
 	span := samples[len(samples)-1].CapturedAt.Sub(samples[0].CapturedAt)
 	forecast.WindowDays = span.Hours() / 24
+	switch {
+	case forecast.WindowDays >= 30 && len(samples) >= 8:
+		forecast.Confidence = "high"
+	case forecast.WindowDays >= 7:
+		forecast.Confidence = "medium"
+	default:
+		forecast.Confidence = "low"
+	}
+	if forecast.Stale {
+		forecast.Confidence = "low"
+	}
 	if span < 24*time.Hour || latest.TotalBytes == 0 {
 		forecast.Message = "capacity history must span at least one day"
 		return forecast
@@ -73,9 +91,14 @@ func Build(resourceID string, snapshots []model.CapacitySnapshot, now time.Time)
 		days = remaining / slope
 	}
 	forecast.DaysToNinetyPercent = &days
+	fullDays := math.Max(0, (float64(latest.TotalBytes)-float64(latest.UsedBytes))/slope)
+	forecast.DaysToFull = &fullDays
+	if fullDays <= 365*1000 {
+		fullAt := now.AddDate(0, 0, int(math.Ceil(fullDays)))
+		forecast.EstimatedFullAt = &fullAt
+	}
 	forecast.Available = true
 	forecast.Message = fmt.Sprintf("at the recent growth rate, %s may reach 90%% in %.0f days", resourceID, days)
-	_ = now // reserved for future stale-sample checks without changing the API shape
 	return forecast
 }
 

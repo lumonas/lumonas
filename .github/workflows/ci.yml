@@ -26,6 +26,9 @@ jobs:
       - run: python3 scripts/check-api-contract.py
       - run: python3 scripts/validate-api-response.py --self-test
       - run: python3 scripts/validate-sse.py --self-test
+      # The committed catalog signature must verify against the public key in
+      # the shipped env example, so a tampered app catalog cannot ship.
+      - run: make catalog-verify
 
   frontend:
     runs-on: ubuntu-latest
@@ -92,6 +95,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e:live
+
+  workstation-clients:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+      - run: LUMONAS_VERSION=ci bash scripts/build-workstation-clients.sh build/workstation-clients
 
   runtime-smoke:
     runs-on: ubuntu-latest
@@ -458,7 +471,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sh -n installer/build-iso.sh installer/build-arm64.sh installer/build-netboot.sh packaging/build-deb.sh packaging/debian/postinst packaging/debian/prerm scripts/api-smoke.sh scripts/compose-smoke.sh scripts/container-image-scan.sh scripts/dependency-smoke.sh scripts/disk-full-smoke.sh scripts/disk-identity-smoke.sh scripts/frontend-runtime-smoke.sh scripts/fuzz-smoke.sh scripts/iso-smoke.sh scripts/qemu-ab-smoke.sh scripts/qemu-uefi-ab-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/qemu-installer-smoke.sh scripts/qemu-recovery-smoke.sh scripts/qemu-live-recovery-source.sh scripts/recovery-api-smoke.sh scripts/recovery-bundle-smoke.sh scripts/recovery-persistence-smoke.sh scripts/request-limits-smoke.sh scripts/security-smoke.sh scripts/secret-scan-smoke.sh scripts/command-boundary-smoke.sh scripts/storage-loopback-smoke.sh scripts/privileged-storage-loopback-smoke.sh scripts/systemd-smoke.sh scripts/permission-smoke.sh scripts/postinst-policy-smoke.sh scripts/log-retention-smoke.sh scripts/log-identity-smoke.sh scripts/retention-smoke.sh scripts/generation-retention-smoke.sh scripts/share-protocol-smoke.sh scripts/upgrade-smoke.sh scripts/upgrade-service-order-smoke.sh scripts/release-artifacts.sh scripts/release-artifacts-smoke.sh scripts/installer-signature-policy-smoke.sh scripts/installer-workdir-policy-smoke.sh scripts/verify-deb.sh scripts/verify-release.sh scripts/arm64-image-smoke.sh scripts/netboot-smoke.sh
+      - run: sh -n installer/build-iso.sh installer/build-arm64.sh installer/build-netboot.sh packaging/build-deb.sh packaging/debian/postinst packaging/debian/prerm scripts/api-smoke.sh scripts/compose-smoke.sh scripts/container-image-scan.sh scripts/dependency-smoke.sh scripts/disk-full-smoke.sh scripts/disk-identity-smoke.sh scripts/frontend-runtime-smoke.sh scripts/fuzz-smoke.sh scripts/iso-smoke.sh scripts/qemu-ab-smoke.sh scripts/qemu-uefi-ab-smoke.sh scripts/qemu-build-image.sh scripts/qemu-smoke.sh scripts/qemu-installer-smoke.sh scripts/qemu-recovery-smoke.sh scripts/qemu-live-recovery-source.sh scripts/recovery-api-smoke.sh scripts/recovery-bundle-smoke.sh scripts/recovery-persistence-smoke.sh scripts/request-limits-smoke.sh scripts/security-smoke.sh scripts/secret-scan-smoke.sh scripts/command-boundary-smoke.sh scripts/storage-loopback-smoke.sh scripts/privileged-storage-loopback-smoke.sh scripts/systemd-smoke.sh scripts/permission-smoke.sh scripts/postinst-policy-smoke.sh scripts/log-retention-smoke.sh scripts/log-identity-smoke.sh scripts/retention-smoke.sh scripts/generation-retention-smoke.sh scripts/share-protocol-smoke.sh scripts/upgrade-smoke.sh scripts/upgrade-service-order-smoke.sh scripts/build-workstation-clients.sh scripts/release-artifacts.sh scripts/release-artifacts-smoke.sh scripts/installer-signature-policy-smoke.sh scripts/installer-workdir-policy-smoke.sh scripts/verify-deb.sh scripts/verify-release.sh scripts/arm64-image-smoke.sh scripts/netboot-smoke.sh
       - run: make arm64-image-smoke netboot-smoke
       - run: bash scripts/upgrade-service-order-smoke.sh
       - run: bash scripts/release-artifacts-smoke.sh
@@ -522,12 +535,15 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
-    needs: [package, package-permissions, deb-verify, package-arm64, deb-verify-arm64, qemu-smoke, iso, installer-scripts, frontend-e2e, frontend-live-e2e, safety-recovery, recovery-api, storage-loopback, privileged-storage-loopback, disk-full, share-integrations, compose-validation, docker-engine-api, security-controls, dependency-controls, race-fuzz, upgrade-compatibility, upgrade-debian]
+    needs: [package, package-permissions, deb-verify, package-arm64, deb-verify-arm64, qemu-smoke, iso, installer-scripts, frontend-e2e, frontend-live-e2e, workstation-clients, safety-recovery, recovery-api, storage-loopback, privileged-storage-loopback, disk-full, share-integrations, compose-validation, docker-engine-api, security-controls, dependency-controls, race-fuzz, upgrade-compatibility, upgrade-debian]
     permissions:
       contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
       - uses: actions/download-artifact@v4
         with:
           name: lumonas-deb
@@ -540,6 +556,10 @@ jobs:
         with:
           name: lumonas-qemu
           path: build/releases
+      - name: Build workstation backup clients
+        env:
+          LUMONAS_VERSION: ${{ github.ref_name }}
+        run: bash scripts/build-workstation-clients.sh build/releases
       - uses: anchore/sbom-action/download-syft@v0
       - uses: sigstore/cosign-installer@v3
       - run: LUMONAS_REQUIRE_SBOM=true LUMONAS_SIGN_ARTIFACTS=true bash scripts/release-artifacts.sh build/releases

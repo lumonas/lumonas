@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { CheckCircle2 } from 'lucide-react'
-import { useRestorePlan } from '@/api/queries'
+import { ArrowDownToLine, CheckCircle2, FileDown } from 'lucide-react'
+import { useDownloadRecovery, useRestorePlan } from '@/api/queries'
 import { AlertBanner } from '@/components/core/alert-banner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -35,6 +35,7 @@ export function RestoreWizard({
 
 function WizardBody({ onClose }: { onClose: () => void }) {
   const { data: plan } = useRestorePlan()
+  const downloadBundle = useDownloadRecovery()
   const [step, setStep] = useState(0)
   const [mapping, setMapping] = useState<Record<string, string>>({})
   const [apps, setApps] = useState<Record<string, boolean>>({})
@@ -48,12 +49,32 @@ function WizardBody({ onClose }: { onClose: () => void }) {
     )
   }
 
+  const currentPlan = plan
   const unmapped = plan.interfaces.filter((iface) => !mapping[iface.old]).length
+
+  function downloadMigrationChecklist() {
+    const content = {
+      format: 'lumonas-migration-checklist-v1',
+      createdAt: new Date().toISOString(),
+      recoveryGeneration: currentPlan.generationId,
+      networkInterfaceMapping: mapping,
+      stacksToReinstall: currentPlan.apps.filter((app) => apps[app.name] ?? app.appdataAvailable).map((app) => ({ name: app.name, appdataAvailable: app.appdataAvailable })),
+      dataDiskNote: currentPlan.dataDisksNote,
+      execution: 'Use the replacement-system recovery environment. This checklist records operator choices; the running NAS is not changed by this wizard.',
+    }
+    const blob = new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `lumonas-migration-generation-${currentPlan.generationId}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h2 className="text-lg font-semibold leading-none">Disaster recovery</h2>
+        <h2 className="text-lg font-semibold leading-none">Replacement NAS migration</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Restores system configuration and apps onto a fresh system disk. Data disks are imported
           — never erased.
@@ -212,12 +233,19 @@ function WizardBody({ onClose }: { onClose: () => void }) {
       {step === 3 && (
         <div className="flex flex-col items-center gap-3 py-6 text-center">
           <CheckCircle2 className="size-10 text-success" />
-          <p className="text-sm font-medium">Restore plan approved</p>
+          <p className="text-sm font-medium">Migration checklist ready</p>
           <p className="max-w-md text-sm text-muted-foreground">
-            On real hardware, the offline installer takes over from the USB stick and walks through
-            install → health-check → commit. Your NAS keeps running untouched until a recovery is
-            actually booted.
+            Download both files before replacing hardware. The recovery bundle contains the verified system configuration and backed-up app data; the JSON checklist records the interface and stack choices made here.
           </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button size="sm" onClick={() => downloadBundle.mutate()} disabled={downloadBundle.isPending}>
+              <ArrowDownToLine />{downloadBundle.isPending ? 'Preparing bundle…' : 'Download recovery bundle'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={downloadMigrationChecklist}>
+              <FileDown />Download migration checklist
+            </Button>
+          </div>
+          <p className="max-w-md text-xs text-muted-foreground">This wizard does not write to the NAS or apply the migration. Boot the recovery installer on the replacement system and verify disk identities before enabling writes.</p>
         </div>
       )}
 

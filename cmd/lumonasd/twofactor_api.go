@@ -12,6 +12,7 @@ import (
 	"github.com/lumonas/lumonas/internal/backup"
 	"github.com/lumonas/lumonas/internal/identity"
 	"github.com/lumonas/lumonas/internal/model"
+	"github.com/lumonas/lumonas/internal/store"
 )
 
 const (
@@ -245,7 +246,7 @@ func (s *apiServer) loginTwoFactor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.clearTOTPChallenge(input.ChallengeID)
-	token, expires, err := s.store.CreateSessionForUser(challenge.UserID, 12*time.Hour)
+	token, expires, err := s.store.CreateSessionForUserWithMetadata(challenge.UserID, 12*time.Hour, store.SessionMetadata{IPAddress: clientIP(r), UserAgent: r.UserAgent()})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

@@ -16,15 +16,25 @@ import (
 type DestinationType string
 
 const (
-	DestinationLocal DestinationType = "local"
-	DestinationSFTP  DestinationType = "sftp"
-	DestinationS3    DestinationType = "s3"
+	DestinationLocal  DestinationType = "local"
+	DestinationSFTP   DestinationType = "sftp"
+	DestinationS3     DestinationType = "s3"
+	DestinationRclone DestinationType = "rclone"
 )
 
 type RetentionPolicy struct {
 	Generations int `json:"generations"`
 	Daily       int `json:"daily"`
 	Monthly     int `json:"monthly"`
+	// ImmutableDays is a retention lock enforced by LumoNAS. Copies newer
+	// than this age are never selected for pruning, even when the normal
+	// generation/daily/monthly policy would remove them. Remote object-lock
+	// should also be enabled at the storage provider when it is available.
+	ImmutableDays int `json:"immutableDays,omitempty"`
+	// ProviderObjectLock asks the S3 endpoint to enforce COMPLIANCE object
+	// retention on every uploaded recovery copy. The bucket must have object
+	// lock enabled by its provider before LumoNAS can upload with this option.
+	ProviderObjectLock bool `json:"providerObjectLock,omitempty"`
 }
 
 func DefaultRetention() RetentionPolicy {
@@ -51,6 +61,8 @@ type Credentials struct {
 	SecretKey      string `json:"secretKey,omitempty"`
 	SessionToken   string `json:"sessionToken,omitempty"`
 	Region         string `json:"region,omitempty"`
+	RcloneConfig   string `json:"rcloneConfig,omitempty"`
+	HealthToken    string `json:"healthToken,omitempty"`
 }
 
 type Run struct {
@@ -85,9 +97,37 @@ type Schedule struct {
 	ID              string     `json:"id"`
 	Enabled         bool       `json:"enabled"`
 	IntervalSeconds int64      `json:"intervalSeconds"`
+	OnUSBAttach     bool       `json:"onUsbAttach"`
 	LastStartedAt   *time.Time `json:"lastStartedAt,omitempty"`
 	NextDueAt       *time.Time `json:"nextDueAt,omitempty"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
+}
+
+type PolicyTemplate struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	IntervalSeconds int64  `json:"intervalSeconds"`
+	Generations     int    `json:"generations"`
+	Daily           int    `json:"daily"`
+	Monthly         int    `json:"monthly"`
+}
+
+func PolicyTemplates() []PolicyTemplate {
+	return []PolicyTemplate{
+		{ID: "daily", Name: "Daily protection", Description: "One verified recovery copy each day with balanced retention.", IntervalSeconds: 24 * 60 * 60, Generations: 20, Daily: 30, Monthly: 12},
+		{ID: "frequent", Name: "Frequent protection", Description: "Run twice a day and keep more recent recovery points.", IntervalSeconds: 12 * 60 * 60, Generations: 40, Daily: 60, Monthly: 24},
+		{ID: "weekly", Name: "Weekly protection", Description: "Run weekly while retaining the baseline recovery history.", IntervalSeconds: 7 * 24 * 60 * 60, Generations: 20, Daily: 30, Monthly: 12},
+	}
+}
+
+func PolicyTemplateByID(id string) (PolicyTemplate, bool) {
+	for _, template := range PolicyTemplates() {
+		if template.ID == id {
+			return template, true
+		}
+	}
+	return PolicyTemplate{}, false
 }
 
 type Verification struct {
@@ -145,6 +185,12 @@ func (d Destination) Validate() error {
 	if d.Retention.Generations < minimum.Generations || d.Retention.Daily < minimum.Daily || d.Retention.Monthly < minimum.Monthly {
 		return fmt.Errorf("backup retention must keep at least %d generations, %d daily copies, and %d monthly copies", minimum.Generations, minimum.Daily, minimum.Monthly)
 	}
+	if d.Retention.ImmutableDays < 0 || d.Retention.ImmutableDays > 3650 {
+		return errors.New("immutable backup retention must be between 0 and 3650 days")
+	}
+	if d.Retention.ProviderObjectLock && (d.Type != DestinationS3 || d.Retention.ImmutableDays < 1) {
+		return errors.New("provider object lock requires an S3 destination and at least one retention day")
+	}
 	switch d.Type {
 	case DestinationLocal:
 		if !filepath.IsAbs(d.Target) || filepath.Clean(d.Target) != d.Target {
@@ -154,6 +200,10 @@ func (d Destination) Validate() error {
 		parsed, err := url.Parse(d.Target)
 		if err != nil || parsed.Scheme != string(d.Type) && !(d.Type == DestinationS3 && (parsed.Scheme == "http" || parsed.Scheme == "https")) || parsed.Host == "" || parsed.Path == "" {
 			return fmt.Errorf("%s backup target must be a valid URL", d.Type)
+		}
+	case DestinationRclone:
+		if _, _, err := parseRcloneTarget(d.Target); err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("unsupported backup destination type %q", d.Type)

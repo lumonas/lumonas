@@ -13,6 +13,7 @@ export function VolumesTab() {
       id: 'name',
       header: 'Volume',
       sortValue: (v) => v.name,
+      searchValue: (v) => `${v.name} ${v.stackName ?? ''} ${v.bindPath ?? ''}`,
       cell: (v) => <span className="font-mono text-[13px] font-medium">{v.name}</span>,
     },
     {

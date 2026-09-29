@@ -27,6 +27,7 @@ export function OperationReview({
   children,
   confirmLabel = 'Apply',
   loading = false,
+  confirmDisabled = false,
   onConfirm,
 }: {
   open: boolean
@@ -39,6 +40,7 @@ export function OperationReview({
   children?: React.ReactNode
   confirmLabel?: string
   loading?: boolean
+  confirmDisabled?: boolean
   onConfirm: () => void
 }) {
   return (
@@ -78,7 +80,7 @@ export function OperationReview({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={onConfirm} disabled={loading}>
+          <Button onClick={onConfirm} disabled={loading || confirmDisabled}>
             {confirmLabel}
           </Button>
         </DialogFooter>

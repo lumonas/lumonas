@@ -13,6 +13,10 @@ CREATE TABLE IF NOT EXISTS alert_acks (
   alert_id TEXT PRIMARY KEY,
   acknowledged_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS alert_snoozes (
+  alert_id TEXT PRIMARY KEY,
+  snoozed_until TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS generated_alerts (
   id TEXT PRIMARY KEY,
   rule_id TEXT NOT NULL,
@@ -73,6 +77,56 @@ func (s *Store) AcknowledgedAlerts() (map[string]bool, error) {
 		result[id] = true
 	}
 	return result, rows.Err()
+}
+
+// SnoozeAlert persists a temporary suppression window for an alert.
+func (s *Store) SnoozeAlert(id string, until time.Time) error {
+	if id == "" || until.IsZero() {
+		return sql.ErrNoRows
+	}
+	if err := s.ensureAlertsSchema(); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`INSERT INTO alert_snoozes(alert_id,snoozed_until) VALUES(?,?) ON CONFLICT(alert_id) DO UPDATE SET snoozed_until=excluded.snoozed_until`, id, until.UTC().Format(timeFormat))
+	return err
+}
+
+// SnoozedAlerts returns only snoozes that are still active.
+func (s *Store) SnoozedAlerts(now time.Time) (map[string]time.Time, error) {
+	if err := s.ensureAlertsSchema(); err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT alert_id,snoozed_until FROM alert_snoozes WHERE snoozed_until>?`, now.UTC().Format(timeFormat))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make(map[string]time.Time)
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, err
+		}
+		value, err := parseTime(raw)
+		if err != nil {
+			return nil, err
+		}
+		result[id] = value
+	}
+	return result, rows.Err()
+}
+
+// ClearAlertSuppression resets acknowledgement and snooze state after the
+// underlying condition has recovered, so a later recurrence is visible.
+func (s *Store) ClearAlertSuppression(id string) error {
+	if err := s.ensureAlertsSchema(); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec(`DELETE FROM alert_acks WHERE alert_id=?`, id); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM alert_snoozes WHERE alert_id=?`, id)
+	return err
 }
 
 // OpenGeneratedAlert inserts a rule-fired alert unless an open alert for the

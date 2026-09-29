@@ -27,6 +27,7 @@ var DefaultNames = []string{
 	"lumonas-privd-network.service",
 	"lumonas-privd-power.service",
 	"lumonas-privd-general.service",
+	"lumonas-privd-acme.service",
 	"lumonasd.service",
 	"lumonas-web.service",
 	"docker.service",

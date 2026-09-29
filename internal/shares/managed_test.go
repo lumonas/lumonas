@@ -42,3 +42,18 @@ func TestManagedShareLegacyConversion(t *testing.T) {
 		t.Fatalf("legacy conversion mismatch: %#v", legacy)
 	}
 }
+
+func TestManagedShareSMBAuditSettingsAreValidatedAndConverted(t *testing.T) {
+	value := ManagedShare{ID: "share-audit", Name: "Records", Path: "/srv/records", Enabled: true, Protocols: []Protocol{{Name: "smb", Settings: map[string]any{"auditEnabled": true, "auditOperations": []any{"renameat", "unlinkat"}}}}}
+	if err := value.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	legacy := value.Legacy()
+	if !legacy.AuditSMB || len(legacy.AuditOps) != 2 || legacy.AuditOps[0] != "renameat" {
+		t.Fatalf("SMB audit settings were not converted: %#v", legacy)
+	}
+	value.Protocols[0].Settings["auditOperations"] = []any{"renameat\\n   include = /etc/passwd"}
+	if err := value.Validate(); err == nil {
+		t.Fatal("unsafe SMB audit operation was accepted")
+	}
+}

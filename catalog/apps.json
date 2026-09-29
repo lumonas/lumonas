@@ -550,5 +550,41 @@
       "stopServices": ["vaultwarden-backup"],
       "startServices": ["vaultwarden-backup"]
     }
+  },
+  {
+    "id": "filebrowser-webdav",
+    "name": "File Browser (WebDAV)",
+    "category": "Files",
+    "tagline": "Web file manager with a WebDAV endpoint",
+    "description": "Deploy a lightweight file manager and WebDAV service against a selected LumoNAS share.",
+    "accent": "info",
+    "upstream": "https://filebrowser.org",
+    "image": "filebrowser/filebrowser:v2.32.0",
+    "ports": [8080],
+    "form": [
+      {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8080"},
+      {"id":"ROOT","label":"Files to publish","type":"storage_ref","required":true,"containerPath":"/srv","defaultResource":"share-media"}
+    ],
+    "appdataPaths": ["/database", "/config"],
+    "recovery": {"strategy":"stop-backup","appdataPaths":["/database", "/config"],"stopServices":["filebrowser-webdav"],"startServices":["filebrowser-webdav"]}
+  },
+  {
+    "id": "minio",
+    "name": "MinIO",
+    "category": "Storage",
+    "tagline": "Local S3-compatible object storage",
+    "description": "Run a local, S3-compatible object store on a dedicated LumoNAS share.",
+    "accent": "warning",
+    "upstream": "https://min.io",
+    "image": "minio/minio:RELEASE.2025-02-28T09-55-16Z",
+    "ports": [9000, 9001],
+    "form": [
+      {"id":"PORT","label":"S3 API port","type":"port","required":true,"defaultValue":"9000"},
+      {"id":"DATA","label":"Object data storage","type":"storage_ref","required":true,"containerPath":"/data","defaultResource":"apps"},
+      {"id":"MINIO_ROOT_USER","label":"Root access key","type":"text","required":true,"defaultValue":"lumonas"},
+      {"id":"MINIO_ROOT_PASSWORD","label":"Root secret key","type":"secret","required":true}
+    ],
+    "appdataPaths": ["/data"],
+    "recovery": {"strategy":"stop-backup","appdataPaths":["/data"],"stopServices":["minio"],"startServices":["minio"]}
   }
 ]

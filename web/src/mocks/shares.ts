@@ -26,6 +26,7 @@ export const shares: Share[] = [
   {
     id: 'share-media',
     name: 'Media',
+    path: '/srv/pools/pool-main/Media',
     resourceId: 'pool-main',
     resourceLabel: 'Main pool',
     relativePath: '/Media',
@@ -46,6 +47,7 @@ export const shares: Share[] = [
   {
     id: 'share-documents',
     name: 'Documents',
+    path: '/srv/pools/pool-main/Documents',
     resourceId: 'pool-main',
     resourceLabel: 'Main pool',
     relativePath: '/Documents',
@@ -63,6 +65,7 @@ export const shares: Share[] = [
   {
     id: 'share-photos',
     name: 'Photos',
+    path: '/srv/pools/pool-main/Photos',
     resourceId: 'pool-main',
     resourceLabel: 'Main pool',
     relativePath: '/Photos',
@@ -80,6 +83,7 @@ export const shares: Share[] = [
   {
     id: 'share-backups',
     name: 'Backups',
+    path: '/srv/pools/pool-main/Backups',
     resourceId: 'pool-main',
     resourceLabel: 'Main pool',
     relativePath: '/Backups',
@@ -99,6 +103,7 @@ export const shares: Share[] = [
   {
     id: 'share-cloud',
     name: 'Cloud',
+    path: '/srv/pools/pool-main/Cloud',
     resourceId: 'pool-main',
     resourceLabel: 'Main pool',
     relativePath: '/Cloud',
@@ -116,6 +121,7 @@ export const shares: Share[] = [
   {
     id: 'share-timemachine',
     name: 'TimeMachine',
+    path: '/srv/pools/apps/timemachine',
     resourceId: 'apps',
     resourceLabel: 'Apps SSD',
     relativePath: '/timemachine',

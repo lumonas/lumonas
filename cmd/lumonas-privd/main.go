@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -76,6 +77,7 @@ var workerDial = func(socket string) (net.Conn, error) {
 }
 
 var networkCheckpointCommand = exec.Command
+var cryptoCommandRunner stdinRunner = stdinCommandRunner
 
 var wireGuardApply = network.ApplyWireGuardConfigWithRunner
 
@@ -88,9 +90,21 @@ func main() {
 	socket := flag.String("socket", "/run/lumonas/privd.sock", "Unix socket path")
 	worker := flag.String("worker", "", "run as a restricted operation worker (storage, network, power, or general)")
 	runtimeMode := flag.Bool("runtime", false, "apply the persisted runtime provisioning and exit")
+	activateACME := flag.Bool("activate-acme-certificate", false, "activate a renewed LumoNAS Let's Encrypt certificate")
 	flag.Parse()
 	if *runtimeMode {
 		if err := runRuntimeFromEnv(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *activateACME {
+		if os.Geteuid() != 0 {
+			fmt.Fprintln(os.Stderr, "ACME certificate activation requires root")
+			os.Exit(1)
+		}
+		if err := activateACMECertificate(commandRunner); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -244,13 +258,15 @@ func executeWorker(req request, worker string) response {
 
 func operationWorker(operation string) string {
 	switch operation {
-	case "worker.ping.storage", "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.browse", "snapshot.delete", "install.apply", "system.slot.write", "system.slot.bootnext":
+	case "worker.ping.storage", "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "filesystem.crypto.unlock", "filesystem.crypto.lock", "filesystem.scrub.start", "filesystem.scrub.status", "filesystem.scrub.cancel", "disk.erase", "pool.mount", "pool.unmount", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "snapraid.config.apply", "storage.mountpersist.apply", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.list", "snapshot.browse", "snapshot.compare", "snapshot.delete", "snapshot.export", "snapshot.receive", "snapshot.export.cancel", "snapshot.receive.cancel", "snapshot.stream.remove", "install.apply", "system.slot.write", "system.slot.bootnext":
 		return "storage"
 	case "worker.ping.network", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply":
 		return "network"
 	case "worker.ping.power", "power.action", "power.shutdown":
 		return "power"
-	case "worker.ping.general", "service.reload", "service.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "avahi.config.apply", "updates.debian.status", "docker.logs.usage":
+	case "tls.acme.configure", "tls.acme.disable":
+		return "acme"
+	case "worker.ping.general", "service.reload", "service.config.apply", "tls.certificate.install", "identity.system-user.ensure", "samba.user.ensure", "samba.status.read", "samba.client.disconnect", "acl.apply", "avahi.config.apply", "updates.debian.status", "docker.logs.usage":
 		return "general"
 	default:
 		return ""
@@ -258,7 +274,7 @@ func operationWorker(operation string) string {
 }
 
 func validWorker(worker string) bool {
-	return worker == "storage" || worker == "network" || worker == "power" || worker == "general"
+	return worker == "storage" || worker == "network" || worker == "power" || worker == "general" || worker == "acme"
 }
 
 func envOr(key, fallback string) string {
@@ -310,15 +326,26 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 			return response{Error: "disk identity discovery failed"}
 		}
 		return response{OK: true, Data: disks}
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "install.apply":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "filesystem.crypto.unlock", "filesystem.crypto.lock", "disk.erase", "install.apply":
 		if req.TargetDiskID == "" {
 			return response{Error: "targetDiskId is required for filesystem operations"}
 		}
 		if !req.Confirmed {
 			return response{Error: "operation plan is not confirmed"}
 		}
-		if req.Operation != "install.apply" {
-			if err := storage.ValidateRequestedState(storage.Action(req.Operation), req.TargetDiskID, req.RequestedState); err != nil {
+		if req.Operation != "install.apply" && req.Operation != "filesystem.crypto.unlock" && req.Operation != "filesystem.crypto.lock" {
+			requestedForValidation := req.RequestedState
+			if req.Operation == "filesystem.create" {
+				if _, hasPassphrase := req.RequestedState["encryptionPassphrase"]; hasPassphrase {
+					requestedForValidation = make(map[string]any, len(req.RequestedState)-1)
+					for key, value := range req.RequestedState {
+						if key != "encryptionPassphrase" {
+							requestedForValidation[key] = value
+						}
+					}
+				}
+			}
+			if err := storage.ValidateRequestedState(storage.Action(req.Operation), req.TargetDiskID, requestedForValidation); err != nil {
 				return response{Error: "requested state is invalid: " + err.Error()}
 			}
 		}
@@ -342,6 +369,9 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		if err := validateIdentity(*target, req.ExpectedIdentity); err != nil {
 			return response{Error: err.Error()}
 		}
+		if req.Operation == "filesystem.crypto.unlock" && (target.Filesystem != "crypto_LUKS" || target.Mounted || target.PoolID != "") {
+			return response{Error: "target is not an available locked LUKS volume"}
+		}
 		if (req.Operation == "filesystem.format" || req.Operation == "filesystem.create" || req.Operation == "disk.erase" || req.Operation == "install.apply") && (target.Mounted || target.PoolID != "") {
 			return response{Error: "target disk is mounted or assigned to a pool"}
 		}
@@ -357,13 +387,23 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		if req.Operation == "install.apply" {
 			return applyDiskInstall(req, *target, run, stdinCommandRunner)
 		}
-		return executeStorage(req, *target, run)
+		return executeStorageWithStdin(req, *target, run, cryptoCommandRunner)
 	case "pool.mount":
 		return executePoolMount(req, discover, run)
 	case "pool.unmount":
 		return executePoolUnmount(req, run)
-	case "snapshot.create", "snapshot.list", "snapshot.browse", "snapshot.delete":
+	case "snapshot.create", "snapshot.list", "snapshot.browse", "snapshot.compare", "snapshot.delete":
 		return executeSnapshotOperation(req, run)
+	case "snapshot.export":
+		return executeSnapshotStreamExport(req)
+	case "snapshot.receive":
+		return executeSnapshotStreamReceive(req)
+	case "snapshot.stream.remove":
+		return executeSnapshotStreamRemove(req)
+	case "snapshot.export.cancel", "snapshot.receive.cancel":
+		return executeSnapshotStreamCancel(req)
+	case "filesystem.scrub.start", "filesystem.scrub.status", "filesystem.scrub.cancel":
+		return executeFilesystemScrub(req, run)
 	case "storage.mountpersist.apply":
 		return applyMountPersistence(req, discover, run)
 	case "snapraid.config.apply":
@@ -398,6 +438,31 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 		return response{OK: true, Data: map[string]string{"service": name}}
 	case "service.config.apply":
 		return applyServiceConfig(req, run)
+	case "tls.certificate.install":
+		return applyTLSCertificate(req, run)
+	case "tls.acme.configure":
+		return configureTLSACME(req, run)
+	case "tls.acme.disable":
+		return disableTLSACME(req, run)
+	case "samba.status.read":
+		output, err := run("smbstatus", "--json")
+		if err != nil {
+			return response{Error: "Samba status is unavailable"}
+		}
+		var status map[string]any
+		if err := json.Unmarshal(output, &status); err != nil {
+			return response{Error: "Samba returned invalid status data"}
+		}
+		return response{OK: true, Data: status}
+	case "samba.client.disconnect":
+		address := requestedString(req.RequestedState, "address")
+		if net.ParseIP(address) == nil {
+			return response{Error: "client address is invalid"}
+		}
+		if _, err := run("smbcontrol", "smbd", "kill-client-ip", address); err != nil {
+			return response{Error: "Samba could not disconnect the client"}
+		}
+		return response{OK: true, Data: map[string]string{"address": address}}
 	case "firewall.apply":
 		return applyFirewall(req, run)
 	case "identity.system-user.ensure":
@@ -505,7 +570,7 @@ func execute(req request, discover func(collector.CommandRunner) ([]model.Disk, 
 
 func requiresOperationID(operation string) bool {
 	switch operation {
-	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply", "service.reload", "service.config.apply", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.delete", "install.apply", "system.slot.write", "system.slot.bootnext":
+	case "filesystem.mount", "filesystem.unmount", "filesystem.create", "filesystem.format", "filesystem.crypto.unlock", "filesystem.crypto.lock", "filesystem.scrub.start", "filesystem.scrub.cancel", "disk.erase", "pool.mount", "pool.unmount", "storage.mountpersist.apply", "snapraid.config.apply", "snapraid.sync", "snapraid.scrub", "snapraid.fix", "network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback", "network.wifi.connect", "network.wireguard.apply", "network.tailscale.up", "network.tailscale.down", "network.tailscale.exit-node", "network.wol.set", "network.wol.wake", "firewall.apply", "service.reload", "service.config.apply", "tls.certificate.install", "tls.acme.configure", "tls.acme.disable", "avahi.config.apply", "identity.system-user.ensure", "samba.user.ensure", "samba.client.disconnect", "acl.apply", "power.action", "power.shutdown", "runtime.zram.apply", "runtime.zram.disable", "runtime.tmpfs.apply", "runtime.tmpfs.disable", "runtime.config.apply", "snapshot.create", "snapshot.delete", "snapshot.export", "snapshot.receive", "snapshot.export.cancel", "snapshot.receive.cancel", "snapshot.stream.remove", "install.apply", "system.slot.write", "system.slot.bootnext":
 		return true
 	default:
 		return false
@@ -779,6 +844,15 @@ func validateIdentity(disk model.Disk, expected map[string]string) error {
 }
 
 func executeStorage(req request, disk model.Disk, run command) response {
+	return executeStorageWithStdin(req, disk, run, stdinCommandRunner)
+}
+
+func cryptoMapperName(diskID string) string {
+	digest := sha256.Sum256([]byte(diskID))
+	return "lumonas-" + fmt.Sprintf("%x", digest[:8])
+}
+
+func executeStorageWithStdin(req request, disk model.Disk, run command, runStdin stdinRunner) response {
 	path := disk.CurrentPath
 	switch req.Operation {
 	case "install.apply":
@@ -828,6 +902,23 @@ func executeStorage(req request, disk model.Disk, run command) response {
 		if label != "" && !storage.ValidFilesystemLabel(label) {
 			return response{Error: "filesystem label is invalid"}
 		}
+		device := path
+		encrypted := requestedBool(req.RequestedState, "encrypted")
+		mapper := ""
+		if encrypted {
+			passphrase := requestedString(req.RequestedState, "encryptionPassphrase")
+			if len(passphrase) < 12 || len(passphrase) > 256 || strings.ContainsAny(passphrase, "\r\n\x00") {
+				return response{Error: "encryption passphrase is invalid"}
+			}
+			mapper = cryptoMapperName(disk.ID)
+			if _, err := runStdin("cryptsetup", []string{"luksFormat", "--batch-mode", "--type", "luks2", "--key-file", "-", path}, passphrase); err != nil {
+				return response{Error: "LUKS encryption setup failed"}
+			}
+			if _, err := runStdin("cryptsetup", []string{"open", "--key-file", "-", path, mapper}, passphrase); err != nil {
+				return response{Error: "encrypted volume could not be opened"}
+			}
+			device = "/dev/mapper/" + mapper
+		}
 		binary := "mkfs." + filesystem
 		args := []string{}
 		if filesystem == "ext4" {
@@ -838,17 +929,69 @@ func executeStorage(req request, disk model.Disk, run command) response {
 		if label != "" {
 			args = append(args, "-L", label)
 		}
-		args = append(args, path)
+		args = append(args, device)
 		if _, err := run(binary, args...); err != nil {
+			if encrypted {
+				_, _ = run("cryptsetup", "close", mapper)
+			}
 			return response{Error: "filesystem creation failed"}
 		}
 		if _, err := run("mkdir", "-p", mountPath); err != nil {
+			if encrypted {
+				_, _ = run("cryptsetup", "close", mapper)
+			}
 			return response{Error: "mount path could not be created"}
 		}
-		if _, err := run("mount", "-t", filesystem, path, mountPath); err != nil {
+		if _, err := run("mount", "-t", filesystem, device, mountPath); err != nil {
+			if encrypted {
+				_, _ = run("cryptsetup", "close", mapper)
+			}
 			return response{Error: "mount failed"}
 		}
-		return response{OK: true, Data: map[string]string{"filesystem": filesystem, "path": path, "mountPath": mountPath, "label": label}}
+		return response{OK: true, Data: map[string]any{"filesystem": filesystem, "path": path, "mountPath": mountPath, "label": label, "encrypted": encrypted}}
+	case "filesystem.crypto.unlock":
+		mountPath := requestedString(req.RequestedState, "mountPath")
+		passphrase := requestedString(req.RequestedState, "encryptionPassphrase")
+		if filepath.Clean(mountPath) != storage.DiskBranchPath(disk.ID) || len(passphrase) < 1 || len(passphrase) > 256 || strings.ContainsAny(passphrase, "\r\n\x00") {
+			return response{Error: "encrypted volume unlock request is invalid"}
+		}
+		mapper := cryptoMapperName(disk.ID)
+		if _, err := runStdin("cryptsetup", []string{"open", "--key-file", "-", path, mapper}, passphrase); err != nil {
+			return response{Error: "encrypted volume could not be opened; check the passphrase"}
+		}
+		device := "/dev/mapper/" + mapper
+		filesystem, err := run("blkid", "-o", "value", "-s", "TYPE", device)
+		if err != nil || (strings.TrimSpace(string(filesystem)) != "ext4" && strings.TrimSpace(string(filesystem)) != "xfs") {
+			_, _ = run("cryptsetup", "close", mapper)
+			return response{Error: "unlocked volume has an unsupported filesystem"}
+		}
+		if _, err := run("mkdir", "-p", mountPath); err != nil {
+			_, _ = run("cryptsetup", "close", mapper)
+			return response{Error: "mount path could not be created"}
+		}
+		if _, err := run("mount", "-t", strings.TrimSpace(string(filesystem)), device, mountPath); err != nil {
+			_, _ = run("cryptsetup", "close", mapper)
+			return response{Error: "encrypted volume mount failed"}
+		}
+		return response{OK: true, Data: map[string]string{"mountPath": mountPath, "filesystem": strings.TrimSpace(string(filesystem))}}
+	case "filesystem.crypto.lock":
+		mountPath := requestedString(req.RequestedState, "mountPath")
+		if filepath.Clean(mountPath) != storage.DiskBranchPath(disk.ID) {
+			return response{Error: "encrypted volume mount path is invalid"}
+		}
+		mapper := cryptoMapperName(disk.ID)
+		device := "/dev/mapper/" + mapper
+		mounted, err := run("findmnt", "-rn", "-o", "SOURCE", "-T", mountPath)
+		if err != nil || !strings.Contains(strings.TrimSpace(string(mounted)), device) {
+			return response{Error: "encrypted volume is not mounted at its managed path"}
+		}
+		if _, err := run("umount", "--", mountPath); err != nil {
+			return response{Error: "encrypted volume could not be unmounted"}
+		}
+		if _, err := run("cryptsetup", "close", mapper); err != nil {
+			return response{Error: "encrypted volume could not be locked"}
+		}
+		return response{OK: true, Data: map[string]string{"mountPath": mountPath, "state": "locked"}}
 	case "filesystem.format":
 		filesystem := requestedString(req.RequestedState, "filesystem")
 		if filesystem != "ext4" && filesystem != "xfs" {

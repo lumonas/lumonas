@@ -62,6 +62,7 @@ export function UsersPage() {
       id: 'user',
       header: 'User',
       sortValue: (u) => u.username,
+      searchValue: (u) => `${u.username} ${u.fullName ?? ''} ${u.role} ${u.twoFactor ? 'two factor' : ''}`,
       cell: (u) => (
         <div className="flex flex-col">
           <span className="text-[13px] font-medium">{u.username}</span>
@@ -154,6 +155,7 @@ export function UsersPage() {
       id: 'user',
       header: 'User',
       sortValue: (u) => u.username,
+      searchValue: (u) => `${u.username} ${u.fullName ?? ''} ${u.type} ${u.groups.join(' ')}`,
       cell: (u) => (
         <div className="flex flex-col">
           <span className="text-[13px] font-medium">{u.username}</span>

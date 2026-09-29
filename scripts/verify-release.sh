@@ -54,7 +54,8 @@ for item in manifest.get("artifacts", []):
     if pathlib.PurePath(name).name != name:
         raise SystemExit(f"release manifest artifact name is not a direct file name: {name}")
     path = release_dir / name
-    if path.is_symlink() or not path.is_file() or path.parent != release_dir or path.suffix not in {".deb", ".iso", ".qcow2", ".raw"}:
+    workstation_client = name.startswith("lumonas-workstation_") and name.endswith(("_linux_amd64", "_linux_arm64", "_windows_amd64.exe", "_darwin_amd64", "_darwin_arm64"))
+    if path.is_symlink() or not path.is_file() or path.parent != release_dir or (path.suffix not in {".deb", ".iso", ".qcow2", ".raw"} and not workstation_client):
         raise SystemExit(f"release manifest artifact is missing or invalid: {name}")
     if item.get("sizeBytes") != path.stat().st_size:
         raise SystemExit(f"release manifest size mismatch: {name}")
@@ -85,7 +86,8 @@ for item in manifest.get("artifacts", []):
                 raise SystemExit(f"release SBOM is missing SPDX document sections: {sidecar['name']}")
     expected[name] = item
 
-actual = sorted(path.name for pattern in ("*.deb", "*.iso", "*.qcow2", "*.raw") for path in release_dir.glob(pattern))
+patterns = ("*.deb", "*.iso", "*.qcow2", "*.raw", "lumonas-workstation_*_linux_amd64", "lumonas-workstation_*_linux_arm64", "lumonas-workstation_*_windows_amd64.exe", "lumonas-workstation_*_darwin_amd64", "lumonas-workstation_*_darwin_arm64")
+actual = sorted(path.name for pattern in patterns for path in release_dir.glob(pattern))
 if sorted(expected) != actual:
     raise SystemExit("release manifest artifact set does not match release directory")
 PY
@@ -95,10 +97,11 @@ artifact_count=0
 deb_count=0
 iso_count=0
 machine_image_count=0
+workstation_client_count=0
 if [ "${LUMONAS_REQUIRE_SIGNATURES:-false}" = "true" ]; then
 	command -v cosign >/dev/null 2>&1 || { echo "cosign is required for signature verification" >&2; exit 1; }
 fi
-for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw; do
+for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw "$RELEASE_DIR"/lumonas-workstation_*_linux_amd64 "$RELEASE_DIR"/lumonas-workstation_*_linux_arm64 "$RELEASE_DIR"/lumonas-workstation_*_windows_amd64.exe "$RELEASE_DIR"/lumonas-workstation_*_darwin_amd64 "$RELEASE_DIR"/lumonas-workstation_*_darwin_arm64; do
 	[ -f "$artifact" ] || continue
 	artifact_count=$((artifact_count + 1))
 	base=$(basename "$artifact")
@@ -106,6 +109,7 @@ for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2
 		*.deb) deb_count=$((deb_count + 1)) ;;
 		*.iso) iso_count=$((iso_count + 1)) ;;
 		*.qcow2|*.raw) machine_image_count=$((machine_image_count + 1)) ;;
+		lumonas-workstation_*) workstation_client_count=$((workstation_client_count + 1)) ;;
 	esac
 	grep -F "  $artifact" "$CHECKSUMS" >/dev/null 2>&1 || grep -F "  $base" "$CHECKSUMS" >/dev/null 2>&1 || {
 		echo "artifact is not covered by SHA256SUMS: $base" >&2
@@ -158,6 +162,7 @@ if [ "${LUMONAS_REQUIRE_RELEASE_SET:-false}" = "true" ]; then
 	[ "$deb_count" -eq 1 ] || { echo "release must contain exactly one Debian package" >&2; exit 1; }
 	[ "$iso_count" -ge 1 ] || { echo "release must contain an installer ISO" >&2; exit 1; }
 	[ "$machine_image_count" -ge 1 ] || { echo "release must contain a QEMU machine image" >&2; exit 1; }
+	[ "$workstation_client_count" -eq 5 ] || { echo "release must contain all five workstation clients" >&2; exit 1; }
 fi
 (cd "$RELEASE_DIR" && sha256sum -c SHA256SUMS >/dev/null)
 echo "LumoNAS release artifacts verified: $artifact_count"

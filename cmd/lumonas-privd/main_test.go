@@ -119,6 +119,66 @@ func TestExecuteCreateFormatsLabelsAndMounts(t *testing.T) {
 	}
 }
 
+func TestEncryptedCreatePassesPassphraseOnlyOverStdin(t *testing.T) {
+	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
+	passphrase := "correct horse battery staple"
+	var commands []string
+	var secretInputs []string
+	run := func(name string, args ...string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return nil, nil
+	}
+	runStdin := func(name string, args []string, stdin string) ([]byte, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		secretInputs = append(secretInputs, stdin)
+		return nil, nil
+	}
+	result := executeStorageWithStdin(request{Operation: "filesystem.create", RequestedState: map[string]any{
+		"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test", "encrypted": true, "encryptionPassphrase": passphrase,
+	}}, disk, run, runStdin)
+	if !result.OK || strings.Contains(result.Error, passphrase) {
+		t.Fatalf("encrypted format failed or exposed secret: %#v", result)
+	}
+	mapper := cryptoMapperName(disk.ID)
+	if len(secretInputs) != 2 || secretInputs[0] != passphrase || secretInputs[1] != passphrase {
+		t.Fatalf("expected passphrase to be supplied to both cryptsetup commands over stdin: %#v", secretInputs)
+	}
+	want := []string{
+		"cryptsetup luksFormat --batch-mode --type luks2 --key-file - /dev/sda",
+		"cryptsetup open --key-file - /dev/sda " + mapper,
+		"mkfs.ext4 -F /dev/mapper/" + mapper,
+		"mkdir -p /srv/disks/wwn-test",
+		"mount -t ext4 /dev/mapper/" + mapper + " /srv/disks/wwn-test",
+	}
+	if strings.Join(commands, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("unexpected encrypted format commands:\n%v", commands)
+	}
+}
+
+func TestExecuteAllowsTransientPassphraseForEncryptedCreate(t *testing.T) {
+	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
+	previousRunner := cryptoCommandRunner
+	t.Cleanup(func() { cryptoCommandRunner = previousRunner })
+	var received int
+	cryptoCommandRunner = func(_ string, _ []string, stdin string) ([]byte, error) {
+		if stdin != "correct horse battery staple" {
+			t.Fatal("transient passphrase did not reach cryptsetup stdin")
+		}
+		received++
+		return nil, nil
+	}
+	run := func(string, ...string) ([]byte, error) { return nil, nil }
+	result := execute(request{
+		Operation: "filesystem.create", OperationID: "op-encrypted", PlanHash: "hash", TargetDiskID: disk.ID,
+		ExpectedIdentity: map[string]string{"wwn": "test", "sizeBytes": "100"},
+		RequestedState:   map[string]any{"filesystem": "ext4", "mountPath": "/srv/disks/wwn-test", "encrypted": true, "encryptionPassphrase": "correct horse battery staple"},
+		ExpiresAt:        time.Now().UTC().Add(time.Minute), Confirmed: true,
+	}, func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }, run)
+	if !result.OK || received != 2 {
+		t.Fatalf("encrypted create did not pass worker validation: result=%#v stdinCalls=%d", result, received)
+	}
+}
+
 func TestExecuteCreateEnforcesCanonicalPathFilesystemAndLabel(t *testing.T) {
 	disk := model.Disk{ID: "wwn-test", CurrentPath: "/dev/sda", WWN: "test", SizeBytes: 100}
 	discover := func(collector.CommandRunner) ([]model.Disk, error) { return []model.Disk{disk}, nil }
@@ -344,10 +404,32 @@ func TestShareActivationRequiresOperationID(t *testing.T) {
 	}
 }
 
+func TestSambaClientDisconnectUsesValidatedIP(t *testing.T) {
+	called := false
+	invalid := execute(request{Operation: "samba.client.disconnect", OperationID: "disconnect-1", PlanHash: "disconnect", Confirmed: true, RequestedState: map[string]any{"address": "; reboot"}}, nil, func(string, ...string) ([]byte, error) {
+		called = true
+		return nil, nil
+	})
+	if invalid.OK || called {
+		t.Fatalf("invalid client IP reached smbcontrol: %#v", invalid)
+	}
+	valid := execute(request{Operation: "samba.client.disconnect", OperationID: "disconnect-2", PlanHash: "disconnect", Confirmed: true, RequestedState: map[string]any{"address": "192.0.2.41"}}, nil, func(name string, args ...string) ([]byte, error) {
+		called = true
+		if name != "smbcontrol" || strings.Join(args, " ") != "smbd kill-client-ip 192.0.2.41" {
+			t.Fatalf("unexpected disconnect command: %s %v", name, args)
+		}
+		return []byte("ok"), nil
+	})
+	if !valid.OK || !called {
+		t.Fatalf("valid confirmed disconnect failed: %#v", valid)
+	}
+}
+
 func TestRemainingMutationsRequireOperationID(t *testing.T) {
 	for _, operation := range []string{
 		"network.checkpoint.begin", "network.checkpoint.commit", "network.checkpoint.rollback",
 		"network.wifi.connect", "network.wol.set", "service.reload", "power.action", "power.shutdown",
+		"samba.client.disconnect", "tls.certificate.install",
 	} {
 		t.Run(operation, func(t *testing.T) {
 			result := execute(request{Operation: operation, PlanHash: "mutation-plan", Confirmed: true}, nil, func(string, ...string) ([]byte, error) {

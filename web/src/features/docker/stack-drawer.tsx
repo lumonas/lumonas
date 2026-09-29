@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Archive, ArrowUpCircle, Eye, EyeOff, Play, RotateCw, Square } from 'lucide-react'
-import { useDockerContainers, useDockerStack, useStackAction } from '@/api/queries'
+import { useDockerContainers, useDockerStack, useStackAction, useUpdateStackRecoveryProfile } from '@/api/queries'
 import { AlertBanner } from '@/components/core/alert-banner'
 import { HealthBadge } from '@/components/core/health-badge'
 import { LogStream } from '@/components/core/log-stream'
@@ -32,13 +32,19 @@ export function StackDrawer({
   const { data: stack } = useDockerStack(stackId)
   const { data: containers } = useDockerContainers()
   const stackAction = useStackAction()
+  const updateRecoveryProfile = useUpdateStackRecoveryProfile()
 
   const [updateOpen, setUpdateOpen] = useState(false)
   const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(new Set())
+  const [recoveryDraft, setRecoveryDraft] = useState<{ stackId: string; value: string } | null>(null)
 
   if (!stack) {
     return null
   }
+
+  const recoveryPaths = recoveryDraft?.stackId === stack.id
+    ? recoveryDraft.value
+    : (stack.recovery?.appdataPaths ?? []).join('\n')
 
   const stackContainers = (containers ?? []).filter((c) => c.stackId === stack.id)
   const running = stack.state === 'running'
@@ -194,9 +200,29 @@ export function StackDrawer({
                 </span>
               </div>
             </div>
+            <div className="mt-4 grid gap-2">
+              <label htmlFor="stack-recovery-paths" className="text-xs font-medium">Container data paths to include</label>
+              <textarea
+                id="stack-recovery-paths"
+                value={recoveryPaths}
+                onChange={(event) => setRecoveryDraft({ stackId: stack.id, value: event.target.value })}
+                placeholder="/config\n/data"
+                className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                spellCheck={false}
+              />
+              <p className="text-xs text-muted-foreground">Enter one absolute path used by the container per line. LumoNAS checks that each path is backed by a mounted volume before archiving it.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="self-start"
+                disabled={updateRecoveryProfile.isPending}
+                onClick={() => updateRecoveryProfile.mutate({ id: stack.id, appdataPaths: recoveryPaths.split('\n').map((path) => path.trim()).filter(Boolean) })}
+              >
+                {updateRecoveryProfile.isPending ? 'Saving…' : 'Save recovery paths'}
+              </Button>
+            </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Stack updates run an encrypted configuration backup beforehand; per-app appdata
-              backup is planned.
+              App-data paths are included in the next recovery bundle. The restore center shows whether each path made it into the verified bundle.
             </p>
           </div>
         </TabsContent>

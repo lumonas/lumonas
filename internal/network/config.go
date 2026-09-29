@@ -256,7 +256,7 @@ func (c IPConfig) validate(version int) error {
 
 var knownServices = map[string]bool{
 	"ui": true, "ssh": true, "smb": true, "nfs": true, "sftp": true,
-	"ftp": true, "rsync": true, "reverse-proxy": true,
+	"ftp": true, "rsync": true, "reverse-proxy": true, "acme-http": true,
 }
 
 func ValidateBindings(values []Binding) error {

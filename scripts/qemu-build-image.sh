@@ -122,9 +122,9 @@ Acquire::Check-Valid-Until "false";
 APT
 apt-get update
 apt-get install -y --no-install-recommends \
-  systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc grub-efi-amd64 dosfstools efibootmgr gdisk openssh-server curl ca-certificates openssl \
-  iproute2 util-linux smartmontools lm-sensors nut nut-client e2fsprogs xfsprogs mergerfs snapraid \
-  network-manager docker.io docker-compose samba samba-common-bin nfs-kernel-server rsync vsftpd \
+  systemd systemd-sysv systemd-resolved linux-image-amd64 grub-pc grub-efi-amd64 dosfstools efibootmgr gdisk openssh-server curl ca-certificates openssl certbot \
+  iproute2 util-linux smartmontools lm-sensors nut nut-client e2fsprogs xfsprogs cryptsetup mergerfs snapraid \
+  network-manager docker.io docker-compose samba samba-common-bin samba-vfs-modules nfs-kernel-server rsync rclone vsftpd \
   avahi-daemon nftables
 dpkg -i /tmp/lumonas.deb || apt-get -f install -y
 rm -f /tmp/lumonas.deb
@@ -141,7 +141,7 @@ mkdir -p /usr/share/doc/lumonas
   echo "packages:"
   dpkg-query -W -f='${Package}\t${Version}\n' | sort
 } >/usr/share/doc/lumonas/qemu-package-manifest.txt
-systemd-analyze verify /lib/systemd/system/lumonas-runtime.service /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service /lib/systemd/system/lumonas-jobs.target /lib/systemd/system/lumonas-services.target /lib/systemd/system/lumonas-storage.target
+systemd-analyze verify /lib/systemd/system/lumonas-runtime.service /lib/systemd/system/lumonas-privd.service /lib/systemd/system/lumonas-privd-general.service /lib/systemd/system/lumonas-privd-acme.service /lib/systemd/system/lumonas-privd-network.service /lib/systemd/system/lumonas-privd-power.service /lib/systemd/system/lumonas-privd-storage.service /lib/systemd/system/lumonas-web.service /lib/systemd/system/lumonasd.service /lib/systemd/system/lumonas-jobs.target /lib/systemd/system/lumonas-services.target /lib/systemd/system/lumonas-storage.target
 mkdir -p /etc/NetworkManager/system-connections /etc/systemd/system/lumonas-web.service.d
 cat >/etc/NetworkManager/system-connections/qemu-ethernet.nmconnection <<'NETWORK'
 [connection]
@@ -165,7 +165,7 @@ cat >/etc/fstab <<FSTAB
 UUID=$LUMONAS_ROOT_UUID / ext4 defaults 0 1
 UUID=$LUMONAS_EFI_UUID /boot/efi vfat umask=0077 0 1
 FSTAB
-systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service ssh.service lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
+systemctl enable NetworkManager.service NetworkManager-wait-online.service systemd-resolved.service docker.service smbd.service avahi-daemon.service ssh.service lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
 systemctl disable systemd-networkd.service systemd-networkd-wait-online.service || true
 ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
 passwd -l root || true

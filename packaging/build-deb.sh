@@ -79,6 +79,9 @@ cp "$ROOT/packaging/docker-daemon.json" "$OUT/etc/docker/daemon.json.lumonas"
 cp "$ROOT/packaging/debian/lumonasd.env.example" "$OUT/etc/lumonas/lumonasd.env.example"
 cp "$ROOT/packaging/debian/lumonas-web.env.example" "$OUT/etc/lumonas/lumonas-web.env.example"
 cp "$ROOT/catalog/apps.json" "$OUT/usr/share/lumonas/catalog/apps.json"
+if [ -f "$ROOT/catalog/apps.json.sig" ]; then
+	cp "$ROOT/catalog/apps.json.sig" "$OUT/usr/share/lumonas/catalog/apps.json.sig"
+fi
 install -m 0750 "$ROOT/packaging/scripts/install-disk.sh" "$OUT/usr/share/lumonas/install-disk"
 sed -e "s/^Version:.*/Version: $VERSION/" -e "s/^Architecture:.*/Architecture: $DEB_ARCH/" "$ROOT/packaging/debian/control" > "$OUT/DEBIAN/control"
 printf '%s\n' \

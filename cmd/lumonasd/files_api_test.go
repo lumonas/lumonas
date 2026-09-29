@@ -123,6 +123,62 @@ func TestFilesAPIDownload(t *testing.T) {
 	}
 }
 
+func TestFilesAPIMediaPreviewUsesSafeInlineStreaming(t *testing.T) {
+	server := testServer(t)
+	shareID := testFileShare(t, server)
+	share, err := server.store.ManagedShare(shareID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	image := []byte("safe image bytes")
+	if err := os.WriteFile(filepath.Join(share.Path, "preview.png"), image, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	text := []byte("plain text preview")
+	if err := os.WriteFile(filepath.Join(share.Path, "preview.txt"), text, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(share.Path, "page.html"), []byte("<script>alert(1)</script>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/files/download?share="+shareID+"&path=/&name=preview.png&inline=1", nil)
+	rec := httptest.NewRecorder()
+	server.routes().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != string(image) {
+		t.Fatalf("preview failed: %d %q", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/png" {
+		t.Fatalf("unexpected preview content type %q", got)
+	}
+	if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, "inline") || !strings.Contains(got, "preview.png") {
+		t.Fatalf("unexpected preview disposition %q", got)
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" || rec.Header().Get("Cache-Control") != "private, no-store" || !strings.Contains(rec.Header().Get("Content-Security-Policy"), "sandbox") {
+		t.Fatalf("preview security headers are incomplete: %#v", rec.Header())
+	}
+	textPreview := httptest.NewRecorder()
+	server.routes().ServeHTTP(textPreview, httptest.NewRequest(http.MethodGet, "/api/v1/files/download?share="+shareID+"&path=/&name=preview.txt&inline=1", nil))
+	if textPreview.Code != http.StatusOK || textPreview.Body.String() != string(text) || !strings.HasPrefix(textPreview.Header().Get("Content-Type"), "text/plain") {
+		t.Fatalf("plain text preview failed: %d %q %q", textPreview.Code, textPreview.Body.String(), textPreview.Header().Get("Content-Type"))
+	}
+	largeText := filepath.Join(share.Path, "large.txt")
+	if err := os.WriteFile(largeText, make([]byte, maxInlineTextPreviewBytes+1), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	largePreview := httptest.NewRecorder()
+	server.routes().ServeHTTP(largePreview, httptest.NewRequest(http.MethodGet, "/api/v1/files/download?share="+shareID+"&path=/&name=large.txt&inline=1", nil))
+	if largePreview.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected large text preview to be rejected, got %d", largePreview.Code)
+	}
+
+	unsupported := httptest.NewRecorder()
+	server.routes().ServeHTTP(unsupported, httptest.NewRequest(http.MethodGet, "/api/v1/files/download?share="+shareID+"&path=/&name=page.html&inline=1", nil))
+	if unsupported.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("expected HTML to be excluded from previews, got %d", unsupported.Code)
+	}
+}
+
 func TestFilesAPISearch(t *testing.T) {
 	server := testServer(t)
 	shareID := testFileShare(t, server)

@@ -163,6 +163,7 @@ for attempt in $(seq 1 60); do
        grep -F '"id":"lumonas-privd-network.service","name":"lumonas-privd-network.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-privd-power.service","name":"lumonas-privd-power.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-privd-general.service","name":"lumonas-privd-general.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
+       grep -F '"id":"lumonas-privd-acme.service","name":"lumonas-privd-acme.service","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-jobs.target","name":"lumonas-jobs.target","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-services.target","name":"lumonas-services.target","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \
        grep -F '"id":"lumonas-storage.target","name":"lumonas-storage.target","active":true,"state":"running"' "$LOG.services" >/dev/null 2>&1 && \

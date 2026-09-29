@@ -24,6 +24,7 @@ type ApplyResult struct {
 	SecretsRestored  bool     `json:"secretsRestored"`
 	DatabaseRestored bool     `json:"databaseRestored"`
 	AppdataRestored  []string `json:"appdataRestored,omitempty"`
+	SharesRestored   []string `json:"sharesRestored,omitempty"`
 }
 
 // Apply verifies the complete bundle before writing anything. It is intended
@@ -50,7 +51,7 @@ func Apply(bundle, key []byte, options ApplyOptions) (ApplyResult, error) {
 		return ApplyResult{}, fmt.Errorf("create recovery root: %w", err)
 	}
 
-	result := ApplyResult{Manifest: plan.Manifest, Verified: true, AppliedFiles: make([]string, 0), AppdataRestored: make([]string, 0)}
+	result := ApplyResult{Manifest: plan.Manifest, Verified: true, AppliedFiles: make([]string, 0), AppdataRestored: make([]string, 0), SharesRestored: make([]string, 0)}
 	appdataLimit := options.AppdataMaxBytes
 	if appdataLimit <= 0 {
 		appdataLimit = DefaultAppdataArchiveLimit
@@ -71,6 +72,28 @@ func Apply(bundle, key []byte, options ApplyOptions) (ApplyResult, error) {
 			return ApplyResult{}, fmt.Errorf("restore appdata %s: %w", record.Stack, err)
 		}
 		result.AppdataRestored = append(result.AppdataRestored, record.Stack+":"+record.ContainerPath)
+		result.AppliedFiles = append(result.AppliedFiles, record.ArchivePath)
+	}
+	for _, record := range plan.Shares {
+		ciphertext, ok := files[record.ArchivePath]
+		if !ok {
+			return ApplyResult{}, fmt.Errorf("share archive is missing: %s", record.ArchivePath)
+		}
+		archive, err := decrypt(ciphertext, key)
+		if err != nil {
+			return ApplyResult{}, fmt.Errorf("decrypt share %s: %w", record.ID, err)
+		}
+		target := filepath.Join(root, strings.TrimPrefix(filepath.Clean(record.Path), string(filepath.Separator)))
+		if !withinRoot(root, target) || !validSharePath(filepath.Clean(record.Path)) {
+			return ApplyResult{}, fmt.Errorf("unsafe share restore target: %s", record.Path)
+		}
+		if err := rejectSymlinkPath(root, filepath.Dir(target)); err != nil {
+			return ApplyResult{}, err
+		}
+		if err := ExtractAppdata(archive, target, DefaultShareArchiveLimit); err != nil {
+			return ApplyResult{}, fmt.Errorf("restore share %s: %w", record.Name, err)
+		}
+		result.SharesRestored = append(result.SharesRestored, record.ID)
 		result.AppliedFiles = append(result.AppliedFiles, record.ArchivePath)
 	}
 	names := make([]string, 0, len(files))

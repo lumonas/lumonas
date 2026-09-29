@@ -35,10 +35,12 @@ func (s Service) CheckImageUpdates(ctx context.Context) ([]Image, error) {
 		if localErr != nil {
 			continue
 		}
+		image.LocalDigest = localDigest
 		remoteDigest, remoteErr := s.remoteDigest(ctx, reference)
 		if remoteErr != nil {
 			continue
 		}
+		image.RemoteDigest = remoteDigest
 		image.UpdateAvailable = localDigest != remoteDigest
 	}
 	return images, nil

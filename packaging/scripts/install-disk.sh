@@ -170,7 +170,7 @@ mount --bind /sys "$MOUNT/sys"
 chroot "$MOUNT" /bin/sh -s -- "$ADMIN_NAME" <<-'CHROOT'
 	set -eu
 	admin_name="$1"
-	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
 	update-initramfs -u -k all >/dev/null 2>&1
 	if [ "$admin_name" = "root" ]; then
 		echo "administrator name may not be root" >&2

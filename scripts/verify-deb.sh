@@ -64,6 +64,7 @@ for unit in \
 	lumonas-privd-network.service \
 	lumonas-privd-power.service \
 	lumonas-privd-general.service \
+	lumonas-privd-acme.service \
 	lumonas-runtime.service \
 	lumonas-jobs.target \
 	lumonas-services.target \

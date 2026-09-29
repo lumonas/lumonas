@@ -1,8 +1,8 @@
 [Unit]
 Description=LumoNAS management daemon
-After=network-online.target docker.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service
+After=network-online.target docker.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service
 Wants=network-online.target
-Requires=lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service
+Requires=lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service
 PartOf=lumonas-jobs.target
 
 [Service]
@@ -15,13 +15,14 @@ StandardError=journal
 SyslogIdentifier=lumonasd
 User=lumonas
 Group=lumonas
+SupplementaryGroups=libvirt
 Restart=on-failure
 RestartSec=3s
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/lumonas /srv/lumonas
+ReadWritePaths=/var/lib/lumonas /srv/lumonas /var/lib/libvirt/images/lumonas
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictSUIDSGID=true
 LockPersonality=true

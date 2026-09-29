@@ -415,6 +415,7 @@ export const stacks: DockerStack[] = [
     lastDeploy: daysAgo(12),
     updateAvailable: { current: '10.10.6', latest: '10.10.7' },
     backup: { strategy: 'stop-backup', lastBackupAt: hoursAgo(26), appdataSizeBytes: 2.1 * GB },
+    recovery: { strategy: 'stop-backup', appdataPaths: ['/config'] },
     recoveryCoverage: 94,
   },
   {

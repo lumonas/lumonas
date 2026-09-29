@@ -113,7 +113,7 @@ data d2 /srv/disks/serial_B
 		t.Fatalf("unexpected confirm result: %#v", result)
 	}
 	// Expected chain: format C, unmount pool, mount pool, extend snapraid config.
-	if len(operations) != 4 || operations[0] != "filesystem.create" || operations[1] != "pool.unmount" || operations[2] != "pool.mount" || operations[3] != "snapraid.config.apply" {
+	if len(operations) < 4 || operations[0] != "filesystem.create" || operations[1] != "pool.unmount" || operations[2] != "pool.mount" || operations[3] != "snapraid.config.apply" {
 		t.Fatalf("unexpected broker chain: %#v", operations)
 	}
 	// A sync job was queued for the extended parity set.

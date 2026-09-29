@@ -2,10 +2,54 @@ package store
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
 )
+
+type CapacityThreshold struct {
+	ResourceID string    `json:"resourceId"`
+	Percent    int       `json:"thresholdPercent"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+func (s *Store) CapacityThresholds() ([]CapacityThreshold, error) {
+	rows, err := s.db.Query(`SELECT key,value FROM meta WHERE key GLOB 'capacity_threshold:*' ORDER BY key`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]CapacityThreshold, 0)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		var percent int
+		if _, err := fmt.Sscanf(value, "%d", &percent); err != nil || percent < 50 || percent > 99 {
+			continue
+		}
+		resource := strings.TrimPrefix(key, "capacity_threshold:")
+		var updated string
+		_ = s.db.QueryRow(`SELECT value FROM meta WHERE key=?`, "capacity_threshold_updated:"+resource).Scan(&updated)
+		updatedAt, _ := time.Parse(time.RFC3339Nano, updated)
+		result = append(result, CapacityThreshold{ResourceID: resource, Percent: percent, UpdatedAt: updatedAt})
+	}
+	return result, rows.Err()
+}
+
+func (s *Store) SetCapacityThreshold(resourceID string, percent int) error {
+	if strings.TrimSpace(resourceID) == "" || len(resourceID) > 512 || percent < 50 || percent > 99 {
+		return fmt.Errorf("resource id is required and threshold must be between 50 and 99")
+	}
+	_, err := s.db.Exec(`INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, "capacity_threshold:"+resourceID, fmt.Sprint(percent))
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, "capacity_threshold_updated:"+resourceID, time.Now().UTC().Format(time.RFC3339Nano))
+	return err
+}
 
 const capacitySchema = `
 CREATE TABLE IF NOT EXISTS capacity_snapshots (

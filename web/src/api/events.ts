@@ -4,8 +4,11 @@ import { MockEventSource } from '@/mocks/event-stream'
 export const useMocks = import.meta.env.VITE_USE_MOCKS === 'true'
 
 export interface EventSourceLike {
+  readonly readyState?: number
   addEventListener(type: 'message', listener: (event: { data: string }) => void): void
+  addEventListener(type: 'open' | 'error', listener: (event: Event) => void): void
   removeEventListener(type: 'message', listener: (event: { data: string }) => void): void
+  removeEventListener(type: 'open' | 'error', listener: (event: Event) => void): void
   close(): void
 }
 

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
 
-const ACTIVE_STATES = ['queued', 'preparing', 'running']
+const ACTIVE_STATES = ['queued', 'preparing', 'running', 'waiting-confirmation']
 
 export function JobsPopover() {
   const navigate = useNavigate()
@@ -32,7 +32,7 @@ export function JobsPopover() {
         <div className="flex items-center justify-between border-b px-4 py-3">
           <p className="text-sm font-semibold">Jobs</p>
           <span className="text-xs text-muted-foreground">
-            {active.length > 0 ? `${active.length} running` : 'All idle'}
+            {active.length > 0 ? `${active.length} active` : 'All idle'}
           </span>
         </div>
         <ScrollArea className="max-h-96">

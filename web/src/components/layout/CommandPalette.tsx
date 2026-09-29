@@ -25,7 +25,6 @@ import {
   CommandGroup,
   CommandItem,
   CommandSeparator,
-  CommandShortcut,
 } from '@/components/ui/command'
 import { useUiStore } from '@/stores/ui'
 
@@ -37,6 +36,9 @@ export function CommandPalette() {
   const createJob = useCreateJob()
   const { data: stacks } = useDockerStacks()
   const stackAction = useStackAction()
+  const flaggedDisk = [...(disks ?? [])]
+    .filter((disk) => disk.health === 'critical' || disk.health === 'warning')
+    .sort((a, b) => (a.health === 'critical' ? 0 : 1) - (b.health === 'critical' ? 0 : 1))[0]
 
   function run(fn: () => void) {
     return () => {
@@ -105,31 +107,18 @@ export function CommandPalette() {
           })}
         >
           <RefreshCw />
-          Start SnapRAID sync
-          <CommandShortcut>job</CommandShortcut>
+          Queue SnapRAID sync job
         </CommandItem>
-        {stacks?.some((s) => s.name === 'jellyfin') && (
-          <>
-            <CommandItem
-              onSelect={run(() => {
-                const jellyfin = stacks.find((s) => s.name === 'jellyfin')
-                if (jellyfin) stackAction.mutate({ id: jellyfin.id, action: 'restart' })
-              })}
-            >
-              <RotateCw />
-              Restart Jellyfin
-            </CommandItem>
-            <CommandItem
-              onSelect={run(() => {
-                const jellyfin = stacks.find((s) => s.name === 'jellyfin')
-                navigate(`/docker?tab=stacks&stack=${jellyfin?.id ?? ''}`)
-              })}
-            >
-              <Container />
-              View Jellyfin logs
-            </CommandItem>
-          </>
-        )}
+        {(stacks ?? []).slice(0, 6).map((stack) => (
+          <CommandItem
+            key={`restart-${stack.id}`}
+            value={`action restart ${stack.name}`}
+            onSelect={run(() => stackAction.mutate({ id: stack.id, action: 'restart' }))}
+          >
+            <RotateCw />
+            Restart {stack.name}
+          </CommandItem>
+        ))}
         {stacks?.some((s) => s.updateAvailable) && (
           <CommandItem
             onSelect={run(() => {
@@ -153,17 +142,18 @@ export function CommandPalette() {
           <UserPlus />
           Add user
         </CommandItem>
-        <CommandItem
-          onSelect={run(() => {
-            const flagged = disks?.find((d) => d.health === 'warning' || d.health === 'critical')
-            if (flagged) createJob.mutate({ type: 'smart.short', resourceId: flagged.id })
-            navigate('/storage')
-          })}
-        >
-          <Activity />
-          Run SMART test on flagged disk
-          <CommandShortcut>job</CommandShortcut>
-        </CommandItem>
+        {flaggedDisk ? (
+          <CommandItem
+            value={`smart test disk ${flaggedDisk.name} ${flaggedDisk.model}`}
+            onSelect={run(() => {
+              createJob.mutate({ type: 'smart.short', resourceId: flaggedDisk.id })
+              navigate(`/storage?disk=${flaggedDisk.id}`)
+            })}
+          >
+            <Activity />
+            Queue short SMART test for {flaggedDisk.name}
+          </CommandItem>
+        ) : null}
         <CommandItem onSelect={run(() => navigate('/docker'))}>
           <Search />
           Browse app catalog

@@ -43,9 +43,10 @@ func (s *apiServer) createStorageSnapshot(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var input struct {
-		Kind   string `json:"kind"`
-		Source string `json:"source"`
-		Label  string `json:"label"`
+		Kind              string `json:"kind"`
+		Source            string `json:"source"`
+		Label             string `json:"label"`
+		RetentionLockDays int    `json:"retentionLockDays"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -58,6 +59,10 @@ func (s *apiServer) createStorageSnapshot(w http.ResponseWriter, r *http.Request
 	}
 	if err := storage.ValidateSnapshotLabel(input.Label); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if input.RetentionLockDays < 0 || input.RetentionLockDays > 3650 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "snapshot retention lock must be between 0 and 3650 days"})
 		return
 	}
 	operationID := newID("snap")
@@ -85,6 +90,10 @@ func (s *apiServer) createStorageSnapshot(w http.ResponseWriter, r *http.Request
 		return
 	}
 	record := snapshotRecordFromResponse(result, kind, input.Source, input.Label)
+	if input.RetentionLockDays > 0 {
+		protectedUntil := time.Now().UTC().Add(time.Duration(input.RetentionLockDays) * 24 * time.Hour)
+		record.ProtectedUntil = &protectedUntil
+	}
 	saved, err := s.store.SaveStorageSnapshot(record)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -122,6 +131,10 @@ func (s *apiServer) deleteStorageSnapshot(w http.ResponseWriter, r *http.Request
 	}
 	if !found {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "snapshot not found"})
+		return
+	}
+	if record.ProtectedUntil != nil && record.ProtectedUntil.After(time.Now().UTC()) {
+		writeJSON(w, http.StatusLocked, map[string]string{"error": "snapshot is retention-locked until " + record.ProtectedUntil.UTC().Format(time.RFC3339)})
 		return
 	}
 	operationID := newID("snap")

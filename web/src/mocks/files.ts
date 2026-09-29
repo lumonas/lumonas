@@ -179,6 +179,21 @@ export function listDir(shareId: string, path: string): FileEntry[] | null {
     )
 }
 
+export function searchFiles(shareId: string, query: string): FileEntry[] {
+  const root = vfs[shareId]
+  if (!root || !query.trim()) return []
+  const needle = query.trim().toLowerCase()
+  const matches: FileEntry[] = []
+  function visit(node: VfsNode) {
+    for (const child of node.children ?? []) {
+      if (child.name.toLowerCase().includes(needle)) matches.push(toEntry(child))
+      if (child.type === 'dir') visit(child)
+    }
+  }
+  visit(root)
+  return matches
+}
+
 export function mkdir(shareId: string, path: string, name: string): boolean {
   const parent = getNode(shareId, path)
   if (!parent?.children) return false

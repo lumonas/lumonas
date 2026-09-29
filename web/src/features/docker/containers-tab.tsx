@@ -17,6 +17,7 @@ export function ContainersTab() {
       id: 'name',
       header: 'Container',
       sortValue: (c) => c.name,
+      searchValue: (c) => `${c.name} ${c.image} ${c.state}`,
       cell: (c) => (
         <div className="flex flex-col">
           <span className="font-mono text-[13px] font-medium">{c.name}</span>

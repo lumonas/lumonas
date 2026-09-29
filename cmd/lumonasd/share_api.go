@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,9 +10,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/lumonas/lumonas/internal/shares"
+	"github.com/lumonas/lumonas/internal/storage"
 )
 
 type sharePayload struct {
@@ -47,11 +51,13 @@ type shareResponse struct {
 }
 
 type shareProtocolSetting struct {
-	Protocol   string `json:"protocol"`
-	Enabled    bool   `json:"enabled"`
-	Hosts      string `json:"hosts,omitempty"`
-	ReadOnly   bool   `json:"readOnly,omitempty"`
-	QuotaBytes int64  `json:"quotaBytes,omitempty"`
+	Protocol        string   `json:"protocol"`
+	Enabled         bool     `json:"enabled"`
+	Hosts           string   `json:"hosts,omitempty"`
+	ReadOnly        bool     `json:"readOnly,omitempty"`
+	QuotaBytes      int64    `json:"quotaBytes,omitempty"`
+	AuditEnabled    bool     `json:"auditEnabled,omitempty"`
+	AuditOperations []string `json:"auditOperations,omitempty"`
 }
 
 type shareAccessSetting struct {
@@ -77,6 +83,14 @@ func presentShare(share shares.ManagedShare) shareResponse {
 		}
 		if value, ok := protocol.Settings["quotaBytes"].(float64); ok {
 			setting.QuotaBytes = int64(value)
+		}
+		setting.AuditEnabled, _ = protocol.Settings["auditEnabled"].(bool)
+		if raw, ok := protocol.Settings["auditOperations"].([]any); ok {
+			for _, value := range raw {
+				if operation, ok := value.(string); ok {
+					setting.AuditOperations = append(setting.AuditOperations, operation)
+				}
+			}
 		}
 		protocols = append(protocols, setting)
 	}
@@ -148,11 +162,13 @@ func decodeProtocols(raw json.RawMessage) ([]shares.Protocol, error) {
 		return nil, errors.New("at least one share protocol is required")
 	}
 	var modern []struct {
-		Protocol   string `json:"protocol"`
-		Enabled    bool   `json:"enabled"`
-		Hosts      string `json:"hosts"`
-		ReadOnly   bool   `json:"readOnly"`
-		QuotaBytes int64  `json:"quotaBytes"`
+		Protocol        string   `json:"protocol"`
+		Enabled         bool     `json:"enabled"`
+		Hosts           string   `json:"hosts"`
+		ReadOnly        bool     `json:"readOnly"`
+		QuotaBytes      int64    `json:"quotaBytes"`
+		AuditEnabled    bool     `json:"auditEnabled"`
+		AuditOperations []string `json:"auditOperations"`
 	}
 	if err := json.Unmarshal(raw, &modern); err == nil && len(modern) > 0 && modern[0].Protocol != "" {
 		result := make([]shares.Protocol, 0, len(modern))
@@ -169,6 +185,10 @@ func decodeProtocols(raw json.RawMessage) ([]shares.Protocol, error) {
 			}
 			if item.QuotaBytes > 0 {
 				settings["quotaBytes"] = item.QuotaBytes
+			}
+			if item.AuditEnabled {
+				settings["auditEnabled"] = true
+				settings["auditOperations"] = item.AuditOperations
 			}
 			result = append(result, shares.Protocol{Name: item.Protocol, Settings: settings})
 		}
@@ -231,6 +251,64 @@ func (s *apiServer) listManagedShares(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, responses)
 }
 
+type shareStorageResource struct {
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Path       string `json:"path"`
+	Kind       string `json:"kind"`
+	TotalBytes uint64 `json:"totalBytes,omitempty"`
+	UsedBytes  uint64 `json:"usedBytes,omitempty"`
+}
+
+func (s *apiServer) listShareStorageResources(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+	resources, err := s.shareStorageResources(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage discovery unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, resources)
+}
+
+func (s *apiServer) shareStorageResources(ctx context.Context) ([]shareStorageResource, error) {
+	if s.shareStorageResourcesFunc != nil {
+		return s.shareStorageResourcesFunc(ctx)
+	}
+	disks, err := s.diskFunc()
+	if err != nil {
+		return nil, err
+	}
+	resources := make([]shareStorageResource, 0)
+	for _, pool := range storage.DiscoverPools(ctx, disks, nil) {
+		root := filepath.Clean(pool.MountPath)
+		if !strings.HasPrefix(root, "/srv/pools/") || filepath.Dir(root) != "/srv/pools" {
+			continue
+		}
+		if info, statErr := os.Stat(root); statErr == nil && info.IsDir() {
+			resources = append(resources, shareStorageResource{ID: root, Label: pool.Name + " pool", Path: root, Kind: "pool", TotalBytes: pool.SizeBytes, UsedBytes: pool.UsedBytes})
+		}
+	}
+	for _, disk := range disks {
+		if !disk.Mounted || (disk.Role != "data" && disk.Role != "apps") || disk.Filesystem != "ext4" && disk.Filesystem != "xfs" {
+			continue
+		}
+		root := storage.DiskBranchPath(disk.ID)
+		if info, statErr := os.Stat(root); statErr == nil && info.IsDir() {
+			used := uint64(0)
+			if disk.UsedBytes != nil {
+				used = *disk.UsedBytes
+			}
+			resources = append(resources, shareStorageResource{ID: root, Label: disk.Name + " · " + disk.Model, Path: root, Kind: "disk", TotalBytes: disk.SizeBytes, UsedBytes: used})
+		}
+	}
+	sort.Slice(resources, func(i, j int) bool { return resources[i].Label < resources[j].Label })
+	return resources, nil
+}
+
 func (s *apiServer) getManagedShare(w http.ResponseWriter, r *http.Request, id string) {
 	if _, ok := s.identityActor(w, r, false); !ok {
 		return
@@ -269,13 +347,54 @@ func (s *apiServer) createManagedShare(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	share, expectedGeneration, err := decodeManagedShare(r)
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	share, expectedGeneration, err := decodeManagedShareBytes(raw)
 	if err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	if !s.expectedIdentityGeneration(w, expectedGeneration) {
 		return
+	}
+	createdPath := ""
+	var requested sharePayload
+	if json.Unmarshal(raw, &requested) == nil && filepath.IsAbs(requested.ResourceID) {
+		resources, resourceErr := s.shareStorageResources(r.Context())
+		if resourceErr != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "storage discovery unavailable"})
+			return
+		}
+		var selected *shareStorageResource
+		for index := range resources {
+			if resources[index].ID == filepath.Clean(requested.ResourceID) {
+				selected = &resources[index]
+				break
+			}
+		}
+		if selected == nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "storage location is not currently mounted"})
+			return
+		}
+		relative := strings.TrimSpace(requested.RelativePath)
+		relative = strings.TrimPrefix(relative, "/")
+		if relative == "" || relative == "." {
+			relative = requested.Name
+		}
+		clean := filepath.Clean(filepath.FromSlash(relative))
+		if clean == "." || clean == ".." || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) || strings.ContainsAny(clean, "\x00\r\n") {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "share path must stay inside the selected storage location"})
+			return
+		}
+		share.Path = filepath.Join(selected.Path, clean)
+		createdPath, err = ensureShareDirectory(selected.Path, clean)
+		if err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "share directory is unavailable: " + err.Error()})
+			return
+		}
 	}
 	if share.ID == "" {
 		share.ID = newID("share")
@@ -294,23 +413,27 @@ func (s *apiServer) createManagedShare(w http.ResponseWriter, r *http.Request) {
 	candidate := append(append([]shares.ManagedShare(nil), existing...), share)
 	prepared, err := s.prepareShareConfigs(candidate)
 	if err != nil {
+		removeCreatedShareDirectory(createdPath)
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
 	created, err := s.store.CreateManagedShare(share)
 	if err != nil {
 		cleanupShareConfigs(prepared)
+		removeCreatedShareDirectory(createdPath)
 		writeJSON(w, statusForShareError(err), map[string]string{"error": err.Error()})
 		return
 	}
 	if err := activateShareConfigs(prepared); err != nil {
 		_ = s.store.DeleteManagedShare(created.ID)
+		removeCreatedShareDirectory(createdPath)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "activate Samba configuration: " + err.Error()})
 		return
 	}
 	if err := s.reloadShareServices(r.Context(), candidate); err != nil {
 		restoreShareConfigs(prepared)
 		_ = s.store.DeleteManagedShare(created.ID)
+		removeCreatedShareDirectory(createdPath)
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "activate share services: " + err.Error()})
 		return
 	}
@@ -320,6 +443,55 @@ func (s *apiServer) createManagedShare(w http.ResponseWriter, r *http.Request) {
 	}
 	s.advanceGeneration("share.create")
 	writeShare(w, http.StatusCreated, created)
+}
+
+func ensureShareDirectory(root, relative string) (string, error) {
+	root = filepath.Clean(root)
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return "", errors.New("selected storage location is not mounted")
+	}
+	clean := filepath.Clean(filepath.FromSlash(relative))
+	if clean == "." || clean == ".." || filepath.IsAbs(clean) || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", errors.New("share path escapes its storage location")
+	}
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return "", err
+	}
+	defer rootFS.Close()
+	current := rootFS
+	opened := []*os.Root{}
+	defer func() {
+		for _, handle := range opened {
+			_ = handle.Close()
+		}
+	}()
+	parts := strings.Split(clean, string(filepath.Separator))
+	created := false
+	for _, part := range parts {
+		if err := current.Mkdir(part, 0o750); err != nil && !errors.Is(err, os.ErrExist) {
+			return "", err
+		} else if err == nil {
+			created = true
+		}
+		next, err := current.OpenRoot(part)
+		if err != nil {
+			return "", errors.New("share path contains a non-directory or escaping symlink")
+		}
+		opened = append(opened, next)
+		current = next
+	}
+	if !created {
+		return "", nil
+	}
+	return filepath.Join(root, clean), nil
+}
+
+func removeCreatedShareDirectory(path string) {
+	if path != "" {
+		_ = os.Remove(path)
+	}
 }
 
 func (s *apiServer) updateManagedShare(w http.ResponseWriter, r *http.Request, id string) {
@@ -368,10 +540,30 @@ func (s *apiServer) updateManagedShare(w http.ResponseWriter, r *http.Request, i
 }
 
 func (s *apiServer) commitManagedShareUpdate(w http.ResponseWriter, r *http.Request, actor string, share shares.ManagedShare) {
+	updated, err := s.persistManagedShareUpdate(r.Context(), share)
+	if err != nil {
+		status := statusForShareError(err)
+		if errors.Is(err, errShareNameExists) {
+			status = http.StatusConflict
+		} else if errors.Is(err, os.ErrNotExist) {
+			status = http.StatusNotFound
+		} else if strings.Contains(err.Error(), "activate Samba") {
+			status = http.StatusInternalServerError
+		} else if strings.Contains(err.Error(), "activate share services") {
+			status = http.StatusServiceUnavailable
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordRequestAudit(r, actor, "share.update", updated.ID, map[string]any{"name": updated.Name})
+	s.advanceGeneration("share.update")
+	writeShare(w, http.StatusOK, updated)
+}
+
+func (s *apiServer) persistManagedShareUpdate(ctx context.Context, share shares.ManagedShare) (shares.ManagedShare, error) {
 	existing, err := s.store.ListManagedShares()
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
+		return shares.ManagedShare{}, err
 	}
 	found := false
 	var previous shares.ManagedShare
@@ -381,40 +573,34 @@ func (s *apiServer) commitManagedShareUpdate(w http.ResponseWriter, r *http.Requ
 			existing[index] = share
 			found = true
 		} else if existing[index].Name == share.Name {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "share name already exists"})
-			return
+			return shares.ManagedShare{}, errShareNameExists
 		}
 	}
 	if !found {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "share not found"})
-		return
+		return shares.ManagedShare{}, os.ErrNotExist
 	}
 	prepared, err := s.prepareShareConfigs(existing)
 	if err != nil {
-		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
-		return
+		return shares.ManagedShare{}, err
 	}
 	updated, err := s.store.UpdateManagedShare(share)
 	if err != nil {
 		cleanupShareConfigs(prepared)
-		writeJSON(w, statusForShareError(err), map[string]string{"error": err.Error()})
-		return
+		return shares.ManagedShare{}, err
 	}
 	if err := activateShareConfigs(prepared); err != nil {
 		_, _ = s.store.UpdateManagedShare(previous)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "activate Samba configuration: " + err.Error()})
-		return
+		return shares.ManagedShare{}, errors.New("activate Samba configuration: " + err.Error())
 	}
-	if err := s.reloadShareServices(r.Context(), existing); err != nil {
+	if err := s.reloadShareServices(ctx, existing); err != nil {
 		restoreShareConfigs(prepared)
 		_, _ = s.store.UpdateManagedShare(previous)
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "activate share services: " + err.Error()})
-		return
+		return shares.ManagedShare{}, errors.New("activate share services: " + err.Error())
 	}
-	s.recordRequestAudit(r, actor, "share.update", updated.ID, map[string]any{"name": updated.Name})
-	s.advanceGeneration("share.update")
-	writeShare(w, http.StatusOK, updated)
+	return updated, nil
 }
+
+var errShareNameExists = errors.New("share name already exists")
 
 func (s *apiServer) updateShareAccess(w http.ResponseWriter, r *http.Request, id string) {
 	actor, ok := s.identityActor(w, r, true)
@@ -463,10 +649,12 @@ func (s *apiServer) updateShareProtocol(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	var input struct {
-		Enabled    *bool   `json:"enabled"`
-		Hosts      *string `json:"hosts"`
-		ReadOnly   *bool   `json:"readOnly"`
-		QuotaBytes *int64  `json:"quotaBytes"`
+		Enabled         *bool    `json:"enabled"`
+		Hosts           *string  `json:"hosts"`
+		ReadOnly        *bool    `json:"readOnly"`
+		QuotaBytes      *int64   `json:"quotaBytes"`
+		AuditEnabled    *bool    `json:"auditEnabled"`
+		AuditOperations []string `json:"auditOperations"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -506,6 +694,19 @@ func (s *apiServer) updateShareProtocol(w http.ResponseWriter, r *http.Request, 
 		}
 		if input.QuotaBytes != nil {
 			settings["quotaBytes"] = *input.QuotaBytes
+		}
+		if input.AuditEnabled != nil {
+			settings["auditEnabled"] = *input.AuditEnabled
+			if !*input.AuditEnabled {
+				delete(settings, "auditOperations")
+			}
+		}
+		if input.AuditOperations != nil {
+			if err := shares.ValidateAuditOperations(input.AuditOperations); err != nil {
+				writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+				return
+			}
+			settings["auditOperations"] = input.AuditOperations
 		}
 		share.Protocols[index].Settings = settings
 	}

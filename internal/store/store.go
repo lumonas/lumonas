@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -77,6 +78,10 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate identity schema: %w", err)
 	}
+	if err := s.ensureSessionMetadataSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate session metadata: %w", err)
+	}
 	if err := s.ensureShareSchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate share schema: %w", err)
@@ -133,7 +138,50 @@ func Open(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate LAN host schema: %w", err)
 	}
+	if err := s.ensureSMARTHistorySchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate SMART history schema: %w", err)
+	}
+	if err := s.ensureRestoreDrillSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate restore drill schema: %w", err)
+	}
+	if err := s.ensureAPITokenSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate API token schema: %w", err)
+	}
+	if err := s.ensureReplicationSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate replication schema: %w", err)
+	}
+	// These schemas used to be created lazily inside each accessor, which meant
+	// the packaged lumonas-migrate upgrade path never provisioned them. Fail
+	// closed at open time instead so an upgrade either produces a complete
+	// schema or reports why it could not.
+	if err := s.ensureSupplementalSchemas(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate supplemental schemas: %w", err)
+	}
 	return s, nil
+}
+
+// ensureSupplementalSchemas provisions the feature schemas that back folder
+// sync, quotas, file requests, integrity scanning, the content index, and
+// two-factor columns on principals.
+func (s *Store) ensureSupplementalSchemas() error {
+	for name, ensure := range map[string]func() error{
+		"folder sync":        s.ensureFolderSyncSchema,
+		"quota":              s.ensureQuotaSchema,
+		"file request":       s.ensureFileRequestSchema,
+		"integrity":          s.ensureIntegritySchema,
+		"file content index": s.ensureFileContentIndexSchema,
+		"two-factor":         s.ensureTOTPColumns,
+	} {
+		if err := ensure(); err != nil {
+			return fmt.Errorf("migrate %s schema: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -185,7 +233,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE TABLE IF NOT EXISTS sessions (
   token_digest TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires_at TEXT NOT NULL,
-  created_at TEXT NOT NULL, FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+  created_at TEXT NOT NULL, ip_address TEXT NOT NULL DEFAULT '',
+  user_agent TEXT NOT NULL DEFAULT '', last_seen_at TEXT NOT NULL DEFAULT '',
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS disk_inventory (
   id TEXT PRIMARY KEY, last_seen TEXT NOT NULL, model TEXT NOT NULL, serial TEXT NOT NULL,
@@ -322,7 +372,7 @@ func (s *Store) SaveAudit(entry AuditEntry) error {
 }
 
 func (s *Store) Audit(limit int) ([]AuditEntry, error) {
-	if limit < 1 || limit > 500 {
+	if limit < 1 || limit > 10000 {
 		limit = 100
 	}
 	rows, err := s.db.Query(`SELECT id,timestamp,actor,action,outcome,COALESCE(correlation_id,''),COALESCE(operation_id,''),COALESCE(plan_hash,''),COALESCE(generation,0),COALESCE(resource_type,''),COALESCE(resource_id,''),metadata_json FROM audit_log ORDER BY timestamp DESC LIMIT ?`, limit)
@@ -346,11 +396,111 @@ func (s *Store) Audit(limit int) ([]AuditEntry, error) {
 	return result, rows.Err()
 }
 
+type AuditFilters struct {
+	Actor        string
+	Action       string
+	Outcome      string
+	ResourceType string
+	Query        string
+	From         time.Time
+	To           time.Time
+}
+
+type AuditPage struct {
+	Entries    []AuditEntry `json:"entries"`
+	NextCursor string       `json:"nextCursor,omitempty"`
+	HasMore    bool         `json:"hasMore"`
+}
+
+func (s *Store) AuditPage(filters AuditFilters, limit int, cursor string) (AuditPage, error) {
+	if limit < 1 || limit > 500 {
+		limit = 100
+	}
+	where := make([]string, 0, 8)
+	args := make([]any, 0, 10)
+	add := func(column, value string) {
+		if value != "" {
+			where = append(where, column+"=?")
+			args = append(args, value)
+		}
+	}
+	add("actor", filters.Actor)
+	add("action", filters.Action)
+	add("outcome", filters.Outcome)
+	add("resource_type", filters.ResourceType)
+	if filters.From.IsZero() == false {
+		where = append(where, "timestamp>=?")
+		args = append(args, filters.From.UTC().Format(timeFormat))
+	}
+	if filters.To.IsZero() == false {
+		where = append(where, "timestamp<=?")
+		args = append(args, filters.To.UTC().Format(timeFormat))
+	}
+	if filters.Query != "" {
+		where = append(where, `(actor LIKE ? ESCAPE '\' OR action LIKE ? ESCAPE '\' OR COALESCE(resource_type,'') LIKE ? ESCAPE '\' OR COALESCE(resource_id,'') LIKE ? ESCAPE '\' OR COALESCE(metadata_json,'') LIKE ? ESCAPE '\')`)
+		pattern := "%" + strings.ReplaceAll(strings.ReplaceAll(filters.Query, "%", "\\%"), "_", "\\_") + "%"
+		for index := 0; index < 5; index++ {
+			args = append(args, pattern)
+		}
+	}
+	if cursor != "" {
+		raw, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil {
+			return AuditPage{}, fmt.Errorf("invalid audit cursor")
+		}
+		timestamp, id, ok := strings.Cut(string(raw), "\x00")
+		if !ok || timestamp == "" || id == "" {
+			return AuditPage{}, fmt.Errorf("invalid audit cursor")
+		}
+		where = append(where, `(timestamp<? OR (timestamp=? AND id<?))`)
+		args = append(args, timestamp, timestamp, id)
+	}
+	query := `SELECT id,timestamp,actor,action,outcome,COALESCE(correlation_id,''),COALESCE(operation_id,''),COALESCE(plan_hash,''),COALESCE(generation,0),COALESCE(resource_type,''),COALESCE(resource_id,''),metadata_json FROM audit_log`
+	if len(where) > 0 {
+		query += ` WHERE ` + strings.Join(where, " AND ")
+	}
+	query += ` ORDER BY timestamp DESC,id DESC LIMIT ?`
+	args = append(args, limit+1)
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return AuditPage{}, err
+	}
+	defer rows.Close()
+	entries := make([]AuditEntry, 0, limit+1)
+	for rows.Next() {
+		var entry AuditEntry
+		var timestamp, metadata string
+		if err := rows.Scan(&entry.ID, &timestamp, &entry.Actor, &entry.Action, &entry.Outcome, &entry.CorrelationID, &entry.OperationID, &entry.PlanHash, &entry.Generation, &entry.ResourceType, &entry.ResourceID, &metadata); err != nil {
+			return AuditPage{}, err
+		}
+		entry.Timestamp, _ = parseTime(timestamp)
+		if err := json.Unmarshal([]byte(metadata), &entry.Metadata); err != nil {
+			entry.Metadata = map[string]any{}
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return AuditPage{}, err
+	}
+	page := AuditPage{Entries: entries, HasMore: len(entries) > limit}
+	if page.HasMore {
+		page.Entries = page.Entries[:limit]
+		last := page.Entries[len(page.Entries)-1]
+		page.NextCursor = base64.RawURLEncoding.EncodeToString([]byte(last.Timestamp.UTC().Format(timeFormat) + "\x00" + last.ID))
+	}
+	return page, nil
+}
+
 func (s *Store) PruneAudit(keep int) error {
 	if keep < 100 {
 		keep = 100
 	}
 	_, err := s.db.Exec(`DELETE FROM audit_log WHERE id NOT IN (SELECT id FROM audit_log ORDER BY timestamp DESC LIMIT ?)`, keep)
+	return err
+}
+
+func (s *Store) PruneAuditBefore(before time.Time) error {
+	_, err := s.db.Exec(`DELETE FROM audit_log WHERE timestamp < ?`, before.UTC().Format(timeFormat))
 	return err
 }
 
@@ -468,6 +618,24 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET correlatio
 		return err
 	}
 	return s.PruneJobs(defaultJobRetention)
+}
+
+func (s *Store) StartQueuedJob(id, stage string, progress float64, started time.Time) (bool, error) {
+	result, err := s.db.Exec(`UPDATE jobs SET state='running',stage=?,progress=?,started_at=? WHERE id=? AND state='queued'`, nullable(stage), progress, started.UTC().Format(timeFormat), id)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows == 1, err
+}
+
+func (s *Store) CancelQueuedJob(id string, finished time.Time) (bool, error) {
+	result, err := s.db.Exec(`UPDATE jobs SET state='cancelled',stage='Cancelled before start',finished_at=?,error=NULL WHERE id=? AND state='queued'`, finished.UTC().Format(timeFormat), id)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	return rows == 1, err
 }
 
 func (s *Store) SaveEvent(e model.Event) error {
@@ -624,6 +792,47 @@ func (s *Store) EnsureAdmin(username, password string) error {
 	return s.syncLegacyUsers()
 }
 
+func (s *Store) ensureSessionMetadataSchema() error {
+	columns := []struct{ name, definition string }{
+		{"ip_address", "TEXT NOT NULL DEFAULT ''"},
+		{"user_agent", "TEXT NOT NULL DEFAULT ''"},
+		{"last_seen_at", "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, column := range columns {
+		rows, err := s.db.Query(`PRAGMA table_info(sessions)`)
+		if err != nil {
+			return err
+		}
+		found := false
+		for rows.Next() {
+			var cid, notnull, pk int
+			var name, kind string
+			var defaultValue any
+			if err := rows.Scan(&cid, &name, &kind, &notnull, &defaultValue, &pk); err != nil {
+				rows.Close()
+				return err
+			}
+			if name == column.name {
+				found = true
+			}
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if !found {
+			if _, err := s.db.Exec(`ALTER TABLE sessions ADD COLUMN ` + column.name + ` ` + column.definition); err != nil {
+				return err
+			}
+		}
+	}
+	_, err := s.db.Exec(`UPDATE sessions SET last_seen_at=created_at WHERE last_seen_at=''`)
+	return err
+}
+
 func (s *Store) HasUsers() bool {
 	var count int
 	return s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&count) == nil && count > 0
@@ -647,12 +856,30 @@ func (s *Store) CreateSession(username, password string, duration time.Duration)
 // CreateSessionForUser issues a session for an already-authenticated user
 // (used by the two-factor challenge flow after code verification).
 func (s *Store) CreateSessionForUser(userID string, duration time.Duration) (string, time.Time, error) {
+	return s.CreateSessionForUserWithMetadata(userID, duration, SessionMetadata{})
+}
+
+type SessionMetadata struct {
+	IPAddress string
+	UserAgent string
+}
+
+func (s *Store) CreateSessionForUserWithMetadata(userID string, duration time.Duration, metadata SessionMetadata) (string, time.Time, error) {
 	token, err := auth.NewToken()
 	if err != nil {
 		return "", time.Time{}, err
 	}
 	expires := time.Now().UTC().Add(duration)
-	_, err = s.db.Exec(`INSERT INTO sessions(token_digest,user_id,expires_at,created_at) VALUES(?,?,?,?)`, auth.TokenDigest(token), userID, expires.Format(timeFormat), time.Now().UTC().Format(timeFormat))
+	now := time.Now().UTC()
+	metadata.IPAddress = strings.TrimSpace(metadata.IPAddress)
+	metadata.UserAgent = strings.TrimSpace(metadata.UserAgent)
+	if len(metadata.IPAddress) > 128 {
+		metadata.IPAddress = metadata.IPAddress[:128]
+	}
+	if len(metadata.UserAgent) > 256 {
+		metadata.UserAgent = metadata.UserAgent[:256]
+	}
+	_, err = s.db.Exec(`INSERT INTO sessions(token_digest,user_id,expires_at,created_at,ip_address,user_agent,last_seen_at) VALUES(?,?,?,?,?,?,?)`, auth.TokenDigest(token), userID, expires.Format(timeFormat), now.Format(timeFormat), metadata.IPAddress, metadata.UserAgent, now.Format(timeFormat))
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -688,14 +915,17 @@ func (s *Store) SessionUser(token string) (string, bool) {
 // SessionInfo describes an active session; the token digest doubles as the
 // revocation id and never reveals the session token itself.
 type SessionInfo struct {
-	ID        string    `json:"id"`
-	Username  string    `json:"username"`
-	CreatedAt time.Time `json:"createdAt"`
-	ExpiresAt time.Time `json:"expiresAt"`
+	ID         string    `json:"id"`
+	Username   string    `json:"username"`
+	CreatedAt  time.Time `json:"createdAt"`
+	ExpiresAt  time.Time `json:"expiresAt"`
+	IPAddress  string    `json:"ipAddress"`
+	UserAgent  string    `json:"userAgent"`
+	LastSeenAt time.Time `json:"lastSeenAt"`
 }
 
 func (s *Store) Sessions() ([]SessionInfo, error) {
-	rows, err := s.db.Query(`SELECT sessions.token_digest,users.username,sessions.created_at,sessions.expires_at FROM sessions JOIN users ON users.id=sessions.user_id ORDER BY sessions.created_at DESC`)
+	rows, err := s.db.Query(`SELECT sessions.token_digest,users.username,sessions.created_at,sessions.expires_at,COALESCE(sessions.ip_address,''),COALESCE(sessions.user_agent,''),COALESCE(NULLIF(sessions.last_seen_at,''),sessions.created_at) FROM sessions JOIN users ON users.id=sessions.user_id ORDER BY sessions.created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -704,18 +934,25 @@ func (s *Store) Sessions() ([]SessionInfo, error) {
 	result := make([]SessionInfo, 0)
 	for rows.Next() {
 		var session SessionInfo
-		var created, expires string
-		if err := rows.Scan(&session.ID, &session.Username, &created, &expires); err != nil {
+		var created, expires, lastSeen string
+		if err := rows.Scan(&session.ID, &session.Username, &created, &expires, &session.IPAddress, &session.UserAgent, &lastSeen); err != nil {
 			return nil, err
 		}
 		session.CreatedAt, _ = parseTime(created)
 		session.ExpiresAt, _ = parseTime(expires)
+		session.LastSeenAt, _ = parseTime(lastSeen)
 		if session.ExpiresAt.Before(now) {
 			continue
 		}
 		result = append(result, session)
 	}
 	return result, rows.Err()
+}
+
+func (s *Store) TouchSession(token string) error {
+	now := time.Now().UTC()
+	_, err := s.db.Exec(`UPDATE sessions SET last_seen_at=? WHERE token_digest=? AND (last_seen_at='' OR last_seen_at<?)`, now.Format(timeFormat), auth.TokenDigest(token), now.Add(-time.Minute).Format(timeFormat))
+	return err
 }
 
 func (s *Store) DeleteSessionByID(id string) error {
@@ -733,6 +970,19 @@ func (s *Store) DeleteSession(token string) error {
 func (s *Store) DeleteSessionsForUser(userID string) error {
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID)
 	return err
+}
+
+// DeleteOtherSessions revokes every session except the caller's live session.
+func (s *Store) DeleteOtherSessions(token string) (int64, error) {
+	if strings.TrimSpace(token) == "" {
+		return 0, fmt.Errorf("current session is required")
+	}
+	result, err := s.db.Exec(`DELETE FROM sessions WHERE token_digest <> ? AND expires_at > ?`, auth.TokenDigest(token), time.Now().UTC().Format(timeFormat))
+	if err != nil {
+		return 0, err
+	}
+	count, err := result.RowsAffected()
+	return count, err
 }
 
 // UserIDBySession resolves the principal behind a live session token.

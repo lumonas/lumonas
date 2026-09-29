@@ -1,10 +1,15 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"errors"
+	"io"
+	"io/fs"
+	"mime"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -43,6 +48,10 @@ func (s *apiServer) listFiles(w http.ResponseWriter, r *http.Request) {
 	share, err := s.fileShare(r.URL.Query().Get("share"))
 	if err != nil {
 		writeFileError(w, err)
+		return
+	}
+	if !s.workstationShareAllowed(r, share.ID) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "workstation backup token is bound to a different share"})
 		return
 	}
 	requested := r.URL.Query().Get("path")
@@ -97,6 +106,10 @@ func (s *apiServer) downloadFile(w http.ResponseWriter, r *http.Request) {
 		writeFileError(w, err)
 		return
 	}
+	if !s.workstationShareAllowed(r, share.ID) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "workstation backup token is bound to a different share"})
+		return
+	}
 	path, info, err := fileops.ResolveEntry(share.Path, r.URL.Query().Get("path"), r.URL.Query().Get("name"))
 	if err != nil {
 		writeFileError(w, err)
@@ -106,8 +119,173 @@ func (s *apiServer) downloadFile(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "directories cannot be downloaded by this endpoint"})
 		return
 	}
+	if r.URL.Query().Get("inline") == "1" {
+		contentType, ok := previewContentType(info.Name())
+		if !ok {
+			writeJSON(w, http.StatusUnsupportedMediaType, map[string]string{"error": "this file type cannot be previewed"})
+			return
+		}
+		if strings.HasPrefix(contentType, "text/plain") && info.Size() > maxInlineTextPreviewBytes {
+			writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "text previews are limited to 2 MiB"})
+			return
+		}
+		file, openErr := os.Open(path)
+		if openErr != nil {
+			writeFileError(w, openErr)
+			return
+		}
+		defer file.Close()
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{"filename": info.Name()}))
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; img-src 'self'; media-src 'self'; sandbox")
+		w.Header().Set("Cache-Control", "private, no-store")
+		http.ServeContent(w, r, info.Name(), info.ModTime(), file)
+		return
+	}
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+info.Name()+"\"")
 	http.ServeFile(w, r, path)
+}
+
+const maxInlineTextPreviewBytes int64 = 2 << 20
+
+func previewContentType(name string) (string, bool) {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".txt", ".log", ".csv", ".json", ".yaml", ".yml", ".xml":
+		return "text/plain; charset=utf-8", true
+	case ".jpg", ".jpeg":
+		return "image/jpeg", true
+	case ".png":
+		return "image/png", true
+	case ".gif":
+		return "image/gif", true
+	case ".webp":
+		return "image/webp", true
+	case ".avif":
+		return "image/avif", true
+	case ".mp3":
+		return "audio/mpeg", true
+	case ".ogg", ".oga":
+		return "audio/ogg", true
+	case ".wav":
+		return "audio/wav", true
+	case ".m4a":
+		return "audio/mp4", true
+	case ".mp4", ".m4v":
+		return "video/mp4", true
+	case ".webm":
+		return "video/webm", true
+	case ".ogv":
+		return "video/ogg", true
+	default:
+		return "", false
+	}
+}
+
+func (s *apiServer) downloadFileArchive(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	share, err := s.fileShare(r.URL.Query().Get("share"))
+	if err != nil {
+		writeFileError(w, err)
+		return
+	}
+	names := r.URL.Query()["name"]
+	if len(names) == 0 || len(names) > 100 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "select between 1 and 100 items to archive"})
+		return
+	}
+	basePath := r.URL.Query().Get("path")
+	type source struct {
+		name string
+		path string
+		info os.FileInfo
+	}
+	items := make([]source, 0, len(names))
+	for _, name := range names {
+		if name == ".lumonas-trash" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "the recycle-bin storage is not available for download"})
+			return
+		}
+		itemPath, info, resolveErr := fileops.ResolveEntry(share.Path, basePath, name)
+		if resolveErr != nil {
+			writeFileError(w, resolveErr)
+			return
+		}
+		items = append(items, source{name: name, path: itemPath, info: info})
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="files.zip"`)
+	archive := zip.NewWriter(w)
+	addFile := func(archiveName, localPath string, info os.FileInfo) error {
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = archiveName
+		if info.IsDir() {
+			header.Name = strings.TrimSuffix(header.Name, "/") + "/"
+		}
+		header.Method = zip.Store
+		writer, err := archive.CreateHeader(header)
+		if err != nil || info.IsDir() {
+			return err
+		}
+		file, err := os.Open(localPath)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(writer, file)
+		closeErr := file.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	}
+
+	for _, item := range items {
+		if !item.info.IsDir() {
+			if err := addFile(item.name, item.path, item.info); err != nil {
+				_ = archive.Close()
+				return
+			}
+			continue
+		}
+		err = filepath.WalkDir(item.path, func(current string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if current != item.path && entry.Name() == ".lumonas-trash" && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			if entry.Type()&os.ModeSymlink != 0 {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			relative, relErr := filepath.Rel(item.path, current)
+			if relErr != nil {
+				return relErr
+			}
+			archiveName := item.name
+			if relative != "." {
+				archiveName = path.Join(item.name, filepath.ToSlash(relative))
+			}
+			info, infoErr := entry.Info()
+			if infoErr != nil {
+				return infoErr
+			}
+			return addFile(archiveName, current, info)
+		})
+		if err != nil {
+			_ = archive.Close()
+			return
+		}
+	}
+	_ = archive.Close()
 }
 
 func (s *apiServer) makeDirectory(w http.ResponseWriter, r *http.Request) {

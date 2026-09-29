@@ -19,7 +19,7 @@ func TestRenderSambaIncludesTimeMachineOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"fruit:model = MacSamba", "vfs objects = catia fruit streams_xattr", "fruit:time machine = yes"} {
+	for _, expected := range []string{"fruit:model = MacSamba", "vfs objects = catia fruit streams_xattr", "vfs objects = catia fruit streams_xattr shadow_copy2", "fruit:time machine = yes"} {
 		if !strings.Contains(config, expected) {
 			t.Fatalf("missing %q in:\n%s", expected, config)
 		}
@@ -30,6 +30,9 @@ func TestRenderSambaIncludesTimeMachineOptions(t *testing.T) {
 	}
 	if strings.Contains(plain, "fruit") {
 		t.Fatalf("non-Time Machine setup must not emit fruit options:\n%s", plain)
+	}
+	if !strings.Contains(plain, "vfs objects = shadow_copy2") || !strings.Contains(plain, "shadow:snapdir = /srv/docs.snapshots") {
+		t.Fatalf("SMB shares must expose available snapshots to Windows clients:\n%s", plain)
 	}
 }
 

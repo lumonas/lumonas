@@ -32,7 +32,7 @@ func TestStorageSnapshotCreatePersistsRecord(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&record); err != nil {
 		t.Fatal(err)
 	}
-	if record.Kind != "btrfs" || record.Source != "/srv/pool" || !strings.HasPrefix(record.Name, "nightly-") {
+	if record.Kind != "btrfs" || record.Source != "/srv/pool" || !strings.HasPrefix(record.Name, "20") || record.Label != "nightly" {
 		t.Fatalf("unexpected record: %#v", record)
 	}
 	if seen.Operation != "snapshot.create" || !seen.Confirmed || seen.OperationID == "" {
@@ -41,6 +41,35 @@ func TestStorageSnapshotCreatePersistsRecord(t *testing.T) {
 	persisted, err := server.store.StorageSnapshots("/srv/pool", 10)
 	if err != nil || len(persisted) != 1 {
 		t.Fatalf("snapshot was not persisted: %#v err=%v", persisted, err)
+	}
+}
+
+func TestStorageSnapshotCanSetRetentionLock(t *testing.T) {
+	server := testServer(t)
+	server.brokerExec = func(context.Context, privileged.Request) error { return nil }
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/v1/storage/snapshots", strings.NewReader(`{"kind":"btrfs","source":"/srv/pool","retentionLockDays":30}`)))
+	if response.Code != http.StatusCreated || !strings.Contains(response.Body.String(), `"protectedUntil"`) {
+		t.Fatalf("snapshot retention lock was not returned: %d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestStorageSnapshotRetentionLockBlocksManualDeletion(t *testing.T) {
+	server := testServer(t)
+	protectedUntil := time.Now().UTC().Add(24 * time.Hour)
+	saved, err := server.store.SaveStorageSnapshot(store.StorageSnapshotRecord{Kind: "btrfs", Source: "/srv/pool", Name: "locked", ProtectedUntil: &protectedUntil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.safetyMu.Lock()
+	server.safetyUntil = time.Now().UTC().Add(time.Minute)
+	server.safetyMu.Unlock()
+	called := false
+	server.brokerExec = func(context.Context, privileged.Request) error { called = true; return nil }
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/v1/storage/snapshots/"+saved.ID, strings.NewReader(`{"reauthenticated":true,"storageSafetyUnlocked":true}`)))
+	if response.Code != http.StatusLocked || called || !strings.Contains(response.Body.String(), "retention-locked") {
+		t.Fatalf("protected snapshot deletion was not blocked: called=%v status=%d body=%s", called, response.Code, response.Body.String())
 	}
 }
 

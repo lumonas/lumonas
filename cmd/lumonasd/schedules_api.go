@@ -29,6 +29,90 @@ func (s *apiServer) schedules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, values)
 }
 
+func (s *apiServer) createSnapshotSchedule(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	var schedule monitoring.Schedule
+	if err := json.NewDecoder(r.Body).Decode(&schedule); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	schedule.ID = newID("schedule")
+	if schedule.JobType != "filesystem.scrub" && schedule.JobType != "share.relocate" {
+		schedule.JobType = "snapshot.create"
+	}
+	if schedule.Kind == "" {
+		schedule.Kind = monitoring.ScheduleDaily
+	}
+	if schedule.TimeOfDay == "" {
+		schedule.TimeOfDay = "01:30"
+	}
+	if schedule.JobType == "snapshot.create" && schedule.SnapshotKind == "" {
+		schedule.SnapshotKind = "btrfs"
+	}
+	if schedule.JobType == "snapshot.create" && schedule.SnapshotLabel == "" {
+		schedule.SnapshotLabel = "scheduled"
+	}
+	if schedule.JobType == "snapshot.create" && schedule.SnapshotKeep == 0 {
+		schedule.SnapshotKeep = 7
+	}
+	if err := validateScheduledSnapshot(schedule); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := validateScheduledFilesystemScrub(schedule); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := validateScheduledShareRelocation(s, r.Context(), schedule); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	now := time.Now()
+	next := monitoring.NextOccurrence(schedule, now)
+	schedule.NextDueAt = &next
+	if err := s.store.SaveJobSchedule(schedule); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	action := "schedule.snapshot.create"
+	metadata := map[string]any{"source": schedule.SnapshotSource, "kind": schedule.SnapshotKind}
+	if schedule.JobType == "share.relocate" {
+		action = "share.relocation.schedule"
+		metadata = map[string]any{"shareId": schedule.RelocationShareID, "destination": schedule.RelocationResourceID, "relativePath": schedule.RelocationRelativePath}
+	}
+	s.recordRequestAudit(r, actor, action, schedule.ID, metadata)
+	s.advanceGeneration(action)
+	s.publishActor(actor, "schedule.created", "info", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID})
+	saved, err := s.store.JobSchedule(schedule.ID, now)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, saved)
+}
+
+func (s *apiServer) deleteCustomSchedule(w http.ResponseWriter, r *http.Request, id string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	if !strings.HasPrefix(id, "schedule-") {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "built-in schedules cannot be deleted"})
+		return
+	}
+	if err := s.store.DeleteJobSchedule(id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "schedule not found"})
+		return
+	}
+	s.recordRequestAudit(r, actor, "schedule.delete", id, nil)
+	s.advanceGeneration("schedule.delete")
+	s.publishActor(actor, "schedule.deleted", "info", &model.ResourceRef{Type: "schedule", ID: id}, nil)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id string) {
 	actor, ok := s.identityActor(w, r, true)
 	if !ok {
@@ -44,19 +128,22 @@ func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id st
 		return
 	}
 	var input struct {
-		Enabled        *bool   `json:"enabled"`
-		TimeOfDay      *string `json:"timeOfDay"`
-		Weekday        *string `json:"weekday"`
-		SnapshotKind   *string `json:"snapshotKind"`
-		SnapshotSource *string `json:"snapshotSource"`
-		SnapshotLabel  *string `json:"snapshotLabel"`
-		SnapshotKeep   *int    `json:"snapshotKeep"`
+		Enabled          *bool   `json:"enabled"`
+		TimeOfDay        *string `json:"timeOfDay"`
+		Weekday          *string `json:"weekday"`
+		SnapshotKind     *string `json:"snapshotKind"`
+		SnapshotSource   *string `json:"snapshotSource"`
+		SnapshotLabel    *string `json:"snapshotLabel"`
+		SnapshotKeep     *int    `json:"snapshotKeep"`
+		SnapshotLockDays *int    `json:"snapshotLockDays"`
+		FilesystemKind   *string `json:"filesystemKind"`
+		FilesystemSource *string `json:"filesystemSource"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	if input.Enabled == nil && input.TimeOfDay == nil && input.Weekday == nil && input.SnapshotKind == nil && input.SnapshotSource == nil && input.SnapshotLabel == nil && input.SnapshotKeep == nil {
+	if input.Enabled == nil && input.TimeOfDay == nil && input.Weekday == nil && input.SnapshotKind == nil && input.SnapshotSource == nil && input.SnapshotLabel == nil && input.SnapshotKeep == nil && input.SnapshotLockDays == nil && input.FilesystemKind == nil && input.FilesystemSource == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "schedule fields are required"})
 		return
 	}
@@ -81,6 +168,15 @@ func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id st
 	if input.SnapshotKeep != nil {
 		schedule.SnapshotKeep = *input.SnapshotKeep
 	}
+	if input.SnapshotLockDays != nil {
+		schedule.SnapshotLockDays = *input.SnapshotLockDays
+	}
+	if input.FilesystemKind != nil {
+		schedule.FilesystemKind = strings.ToLower(strings.TrimSpace(*input.FilesystemKind))
+	}
+	if input.FilesystemSource != nil {
+		schedule.FilesystemSource = strings.TrimSpace(*input.FilesystemSource)
+	}
 	// A cadence change re-arms the schedule from now; enabling a paused
 	// schedule keeps its previously computed due time when it is still future.
 	if input.TimeOfDay != nil || input.Weekday != nil {
@@ -89,6 +185,14 @@ func (s *apiServer) updateSchedule(w http.ResponseWriter, r *http.Request, id st
 		schedule.NextDueAt = &next
 	}
 	if err := validateScheduledSnapshot(schedule); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := validateScheduledFilesystemScrub(schedule); err != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := validateScheduledShareRelocation(s, r.Context(), schedule); err != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
 		return
 	}
@@ -115,6 +219,9 @@ func validateScheduledSnapshot(schedule monitoring.Schedule) error {
 	if err := storage.ValidateSnapshotSource(kind, schedule.SnapshotSource); err != nil {
 		return err
 	}
+	if kind == storage.SnapshotBtrfs && !(strings.HasPrefix(schedule.SnapshotSource, "/srv/pools/") || strings.HasPrefix(schedule.SnapshotSource, "/srv/disks/")) {
+		return errors.New("Btrfs snapshot source must be inside a managed pool or disk mount")
+	}
 	if err := storage.ValidateSnapshotLabel(schedule.SnapshotLabel); err != nil {
 		return err
 	}
@@ -122,6 +229,13 @@ func validateScheduledSnapshot(schedule monitoring.Schedule) error {
 		return errors.New("snapshot retention must keep between 1 and 365 snapshots")
 	}
 	return nil
+}
+
+func validateScheduledFilesystemScrub(schedule monitoring.Schedule) error {
+	if schedule.JobType != "filesystem.scrub" {
+		return nil
+	}
+	return storage.ValidateScrubSource(storage.SnapshotKind(schedule.FilesystemKind), schedule.FilesystemSource)
 }
 
 // scheduleLoop drives persisted schedules; it mirrors backupLoop's one-minute tick.
@@ -133,6 +247,8 @@ func (s *apiServer) scheduleLoop() {
 	for range ticker.C {
 		tick++
 		s.runDueSchedules()
+		s.runDueFolderSyncTasks()
+		s.runDueSnapshotReplicationTasks()
 		s.runScheduledPower()
 		s.evaluatePeriodicAlerts(tick)
 		s.cleanupExpiredCSRFTokens()
@@ -296,6 +412,34 @@ func (s *apiServer) launchScheduleJob(schedule monitoring.Schedule) {
 		}
 		s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "schedule": schedule.ID})
 		go s.runSnapshotJob(job, schedule)
+	case "filesystem.scrub":
+		if err := validateScheduledFilesystemScrub(schedule); err != nil {
+			s.publish("schedule.skipped", "warning", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "reason": err.Error()})
+			return
+		}
+		job := model.Job{ID: newID("job"), CorrelationID: "schedule-" + schedule.ID, Type: schedule.JobType, Title: "Filesystem integrity scrub (scheduled)", ResourceID: schedule.FilesystemSource, State: "queued", CreatedAt: time.Now().UTC()}
+		if err := s.admitJob(&job); err != nil {
+			s.scheduleLaunchFailed(schedule, err)
+			return
+		}
+		s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "schedule": schedule.ID})
+		go s.runFilesystemScrubJob(job, storage.SnapshotKind(schedule.FilesystemKind), schedule.FilesystemSource)
+	case "share.relocate":
+		if err := validateScheduledShareRelocation(s, context.Background(), schedule); err != nil {
+			s.publish("schedule.skipped", "warning", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "reason": err.Error()})
+			return
+		}
+		preview, err := s.buildShareRelocationPreview(context.Background(), schedule.RelocationShareID, shareRelocationTarget{ResourceID: schedule.RelocationResourceID, RelativePath: schedule.RelocationRelativePath})
+		if err != nil {
+			s.publish("schedule.skipped", "warning", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "reason": err.Error()})
+			return
+		}
+		job, err := s.queueShareRelocation("schedule:"+schedule.ID, "schedule-"+schedule.ID, preview)
+		if err != nil {
+			s.publish("schedule.skipped", "warning", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "reason": err.Error()})
+			return
+		}
+		s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job, "schedule": schedule.ID})
 	default:
 		s.publish("schedule.skipped", "warning", &model.ResourceRef{Type: "schedule", ID: schedule.ID}, map[string]any{"scheduleId": schedule.ID, "reason": "unsupported job type " + schedule.JobType})
 	}
@@ -332,6 +476,10 @@ func (s *apiServer) runSnapshotJob(job model.Job, schedule monitoring.Schedule) 
 	}
 	record := snapshotRecordFromResponse(result, storage.SnapshotKind(schedule.SnapshotKind), schedule.SnapshotSource, schedule.SnapshotLabel)
 	record.Origin = "scheduled"
+	if schedule.SnapshotLockDays > 0 {
+		protectedUntil := time.Now().UTC().Add(time.Duration(schedule.SnapshotLockDays) * 24 * time.Hour)
+		record.ProtectedUntil = &protectedUntil
+	}
 	if _, saveErr := s.store.SaveStorageSnapshot(record); saveErr != nil {
 		job.State, job.Error = "failed", "snapshot state persistence failed"
 		finished := time.Now().UTC()
@@ -363,6 +511,9 @@ func (s *apiServer) pruneScheduledSnapshots(schedule monitoring.Schedule, newest
 		}
 		kept++
 		if record.ID == newest.ID || kept <= schedule.SnapshotKeep {
+			continue
+		}
+		if record.ProtectedUntil != nil && record.ProtectedUntil.After(time.Now().UTC()) {
 			continue
 		}
 		operationID := newID("scheduled-snapshot-delete")

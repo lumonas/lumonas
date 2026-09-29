@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 const trashDirectory = ".lumonas-trash"
@@ -93,6 +95,55 @@ func Resolve(root, relative string) (string, error) {
 		return "", errors.New("path escapes the share root")
 	}
 	return filepath.Join(parentReal, filepath.Base(candidate)), nil
+}
+
+// EnsureDirectory creates a relative directory tree inside a managed root.
+// openat with O_NOFOLLOW keeps concurrent symlink replacement from escaping
+// the root while recovery directories are prepared.
+func EnsureDirectory(root, relative string) error {
+	rootReal, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return fmt.Errorf("resolve share root: %w", err)
+	}
+	relative, err = cleanRelative(relative)
+	if err != nil {
+		return err
+	}
+	rootFD, err := unix.Open(rootReal, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		return fmt.Errorf("open share root: %w", err)
+	}
+	defer unix.Close(rootFD)
+	if relative == "" {
+		return nil
+	}
+	parentFD := rootFD
+	closeParent := false
+	defer func() {
+		if closeParent {
+			_ = unix.Close(parentFD)
+		}
+	}()
+	for _, component := range strings.Split(filepath.FromSlash(relative), string(filepath.Separator)) {
+		if component == "" || component == "." || component == ".." {
+			return errors.New("directory path must stay inside the share")
+		}
+		fd, openErr := unix.Openat(parentFD, component, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		if errors.Is(openErr, unix.ENOENT) {
+			if mkdirErr := unix.Mkdirat(parentFD, component, 0o750); mkdirErr != nil && !errors.Is(mkdirErr, unix.EEXIST) {
+				return fmt.Errorf("create recovery directory: %w", mkdirErr)
+			}
+			fd, openErr = unix.Openat(parentFD, component, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		}
+		if openErr != nil {
+			return fmt.Errorf("open recovery directory: %w", openErr)
+		}
+		if closeParent {
+			_ = unix.Close(parentFD)
+		}
+		parentFD, closeParent = fd, true
+	}
+	return nil
 }
 
 func List(root, relative string) ([]Entry, error) {
@@ -256,6 +307,74 @@ func WriteUpload(root, relative, name string, input io.Reader, sizeLimit int64) 
 		return "", err
 	}
 	return finalName, nil
+}
+
+// WriteUploadReplacing atomically replaces a regular file only if its current
+// size and modification time still match the caller's reviewed version. This
+// gives sync clients a compare-and-swap guard against overwriting concurrent
+// edits while preserving the ordinary upload API's collision-safe behavior.
+func WriteUploadReplacing(root, relative, name string, input io.Reader, sizeLimit, expectedSize int64, expectedModified time.Time) (string, error) {
+	if err := validName(name); err != nil {
+		return "", err
+	}
+	if sizeLimit < 0 || sizeLimit > 1<<40 || expectedSize < 0 || expectedModified.IsZero() {
+		return "", errors.New("replacement requires a valid size and modification time")
+	}
+	parent, err := Resolve(root, relative)
+	if err != nil {
+		return "", err
+	}
+	target := filepath.Join(parent, name)
+	if err := expectedRegularFile(target, expectedSize, expectedModified); err != nil {
+		return "", err
+	}
+	temporary, err := os.CreateTemp(parent, ".lumonas-upload-*")
+	if err != nil {
+		return "", err
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o660); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	written, err := io.CopyN(temporary, input, sizeLimit+1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		_ = temporary.Close()
+		return "", err
+	}
+	if written > sizeLimit {
+		_ = temporary.Close()
+		return "", errors.New("upload exceeds declared size limit")
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return "", err
+	}
+	if err := temporary.Close(); err != nil {
+		return "", err
+	}
+	if err := expectedRegularFile(target, expectedSize, expectedModified); err != nil {
+		return "", err
+	}
+	if err := os.Rename(temporaryPath, target); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+func expectedRegularFile(target string, expectedSize int64, expectedModified time.Time) error {
+	info, err := os.Lstat(target)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("replacement target is not a regular file")
+	}
+	if info.Size() != expectedSize || !info.ModTime().UTC().Equal(expectedModified.UTC()) {
+		return errors.New("replacement target changed after sync preview")
+	}
+	return nil
 }
 
 func MakeDir(root, relative, name string) error {
@@ -636,6 +755,8 @@ func validName(name string) error {
 	}
 	return nil
 }
+
+func ValidateName(name string) error { return validName(name) }
 
 func within(root, candidate string) bool {
 	relative, err := filepath.Rel(root, candidate)

@@ -3,9 +3,17 @@ set -eu
 
 getent group lumonas >/dev/null 2>&1 || groupadd --system lumonas
 id lumonas >/dev/null 2>&1 || useradd --system --gid lumonas --home-dir /var/lib/lumonas --no-create-home --shell /usr/sbin/nologin lumonas
+# The daemon only talks to libvirt through its local management socket. It is
+# not granted direct access to KVM devices or VM disk files.
+getent group libvirt >/dev/null 2>&1 || groupadd --system libvirt
+usermod -a -G libvirt lumonas
 install -d -o root -g lumonas -m 0750 /etc/lumonas
 install -d -o root -g root -m 0755 /etc/exports.d /etc/ssh/sshd_config.d /etc/docker
 install -d -o lumonas -g lumonas -m 0750 /var/lib/lumonas /var/lib/lumonas/secrets /var/lib/lumonas/generated /var/lib/lumonas/recovery /srv/lumonas /srv/lumonas/docker /srv/disks /srv/pools
+install -d -o root -g lumonas -m 0710 /var/lib/lumonas/replication
+install -d -o lumonas -g lumonas -m 0700 /var/lib/lumonas/replication-incoming
+install -d -o root -g libvirt -m 0755 /var/lib/libvirt/images
+install -d -o lumonas -g libvirt -m 0755 /var/lib/libvirt/images/lumonas
 install -d -o root -g root -m 0755 /var/tmp/lumonas-transcode
 
 # Do not grant the daemon direct Docker socket access. The Docker socket is
@@ -106,8 +114,8 @@ runuser -u lumonas -- /usr/lib/lumonas/lumonas-migrate --db "$database_path"
 if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
 	systemctl daemon-reload
 	systemctl try-reload-or-restart systemd-journald.service
-	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
-	for unit in lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service; do
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
+	for unit in lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service; do
 		systemctl start "$unit"
 	done
 	if systemctl cat ssh.service >/dev/null 2>&1; then
@@ -118,6 +126,6 @@ if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
 else
 	systemctl daemon-reload || true
 	systemctl try-reload-or-restart systemd-journald.service || true
-	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service || true
 fi
 exit 0

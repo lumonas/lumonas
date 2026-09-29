@@ -13,7 +13,7 @@ require_line() {
 	fi
 }
 
-for unit in lumonas-web.service lumonasd.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service; do
+for unit in lumonas-web.service lumonasd.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service; do
 	[ -f "$SYSTEMD/$unit" ] || { echo "missing systemd unit: $unit" >&2; exit 1; }
 	require_line "$SYSTEMD/$unit" 'NoNewPrivileges=true'
 	require_line "$SYSTEMD/$unit" 'ProtectSystem=strict'
@@ -35,8 +35,14 @@ require_line "$SYSTEMD/lumonas-web.service" 'User=lumonas'
 require_line "$SYSTEMD/lumonasd.service" 'User=lumonas'
 require_line "$SYSTEMD/lumonas-privd.service" 'User=root'
 require_line "$SYSTEMD/lumonas-privd.service" 'CapabilityBoundingSet='
-require_line "$SYSTEMD/lumonasd.service" 'ReadWritePaths=/var/lib/lumonas /srv/lumonas'
+require_line "$SYSTEMD/lumonasd.service" 'ReadWritePaths=/var/lib/lumonas /srv/lumonas /var/lib/libvirt/images/lumonas'
 require_line "$SYSTEMD/lumonasd.service" 'PartOf=lumonas-jobs.target'
+# The VM media and disk defaults live under the libvirt image store, so the
+# daemon sandbox must keep that exact directory writable. postinst creates it
+# as lumonas:libvirt and the unit joins the libvirt group; without the
+# ReadWritePaths entry, ISO upload and VM creation fail with EROFS.
+require_line "$ROOT/packaging/debian/postinst" 'install -d -o lumonas -g libvirt -m 0755 /var/lib/libvirt/images/lumonas'
+require_line "$SYSTEMD/lumonasd.service" 'SupplementaryGroups=libvirt'
 require_line "$SYSTEMD/lumonas-web.service" 'PartOf=lumonas-services.target'
 require_line "$SYSTEMD/smbd.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
 require_line "$SYSTEMD/rsync.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
@@ -45,8 +51,8 @@ require_line "$SYSTEMD/docker.service.d/lumonas.conf" 'PartOf=lumonas-services.t
 require_line "$SYSTEMD/nfs-server.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
 require_line "$SYSTEMD/ssh.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
 require_line "$SYSTEMD/avahi-daemon.service.d/lumonas.conf" 'PartOf=lumonas-services.target'
-require_line "$SYSTEMD/lumonasd.service" 'Requires=lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service'
-for worker in storage network power general; do
+require_line "$SYSTEMD/lumonasd.service" 'Requires=lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service'
+for worker in storage network power general acme; do
   require_line "$SYSTEMD/lumonas-privd-$worker.service" 'Requires=lumonas-privd.service'
 done
 require_line "$SYSTEMD/lumonas-privd-storage.service" 'CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_RAWIO'
@@ -54,6 +60,9 @@ require_line "$SYSTEMD/lumonas-privd-network.service" 'CapabilityBoundingSet=CAP
 require_line "$SYSTEMD/lumonas-privd-power.service" 'CapabilityBoundingSet=CAP_SYS_BOOT'
 require_line "$SYSTEMD/lumonas-privd-general.service" 'CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID'
 require_line "$SYSTEMD/lumonas-privd-general.service" '/etc/exports.d /etc/ssh/sshd_config.d'
+require_line "$SYSTEMD/lumonas-privd-acme.service" 'CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_NET_BIND_SERVICE CAP_SETGID CAP_SETUID'
+require_line "$SYSTEMD/lumonas-privd-acme.service" 'ReadWritePaths=/run/lumonas /etc/letsencrypt /etc/lumonas /var/lib/lumonas /var/lib/letsencrypt /var/log/letsencrypt'
+require_line "$SYSTEMD/lumonas-privd-acme.service" 'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6'
 require_line "$SYSTEMD/lumonas-runtime.service" 'EnvironmentFile=-/etc/lumonas/runtime.env'
 require_line "$SYSTEMD/lumonas-runtime.service" 'ExecStart=/usr/lib/lumonas/lumonas-privd --runtime'
 require_line "$SYSTEMD/lumonas-runtime.service" 'CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_MODULE CAP_SYS_RESOURCE'
@@ -97,7 +106,7 @@ require_line "$ROOT/packaging/docker-daemon.json" '"max-size": "10m"'
 require_line "$ROOT/packaging/docker-daemon.json" '"max-file": "3"'
 require_line "$ROOT/packaging/debian/postinst" 'lumonas-privd.service'
 require_line "$ROOT/packaging/debian/postinst" 'LUMONAS_ZRAM_ENABLED=false'
-require_line "$ROOT/packaging/debian/control" 'Depends: libc6, systemd, openssl'
+require_line "$ROOT/packaging/debian/control" 'Depends: libc6, systemd, openssl, certbot'
 require_line "$ROOT/packaging/debian/lumonas-web.env.example" 'LUMONAS_WEB_LISTEN=0.0.0.0:8081'
 require_line "$ROOT/scripts/upgrade-service-order-smoke.sh" 'lumonas-runtime.service'
 require_line "$ROOT/scripts/upgrade-service-order-smoke.sh" 'runuser -u lumonas -- /usr/lib/lumonas/lumonas-migrate'
@@ -458,6 +467,7 @@ require_line "$ROOT/Makefile" 'qemu-image: package'
 require_line "$ROOT/.github/workflows/ci.yml" 'LUMONAS_GIT_COMMIT="$GITHUB_SHA" make package'
 require_line "$ROOT/.github/workflows/ci.yml" 'scripts/package-dependency-parity-smoke.sh'
 require_line "$ROOT/packaging/debian/control" 'vsftpd'
+require_line "$ROOT/packaging/debian/control" 'rclone'
 require_line "$ROOT/packaging/debian/control" 'xfsprogs'
 require_line "$ROOT/packaging/debian/control" 'mergerfs'
 require_line "$ROOT/packaging/debian/control" 'snapraid'
@@ -472,10 +482,11 @@ require_line "$ROOT/cmd/lumonas-privd/main_test.go" 'TestRemainingMutationsRequi
 require_line "$ROOT/cmd/lumonasd/share_configs.go" 's.brokerExecute(ctx, privileged.Request'
 require_line "$ROOT/cmd/lumonasd/share_configs.go" 'ExpiresAt: time.Now().UTC().Add(2 * time.Minute)'
 require_line "$ROOT/cmd/lumonasd/share_configs_test.go" 'TestReloadShareServicesFailsClosedWithoutPrivilegedBroker'
-require_line "$ROOT/cmd/lumonas-privd/main.go" '"service.config.apply", "avahi.config.apply"'
+require_line "$ROOT/cmd/lumonas-privd/main.go" 'case "tls.acme.configure", "tls.acme.disable":'
+require_line "$ROOT/cmd/lumonas-privd/main.go" 'return "acme"'
 require_line "$ROOT/cmd/lumonasd/identity_provisioning.go" 'OperationID:    newID("identity")'
 require_line "$ROOT/cmd/lumonasd/identity_provisioning.go" 'OperationID:    newID("samba")'
-require_line "$ROOT/cmd/lumonas-privd/main.go" '"identity.system-user.ensure", "samba.user.ensure", "acl.apply"'
+require_line "$ROOT/cmd/lumonas-privd/main.go" '"identity.system-user.ensure", "samba.user.ensure", "samba.status.read", "samba.client.disconnect", "acl.apply"'
 require_line "$ROOT/internal/privileged/limits.go" 'MaxIPCMessageBytes = 1 << 20'
 require_line "$ROOT/internal/privileged/client.go" 'io.LimitReader(connection, MaxIPCMessageBytes)'
 require_line "$ROOT/cmd/lumonas-privd/main.go" 'scanner.Buffer(make([]byte, 64*1024), privileged.MaxIPCMessageBytes)'
@@ -534,6 +545,7 @@ require_line "$ROOT/installer/build-iso.sh" 'vsftpd'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'NetworkManager.service'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'qemu-ethernet.nmconnection'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'openssl'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'certbot'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'https://127.0.0.1:18080'
 require_line "$ROOT/scripts/iso-smoke.sh" 'https://127.0.0.1:18081'
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'https://127.0.0.1:18082'

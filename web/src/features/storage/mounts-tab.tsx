@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { HardDrive, Lock, LockOpen, Plus, TrendingUp, Unplug } from 'lucide-react'
 import {
   useCapacityForecast,
+  useCapacityThresholds,
+  useSetCapacityThreshold,
   usePools,
   usePlanPool,
   usePlanPoolUnmount,
@@ -225,23 +227,32 @@ function PoolUnmountDialog({ poolName, open, onOpenChange }: { poolName: string 
 }
 
 function CapacityForecastCard() {
-  const { data: forecasts } = useCapacityForecast(30)
+  const { data: forecasts } = useCapacityForecast(90)
+  const { data: thresholds } = useCapacityThresholds()
+  const updateThreshold = useSetCapacityThreshold()
   if (!forecasts || forecasts.length === 0) return null
   return (
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <TrendingUp className="size-4" />
-          Capacity forecast (30 days)
+          Capacity forecast
         </CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">Thresholds are stored on this appliance and generate alerts for every signed-in administrator.</p>
       </CardHeader>
       <CardContent className="grid gap-3">
-        {forecasts.map((forecast) => (
+        {forecasts.map((forecast) => {
+          const threshold = thresholds?.find((item) => item.resourceId === forecast.resourceId)?.thresholdPercent ?? 80
+          const utilization = forecast.totalBytes > 0 ? (forecast.usedBytes / forecast.totalBytes) * 100 : 0
+          const needsAttention = utilization >= threshold || (forecast.daysToNinetyPercent != null && forecast.daysToNinetyPercent < 60)
+          return (
           <div key={forecast.resourceId} className="rounded-lg border px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <span className="truncate font-mono text-xs">{forecast.resourceId}</span>
-              {forecast.available ? (
-                <Badge variant={forecast.daysToNinetyPercent != null && forecast.daysToNinetyPercent < 60 ? 'warning' : 'success'}>
+              {utilization >= threshold ? (
+                <Badge variant="warning">{utilization.toFixed(0)}% · above {threshold}%</Badge>
+              ) : forecast.available ? (
+                <Badge variant={needsAttention ? 'warning' : 'success'}>
                   {forecast.daysToNinetyPercent != null
                     ? `90% in ~${Math.round(forecast.daysToNinetyPercent)}d`
                     : 'stable'}
@@ -253,11 +264,17 @@ function CapacityForecastCard() {
             <p className="mt-1 text-xs text-muted-foreground">
               {formatBytes(forecast.usedBytes)} / {formatBytes(forecast.totalBytes)}
               {forecast.available
-                ? ` · growing ${formatBytes(forecast.growthBytesPerDay)}/day over ${Math.round(forecast.windowDays)}d`
+                ? ` · growing ${formatBytes(forecast.growthBytesPerDay)}/day · full around ${forecast.estimatedFullAt ? new Date(forecast.estimatedFullAt).toLocaleDateString() : 'unknown'} · ${forecast.confidence} confidence`
                 : ` · ${forecast.message ?? 'not enough history'}`}
+              {forecast.stale ? ` · history is ${Math.round(forecast.sampleAgeHours)}h old` : ''}
             </p>
+            <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">Warn at
+              <select aria-label={`Capacity warning threshold for ${forecast.resourceId}`} className="h-7 rounded-md border bg-background px-2 text-foreground" value={threshold} disabled={updateThreshold.isPending} onChange={(event) => updateThreshold.mutate({ resourceId: forecast.resourceId, thresholdPercent: Number(event.target.value) })}>{[70, 75, 80, 85, 90, 95].map((value) => <option key={value} value={value}>{value}%</option>)}</select>
+              <span>{utilization.toFixed(0)}% used</span>
+            </label>
           </div>
-        ))}
+          )
+        })}
       </CardContent>
     </Card>
   )

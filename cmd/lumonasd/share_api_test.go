@@ -82,6 +82,38 @@ func TestManagedShareAPIGeneratesNonSMBConfigurations(t *testing.T) {
 	}
 }
 
+func TestManagedShareSMBAuditCanBeEnabledAndRendered(t *testing.T) {
+	server := testServer(t)
+	t.Setenv("LUMONAS_SHARES_FILE", t.TempDir()+"/legacy-shares.json")
+	sambaConfig := t.TempDir() + "/generated/smb.conf"
+	t.Setenv("LUMONAS_SAMBA_CONFIG", sambaConfig)
+	created := httptest.NewRecorder()
+	server.routes().ServeHTTP(created, httptest.NewRequest(http.MethodPost, "/api/v1/shares", strings.NewReader(`{"name":"Records","path":"/srv/records","enabled":true,"protocols":["smb"],"access":{}}`)))
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create status %d: %s", created.Code, created.Body.String())
+	}
+	var share struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(created.Body).Decode(&share); err != nil || share.ID == "" {
+		t.Fatalf("invalid create response %#v err=%v", share, err)
+	}
+	updated := httptest.NewRecorder()
+	server.routes().ServeHTTP(updated, httptest.NewRequest(http.MethodPatch, "/api/v1/shares/"+share.ID+"/protocols/smb", strings.NewReader(`{"auditEnabled":true,"auditOperations":["renameat","unlinkat"]}`)))
+	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"auditEnabled":true`) || !strings.Contains(updated.Body.String(), `"auditOperations":["renameat","unlinkat"]`) {
+		t.Fatalf("SMB audit settings were not returned: %d %s", updated.Code, updated.Body.String())
+	}
+	config, err := os.ReadFile(sambaConfig)
+	if err != nil || !strings.Contains(string(config), "vfs objects = shadow_copy2 full_audit") || !strings.Contains(string(config), "full_audit:success = renameat unlinkat") {
+		t.Fatalf("SMB audit config was not rendered: %s err=%v", config, err)
+	}
+	unsafe := httptest.NewRecorder()
+	server.routes().ServeHTTP(unsafe, httptest.NewRequest(http.MethodPatch, "/api/v1/shares/"+share.ID+"/protocols/smb", strings.NewReader(`{"auditOperations":["renameat\n   include = /etc/passwd"]}`)))
+	if unsafe.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unsafe SMB audit operation accepted: %d %s", unsafe.Code, unsafe.Body.String())
+	}
+}
+
 func TestModernShareAPIContract(t *testing.T) {
 	server := testServer(t)
 	t.Setenv("LUMONAS_SHARES_FILE", t.TempDir()+"/legacy-shares.json")

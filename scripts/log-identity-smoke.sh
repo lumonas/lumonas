@@ -7,7 +7,7 @@ UNIT_DIR="$ROOT/packaging/systemd"
 for unit in \
 	lumonas-web.service lumonasd.service lumonas-privd.service \
 	lumonas-privd-storage.service lumonas-privd-network.service \
-	lumonas-privd-power.service lumonas-privd-general.service lumonas-runtime.service; do
+	lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-runtime.service; do
 	file="$UNIT_DIR/$unit"
 	identifier=${unit%.service}
 	[ -f "$file" ] || { echo "missing service unit: $unit" >&2; exit 1; }

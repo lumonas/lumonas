@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	fileops "github.com/lumonas/lumonas/internal/files"
 	"github.com/lumonas/lumonas/internal/storage"
 )
 
@@ -92,6 +93,9 @@ func executeSnapshotOperation(req request, run command) response {
 		snapshotName := storage.SnapshotName(label, time.Now().UTC())
 		switch kind {
 		case storage.SnapshotBtrfs:
+			if _, err := run("mkdir", "-p", "--", source+".snapshots"); err != nil {
+				return response{Error: "btrfs snapshot directory could not be prepared"}
+			}
 			if err := storage.CreateBtrfsSnapshot(context.Background(), snapshotRun, source, snapshotName); err != nil {
 				return response{Error: "btrfs snapshot creation failed"}
 			}
@@ -155,6 +159,21 @@ func executeSnapshotOperation(req request, run command) response {
 			return response{Error: err.Error()}
 		}
 		return browseSnapshot(source, name, subpath)
+	case "snapshot.compare":
+		if kind != storage.SnapshotBtrfs {
+			return response{Error: "only btrfs snapshots can be compared with the current share"}
+		}
+		if strings.TrimSpace(name) == "" {
+			return response{Error: "snapshot name is required"}
+		}
+		if err := storage.ValidateSnapshotName(name); err != nil {
+			return response{Error: err.Error()}
+		}
+		diff, err := fileops.CompareSnapshotTree(source+".snapshots/"+name, source)
+		if err != nil {
+			return response{Error: "snapshot comparison failed: " + err.Error()}
+		}
+		return response{OK: true, Data: diff}
 	default:
 		return response{Error: "operation is not allow-listed"}
 	}

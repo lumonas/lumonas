@@ -76,6 +76,7 @@ export function AlertsTab() {
       id: 'rule',
       header: 'Rule',
       sortValue: (r) => r.name,
+      searchValue: (r) => `${r.name} ${r.condition} ${r.severity} ${r.routes.join(' ')}`,
       cell: (r) => (
         <div className="flex flex-col">
           <span className="text-[13px] font-medium">{r.name}</span>

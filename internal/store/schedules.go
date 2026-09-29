@@ -89,3 +89,18 @@ func (s *Store) SaveJobSchedule(schedule monitoring.Schedule) error {
 	_, err = s.db.Exec(`INSERT INTO job_schedules(id,config_json,updated_at) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET config_json=excluded.config_json,updated_at=excluded.updated_at`, schedule.ID, string(encoded), time.Now().UTC().Format(timeFormat))
 	return err
 }
+
+func (s *Store) DeleteJobSchedule(id string) error {
+	if err := s.ensureScheduleSchema(); err != nil {
+		return err
+	}
+	result, err := s.db.Exec(`DELETE FROM job_schedules WHERE id=?`, id)
+	if err != nil {
+		return err
+	}
+	count, _ := result.RowsAffected()
+	if count == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}

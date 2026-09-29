@@ -3,9 +3,12 @@ package monitoring
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lumonas/lumonas/internal/storage"
 )
 
 type AlertRule struct {
@@ -54,21 +57,27 @@ type NotificationChannel struct {
 }
 
 type Schedule struct {
-	ID             string     `json:"id"`
-	Name           string     `json:"name"`
-	JobType        string     `json:"jobType"`
-	Kind           string     `json:"kind"`
-	TimeOfDay      string     `json:"timeOfDay"`
-	Weekday        string     `json:"weekday,omitempty"`
-	Enabled        bool       `json:"enabled"`
-	LastStartedAt  *time.Time `json:"lastStartedAt,omitempty"`
-	NextDueAt      *time.Time `json:"nextDueAt,omitempty"`
-	Schedule       string     `json:"schedule"`
-	Next           string     `json:"next"`
-	SnapshotKind   string     `json:"snapshotKind,omitempty"`
-	SnapshotSource string     `json:"snapshotSource,omitempty"`
-	SnapshotLabel  string     `json:"snapshotLabel,omitempty"`
-	SnapshotKeep   int        `json:"snapshotKeep,omitempty"`
+	ID                     string     `json:"id"`
+	Name                   string     `json:"name"`
+	JobType                string     `json:"jobType"`
+	Kind                   string     `json:"kind"`
+	TimeOfDay              string     `json:"timeOfDay"`
+	Weekday                string     `json:"weekday,omitempty"`
+	Enabled                bool       `json:"enabled"`
+	LastStartedAt          *time.Time `json:"lastStartedAt,omitempty"`
+	NextDueAt              *time.Time `json:"nextDueAt,omitempty"`
+	Schedule               string     `json:"schedule"`
+	Next                   string     `json:"next"`
+	SnapshotKind           string     `json:"snapshotKind,omitempty"`
+	SnapshotSource         string     `json:"snapshotSource,omitempty"`
+	SnapshotLabel          string     `json:"snapshotLabel,omitempty"`
+	SnapshotKeep           int        `json:"snapshotKeep,omitempty"`
+	SnapshotLockDays       int        `json:"snapshotLockDays,omitempty"`
+	FilesystemKind         string     `json:"filesystemKind,omitempty"`
+	FilesystemSource       string     `json:"filesystemSource,omitempty"`
+	RelocationShareID      string     `json:"relocationShareId,omitempty"`
+	RelocationResourceID   string     `json:"relocationResourceId,omitempty"`
+	RelocationRelativePath string     `json:"relocationRelativePath,omitempty"`
 }
 
 const (
@@ -93,6 +102,10 @@ func (s Schedule) Validate() error {
 	}
 	switch s.JobType {
 	case "smart.short", "smart.extended", "snapraid.sync", "snapraid.scrub", "backup.run":
+	case "filesystem.scrub":
+		if err := storage.ValidateScrubSource(storage.SnapshotKind(s.FilesystemKind), s.FilesystemSource); err != nil {
+			return err
+		}
 	case "snapshot.create":
 		if strings.TrimSpace(s.SnapshotKind) == "" || strings.TrimSpace(s.SnapshotSource) == "" {
 			return errors.New("snapshot schedule kind and source are required")
@@ -102,6 +115,16 @@ func (s Schedule) Validate() error {
 		}
 		if s.SnapshotKeep < 1 || s.SnapshotKeep > 365 {
 			return errors.New("snapshot retention must keep between 1 and 365 snapshots")
+		}
+		if s.SnapshotLockDays < 0 || s.SnapshotLockDays > 3650 {
+			return errors.New("snapshot retention lock must be between 0 and 3650 days")
+		}
+	case "share.relocate":
+		if strings.TrimSpace(s.RelocationShareID) == "" || !filepath.IsAbs(s.RelocationResourceID) || filepath.Clean(s.RelocationResourceID) != s.RelocationResourceID {
+			return errors.New("share relocation schedule requires a share and managed storage location")
+		}
+		if s.RelocationRelativePath == "" || filepath.IsAbs(s.RelocationRelativePath) || filepath.Clean(s.RelocationRelativePath) != s.RelocationRelativePath || s.RelocationRelativePath == "." || s.RelocationRelativePath == ".." || strings.HasPrefix(s.RelocationRelativePath, ".."+string(filepath.Separator)) || strings.ContainsAny(s.RelocationRelativePath, "\\\x00\r\n") {
+			return errors.New("share relocation schedule path must stay inside the selected storage location")
 		}
 	default:
 		return fmt.Errorf("unsupported schedule job type %q", s.JobType)
@@ -254,6 +277,7 @@ func DefaultAlertRules() []AlertRule {
 		{ID: "rule-backup", Name: "Backup job failed", Condition: "backup job state = failed", Severity: "warning", Routes: []string{"web"}, Enabled: true},
 		{ID: "rule-container", Name: "Container unhealthy", Condition: "health check failing for 2 minutes", Severity: "warning", Routes: []string{"web"}, Enabled: true},
 		{ID: "rule-filesystem", Name: "Filesystem nearly full", Condition: "filesystem usage above 80%", Severity: "warning", Routes: []string{"web"}, Enabled: true},
+		{ID: "rule-ransomware", Name: "Unusual SMB file changes", Condition: "80 or more delete, directory-remove, or rename operations on one share in 5 minutes", Severity: "critical", Routes: []string{"web"}, Enabled: true},
 		{ID: "rule-login", Name: "New admin sign-in", Condition: "login from unseen device", Severity: "info", Routes: []string{"web"}, Enabled: false},
 	}
 }

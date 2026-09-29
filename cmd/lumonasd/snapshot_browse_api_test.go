@@ -79,3 +79,19 @@ func TestStorageSnapshotFilesMissingSnapshot(t *testing.T) {
 		t.Fatalf("expected 404, got %d", response.Code)
 	}
 }
+
+func TestStorageSnapshotCompareRunsThroughPrivilegedWorker(t *testing.T) {
+	server, requests := lanTestServer(t)
+	record, err := server.store.SaveStorageSnapshot(store.StorageSnapshotRecord{Kind: "btrfs", Source: "/srv/pool", Name: "nightly-20260913T100000Z"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	server.routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/v1/storage/snapshots/"+record.ID+"/compare", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if len(*requests) != 1 || (*requests)[0].Operation != "snapshot.compare" || (*requests)[0].RequestedState["name"] != record.Name {
+		t.Fatalf("comparison did not use the storage worker: %#v", *requests)
+	}
+}

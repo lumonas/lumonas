@@ -97,6 +97,15 @@ func TestScheduleValidation(t *testing.T) {
 	if err := snapshot.Validate(); err != nil {
 		t.Fatalf("valid snapshot schedule rejected: %v", err)
 	}
+	lockedSnapshot := snapshot
+	lockedSnapshot.SnapshotLockDays = 3650
+	if err := lockedSnapshot.Validate(); err != nil {
+		t.Fatalf("maximum snapshot lock rejected: %v", err)
+	}
+	lockedSnapshot.SnapshotLockDays = 3651
+	if err := lockedSnapshot.Validate(); err == nil {
+		t.Fatal("excessive snapshot lock unexpectedly passed")
+	}
 	missingSnapshotSource := snapshot
 	missingSnapshotSource.SnapshotSource = ""
 	if err := missingSnapshotSource.Validate(); err == nil {

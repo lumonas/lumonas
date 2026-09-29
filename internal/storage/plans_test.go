@@ -90,6 +90,12 @@ func TestCreatePlanValidatesRequestedState(t *testing.T) {
 	if err := ValidateRequestedState(ActionCreate, plan.Target.DiskID, map[string]any{"filesystem": "ext4", "mountPath": DiskBranchPath(plan.Target.DiskID), "label": "thirteenchars"}); err == nil {
 		t.Fatal("overlong label should fail")
 	}
+	if err := ValidateRequestedState(ActionCreate, plan.Target.DiskID, map[string]any{"filesystem": "ext4", "mountPath": DiskBranchPath(plan.Target.DiskID), "encrypted": true}); err != nil {
+		t.Fatalf("valid encrypted plan rejected: %v", err)
+	}
+	if err := ValidateRequestedState(ActionCreate, plan.Target.DiskID, map[string]any{"filesystem": "ext4", "mountPath": DiskBranchPath(plan.Target.DiskID), "encryptionPassphrase": "should-never-persist"}); err == nil {
+		t.Fatal("passphrase must not be accepted into a stored plan")
+	}
 	branch := DiskBranchPath(plan.Target.DiskID)
 	validStates := map[Action]map[string]any{
 		ActionFormat:  {"filesystem": "xfs"},

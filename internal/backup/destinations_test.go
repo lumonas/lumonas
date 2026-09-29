@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,8 +32,61 @@ func TestSFTPCommandsUseBoundedRunnerAndValidatedArguments(t *testing.T) {
 	if err := downloadSFTP(context.Background(), destination.Target, credentials, "recovery/latest.mrb", "/tmp/restored.mrb"); err != nil {
 		t.Fatal(err)
 	}
-	if len(commands) != 3 || !strings.Contains(commands[0], "sftp") || !strings.Contains(commands[0], "put /tmp/bundle.mrb /base/recovery/latest.mrb") || !strings.Contains(commands[1], "rm /base/recovery/latest.mrb") || !strings.Contains(commands[2], "get /base/recovery/latest.mrb /tmp/restored.mrb") {
+	if len(commands) != 3 || !strings.Contains(commands[0], "sftp") || !strings.Contains(commands[0], `put "/tmp/bundle.mrb" "/base/recovery/latest.mrb.lumonas-upload-`) || !strings.Contains(commands[0], `rename "/base/recovery/latest.mrb.lumonas-upload-`) || !strings.Contains(commands[0], `" "/base/recovery/latest.mrb"`) || !strings.Contains(commands[1], `rm "/base/recovery/latest.mrb"`) || !strings.Contains(commands[2], `get "/base/recovery/latest.mrb" "/tmp/restored.mrb"`) {
 		t.Fatalf("unexpected SFTP commands: %v", commands)
+	}
+}
+
+func TestSFTPPathsWithSpacesAreQuoted(t *testing.T) {
+	original := runSFTPCommand
+	t.Cleanup(func() { runSFTPCommand = original })
+	var script string
+	runSFTPCommand = func(_ context.Context, input io.Reader, _ string, _ ...string) ([]byte, error) {
+		data, _ := io.ReadAll(input)
+		script = string(data)
+		return nil, nil
+	}
+	if err := uploadSFTP(context.Background(), "sftp://backup.example/base", Credentials{Username: "nas", PrivateKeyPath: "/tmp/ssh key"}, "/tmp/source file", "Family Photos/image 1.jpg"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(script, `put "/tmp/source file" "/base/Family Photos/image 1.jpg.lumonas-upload-`) || !strings.Contains(script, `rename "/base/Family Photos/image 1.jpg.lumonas-upload-`) {
+		t.Fatalf("SFTP paths were not safely quoted: %q", script)
+	}
+}
+
+func TestSFTPListRecursesAndReturnsRelativeFileMetadata(t *testing.T) {
+	original := runSFTPCommand
+	t.Cleanup(func() { runSFTPCommand = original })
+	var commands []string
+	runSFTPCommand = func(_ context.Context, input io.Reader, _ string, _ ...string) ([]byte, error) {
+		data, _ := io.ReadAll(input)
+		commands = append(commands, string(data))
+		if strings.Contains(string(data), `"/base/snapshots/Family Photos"`) {
+			return []byte("-rw-r--r-- 1 nas users 7 Sep 28 2026 image 1.jpg\n"), nil
+		}
+		return []byte("drwxr-xr-x 2 nas users 0 Sep 28 2026 Family Photos\n-rw-r--r-- 1 nas users 3 Sep 28 2026 root.txt\n"), nil
+	}
+	files, err := listSFTP(context.Background(), "sftp://backup.example/base", Credentials{Username: "nas", PrivateKeyPath: "/tmp/key"}, "snapshots")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 || files[0].Path != "root.txt" || files[1].Path != "Family Photos/image 1.jpg" || files[1].Size != 7 || files[1].ModTime.IsZero() {
+		t.Fatalf("unexpected SFTP listing: %#v", files)
+	}
+	if len(commands) != 2 {
+		t.Fatalf("expected recursive listing, got %v", commands)
+	}
+}
+
+func TestSFTPListReturnsRemoteErrors(t *testing.T) {
+	original := runSFTPCommand
+	t.Cleanup(func() { runSFTPCommand = original })
+	runSFTPCommand = func(context.Context, io.Reader, string, ...string) ([]byte, error) {
+		return []byte("permission denied"), errors.New("exit status 1")
+	}
+	_, err := listSFTP(context.Background(), "sftp://backup.example/base", Credentials{Username: "nas", PrivateKeyPath: "/tmp/key"}, "source")
+	if err == nil || !strings.Contains(err.Error(), "permission denied") {
+		t.Fatalf("expected actionable SFTP listing error, got %v", err)
 	}
 }
 

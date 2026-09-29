@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
+import { useRecoveryStatus, useRestoreDrills } from '@/api/queries'
 
 interface UpdateState {
   activeSlot: string
@@ -36,6 +39,15 @@ interface ImageSlotForm {
   signature: string
 }
 
+interface UpdatePreflight {
+  ready: boolean
+  checks: { id: string; label: string; passed: boolean; detail: string; required: boolean }[]
+  freeBytes: number
+  imageSizeBytes: number
+  activeSlot: string
+  pendingSlot: string
+}
+
 const initialForm: ManifestForm = {
   version: '',
   packageSha256: '',
@@ -58,6 +70,13 @@ export function UpdatesPage() {
   const [form, setForm] = useState(initialForm)
   const [imageForm, setImageForm] = useState(initialImageForm)
   const [busy, setBusy] = useState(false)
+  const [rollbackOpen, setRollbackOpen] = useState(false)
+  const [rollbackReason, setRollbackReason] = useState('')
+  const [activateOpen, setActivateOpen] = useState(false)
+  const [preflight, setPreflight] = useState<UpdatePreflight | null>(null)
+  const { data: recoveryStatus } = useRecoveryStatus()
+  const { data: restoreDrills } = useRestoreDrills()
+  const recoveryCanaryPassed = !!recoveryStatus?.manifest && restoreDrills?.some((drill) => drill.state === 'successful' && drill.generation === recoveryStatus.manifest?.generation)
 
   const refresh = () => apiGet<UpdateState>('/updates/status').then(setState)
   useEffect(() => {
@@ -105,10 +124,14 @@ export function UpdatesPage() {
   }
 
   async function rollback() {
+    if (!rollbackReason.trim()) return
     setBusy(true)
     try {
-      await apiPost('/updates/rollback', { reason: 'manual rollback from administration UI' })
-      toast.success('Rolled back to the previous slot')
+      const next = await apiPost<UpdateState>('/updates/rollback', { reason: rollbackReason.trim() })
+      setState(next)
+      setRollbackOpen(false)
+      setRollbackReason('')
+      toast.success(`Rolled back to slot ${next.activeSlot}${next.activeVersion ? ` · ${next.activeVersion}` : ''}`)
       await refresh()
     } catch {
       toast.error('Rollback is not available')
@@ -141,16 +164,27 @@ export function UpdatesPage() {
   }
 
   async function activateImage() {
-    if (!window.confirm('Write the staged OS image to the inactive slot device and arm BootNext? The next reboot starts the new slot.')) {
-      return
-    }
     setBusy(true)
     try {
       await apiPost('/updates/slot/activate', {})
       toast.success('Slot image written — reboot to start the new slot')
+      setActivateOpen(false)
       await refresh()
     } catch {
       toast.error('Slot activation failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function reviewActivation() {
+    setBusy(true)
+    try {
+      const result = await apiGet<UpdatePreflight>('/updates/preflight')
+      setPreflight(result)
+      setActivateOpen(true)
+    } catch {
+      toast.error('Update preflight could not be completed')
     } finally {
       setBusy(false)
     }
@@ -187,17 +221,51 @@ export function UpdatesPage() {
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => void refresh()} variant="outline">Refresh</Button>
               {state?.pendingSlot ? <Button onClick={() => void confirmHealth()} disabled={busy}><CheckCircle2 />Confirm healthy</Button> : null}
-              {state?.previousSlot ? <Button onClick={() => void rollback()} disabled={busy} variant="destructiveOutline"><RotateCcw />Rollback</Button> : null}
+              {state?.previousSlot ? <Button onClick={() => setRollbackOpen(true)} disabled={busy} variant="destructiveOutline"><RotateCcw />Rollback</Button> : null}
             </div>
           </CardContent>
-        </Card>
+      </Card>
 
-        <Card>
+      <Dialog open={rollbackOpen} onOpenChange={setRollbackOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Roll back system update?</DialogTitle>
+            <DialogDescription>Switch from slot {state?.activeSlot}{state?.activeVersion ? ` (${state.activeVersion})` : ''} to previous slot {state?.previousSlot}. Record why you are rolling back for the audit trail.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2"><Label htmlFor="rollback-reason">Reason</Label><Input id="rollback-reason" value={rollbackReason} onChange={(event) => setRollbackReason(event.target.value)} placeholder="Describe the issue observed" /></div>
+          <DialogFooter><Button variant="ghost" onClick={() => setRollbackOpen(false)}>Cancel</Button><Button variant="destructive" disabled={busy || !rollbackReason.trim()} onClick={() => void rollback()}>Rollback to previous slot</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activateOpen} onOpenChange={setActivateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review OS slot activation</DialogTitle>
+            <DialogDescription>This writes the staged image for {imageForm.version || state?.pendingVersion || 'the staged version'} to inactive slot {state?.pendingSlot ?? '—'} and arms it for the next reboot.</DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-2 rounded-lg border p-3 text-sm">
+            {(preflight?.checks ?? []).map((check) => <li key={check.id} className={check.passed ? 'text-success' : check.required ? 'text-critical' : 'text-warning'}>{check.passed ? '✓' : '!'} {check.label}: {check.detail}</li>)}
+            <li className="text-muted-foreground">Free space: {preflight?.freeBytes.toLocaleString() ?? '—'} bytes · staged image: {preflight?.imageSizeBytes.toLocaleString() ?? '—'} bytes</li>
+            <li className="text-warning">Reboot is required before the new slot starts.</li>
+          </ul>
+          <DialogFooter><Button variant="ghost" onClick={() => setActivateOpen(false)}>Cancel</Button><Button variant="destructive" disabled={busy || !state?.pendingSlot || !preflight?.ready} onClick={() => void activateImage()}>Write image and arm next boot</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2"><Download className="size-4 text-primary" />Stage signed package</CardTitle>
             <CardDescription>Package paths are local to the NAS update worker. The public verification key is managed server-side.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="rounded-lg border p-3 text-sm">
+              <p className="mb-2 font-medium">Preflight</p>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={recoveryStatus?.verified ? 'success' : 'warning'}>Recovery bundle {recoveryStatus?.verified ? 'verified' : 'needs verification'}</Badge>
+                <Badge variant={recoveryCanaryPassed ? 'success' : 'warning'}>Current generation {recoveryCanaryPassed ? 'restore-tested' : 'not restore-tested'}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">The server verifies the selected recovery bundle before staging. A passing canary drill confirms the current generation can be restored.</p>
+            </div>
             {(['version', 'packageSha256', 'packageSize', 'packagePath', 'signature', 'backupPath'] as const).map((key) => (
               <div key={key} className="space-y-1">
                 <Label htmlFor={`update-${key}`}>{key === 'packageSha256' ? 'Package SHA-256' : key === 'backupPath' ? 'Recovery bundle path (optional)' : key}</Label>
@@ -242,7 +310,7 @@ export function UpdatesPage() {
               Stage image
             </Button>
             {state?.pendingSlot ? (
-              <Button variant="destructive" disabled={busy} onClick={() => void activateImage()}>
+              <Button variant="destructive" disabled={busy} onClick={() => void reviewActivation()}>
                 Write to inactive slot and arm BootNext
               </Button>
             ) : null}

@@ -4,12 +4,14 @@ import { DiskDrawer } from '@/features/storage/disk-drawer'
 import { DisksTab } from '@/features/storage/disks-tab'
 import { MountsTab } from '@/features/storage/mounts-tab'
 import { OverviewTab } from '@/features/storage/overview-tab'
+import { TopologyTab } from '@/features/storage/topology-tab'
 import {
   PoolsTab,
   ProtectionTab,
   StorageActivityTab,
 } from '@/features/storage/storage-tabs'
 import { ProtectionConfigCard } from '@/features/storage/protection-config-card'
+import { QuotasTab } from '@/features/storage/quotas-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const TABS = [
@@ -18,7 +20,9 @@ const TABS = [
   { value: 'pools', label: 'Pools' },
   { value: 'protection', label: 'Protection' },
   { value: 'mounts', label: 'Mounts' },
+  { value: 'topology', label: 'Topology' },
   { value: 'activity', label: 'Activity' },
+  { value: 'quotas', label: 'Quotas' },
 ] as const
 
 export function StoragePage() {
@@ -71,8 +75,14 @@ export function StoragePage() {
         <TabsContent value="mounts">
           <MountsTab />
         </TabsContent>
+        <TabsContent value="topology">
+          <TopologyTab />
+        </TabsContent>
         <TabsContent value="activity">
           <StorageActivityTab />
+        </TabsContent>
+        <TabsContent value="quotas">
+          <QuotasTab />
         </TabsContent>
       </Tabs>
       <DiskDrawer diskId={diskId} onOpenChange={(open) => setParam('disk', open ? diskId : null)} />

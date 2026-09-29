@@ -11,12 +11,29 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-MAIN_GO = ROOT / "cmd" / "lumonasd" / "main.go"
+ROUTE_SOURCES = [
+    ROOT / "cmd" / "lumonasd" / "main.go",
+    ROOT / "cmd" / "lumonasd" / "api_files_routes.go",
+    ROOT / "cmd" / "lumonasd" / "api_recovery_routes.go",
+]
+# Dedicated endpoint handlers are invoked before the main route switch.
+HANDLER_ROUTES = {
+    ("get", "/quotas"),
+    ("put", "/quotas"),
+    ("get", "/system/logs"),
+    ("get", "/folder-sync/tasks"),
+    ("post", "/folder-sync/tasks"),
+    ("put", "/folder-sync/tasks/{id}"),
+    ("delete", "/folder-sync/tasks/{id}"),
+    ("post", "/folder-sync/tasks/{id}/preview"),
+    ("post", "/folder-sync/tasks/{id}/run"),
+    ("get", "/folder-sync/tasks/{id}/runs"),
+    ("post", "/folder-sync/tasks/{id}/runs/cancel"),
+}
 OPENAPI = ROOT / "docs" / "openapi.yaml"
 
-CASE_RE = re.compile(
-    r"case r\.Method == http\.Method(?P<method>\w+) && (?P<cond>.+?):"
-)
+CASE_RE = re.compile(r"case (?P<cond>.+?):")
+METHOD_RE = re.compile(r"r\.Method == http\.Method(?P<method>\w+)")
 LITERAL_RE = re.compile(r'endpoint == "(?P<endpoint>[^"]+)"')
 PREFIX_RE = re.compile(r'strings\.HasPrefix\(endpoint, "(?P<prefix>[^"]+)"\)')
 SUFFIX_RE = re.compile(r'strings\.HasSuffix\(endpoint, "(?P<suffix>[^"]+)"\)')
@@ -52,12 +69,30 @@ def join_path(prefix: str, tail: str) -> str:
     return prefix + "{id}" + tail
 
 
+def canonical_path(path: str) -> str:
+    return re.sub(r"\{[^}]+\}", "{param}", path)
+
+
 def routes_from_go(source: str) -> set[tuple[str, str]]:
     routes: set[tuple[str, str]] = set()
     for match in CASE_RE.finditer(source):
-        method = METHODS.get(match.group("method"))
         condition = match.group("cond")
-        if method is None:
+        methods = [METHODS.get(value) for value in METHOD_RE.findall(condition)]
+        methods = [value for value in methods if value is not None]
+        if not methods:
+            continue
+        vm_parts = re.search(r"len\(vmParts\)\s*==\s*(\d+)", condition)
+        if vm_parts:
+            size = int(vm_parts.group(1))
+            tail = {
+                1: "",
+                2: "/" + (re.search(r'vmParts\[1\]\s*==\s*"([^"]+)"', condition).group(1) if re.search(r'vmParts\[1\]\s*==\s*"([^"]+)"', condition) else "{action}"),
+                3: "/snapshots/{snapshot}",
+                4: "/snapshots/{snapshot}/revert",
+            }.get(size)
+            if tail is not None:
+                for method in methods:
+                    routes.add((method, canonical_path("/virtualization/vms/{name}" + tail)))
             continue
         literal = LITERAL_RE.search(condition)
         prefix = PREFIX_RE.search(condition)
@@ -65,18 +100,35 @@ def routes_from_go(source: str) -> set[tuple[str, str]]:
         contains = CONTAINS_RE.search(condition)
         protocols = PROTOCOLS_RE.search(condition)
         if literal:
-            routes.add((method, literal.group("endpoint")))
+            for method in methods:
+                routes.add((method, canonical_path(literal.group("endpoint"))))
         elif protocols and prefix:
             marker = protocols.group("marker").lstrip("/")
-            routes.add((method, f"{prefix.group('prefix')}{{id}}/{marker}/{{protocol}}"))
-        elif prefix and (method, prefix.group("prefix")) in SPECIAL_PREFIX:
-            routes.add((method, SPECIAL_PREFIX[(method, prefix.group("prefix"))]))
+            for method in methods:
+                routes.add((method, canonical_path(f"{prefix.group('prefix')}{{id}}/{marker}/{{protocol}}")))
+        elif (
+            prefix
+            and suffix
+            and prefix.group("prefix") == "/backup/destinations/"
+            and suffix.group("suffix") == "/restore"
+        ):
+            for method in methods:
+                routes.add((method, canonical_path("/backup/destinations/{id}/runs/{runId}/virtual-machines/{name}/restore")))
+        elif prefix and all((method, prefix.group("prefix")) in SPECIAL_PREFIX for method in methods):
+            for method in methods:
+                routes.add((method, canonical_path(SPECIAL_PREFIX[(method, prefix.group("prefix"))])))
+        elif prefix and suffix and f"!strings.HasSuffix(endpoint, \"{suffix.group('suffix')}\")" in condition:
+            for method in methods:
+                routes.add((method, canonical_path(f"{prefix.group('prefix')}{{id}}")))
         elif prefix and suffix:
-            routes.add((method, join_path(prefix.group("prefix"), suffix.group("suffix"))))
+            for method in methods:
+                routes.add((method, canonical_path(join_path(prefix.group("prefix"), suffix.group("suffix")))))
         elif prefix and contains and contains.group("needle") == "/passkeys/":
-            routes.add((method, f"{prefix.group('prefix')}{{id}}/passkeys/{{credentialId}}"))
+            for method in methods:
+                routes.add((method, canonical_path(f"{prefix.group('prefix')}{{id}}/passkeys/{{credentialId}}")))
         elif prefix:
-            routes.add((method, f"{prefix.group('prefix')}{{id}}"))
+            for method in methods:
+                routes.add((method, canonical_path(f"{prefix.group('prefix')}{{id}}")))
     return routes
 
 
@@ -90,7 +142,7 @@ def paths_from_openapi(source: str) -> set[tuple[str, str]]:
                 in_paths = True
             continue
         if line.startswith("  /") and line.rstrip().endswith(":"):
-            current_path = line.strip().rstrip(":")
+            current_path = canonical_path(line.strip().rstrip(":"))
             continue
         if line.startswith("components:") or (line and not line.startswith(" ") and not line.startswith("  /")):
             in_paths = False
@@ -105,7 +157,10 @@ def paths_from_openapi(source: str) -> set[tuple[str, str]]:
 
 
 def main() -> int:
-    implemented = routes_from_go(MAIN_GO.read_text())
+    implemented: set[tuple[str, str]] = set()
+    for route_source in ROUTE_SOURCES:
+        implemented.update(routes_from_go(route_source.read_text()))
+    implemented.update((method, canonical_path(path)) for method, path in HANDLER_ROUTES)
     documented = paths_from_openapi(OPENAPI.read_text())
     missing = sorted((implemented - documented) - WHITELIST)
     extra = sorted((documented - implemented) - WHITELIST)

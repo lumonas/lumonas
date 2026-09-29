@@ -50,10 +50,10 @@ func (s *Store) PruneJobs(keep int) error {
 		keep = 100
 	}
 	_, err := s.db.Exec(`DELETE FROM jobs
-WHERE state IN ('completed','failed','canceled')
+WHERE state IN ('completed','successful','failed','canceled','cancelled')
   AND id NOT IN (
     SELECT id FROM jobs
-    WHERE state IN ('completed','failed','canceled')
+    WHERE state IN ('completed','successful','failed','canceled','cancelled')
     ORDER BY created_at DESC
     LIMIT ?
   )`, keep)

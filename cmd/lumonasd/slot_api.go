@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/model"
@@ -15,6 +17,67 @@ import (
 	"github.com/lumonas/lumonas/internal/recovery"
 	"github.com/lumonas/lumonas/internal/updates"
 )
+
+func (s *apiServer) updatePreflight(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	checks := make([]map[string]any, 0, 5)
+	add := func(id, label string, passed bool, detail string, required bool) {
+		checks = append(checks, map[string]any{"id": id, "label": label, "passed": passed, "detail": detail, "required": required})
+	}
+	publicKey, keyErr := updates.ParsePublicKey(osUpdatePublicKey())
+	imagePath, manifest, state, imageErr := s.updateManager().StagedSlotImage()
+	if keyErr == nil {
+		imagePath, manifest, state, imageErr = s.updateManager().StagedSlotImageVerified(publicKey)
+	} else {
+		imageErr = keyErr
+	}
+	add("image-signature", "Staged image signature and digest", imageErr == nil, firstError(imageErr, "staged image verified against signed manifest"), true)
+	mapping, mapErr := parseSlotDeviceMapping(os.Getenv("LUMONAS_SLOT_DEVICES"))
+	rollbackReady := mapErr == nil && state.ActiveSlot != "" && mapping[state.ActiveSlot].Device != ""
+	add("rollback-slot", "Known-good rollback slot", rollbackReady, firstError(mapErr, "active slot mapping is available"), true)
+	key := s.recoveryKeyString()
+	bundlePath := filepath.Join(envOr("LUMONAS_RECOVERY_DIR", "/var/lib/lumonas/recovery"), "latest.mrb")
+	bundle, bundleErr := os.ReadFile(bundlePath)
+	var bundleGeneration int64
+	if bundleErr == nil && key != "" {
+		if verified, verifyErr := recovery.Verify(bundle, []byte(key)); verifyErr == nil {
+			bundleGeneration = verified.Generation
+		} else {
+			bundleErr = verifyErr
+		}
+	} else if key == "" {
+		bundleErr = errors.New("recovery key is not configured")
+	}
+	add("recovery-bundle", "Current verified recovery bundle", bundleErr == nil, firstError(bundleErr, "bundle signature and checksum verified"), true)
+	currentGeneration := s.store.CurrentGeneration()
+	canary := false
+	if bundleErr == nil {
+		for _, drill := range func() []model.RestoreDrill { values, _ := s.store.RestoreDrills(100); return values }() {
+			if drill.State == "successful" && drill.ServicesHealthy && drill.Generation == bundleGeneration && drill.Generation == currentGeneration {
+				canary = true
+				break
+			}
+		}
+	}
+	add("recovery-canary", "Current-generation recovery canary", canary, map[bool]string{true: "latest configuration generation passed isolated service rehearsal", false: "run a successful restore drill for the latest verified generation"}[canary], true)
+	updateRoot := envOr("LUMONAS_UPDATE_ROOT", "/var/lib/lumonas/updates")
+	var filesystem syscall.Statfs_t
+	spaceErr := syscall.Statfs(updateRoot, &filesystem)
+	freeBytes := uint64(0)
+	if spaceErr == nil {
+		freeBytes = filesystem.Bavail * uint64(filesystem.Bsize)
+	}
+	add("staging-space", "Update storage available", spaceErr == nil && freeBytes > 0, fmt.Sprintf("%d bytes free in %s", freeBytes, updateRoot), true)
+	ready := true
+	for _, check := range checks {
+		if check["required"] == true && check["passed"] != true {
+			ready = false
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ready": ready, "checks": checks, "freeBytes": freeBytes, "imagePath": imagePath, "imageSizeBytes": manifest.PackageSize, "activeSlot": state.ActiveSlot, "pendingSlot": state.PendingSlot})
+}
 
 // slotDeviceMapping is the appliance's slot layout: which device and EFI
 // boot entry belong to each slot, e.g.
@@ -200,7 +263,12 @@ func (s *apiServer) activateSlotImage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
-	imagePath, manifest, state, err := s.updateManager().StagedSlotImage()
+	publicKey, keyErr := updates.ParsePublicKey(osUpdatePublicKey())
+	if keyErr != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": keyErr.Error()})
+		return
+	}
+	imagePath, manifest, state, err := s.updateManager().StagedSlotImageVerified(publicKey)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return

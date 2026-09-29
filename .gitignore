@@ -13,6 +13,9 @@ web/test-results/
 *.raw
 *.sbom.json
 *.sig
+# The built-in app catalog signature is a release artifact that must be
+# committed so lumonasd can verify the packaged catalog.
+!catalog/apps.json.sig
 build/qemu/work/
 /data/
 *.db

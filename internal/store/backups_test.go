@@ -46,12 +46,12 @@ func TestBackupDestinationsEncryptCredentialsAndPersistRuns(t *testing.T) {
 	}
 	started := time.Now().UTC().Add(-time.Minute)
 	due := time.Now().UTC().Add(time.Hour)
-	schedule, err := database.SaveBackupSchedule(backup.Schedule{ID: "default", Enabled: true, IntervalSeconds: 86400, LastStartedAt: &started, NextDueAt: &due})
+	schedule, err := database.SaveBackupSchedule(backup.Schedule{ID: "default", Enabled: true, IntervalSeconds: 86400, OnUSBAttach: true, LastStartedAt: &started, NextDueAt: &due})
 	if err != nil || schedule.ID != "default" {
 		t.Fatalf("save schedule failed: %#v %v", schedule, err)
 	}
 	loadedSchedule, err := database.BackupSchedule()
-	if err != nil || loadedSchedule.IntervalSeconds != 86400 || loadedSchedule.NextDueAt == nil {
+	if err != nil || loadedSchedule.IntervalSeconds != 86400 || loadedSchedule.NextDueAt == nil || !loadedSchedule.OnUSBAttach {
 		t.Fatalf("unexpected schedule: %#v %v", loadedSchedule, err)
 	}
 	verifiedAt := time.Now().UTC()
@@ -144,5 +144,39 @@ started_at TEXT NOT NULL, finished_at TEXT, error TEXT
 	runs, err := database.BackupRuns(10)
 	if err != nil || len(runs) != 1 || runs[0].Actor != run.Actor {
 		t.Fatalf("legacy backup run actor migration failed: %#v %v", runs, err)
+	}
+}
+
+func TestBackupPolicyTemplateUpdatesCadenceAndRetentionAtomically(t *testing.T) {
+	database, err := Open(t.TempDir() + "/policy.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	retention := backup.DefaultRetention()
+	retention.ImmutableDays = 45
+	retention.ProviderObjectLock = true
+	if _, err := database.SaveBackupDestination(backup.Destination{ID: "s3", Name: "Offsite", Type: backup.DestinationS3, Target: "https://s3.example.test/bucket", Enabled: true, Retention: retention}, backup.Credentials{AccessKey: "access", SecretKey: "secret"}, []byte("recovery-key")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.SaveBackupSchedule(backup.Schedule{ID: "default", Enabled: true, IntervalSeconds: 86400, OnUSBAttach: true}); err != nil {
+		t.Fatal(err)
+	}
+	schedule, err := database.ApplyBackupPolicyTemplate("frequent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if schedule.IntervalSeconds != 43200 || !schedule.OnUSBAttach {
+		t.Fatalf("unexpected updated schedule: %#v", schedule)
+	}
+	destination, credentials, err := database.BackupDestination("s3", []byte("recovery-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if destination.Retention.Generations != 40 || destination.Retention.Daily != 60 || destination.Retention.Monthly != 24 || destination.Retention.ImmutableDays != 45 || !destination.Retention.ProviderObjectLock {
+		t.Fatalf("template did not update retention while preserving lock settings: %#v", destination.Retention)
+	}
+	if credentials.AccessKey != "access" || credentials.SecretKey != "secret" {
+		t.Fatal("applying a backup template changed encrypted destination credentials")
 	}
 }

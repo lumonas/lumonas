@@ -31,6 +31,7 @@ export function ImagesTab() {
       id: 'image',
       header: 'Image',
       sortValue: (i) => `${i.repo}:${i.tag}`,
+      searchValue: (i) => `${i.repo} ${i.tag}`,
       cell: (i) => (
         <div className="flex flex-col">
           <span className="font-mono text-[13px] font-medium">{i.repo}</span>
@@ -51,6 +52,17 @@ export function ImagesTab() {
       className: 'tnum',
       sortValue: (i) => i.createdDaysAgo,
       cell: (i) => <span className="text-muted-foreground">{i.createdDaysAgo}d ago</span>,
+    },
+    {
+      id: 'digest',
+      header: 'Registry digest',
+      searchValue: (i) => `${i.localDigest ?? ''} ${i.remoteDigest ?? ''}`,
+      cell: (i) => i.localDigest || i.remoteDigest ? (
+        <div className="max-w-56 font-mono text-[10px] leading-4 text-muted-foreground">
+          <div title={i.localDigest}>local {i.localDigest?.slice(0, 20) ?? 'unavailable'}</div>
+          <div title={i.remoteDigest}>registry {i.remoteDigest?.slice(0, 20) ?? 'unavailable'}</div>
+        </div>
+      ) : <span className="text-xs text-muted-foreground">Check to compare</span>,
     },
     {
       id: 'inUse',
@@ -142,9 +154,10 @@ export function ImagesTab() {
           size="sm"
           onClick={() => checkUpdates.mutate(undefined)}
           disabled={checkUpdates.isPending}
+          aria-label="Check upstream image digests"
         >
           <RefreshCw className={checkUpdates.isPending ? 'animate-spin' : undefined} />
-          {checkUpdates.isPending ? 'Checking…' : 'Check for updates'}
+          {checkUpdates.isPending ? 'Checking…' : 'Check digests'}
         </Button>
         <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
           <FileUp />

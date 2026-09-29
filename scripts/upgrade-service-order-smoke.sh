@@ -24,7 +24,7 @@ assert_order(prerm, [
     "lumonas-web.service", "lumonas-jobs.target", "lumonas-services.target",
     "lumonas-storage.target", "lumonasd.service",
     "lumonas-runtime.service",
-    "lumonas-privd-general.service", "lumonas-privd-power.service",
+    "lumonas-privd-acme.service", "lumonas-privd-general.service", "lumonas-privd-power.service",
     "lumonas-privd-network.service", "lumonas-privd-storage.service",
     "lumonas-privd.service",
 ], "upgrade stop")
@@ -34,7 +34,7 @@ assert_order(postinst, [
 	"lumonas-runtime.service",
     "lumonas-privd.service", "lumonas-privd-storage.service",
     "lumonas-privd-network.service", "lumonas-privd-power.service",
-    "lumonas-privd-general.service", "lumonas-jobs.target",
+    "lumonas-privd-general.service", "lumonas-privd-acme.service", "lumonas-jobs.target",
     "lumonas-services.target", "lumonas-storage.target", "lumonasd.service",
     "lumonas-web.service",
 ], "upgrade start")

@@ -1,4 +1,4 @@
-import type { AlertRule, NotificationChannel, ServiceStatus } from '@/api/types'
+import type { AlertRule, JobSchedule, NotificationChannel, ServiceStatus } from '@/api/types'
 
 export const services: ServiceStatus[] = [
   { id: 'svc-samba', name: 'SMB (Samba)', state: 'running', detail: '4 shares · 2 active sessions' },
@@ -80,7 +80,7 @@ export const notificationChannels: NotificationChannel[] = [
   { id: 'ch-discord', type: 'discord', label: 'Discord webhook', configured: false, enabled: false },
 ]
 
-export const scheduledJobs = [
+export const scheduledJobs: JobSchedule[] = [
   {
     id: 'sched-sync',
     name: 'SnapRAID sync',
@@ -137,5 +137,19 @@ export const scheduledJobs = [
     enabled: true,
     schedule: 'After every change',
     next: 'on change',
+  },
+  {
+    id: 'sched-snapshot',
+    name: 'Filesystem snapshots',
+    jobType: 'snapshot.create',
+    kind: 'daily',
+    timeOfDay: '01:30',
+    enabled: false,
+    snapshotKind: 'btrfs',
+    snapshotSource: '/srv/pools/media',
+    snapshotLabel: 'scheduled',
+    snapshotKeep: 7,
+    schedule: 'Daily at 01:30',
+    next: 'paused',
   },
 ]

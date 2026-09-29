@@ -403,7 +403,7 @@ func (s *apiServer) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	token, expires, err := s.store.CreateSessionForUser(principal.ID, 12*time.Hour)
+	token, expires, err := s.store.CreateSessionForUserWithMetadata(principal.ID, 12*time.Hour, store.SessionMetadata{IPAddress: clientIP(r), UserAgent: r.UserAgent()})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

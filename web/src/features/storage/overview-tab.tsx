@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, FolderOpen, HardDrive, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, FolderOpen, HardDrive, LockKeyhole, Plus, Trash2 } from 'lucide-react'
 import { useCreateStorageSnapshot, useDeleteStorageSnapshot, useDisks, usePools, useProtection, useStorageSafety, useStorageSnapshotFiles, useStorageSnapshots, useUnlockStorageSafety } from '@/api/queries'
 import { Metric } from '@/components/core/metric'
 import { StorageUsage } from '@/components/core/storage-usage'
@@ -8,9 +8,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { formatBytes } from '@/lib/format'
 import { ROLE_LABELS } from '@/features/storage/roles'
+import { useCurrentTime } from '@/hooks/useCurrentTime'
 
 export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
   const [browser, setBrowser] = useState<{ id: string; name: string; path: string } | null>(null)
+  const [snapshotLockDays, setSnapshotLockDays] = useState('30')
+  const now = useCurrentTime()
   const { data: disks } = useDisks()
   const { data: pools } = usePools()
   const { data: protection } = useProtection()
@@ -126,20 +129,28 @@ export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
       )}
 
       <Card className="xl:col-span-2">
-        <CardHeader className="flex flex-row items-center justify-between pb-4">
+        <CardHeader className="flex flex-wrap flex-row items-center justify-between gap-2 pb-4">
           <CardTitle className="text-sm font-medium text-muted-foreground">Snapshots</CardTitle>
+          <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            Retain
+            <select aria-label="Manual snapshot lock days" value={snapshotLockDays} onChange={(event) => setSnapshotLockDays(event.target.value)} className="h-7 rounded-md border bg-background px-1.5 text-xs text-foreground">
+              <option value="0">No lock</option><option value="7">7 days</option><option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
+            </select>
+          </label>
           <Button
             size="sm"
             variant="outline"
             className="h-7 gap-1.5 text-xs"
             disabled={createSnapshot.isPending || !pool}
             onClick={() =>
-              createSnapshot.mutate({ kind: 'btrfs', source: pool?.mountPath ?? '' })
+              createSnapshot.mutate({ kind: 'btrfs', source: pool?.mountPath ?? '', retentionLockDays: Number(snapshotLockDays) })
             }
           >
             <Plus className="size-3.5" />
             {createSnapshot.isPending ? 'Creating…' : 'Snapshot pool'}
           </Button>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {snapshots && snapshots.length > 0 ? (
@@ -147,7 +158,7 @@ export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
               <div key={snapshot.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 truncate text-sm font-medium">
-                    <span className="font-mono text-xs">{snapshot.name}</span>
+                    <span className="font-mono text-xs">{snapshot.label || snapshot.name}</span>
                     <Badge variant="outline" className="text-[10px] uppercase text-muted-foreground">
                       {snapshot.kind}
                     </Badge>
@@ -155,6 +166,7 @@ export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
                   <p className="truncate text-xs text-muted-foreground">
                     {snapshot.source} · {new Date(snapshot.createdAt).toLocaleString()}
                   </p>
+                  {snapshot.protectedUntil && Date.parse(snapshot.protectedUntil) > now && <p className="mt-1 flex items-center gap-1 text-[11px] text-warning"><LockKeyhole className="size-3" />Protected from deletion until {new Date(snapshot.protectedUntil).toLocaleString()}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {snapshot.kind === 'btrfs' && (
@@ -167,7 +179,8 @@ export function OverviewTab({ onBrowseDisks }: { onBrowseDisks: () => void }) {
                     size="sm"
                     variant="ghost"
                     className="h-7 gap-1.5 text-xs text-destructive hover:text-destructive"
-                    disabled={deleteSnapshot.isPending || unlockStorageSafety.isPending}
+                    disabled={deleteSnapshot.isPending || unlockStorageSafety.isPending || Boolean(snapshot.protectedUntil && Date.parse(snapshot.protectedUntil) > now)}
+                    title={snapshot.protectedUntil && Date.parse(snapshot.protectedUntil) > now ? `Protected until ${new Date(snapshot.protectedUntil).toLocaleString()}` : undefined}
                     onClick={() => void handleDeleteSnapshot(snapshot.id)}
                   >
                     <Trash2 className="size-3.5" />

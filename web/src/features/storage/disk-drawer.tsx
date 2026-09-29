@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Activity, HardDriveDownload, HardDriveUpload, Play } from 'lucide-react'
-import { useActivity, useCreateJob, useDisk, useJobs } from '@/api/queries'
+import { Activity, HardDriveDownload, HardDriveUpload, Play, Wrench } from 'lucide-react'
+import { useActivity, useCreateJob, useDisk, useJobs, useSMARTHistory, useStorageSafety, useUnlockEncryptedDisk, useUnlockStorageSafety } from '@/api/queries'
 import { DangerZone } from '@/components/core/danger-zone'
 import { DependencyList, type DependencyItem } from '@/components/core/dependency-list'
 import { DiskIdentity } from '@/components/core/disk-identity'
@@ -9,14 +9,17 @@ import { HealthBadge } from '@/components/core/health-badge'
 import { Metric } from '@/components/core/metric'
 import { ResourceDrawer } from '@/components/core/resource-drawer'
 import { StorageUsage } from '@/components/core/storage-usage'
+import { Sparkline } from '@/components/core/sparkline'
 import { TimelineEvent } from '@/components/core/timeline-event'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatBytes, timeAgo } from '@/lib/format'
 import { DiskOperationsDialog, type DiskAction } from '@/features/storage/disk-operations-dialog'
+import { DiskReplacementDialog } from '@/features/storage/disk-replacement-dialog'
 import { ROLE_LABELS } from '@/features/storage/roles'
 import { cn } from '@/lib/utils'
 
@@ -56,13 +59,19 @@ export function DiskDrawer({
   onOpenChange: (open: boolean) => void
 }) {
   const { data: disk } = useDisk(diskId)
+  const { data: smartHistory } = useSMARTHistory(diskId)
   const { data: jobs } = useJobs()
   const { data: activity } = useActivity()
+  const { data: storageSafety } = useStorageSafety()
+  const unlockEncryptedDisk = useUnlockEncryptedDisk()
+  const unlockSafety = useUnlockStorageSafety()
   const createJob = useCreateJob()
   const [standby, setStandby] = useState('30')
   const [smartSchedule, setSmartSchedule] = useState('weekly-short')
   const [tempAlerts, setTempAlerts] = useState(true)
   const [diskAction, setDiskAction] = useState<DiskAction | null>(null)
+  const [replacementOpen, setReplacementOpen] = useState(false)
+  const [encryptionPassphrase, setEncryptionPassphrase] = useState('')
 
   const smartRunning =
     disk != null &&
@@ -109,7 +118,28 @@ export function DiskDrawer({
                 <Metric label="Interface" value={disk.interface.toUpperCase()} />
                 <Metric label="Last seen" value={timeAgo(disk.lastSeen)} />
               </div>
-              {disk.filesystem && !disk.poolId ? (
+              {disk.filesystem === 'crypto_LUKS' ? (
+                <div className="grid gap-3 rounded-lg border p-3">
+                  <div>
+                    <p className="text-sm font-medium">LUKS encrypted volume</p>
+                    <p className="text-xs text-muted-foreground">Unlock after reboot to mount this disk. LumoNAS does not save the passphrase.</p>
+                  </div>
+                  {storageSafety?.state !== 'unlocked' ? (
+                    <Button size="sm" variant="outline" onClick={() => unlockSafety.mutate()} disabled={unlockSafety.isPending}>
+                      {unlockSafety.isPending ? 'Unlocking storage safety…' : 'Unlock storage safety (15 min)'}
+                    </Button>
+                  ) : null}
+                  <div className="grid gap-2">
+                    <Label htmlFor="encrypted-disk-passphrase">Passphrase</Label>
+                    <Input id="encrypted-disk-passphrase" type="password" autoComplete="current-password" value={encryptionPassphrase} onChange={(event) => setEncryptionPassphrase(event.target.value)} />
+                    <Button size="sm" disabled={!encryptionPassphrase || storageSafety?.state !== 'unlocked' || unlockEncryptedDisk.isPending} onClick={() => unlockEncryptedDisk.mutate({ diskId: disk.id, passphrase: encryptionPassphrase }, { onSettled: () => setEncryptionPassphrase('') })}>
+                      {unlockEncryptedDisk.isPending ? 'Unlocking…' : 'Unlock and mount'}
+                    </Button>
+                    {unlockEncryptedDisk.isError ? <p role="alert" className="text-sm text-destructive">{unlockEncryptedDisk.error instanceof Error ? unlockEncryptedDisk.error.message : 'The encrypted disk could not be unlocked.'}</p> : null}
+                  </div>
+                </div>
+              ) : null}
+              {disk.filesystem && disk.filesystem !== 'crypto_LUKS' && !disk.poolId ? (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
@@ -131,6 +161,11 @@ export function DiskDrawer({
                   </Button>
                 </div>
               ) : null}
+              {disk.role === 'data' && (
+                <Button size="sm" variant="outline" onClick={() => setReplacementOpen(true)}>
+                  <Wrench /> Replace with parity recovery
+                </Button>
+              )}
               <div>
                 <p className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                   Used by
@@ -143,6 +178,29 @@ export function DiskDrawer({
             </TabsContent>
 
             <TabsContent value="smart">
+              <div className="rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">SMART trend</p>
+                    <p className="text-xs text-muted-foreground">{smartHistory?.trend.summary ?? 'Collecting history…'}</p>
+                  </div>
+                  {smartHistory ? <HealthBadge state={smartHistory.trend.status} /> : null}
+                </div>
+                {smartHistory?.samples.length ? (
+                  <>
+                    <Sparkline
+                      data={smartHistory.samples.slice().reverse().map((sample) => sample.summary.pendingSectors + sample.summary.uncorrectableSectors + sample.summary.reallocatedSectors)}
+                      className="mt-3 h-12"
+                    />
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-4">
+                      <span>{smartHistory.trend.sampleCount} samples</span>
+                      <span>Reallocated {smartHistory.trend.reallocatedSlope.toFixed(2)}/day</span>
+                      <span>Pending {smartHistory.trend.pendingSlope.toFixed(2)}/day</span>
+                      <span>CRC {smartHistory.trend.crcSlope.toFixed(2)}/day</span>
+                    </div>
+                  </>
+                ) : <p className="mt-3 text-xs text-muted-foreground">Trend appears after the first two samples.</p>}
+              </div>
               <div className="flex flex-col divide-y rounded-lg border">
                 <SmartRow label="Overall">
                   <HealthBadge state={disk.smart.overall} />
@@ -300,6 +358,7 @@ export function DiskDrawer({
               if (!open) setDiskAction(null)
             }}
           />
+          <DiskReplacementDialog disk={disk} open={replacementOpen} onOpenChange={setReplacementOpen} />
         </>
       )}
     </ResourceDrawer>

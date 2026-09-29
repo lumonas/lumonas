@@ -24,6 +24,8 @@ type Share struct {
 	Access      map[string]string `json:"access"`
 	Guest       bool              `json:"guest"`
 	Timemachine bool              `json:"timemachine,omitempty"`
+	AuditSMB    bool              `json:"auditSmb,omitempty"`
+	AuditOps    []string          `json:"auditOperations,omitempty"`
 }
 
 type Store struct{ Path string }
@@ -88,6 +90,18 @@ func Validate(share Share) error {
 			return fmt.Errorf("unsupported share protocol %q", protocol)
 		}
 	}
+	if share.AuditSMB {
+		hasSMB := false
+		for _, protocol := range share.Protocols {
+			hasSMB = hasSMB || protocol == "smb"
+		}
+		if !hasSMB {
+			return errors.New("SMB auditing requires the SMB protocol")
+		}
+		if err := ValidateAuditOperations(share.AuditOps); err != nil {
+			return err
+		}
+	}
 	for principal, level := range share.Access {
 		if strings.TrimSpace(principal) == "" {
 			return errors.New("access principal cannot be empty")
@@ -134,6 +148,24 @@ func RenderSamba(values []Share) (string, error) {
 		} else {
 			builder.WriteString("no\n")
 		}
+		if share.Timemachine {
+			builder.WriteString("   vfs objects = catia fruit streams_xattr shadow_copy2")
+		} else {
+			builder.WriteString("   vfs objects = shadow_copy2")
+		}
+		if share.AuditSMB {
+			builder.WriteString(" full_audit")
+			builder.WriteString("\n   full_audit:prefix = %u|%I|%S\n   full_audit:syslog = yes\n   full_audit:facility = LOCAL5\n   full_audit:priority = NOTICE\n   full_audit:success = ")
+			builder.WriteString(strings.Join(share.AuditOps, " "))
+			builder.WriteString("\n   full_audit:failure = none\n")
+		} else {
+			builder.WriteString("\n")
+		}
+		builder.WriteString("   shadow:snapdir = ")
+		builder.WriteString(share.Path)
+		builder.WriteString(".snapshots\n   shadow:basedir = ")
+		builder.WriteString(share.Path)
+		builder.WriteString("\n   shadow:format = %Y.%m.%d-%H.%M.%S\n   shadow:sort = desc\n")
 		if share.Timemachine {
 			builder.WriteString("   fruit:time machine = yes\n   fruit:time machine max size = 0\n   fruit:encoding = native\n")
 		}

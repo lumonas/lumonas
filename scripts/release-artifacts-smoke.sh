@@ -13,6 +13,11 @@ trap cleanup EXIT INT TERM
 
 printf '%s\n' 'debian artifact' >"$WORK/lumonas_test.deb"
 printf '%s\n' 'recovery image' >"$WORK/lumonas_test.raw"
+printf '%s\n' 'linux x64 client' >"$WORK/lumonas-workstation_ci_linux_amd64"
+printf '%s\n' 'linux arm client' >"$WORK/lumonas-workstation_ci_linux_arm64"
+printf '%s\n' 'windows client' >"$WORK/lumonas-workstation_ci_windows_amd64.exe"
+printf '%s\n' 'mac x64 client' >"$WORK/lumonas-workstation_ci_darwin_amd64"
+printf '%s\n' 'mac arm client' >"$WORK/lumonas-workstation_ci_darwin_arm64"
 
 LUMONAS_REQUIRE_SBOM=false sh "$ROOT/scripts/release-artifacts.sh" "$WORK"
 test -s "$WORK/SHA256SUMS"
@@ -48,9 +53,11 @@ fi
 grep -F 'lumonas_test.deb' "$WORK/SHA256SUMS" >/dev/null
 grep -F 'lumonas_test.iso' "$WORK/SHA256SUMS" >/dev/null
 grep -F 'lumonas_test.raw' "$WORK/SHA256SUMS" >/dev/null
+grep -F 'lumonas-workstation_ci_linux_amd64' "$WORK/SHA256SUMS" >/dev/null
 grep -F 'RELEASE-MANIFEST.json' "$WORK/SHA256SUMS" >/dev/null
 grep -F '"sourceDateEpoch"' "$WORK/RELEASE-MANIFEST.json" >/dev/null
 grep -F '"lumonas_test.iso"' "$WORK/RELEASE-MANIFEST.json" >/dev/null
+grep -F '"lumonas-workstation_ci_linux_amd64"' "$WORK/RELEASE-MANIFEST.json" >/dev/null
 if LUMONAS_REQUIRE_RELEASE_SET=true LUMONAS_EXPECTED_SOURCE_COMMIT=wrong sh "$ROOT/scripts/verify-release.sh" "$WORK"; then
 	echo "release manifest accepted an unexpected source commit" >&2
 	exit 1

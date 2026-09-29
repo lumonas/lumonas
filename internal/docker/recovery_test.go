@@ -1,6 +1,11 @@
 package docker
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -29,7 +34,7 @@ func TestValidateRecoveryContractCustomRequiresHooks(t *testing.T) {
 	if err := ValidateRecoveryContract(c); err == nil {
 		t.Fatal("custom strategy without hooks should fail")
 	}
-	c.PreBackupHook = &RecoveryHook{Command: "echo pre"}
+	c.PreBackupHook = &RecoveryHook{Container: "app", Command: "echo pre"}
 	if err := ValidateRecoveryContract(c); err != nil {
 		t.Fatalf("custom strategy with pre-backup hook should be valid: %v", err)
 	}
@@ -82,6 +87,54 @@ func TestValidateRecoveryContractRejectsNegativeTimeout(t *testing.T) {
 	}
 	if err := ValidateRecoveryContract(c); err == nil {
 		t.Fatal("negative timeout should fail")
+	}
+}
+
+func TestValidateRecoveryContractValidatesDatabaseHooks(t *testing.T) {
+	for _, contract := range []*RecoveryContract{
+		{Strategy: StrategyStopBackup, DBDump: &RecoveryHook{Command: "pg_dump"}},
+		{Strategy: StrategyStopBackup, DBRestore: &RecoveryHook{Container: "db", Command: "psql\nmalicious"}},
+		{Strategy: StrategyStopBackup, DBRestore: &RecoveryHook{Container: "../db", Command: "psql"}},
+	} {
+		if err := ValidateRecoveryContract(contract); err == nil {
+			t.Fatalf("invalid database hook was accepted: %#v", contract)
+		}
+	}
+	valid := &RecoveryContract{Strategy: StrategyStopBackup, DBDump: &RecoveryHook{Container: "db", Command: "pg_dump"}, DBRestore: &RecoveryHook{Container: "db", Command: "psql"}}
+	if err := ValidateRecoveryContract(valid); err != nil {
+		t.Fatalf("valid database hooks were rejected: %v", err)
+	}
+}
+
+func TestRunRecoveryHookUsesComposeServiceAndValidatedStack(t *testing.T) {
+	root := t.TempDir()
+	stackDir := filepath.Join(root, "database")
+	if err := os.MkdirAll(stackDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	composePath := filepath.Join(stackDir, "compose.yaml")
+	if err := os.WriteFile(composePath, []byte("services: {}\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	var commandName string
+	var commandArgs []string
+	service := New(root, func(_ context.Context, name string, args ...string) ([]byte, error) {
+		commandName, commandArgs = name, append([]string(nil), args...)
+		return []byte("dump bytes"), nil
+	})
+	out, err := service.RunRecoveryHook(context.Background(), "database", &RecoveryHook{Container: "postgres", Command: "pg_dump --format=custom"}, 1024)
+	if err != nil || string(out) != "dump bytes" {
+		t.Fatalf("recovery hook failed: out=%q err=%v", out, err)
+	}
+	want := []string{"compose", "-f", composePath, "exec", "-T", "postgres", "sh", "-c", "pg_dump --format=custom"}
+	if commandName != "docker" || !reflect.DeepEqual(commandArgs, want) {
+		t.Fatalf("hook command was not constrained to its Compose service: name=%q args=%q", commandName, commandArgs)
+	}
+	if _, err := service.RunRecoveryHook(context.Background(), "../database", &RecoveryHook{Container: "postgres", Command: "true"}, 1024); err == nil {
+		t.Fatal("unsafe stack name was accepted")
+	}
+	if _, err := service.RunRecoveryHook(context.Background(), "database", &RecoveryHook{Container: "postgres;id", Command: "true"}, 1024); err == nil || strings.Contains(err.Error(), "compose") {
+		t.Fatalf("invalid service name reached compose: %v", err)
 	}
 }
 

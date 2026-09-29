@@ -2,6 +2,7 @@ package updates
 
 import (
 	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +62,9 @@ func (m *Manager) StageSlotImage(imagePath string, manifest Manifest, signature 
 	if err := atomicWrite(filepath.Join(slotDir, "image-manifest.json"), encoded, 0o640); err != nil {
 		return SlotState{}, fmt.Errorf("write staged slot manifest: %w", err)
 	}
+	if err := atomicWrite(filepath.Join(slotDir, "image-signature"), []byte(base64.StdEncoding.EncodeToString(signature)), 0o640); err != nil {
+		return SlotState{}, fmt.Errorf("write staged slot signature: %w", err)
+	}
 	state.PreviousSlot = state.ActiveSlot
 	state.PendingSlot = inactive
 	state.PendingVersion = manifest.Version
@@ -103,6 +107,25 @@ func (m *Manager) StagedSlotImage() (string, Manifest, SlotState, error) {
 	imagePath := filepath.Join(slotDir, "image")
 	if err := VerifyPackage(imagePath, manifest); err != nil {
 		return "", Manifest{}, state, fmt.Errorf("staged slot image verification failed: %w", err)
+	}
+	return imagePath, manifest, state, nil
+}
+
+func (m *Manager) StagedSlotImageVerified(publicKey ed25519.PublicKey) (string, Manifest, SlotState, error) {
+	imagePath, manifest, state, err := m.StagedSlotImage()
+	if err != nil {
+		return "", Manifest{}, state, err
+	}
+	signatureData, err := os.ReadFile(filepath.Join(m.Root, "slot-"+state.PendingSlot, "image-signature"))
+	if err != nil {
+		return "", Manifest{}, state, fmt.Errorf("read staged slot signature: %w", err)
+	}
+	signature, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(signatureData)))
+	if err != nil {
+		return "", Manifest{}, state, fmt.Errorf("parse staged slot signature: %w", err)
+	}
+	if err := VerifyManifest(publicKey, manifest, signature); err != nil {
+		return "", Manifest{}, state, fmt.Errorf("staged slot signature verification failed: %w", err)
 	}
 	return imagePath, manifest, state, nil
 }

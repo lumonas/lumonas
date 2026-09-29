@@ -87,14 +87,14 @@ export function PasskeysCard() {
                     Added {new Date(passkey.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <Button variant="ghost" size="icon-sm" onClick={() => void removePasskey(passkey.id)}>
+                <Button variant="ghost" size="icon-sm" aria-label={`Remove passkey ${passkey.name}`} onClick={() => void removePasskey(passkey.id)}>
                   <Trash2 className="text-destructive" />
                 </Button>
               </div>
             ))}
           </div>
         )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
         <div>
           <Button variant="outline" size="sm" onClick={() => void addPasskey()} disabled={busy}>
             <Plus />

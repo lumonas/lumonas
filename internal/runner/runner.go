@@ -48,12 +48,34 @@ func Output(name string, args ...string) ([]byte, error) {
 }
 
 func OutputContext(parent context.Context, name string, args ...string) ([]byte, error) {
-	ctx, cancel := Context(parent)
+	return OutputContextLimit(parent, MaxOutputBytes, name, args...)
+}
+
+// OutputContextLimit executes a command while retaining at most maxBytes of
+// stdout. It is intended for callers that already enforce a domain-specific
+// hard limit, such as a recovery-bundle entry limit.
+func OutputContextLimit(parent context.Context, maxBytes int64, name string, args ...string) ([]byte, error) {
+	return OutputContextLimitTimeout(parent, DefaultTimeout, maxBytes, name, args...)
+}
+
+// OutputContextLimitTimeout is like OutputContextLimit with an explicit
+// maximum runtime. A parent deadline, when earlier, remains authoritative.
+func OutputContextLimitTimeout(parent context.Context, timeout time.Duration, maxBytes int64, name string, args ...string) ([]byte, error) {
+	if maxBytes <= 0 {
+		return nil, errors.New("command output limit must be positive")
+	}
+	if timeout <= 0 {
+		timeout = DefaultTimeout
+	}
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 	command := exec.Command(name, args...)
 	configureProcessGroup(command)
-	var stdout boundedBuffer
-	var stderr boundedBuffer
+	stdout := boundedBuffer{limit: maxBytes}
+	stderr := boundedBuffer{limit: MaxOutputBytes}
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 
@@ -130,18 +152,23 @@ type boundedBuffer struct {
 	mu       sync.Mutex
 	buf      bytes.Buffer
 	exceeded bool
+	limit    int64
 }
 
 func (b *boundedBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	originalLength := len(p)
-	remaining := MaxOutputBytes - b.buf.Len()
+	limit := b.limit
+	if limit <= 0 {
+		limit = MaxOutputBytes
+	}
+	remaining := limit - int64(b.buf.Len())
 	if remaining <= 0 {
 		b.exceeded = true
 		return len(p), nil
 	}
-	if len(p) > remaining {
+	if int64(len(p)) > remaining {
 		b.exceeded = true
 		p = p[:remaining]
 	}

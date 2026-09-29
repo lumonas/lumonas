@@ -17,6 +17,7 @@ export function BackupJobsTab() {
       id: 'name',
       header: 'Job',
       sortValue: (j) => j.name,
+      searchValue: (j) => `${j.name} ${j.destinationId} ${j.lastRun?.status ?? ''}`,
       cell: (j) => (
         <div className="flex flex-col">
           <span className="text-[13px] font-medium">{j.name}</span>

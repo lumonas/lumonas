@@ -74,7 +74,7 @@ mount "$EFI" "$MNT/boot/efi"
 
 mmdebstrap --variant=apt --architecture=arm64 \
 	--aptopt='Acquire::Check-Valid-Until "false"' \
-	--include="linux-image-arm64,grub-efi-arm64,systemd-sysv,locales,ca-certificates,e2fsprogs" \
+	--include="linux-image-arm64,grub-efi-arm64,systemd-sysv,locales,ca-certificates,e2fsprogs,cryptsetup" \
 	trixie "$MNT" "$MIRROR" >/dev/null
 
 mkdir -p "$MNT/dev" "$MNT/proc" "$MNT/sys"
@@ -102,7 +102,7 @@ chroot "$MNT" /bin/sh -s <<-'CHROOT'
 	rm -f /tmp/lumonas.deb
 	grub-install --target=arm64-efi --efi-directory=/boot/efi --boot-directory=/boot --removable --no-nvram >/dev/null
 	update-grub >/dev/null
-	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
+	systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
 CHROOT
 
 umount "$MNT"

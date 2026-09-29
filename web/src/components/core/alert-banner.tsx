@@ -39,7 +39,7 @@ export function AlertBanner({
   const { border, bg, text, Icon } = TONES[tone]
   return (
     <div
-      role="status"
+      role={tone === 'critical' || tone === 'warning' ? 'alert' : 'status'}
       className={cn('flex items-start gap-3 rounded-lg border p-3.5', border, bg, className)}
     >
       <Icon className={cn('mt-0.5 size-4 shrink-0', text)} />
@@ -53,4 +53,3 @@ export function AlertBanner({
     </div>
   )
 }
-

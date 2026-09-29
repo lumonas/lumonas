@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Archive } from 'lucide-react'
-import { useDeleteShare, usePrincipals, useShare, useShareAccess, useShareProtocol, useShareSettings } from '@/api/queries'
+import { useDeleteShare, usePrincipals, usePreviewShareRelocation, useShare, useShareAccess, useShareProtocol, useShareSettings, useShareStorageResources, useStartShareRelocation } from '@/api/queries'
 import { AlertBanner } from '@/components/core/alert-banner'
 import { DangerZone } from '@/components/core/danger-zone'
 import { HealthBadge } from '@/components/core/health-badge'
 import { ResourceDrawer } from '@/components/core/resource-drawer'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -19,7 +20,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { formatBytes } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type { AccessLevel, Share, ShareProtocolType } from '@/api/types'
+import type { AccessLevel, Share, ShareProtocolType, ShareRelocationPreview } from '@/api/types'
 
 const PROTOCOL_LABELS: Record<ShareProtocolType, string> = {
   smb: 'SMB — Windows, macOS, Linux file sharing',
@@ -34,6 +35,12 @@ const LEVELS: { value: AccessLevel; label: string }[] = [
   { value: 'read', label: 'Read only' },
   { value: 'write', label: 'Read & write' },
 ]
+
+const SMB_AUDIT_OPERATIONS = [
+  ['create_file', 'Create or overwrite files'], ['mkdirat', 'Create folders'],
+  ['renameat', 'Rename or move'], ['unlinkat', 'Delete files'], ['rmdir', 'Delete folders'],
+  ['pwrite', 'Write file data'], ['ftruncate', 'Change file size'],
+] as const
 
 export function ShareDrawer({
   shareId,
@@ -70,6 +77,7 @@ export function ShareDrawer({
           <TabsTrigger value="access">Access</TabsTrigger>
           <TabsTrigger value="protocols">Protocols</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
+          <TabsTrigger value="location">Location</TabsTrigger>
         </TabsList>
 
         <TabsContent value="access">
@@ -82,6 +90,10 @@ export function ShareDrawer({
 
         <TabsContent value="settings">
           <SettingsTab key={`settings-${share.id}`} share={share} />
+        </TabsContent>
+
+        <TabsContent value="location">
+          <ShareRelocationTab key={`location-${share.id}`} share={share} />
         </TabsContent>
       </Tabs>
 
@@ -111,6 +123,78 @@ export function ShareDrawer({
       />
     </ResourceDrawer>
   )
+}
+
+function ShareRelocationTab({ share }: { share: Share }) {
+  const { data: resources, isLoading, isError } = useShareStorageResources()
+  const previewMove = usePreviewShareRelocation()
+  const startMove = useStartShareRelocation()
+  const [resourceId, setResourceId] = useState('')
+  const [relativePath, setRelativePath] = useState(share.name)
+  const [scheduleKind, setScheduleKind] = useState<'manual' | 'daily' | 'weekly'>('manual')
+  const [timeOfDay, setTimeOfDay] = useState('02:00')
+  const [weekday, setWeekday] = useState('sunday')
+  const [preview, setPreview] = useState<ShareRelocationPreview | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
+
+  function invalidatePreview() {
+    setPreview(null)
+    setConfirmed(false)
+  }
+
+  function requestPreview() {
+    if (!resourceId || !relativePath.trim()) return
+    invalidatePreview()
+    previewMove.mutate({ shareId: share.id, target: { resourceId, relativePath: relativePath.trim() } }, {
+      onSuccess: setPreview,
+    })
+  }
+
+  function startRelocation() {
+    if (!preview || !confirmed) return
+    startMove.mutate({ shareId: share.id, target: { resourceId, relativePath: relativePath.trim() }, planHash: preview.planHash, scheduleKind, timeOfDay, weekday }, {
+      onSuccess: () => { setPreview(null); setConfirmed(false) },
+    })
+  }
+
+  return <div className="flex flex-col gap-3">
+    <AlertBanner tone="warning" title="Move this share to another storage location">
+      LumoNAS copies and verifies every file before changing the share path. The original directory stays on disk so you can recover it manually.
+    </AlertBanner>
+    <label className="space-y-1 text-xs font-medium text-muted-foreground">Destination storage
+      <select aria-label="Relocation destination storage" value={resourceId} onChange={(event) => { setResourceId(event.target.value); invalidatePreview() }} disabled={isLoading || !resources?.length} className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground">
+        <option value="">{isLoading ? 'Loading mounted storage…' : 'Choose a mounted pool or disk'}</option>
+        {(resources ?? []).map((resource) => <option key={resource.id} value={resource.id}>{resource.label} · {formatBytes(resource.usedBytes ?? 0)} used</option>)}
+      </select>
+    </label>
+    <label className="space-y-1 text-xs font-medium text-muted-foreground">Folder inside destination
+      <Input aria-label="Relocation destination folder" value={relativePath} onChange={(event) => { setRelativePath(event.target.value); invalidatePreview() }} placeholder={share.name} />
+    </label>
+    <label className="space-y-1 text-xs font-medium text-muted-foreground">Run
+      <select aria-label="Relocation schedule" value={scheduleKind} onChange={(event) => setScheduleKind(event.target.value as typeof scheduleKind)} className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground">
+        <option value="manual">Now, after confirmation</option><option value="daily">Schedule daily</option><option value="weekly">Schedule weekly</option>
+      </select>
+    </label>
+    {scheduleKind !== 'manual' ? <label className="space-y-1 text-xs font-medium text-muted-foreground">NAS local time
+      <Input aria-label="Relocation schedule time" type="time" value={timeOfDay} onChange={(event) => setTimeOfDay(event.target.value)} />
+    </label> : null}
+    {scheduleKind === 'weekly' ? <label className="space-y-1 text-xs font-medium text-muted-foreground">Weekday
+      <select aria-label="Relocation schedule weekday" value={weekday} onChange={(event) => setWeekday(event.target.value)} className="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground">{['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].map((day) => <option key={day} value={day}>{day}</option>)}</select>
+    </label> : null}
+    {isError ? <p role="alert" className="text-sm text-destructive">Could not load mounted storage locations.</p> : null}
+    {previewMove.isError ? <p role="alert" className="text-sm text-destructive">{previewMove.error instanceof Error ? previewMove.error.message : 'Could not preview this relocation.'}</p> : null}
+    <Button variant="outline" onClick={requestPreview} disabled={!resourceId || !relativePath.trim() || previewMove.isPending || startMove.isPending}>{previewMove.isPending ? 'Scanning and hashing files…' : 'Preview relocation'}</Button>
+    {preview ? <div className="space-y-3 rounded-lg border p-3">
+      <div><p className="text-sm font-medium">Relocation preview</p><p className="mt-1 break-all font-mono text-xs text-muted-foreground">{preview.sourcePath} → {preview.destinationPath}</p></div>
+      <p className="text-sm">{preview.fileCount.toLocaleString()} files · {formatBytes(preview.bytes)}</p>
+      {preview.requiresDowntime ? <p className="text-xs text-attention">The share will be briefly unavailable while files are copied and checked.</p> : <p className="text-xs text-muted-foreground">The share is currently disabled; it will remain disabled after relocation.</p>}
+      <p className="text-xs text-muted-foreground">The destination must be empty. LumoNAS will verify file hashes before switching the share path. Original files will remain untouched.</p>
+      <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-0.5" /><span>I reviewed the destination and understand the share will be unavailable during the move. I will keep the old directory until I verify the new location.</span></label>
+      <Button onClick={startRelocation} disabled={!confirmed || startMove.isPending}>{startMove.isPending ? 'Starting…' : scheduleKind === 'manual' ? 'Move share' : 'Schedule move'}</Button>
+    </div> : null}
+    {startMove.isError ? <p role="alert" className="text-sm text-destructive">{startMove.error instanceof Error ? startMove.error.message : 'Could not start the relocation.'}</p> : null}
+    {startMove.data ? <p role="status" className="text-sm text-muted-foreground">{'schedule' in startMove.data ? `Move scheduled ${startMove.data.schedule.schedule}. Manage it in Monitoring → Jobs → Scheduled jobs.` : `Relocation queued as job ${startMove.data.jobId}. Track it in Monitoring → Jobs.`}</p> : null}
+  </div>
 }
 
 function AccessTab({
@@ -269,15 +353,23 @@ function ProtocolsTab({ share }: { share: Share }) {
             )}
 
             {enabled && protocol === 'smb' && (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-xs text-muted-foreground select-none">
-                  Advanced SMB options
-                </summary>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Veto files, socket options and auxiliary parameters are preserved as-is and can
-                  be edited by experts.
-                </p>
-              </details>
+              <div className="mt-3 space-y-3">
+                <p className="text-xs text-muted-foreground">Btrfs snapshots of this share appear in Windows Explorer under Previous Versions.</p>
+                <div className="flex items-center justify-between gap-4 rounded-lg border p-3">
+                  <div><p className="text-sm font-medium">Audit SMB changes</p><p className="text-xs text-muted-foreground">Selected file and folder operations go to the system journal.</p></div>
+                  <Switch checked={config?.auditEnabled ?? false} onCheckedChange={(next) => shareProtocol.mutate({ id: share.id, protocol, body: { auditEnabled: next, auditOperations: config?.auditOperations?.length ? config.auditOperations : ['create_file', 'mkdirat', 'renameat', 'unlinkat', 'rmdir'] } })} aria-label="Audit SMB changes" />
+                </div>
+                {config?.auditEnabled && <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-xs font-medium text-muted-foreground">Operations to record</legend>{SMB_AUDIT_OPERATIONS.map(([operation, label]) => <label key={operation} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.auditOperations?.includes(operation) ?? false} onChange={(event) => { const current = config.auditOperations ?? []; const next = event.target.checked ? [...current, operation] : current.filter((value) => value !== operation); if (next.length > 0) shareProtocol.mutate({ id: share.id, protocol, body: { auditOperations: next } }) }} />{label}</label>)}<p className="text-[11px] text-muted-foreground">At least one operation must stay selected. High-volume shares can produce many events.</p></fieldset>}
+                <details>
+                  <summary className="cursor-pointer text-xs text-muted-foreground select-none">
+                    Advanced SMB options
+                  </summary>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Veto files, socket options and auxiliary parameters are preserved as-is and can
+                    be edited by experts.
+                  </p>
+                </details>
+              </div>
             )}
           </div>
         )

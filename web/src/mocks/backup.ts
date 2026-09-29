@@ -29,6 +29,11 @@ export const readiness: RecoveryReadiness = {
       100,
   ),
   layers: readinessLayers,
+  coverage: [
+    { id: 'share-documents', name: 'Documents', kind: 'share', status: 'current', detail: 'Included in the latest verified bundle', lastSuccessfulAt: hoursAgo(2) },
+    { id: 'share-media', name: 'Media', kind: 'share', status: 'stale', detail: 'Included in a verified bundle, but the latest copy is overdue', lastSuccessfulAt: daysAgo(9) },
+    { id: 'docker-appdata', name: 'Docker app data', kind: 'docker-appdata', status: 'stale', detail: 'pihole has never been backed up', lastSuccessfulAt: daysAgo(9) },
+  ],
 }
 export const backupJobs: BackupJob[] = [
   {
@@ -80,6 +85,7 @@ export const backupJobs: BackupJob[] = [
 export const destinations: BackupDestination[] = [
   {
     id: 'dest-usb',
+    enabled: true,
     type: 'usb',
     label: 'Offline USB disk',
     target: 'Seagate Expansion 5TB',
@@ -90,6 +96,7 @@ export const destinations: BackupDestination[] = [
   },
   {
     id: 'dest-s3',
+    enabled: true,
     type: 's3',
     label: 'Backblaze B2',
     target: 's3://us-west-004/backblaze.com/lumo-offsite',
@@ -100,6 +107,7 @@ export const destinations: BackupDestination[] = [
   },
   {
     id: 'dest-sftp',
+    enabled: false,
     type: 'sftp',
     label: 'SFTP (friends NAS)',
     encrypted: true,

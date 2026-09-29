@@ -139,18 +139,22 @@ nftables
 openssh-server
 samba
 samba-common-bin
+samba-vfs-modules
 nfs-kernel-server
 rsync
 vsftpd
 smartmontools
 e2fsprogs
 xfsprogs
+cryptsetup
+certbot
 lm-sensors
 nut
 nut-client
 curl
 mergerfs
 snapraid
+rclone
 docker.io
 docker-compose
 grub-pc-bin
@@ -205,7 +209,7 @@ if ! grep -q '^LUMONAS_INSTALLER_MODE=' /etc/lumonas/lumonasd.env; then
 fi
 chown root:lumonas /etc/lumonas/lumonasd.env
 chmod 0640 /etc/lumonas/lumonasd.env
-systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
+systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
 EOF
 chmod 0755 "$WORK/config/hooks/live/020-install-lumonas.hook.chroot"
 if [ "${LUMONAS_ENABLE_RECOVERY_SMOKE:-false}" = "true" ]; then
@@ -411,7 +415,7 @@ d-i partman/confirm_nooverwrite boolean true
 d-i grub-installer/only_debian boolean true
 d-i grub-installer/with_other_os boolean true
 d-i grub-installer/bootdev string /dev/vda
-d-i preseed/late_command string cp /cdrom/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb /target/tmp/lumonas.deb; in-target dpkg -i /tmp/lumonas.deb; cp /cdrom/etc/lumonas/lumonas-web.env /target/etc/lumonas/lumonas-web.env; in-target systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
+d-i preseed/late_command string cp /cdrom/opt/lumonas-repo/pool/main/l/lumonas/lumonas.deb /target/tmp/lumonas.deb; in-target dpkg -i /tmp/lumonas.deb; cp /cdrom/etc/lumonas/lumonas-web.env /target/etc/lumonas/lumonas-web.env; in-target systemctl enable lumonas-runtime.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-web.service
 EOF
 	if [ -n "$INSTALL_PASSWORD" ]; then
 		printf 'd-i passwd/user-password password %s\nd-i passwd/user-password-again password %s\n' "$INSTALL_PASSWORD" "$INSTALL_PASSWORD" >> "$WORK/config/includes.binary/preseed.cfg"

@@ -96,6 +96,33 @@ Debian package creation requires `dpkg-deb` and is intended for Debian/Ubuntu CI
 make package
 ```
 
+### App catalog signing
+
+The built-in app catalog is signed with a detached Ed25519 signature that ships
+as `catalog/apps.json.sig` and is baked into the `.deb`. `lumonasd` refuses to
+install a catalog app unless that signature verifies against
+`LUMONAS_CATALOG_PUBLIC_KEY`, which is set in
+`packaging/debian/lumonasd.env.example`.
+
+The release private key is stored as the `LUMONAS_CATALOG_PRIVATE_KEY` repository
+secret and is never committed. After editing `catalog/apps.json`, regenerate and
+commit the signature:
+
+```sh
+LUMONAS_CATALOG_PRIVATE_KEY="$(cat catalog-private-key.b64)" make catalog-sign
+git add catalog/apps.json catalog/apps.json.sig
+```
+
+The signature is verified on every CI run and is a release gate, so changing the
+catalog without re-signing fails the build:
+
+```sh
+make catalog-verify
+```
+
+Keep the signing key in the release secret store. Losing it means a new key must
+be generated and the public key in the env example updated together.
+
 The Debian 13 QEMU image is dual-bootable (BIOS and UEFI). On a Debian/Ubuntu
 host with QEMU and OVMF, the release-blocking A/B checks can be run explicitly:
 

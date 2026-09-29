@@ -15,6 +15,9 @@ test.describe('docker apps', () => {
     await expect(page.getByRole('heading', { name: 'Docker' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Install again' }).first()).toBeVisible()
     await expect(page.getByRole('button', { name: 'Install' }).first()).toBeVisible()
+    await expect(page.getByText('Verified').first()).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Blocked' }).first()).toBeDisabled()
+    await expect(page.getByText('Unverified').first()).toBeVisible()
   })
 
   test('catalog search filters apps', async ({ page }) => {

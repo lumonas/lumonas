@@ -31,13 +31,14 @@ const ACTION_META: Record<DiskAction, { title: string; verb: string; destructive
   unmount: { title: 'Unmount disk', verb: 'Unmount', destructive: false },
 }
 
-function requestedState(action: DiskAction, disk: Disk, filesystem: string, label: string) {
+function requestedState(action: DiskAction, disk: Disk, filesystem: string, label: string, encrypted: boolean) {
   switch (action) {
     case 'format':
       return { filesystem }
     case 'format-mount': {
       const state: Record<string, unknown> = { filesystem, mountPath: diskBranchPath(disk.id) }
       if (label.trim() !== '') state.label = label.trim()
+      if (encrypted) state.encrypted = true
       return state
     }
     case 'mount':
@@ -72,6 +73,9 @@ export function DiskOperationsDialog({
   const unlock = useUnlockStorageSafety()
   const [filesystem, setFilesystem] = useState('ext4')
   const [label, setLabel] = useState('')
+  const [encrypted, setEncrypted] = useState(false)
+  const [encryptionPassphrase, setEncryptionPassphrase] = useState('')
+  const [encryptionPassphraseConfirm, setEncryptionPassphraseConfirm] = useState('')
 
   if (action == null) return null
   const meta = ACTION_META[action]
@@ -82,6 +86,9 @@ export function DiskOperationsDialog({
     plan.reset()
     confirm.reset()
     setLabel('')
+    setEncrypted(false)
+    setEncryptionPassphrase('')
+    setEncryptionPassphraseConfirm('')
     onOpenChange(false)
   }
 
@@ -129,16 +136,17 @@ export function DiskOperationsDialog({
       warnings={warnings()}
       confirmLabel={planResult ? `Confirm ${meta.verb.toLowerCase()}` : 'Plan operation'}
       loading={plan.isPending || confirm.isPending}
+      confirmDisabled={Boolean(planResult?.requestedState.encrypted) && (encryptionPassphrase.length < 12 || encryptionPassphrase !== encryptionPassphraseConfirm)}
       onConfirm={() => {
         if (!planResult) {
           plan.mutate(
-            { action: operationAction(action), diskId: disk.id, requestedState: requestedState(action, disk, filesystem, label) },
+            { action: operationAction(action), diskId: disk.id, requestedState: requestedState(action, disk, filesystem, label, encrypted) },
             { onError: () => undefined },
           )
           return
         }
         confirm.mutate(
-          { operationId: planResult.operationId, planHash: planResult.planHash },
+          { operationId: planResult.operationId, planHash: planResult.planHash, ...(planResult.requestedState.encrypted ? { encryptionPassphrase } : {}) },
           { onSuccess: () => close() },
         )
       }}
@@ -160,7 +168,9 @@ export function DiskOperationsDialog({
             </div>
           ) : null}
           {action === 'format-mount' ? (
-            <div className="grid gap-2">
+            <div className="grid gap-3">
+              <label className="flex items-start gap-2 rounded-md border p-3 text-sm"><input type="checkbox" aria-label="Encrypt this disk with LUKS" checked={encrypted} onChange={(event) => setEncrypted(event.target.checked)} className="mt-1" /><span><span className="font-medium">Encrypt this disk with LUKS</span><span className="mt-1 block text-xs text-muted-foreground">The passphrase will not be saved on the NAS. You will enter it to unlock this volume after each reboot. Keep a separate recovery copy; a lost passphrase cannot be reset.</span></span></label>
+              <div className="grid gap-2">
               <Label htmlFor="disk-label">
                 Volume label <span className="text-muted-foreground">(optional, max 12 characters)</span>
               </Label>
@@ -172,6 +182,7 @@ export function DiskOperationsDialog({
                 placeholder="media"
                 className="font-mono"
               />
+              </div>
             </div>
           ) : null}
           {plan.isError ? (
@@ -182,6 +193,7 @@ export function DiskOperationsDialog({
         </div>
       ) : (
         <div className="grid gap-3">
+          {planResult.requestedState.encrypted ? <div className="grid gap-2"><Label htmlFor="luks-passphrase">LUKS passphrase</Label><Input id="luks-passphrase" type="password" autoComplete="new-password" minLength={12} maxLength={256} value={encryptionPassphrase} onChange={(event) => setEncryptionPassphrase(event.target.value)} /><Label htmlFor="luks-passphrase-confirm">Confirm passphrase</Label><Input id="luks-passphrase-confirm" type="password" autoComplete="new-password" minLength={12} maxLength={256} value={encryptionPassphraseConfirm} onChange={(event) => setEncryptionPassphraseConfirm(event.target.value)} />{encryptionPassphraseConfirm && encryptionPassphrase !== encryptionPassphraseConfirm ? <p role="alert" className="text-xs text-destructive">Passphrases do not match.</p> : null}<p className="text-xs text-muted-foreground">This passphrase is sent directly to the privileged storage worker for formatting. It is never written into the saved operation plan.</p></div> : null}
           {safety?.state !== 'unlocked' ? (
             <AlertBanner tone="warning" title="Storage safety is locked">
               <span className="flex flex-wrap items-center gap-2">

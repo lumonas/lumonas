@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { useCreateShare } from '@/api/queries'
-import { STORAGE_RESOURCES } from '@/api/resources'
+import { useCreateShare, useShareStorageResources } from '@/api/queries'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
+import { formatBytes } from '@/lib/format'
 import type { ShareProtocolType } from '@/api/types'
 
 const PROTOCOLS: ShareProtocolType[] = ['smb', 'nfs', 'sftp', 'rsync', 'timemachine']
@@ -26,15 +26,23 @@ export function CreateShareWizard({
   onOpenChange: (open: boolean) => void
 }) {
   const create = useCreateShare()
+  const { data: resources, isLoading: resourcesLoading, isError: resourcesError } = useShareStorageResources()
   const [name, setName] = useState('')
-  const [resourceId, setResourceId] = useState(STORAGE_RESOURCES[0]?.id ?? '')
+  const [resourceChoice, setResourceChoice] = useState<string | null>(null)
   const [relativePath, setRelativePath] = useState('/')
   const [enabledProtocols, setEnabledProtocols] = useState<ShareProtocolType[]>(['smb'])
-  const resource = STORAGE_RESOURCES.find((item) => item.id === resourceId)
+  // Derive the selection during render instead of syncing it in an effect: an
+  // explicit choice wins, and a choice that no longer resolves (resources
+  // reloaded, or the pool was removed) falls back to the first location.
+  const resourceId =
+    resourceChoice && resources?.some((item) => item.id === resourceChoice)
+      ? resourceChoice
+      : resources?.[0]?.id ?? ''
+  const resource = resources?.find((item) => item.id === resourceId)
 
   function reset() {
     setName('')
-    setResourceId(STORAGE_RESOURCES[0]?.id ?? '')
+    setResourceChoice(null)
     setRelativePath('/')
     setEnabledProtocols(['smb'])
   }
@@ -61,7 +69,7 @@ export function CreateShareWizard({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Create share</DialogTitle>
-          <DialogDescription>Publish a storage location through one or more validated protocols.</DialogDescription>
+          <DialogDescription>Choose a mounted pool or data disk. New share files will be stored under that location.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
@@ -70,10 +78,13 @@ export function CreateShareWizard({
           </div>
           <div className="grid gap-2">
             <Label>Storage resource</Label>
-            <Select value={resourceId} onValueChange={setResourceId}>
+            <Select value={resourceId} onValueChange={setResourceChoice} disabled={resourcesLoading || !resources?.length}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{STORAGE_RESOURCES.map((item) => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectContent>
+              <SelectContent>{resources?.map((item) => <SelectItem key={item.id} value={item.id}>{item.label} · {item.kind}</SelectItem>)}</SelectContent>
             </Select>
+            {resource ? <p className="text-xs text-muted-foreground">{resource.path}{resource.totalBytes ? ` · ${formatBytes(Math.max(0, resource.totalBytes - (resource.usedBytes ?? 0)))} available` : ''}</p> : null}
+            {resourcesError ? <p role="alert" className="text-xs text-destructive">Storage locations could not be loaded.</p> : null}
+            {!resourcesLoading && !resourcesError && !resources?.length ? <p className="text-xs text-muted-foreground">No mounted pools or data disks are available. Mount storage before creating a share.</p> : null}
           </div>
           <div className="grid gap-2">
             <Label htmlFor="share-relative-path">Relative path</Label>
@@ -91,7 +102,7 @@ export function CreateShareWizard({
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button disabled={!name.trim() || enabledProtocols.length === 0 || create.isPending} onClick={submit}>Create share</Button>
+          <Button disabled={!name.trim() || !resource || enabledProtocols.length === 0 || create.isPending} onClick={submit}>Create share</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

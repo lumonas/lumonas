@@ -82,6 +82,8 @@ type Image struct {
 	ID              string `json:"id"`
 	Repo            string `json:"repo"`
 	Tag             string `json:"tag"`
+	LocalDigest     string `json:"localDigest,omitempty"`
+	RemoteDigest    string `json:"remoteDigest,omitempty"`
 	SizeBytes       uint64 `json:"sizeBytes"`
 	CreatedDaysAgo  int    `json:"createdDaysAgo"`
 	UpdateAvailable bool   `json:"updateAvailable"`

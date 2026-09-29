@@ -164,6 +164,9 @@ func ValidateRequestedState(action Action, diskID string, requested map[string]a
 
 	switch action {
 	case ActionCreate:
+		if _, exists := requested["encryptionPassphrase"]; exists {
+			return errors.New("encryptionPassphrase is accepted only during operation confirmation")
+		}
 		if err := validateFilesystem(true); err != nil {
 			return err
 		}
@@ -173,7 +176,15 @@ func ValidateRequestedState(action Action, diskID string, requested map[string]a
 		if label, _ := requested["label"].(string); label != "" && !ValidFilesystemLabel(label) {
 			return errors.New("filesystem label is invalid: must be 1-12 alphanumeric, dot, underscore, or hyphen characters")
 		}
+		if _, exists := requested["encrypted"]; exists {
+			if _, valid := requested["encrypted"].(bool); !valid {
+				return errors.New("encrypted must be a boolean")
+			}
+		}
 	case ActionFormat:
+		if _, exists := requested["encrypted"]; exists {
+			return errors.New("disk encryption is supported only for format-and-mount operations")
+		}
 		return validateFilesystem(true)
 	case ActionMount:
 		if err := validateFilesystem(true); err != nil {

@@ -5,8 +5,10 @@ import {
   NeedsAttentionCard,
   ProtectionCard,
   RecentActivityCard,
+  SafeNASChecklistCard,
   StorageSummaryCard,
   SystemCard,
+  WhatChangedCard,
 } from '@/features/dashboard/dashboard-cards'
 
 export function DashboardPage() {
@@ -31,6 +33,12 @@ export function DashboardPage() {
         </div>
         <div className="lg:col-span-4">
           <DockerCard />
+        </div>
+        <div className="lg:col-span-4">
+          <SafeNASChecklistCard />
+        </div>
+        <div className="lg:col-span-4">
+          <WhatChangedCard />
         </div>
         <div className="lg:col-span-8">
           <RecentActivityCard />

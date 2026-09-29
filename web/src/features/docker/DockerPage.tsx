@@ -6,6 +6,7 @@ import { ImagesTab } from '@/features/docker/images-tab'
 import { StackDrawer } from '@/features/docker/stack-drawer'
 import { StacksTab } from '@/features/docker/stacks-tab'
 import { VolumesTab } from '@/features/docker/volumes-tab'
+import { VirtualMachinesTab } from '@/features/docker/virtual-machines-tab'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useDockerSummary } from '@/api/queries'
 import { DockerAvailabilityBanner } from '@/features/docker/docker-availability'
@@ -16,6 +17,7 @@ const TABS = [
   { value: 'containers', label: 'Containers' },
   { value: 'images', label: 'Images' },
   { value: 'volumes', label: 'Volumes' },
+  { value: 'vms', label: 'Virtual machines' },
 ] as const
 
 export function DockerPage() {
@@ -62,6 +64,9 @@ export function DockerPage() {
         </TabsContent>
         <TabsContent value="volumes">
           <VolumesTab />
+        </TabsContent>
+        <TabsContent value="vms">
+          <VirtualMachinesTab />
         </TabsContent>
       </Tabs>
       <StackDrawer

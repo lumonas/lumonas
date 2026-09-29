@@ -279,6 +279,53 @@ func TestStorageCreatePlanValidatesRequestedStateAndSafety(t *testing.T) {
 	}
 }
 
+func TestEncryptedStoragePassphraseIsTransientAndNeverSavedWithPlan(t *testing.T) {
+	server := testServer(t)
+	body := `{"action":"filesystem.create","diskId":"wwn:test","requestedState":{"filesystem":"ext4","mountPath":"/srv/disks/wwn_test","encrypted":true}}`
+	planned := httptest.NewRecorder()
+	server.routes().ServeHTTP(planned, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/plan", strings.NewReader(body)))
+	if planned.Code != http.StatusCreated {
+		t.Fatalf("encrypted plan failed: %d %s", planned.Code, planned.Body.String())
+	}
+	var plan storage.Plan
+	if err := json.NewDecoder(planned.Body).Decode(&plan); err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := plan.RequestedState["encryptionPassphrase"]; exists {
+		t.Fatal("plan response contains a passphrase")
+	}
+	stored, err := server.store.Plan(plan.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := stored.RequestedState["encryptionPassphrase"]; exists {
+		t.Fatal("stored plan contains a passphrase")
+	}
+	server.safetyUntil = time.Now().UTC().Add(time.Minute)
+	const passphrase = "correct horse battery staple"
+	var captured privileged.Request
+	server.brokerExecWithResponse = func(_ context.Context, request privileged.Request) (privileged.Response, error) {
+		captured = request
+		return privileged.Response{OK: true}, nil
+	}
+	confirmBody := `{"planHash":"` + plan.PlanHash + `","reauthenticated":true,"storageSafetyUnlocked":true,"encryptionPassphrase":"` + passphrase + `"}`
+	confirmed := httptest.NewRecorder()
+	server.routes().ServeHTTP(confirmed, httptest.NewRequest(http.MethodPost, "/api/v1/storage/operations/"+plan.OperationID+"/confirm", strings.NewReader(confirmBody)))
+	if confirmed.Code != http.StatusOK {
+		t.Fatalf("encrypted confirmation failed: %d %s", confirmed.Code, confirmed.Body.String())
+	}
+	if captured.RequestedState["encryptionPassphrase"] != passphrase {
+		t.Fatal("passphrase was not forwarded to the privileged worker")
+	}
+	stored, err = server.store.Plan(plan.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, exists := stored.RequestedState["encryptionPassphrase"]; exists {
+		t.Fatal("executed plan persisted the transient passphrase")
+	}
+}
+
 func TestStorageConfirmationReportsPlanPersistenceFailure(t *testing.T) {
 	server := testServer(t)
 	planResponse := httptest.NewRecorder()

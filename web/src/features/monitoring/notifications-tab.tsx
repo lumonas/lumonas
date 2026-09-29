@@ -29,7 +29,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { timeAgo } from '@/lib/format'
-import type { NotificationChannel } from '@/api/types'
+import type { AlertSeverity, NotificationChannel } from '@/api/types'
 
 const CHANNEL_TYPES: NotificationChannelInput['type'][] = [
   'webhook',
@@ -236,18 +236,22 @@ function ChannelsCard() {
 }
 
 function RulesCard() {
+  const { data: channels } = useNotificationChannels()
   const { data: rules } = useNotificationRules()
   const save = useSaveNotificationRule()
   const toggle = useToggleNotificationRule()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [condition, setCondition] = useState('')
+  const [severity, setSeverity] = useState<AlertSeverity>('warning')
+  const [routes, setRoutes] = useState<string[]>(['web'])
+  const availableChannels = (channels ?? []).filter((channel) => channel.enabled && (channel.type === 'web' || channel.configured))
 
   function submit(event: FormEvent) {
     event.preventDefault()
     save.mutate(
-      { name, condition, severity: 'warning', routes: ['web'] },
-      { onSuccess: () => { setOpen(false); setName(''); setCondition('') } },
+      { name, condition, severity, routes },
+      { onSuccess: () => { setOpen(false); setName(''); setCondition(''); setSeverity('warning'); setRoutes(['web']) } },
     )
   }
 
@@ -302,9 +306,11 @@ function RulesCard() {
                 <Label htmlFor="rule-condition">Condition</Label>
                 <Input id="rule-condition" value={condition} onChange={(event) => setCondition(event.target.value)} placeholder="severity >= warning" />
               </div>
+              <div className="grid gap-2"><Label htmlFor="rule-severity">Minimum severity</Label><select id="rule-severity" className="h-9 rounded-md border bg-background px-2 text-sm" value={severity} onChange={(event) => setSeverity(event.target.value as AlertSeverity)}>{(['info', 'attention', 'warning', 'critical'] as AlertSeverity[]).map((value) => <option key={value} value={value}>{value}</option>)}</select></div>
+              <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-xs font-medium text-muted-foreground">Deliver to</legend>{availableChannels.map((channel) => { const routeId = channel.type === 'web' ? 'web' : channel.id; return <label key={channel.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={routes.includes(routeId)} onChange={(event) => setRoutes((current) => event.target.checked ? [...current, routeId] : current.filter((id) => id !== routeId))} />{channel.label}<span className="text-xs text-muted-foreground">{channel.type}</span></label> })}</fieldset>
               <DialogFooter>
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={!name || !condition}>Save rule</Button>
+                <Button type="submit" disabled={!name || !condition || routes.length === 0}>Save rule</Button>
               </DialogFooter>
             </form>
           </DialogContent>

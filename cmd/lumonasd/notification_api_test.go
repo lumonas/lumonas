@@ -60,6 +60,24 @@ func TestNotificationRuleAPIValidatesRequiredFields(t *testing.T) {
 	}
 }
 
+func TestNotificationRuleAPIRejectsUnknownChannelRoute(t *testing.T) {
+	server := testServer(t)
+	key := []byte("notification-route-test-key")
+	if _, err := server.store.SaveNotificationChannel(notify.Channel{ID: "channel-ntfy", Type: "ntfy", Label: "Ops", Target: "https://ntfy.sh/lumo", Enabled: true}, notify.Credentials{Token: "secret"}, key); err != nil {
+		t.Fatal(err)
+	}
+	valid := httptest.NewRecorder()
+	server.routes().ServeHTTP(valid, httptest.NewRequest(http.MethodPost, "/api/v1/notification-rules", strings.NewReader(`{"name":"Critical storage","condition":"category = storage","severity":"critical","routes":["channel-ntfy"]}`)))
+	if valid.Code != http.StatusOK {
+		t.Fatalf("valid route rejected: %d %s", valid.Code, valid.Body.String())
+	}
+	invalid := httptest.NewRecorder()
+	server.routes().ServeHTTP(invalid, httptest.NewRequest(http.MethodPost, "/api/v1/notification-rules", strings.NewReader(`{"name":"Bad route","condition":"severity >= warning","severity":"warning","routes":["missing-channel"]}`)))
+	if invalid.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("unknown route accepted: %d %s", invalid.Code, invalid.Body.String())
+	}
+}
+
 func TestNotificationRoutingHonorsSeverityAndCategoryRoutes(t *testing.T) {
 	server := testServer(t)
 	if err := server.store.SaveAlertRule(monitoring.AlertRule{ID: "rule-disk", Name: "Disk temperature", Condition: "disk temperature is high", Severity: "warning", Routes: []string{"channel-ntfy"}, Enabled: true}); err != nil {

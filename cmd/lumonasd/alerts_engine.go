@@ -94,8 +94,12 @@ func (s *apiServer) resolveAlertForRule(ruleID, resourceID string) {
 // tick.
 func (s *apiServer) evaluatePeriodicAlerts(tick int64) {
 	s.evaluateFilesystemCapacity()
+	s.evaluateStorageQuotaAlerts()
 	s.evaluateDiskTemperatures()
 	s.evaluateContainerHealth()
+	if tick%5 == 0 {
+		s.evaluateSMBChangeBursts()
+	}
 	if tick%10 == 0 {
 		s.evaluateSMARTAlerts()
 	}

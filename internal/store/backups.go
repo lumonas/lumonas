@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lumonas/lumonas/internal/backup"
@@ -30,7 +31,7 @@ CREATE TABLE IF NOT EXISTS backup_copies (
 CREATE INDEX IF NOT EXISTS backup_copies_destination_idx ON backup_copies(destination_id, created_at);
 CREATE TABLE IF NOT EXISTS backup_schedule (
   id TEXT PRIMARY KEY, enabled INTEGER NOT NULL, interval_seconds INTEGER NOT NULL,
-  last_started_at TEXT, next_due_at TEXT, updated_at TEXT NOT NULL
+  on_usb_attach INTEGER NOT NULL DEFAULT 0, last_started_at TEXT, next_due_at TEXT, updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS backup_verifications (
   id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES backup_runs(id) ON DELETE CASCADE,
@@ -70,13 +71,45 @@ func (s *Store) ensureBackupSchema() error {
 			return err
 		}
 	}
-	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?), (8, ?)`, time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat))
+	rows, err = s.db.Query(`PRAGMA table_info(backup_schedule)`)
+	if err != nil {
+		return err
+	}
+	hasUSBTrigger := false
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, dataType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "on_usb_attach" {
+			hasUSBTrigger = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	rows.Close()
+	if !hasUSBTrigger {
+		if _, err := s.db.Exec(`ALTER TABLE backup_schedule ADD COLUMN on_usb_attach INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return err
+		}
+	}
+	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(3, ?), (8, ?), (16, ?)`, time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat), time.Now().UTC().Format(timeFormat))
 	return err
 }
 
 func (s *Store) SaveBackupDestination(value backup.Destination, credentials backup.Credentials, key []byte) (backup.Destination, error) {
 	if err := value.Validate(); err != nil {
 		return backup.Destination{}, err
+	}
+	if value.Type == backup.DestinationRclone {
+		if err := backup.ValidateRcloneConfiguration(value.Target, credentials.RcloneConfig); err != nil {
+			return backup.Destination{}, err
+		}
 	}
 	if err := s.ensureBackupSchema(); err != nil {
 		return backup.Destination{}, err
@@ -158,7 +191,7 @@ func (s *Store) SaveBackupSchedule(value backup.Schedule) (backup.Schedule, erro
 		return backup.Schedule{}, err
 	}
 	now := time.Now().UTC()
-	_, err := s.db.Exec(`INSERT INTO backup_schedule(id,enabled,interval_seconds,last_started_at,next_due_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,interval_seconds=excluded.interval_seconds,last_started_at=excluded.last_started_at,next_due_at=excluded.next_due_at,updated_at=excluded.updated_at`, value.ID, value.Enabled, value.IntervalSeconds, timeValue(value.LastStartedAt), timeValue(value.NextDueAt), now.Format(timeFormat))
+	_, err := s.db.Exec(`INSERT INTO backup_schedule(id,enabled,interval_seconds,on_usb_attach,last_started_at,next_due_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,interval_seconds=excluded.interval_seconds,on_usb_attach=excluded.on_usb_attach,last_started_at=excluded.last_started_at,next_due_at=excluded.next_due_at,updated_at=excluded.updated_at`, value.ID, value.Enabled, value.IntervalSeconds, value.OnUSBAttach, timeValue(value.LastStartedAt), timeValue(value.NextDueAt), now.Format(timeFormat))
 	if err != nil {
 		return backup.Schedule{}, err
 	}
@@ -166,15 +199,94 @@ func (s *Store) SaveBackupSchedule(value backup.Schedule) (backup.Schedule, erro
 	return value, nil
 }
 
+// ApplyBackupPolicyTemplate updates the backup cadence and destination
+// retention counts atomically. Destination-specific provider-lock settings
+// are intentionally preserved by changing only generation/day/month counts.
+func (s *Store) ApplyBackupPolicyTemplate(templateID string) (backup.Schedule, error) {
+	template, ok := backup.PolicyTemplateByID(templateID)
+	if !ok {
+		return backup.Schedule{}, fmt.Errorf("unknown backup policy template %q", templateID)
+	}
+	if err := s.ensureBackupSchema(); err != nil {
+		return backup.Schedule{}, err
+	}
+	schedule, err := s.BackupSchedule()
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	schedule.IntervalSeconds = template.IntervalSeconds
+	if schedule.ID == "" {
+		schedule.ID = "default"
+	}
+	if err := schedule.Validate(); err != nil {
+		return backup.Schedule{}, err
+	}
+	rows, err := s.db.Query(`SELECT id,retention_json FROM backup_destinations`)
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	type retentionUpdate struct {
+		id    string
+		value backup.RetentionPolicy
+	}
+	updates := make([]retentionUpdate, 0)
+	for rows.Next() {
+		var id, encoded string
+		if err := rows.Scan(&id, &encoded); err != nil {
+			rows.Close()
+			return backup.Schedule{}, err
+		}
+		var retention backup.RetentionPolicy
+		if err := json.Unmarshal([]byte(encoded), &retention); err != nil {
+			rows.Close()
+			return backup.Schedule{}, fmt.Errorf("decode retention for destination %s: %w", id, err)
+		}
+		retention.Generations, retention.Daily, retention.Monthly = template.Generations, template.Daily, template.Monthly
+		updates = append(updates, retentionUpdate{id: id, value: retention})
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return backup.Schedule{}, err
+	}
+	if err := rows.Close(); err != nil {
+		return backup.Schedule{}, err
+	}
+	now := time.Now().UTC()
+	schedule.UpdatedAt = now
+	nextDue := now.Add(time.Duration(schedule.IntervalSeconds) * time.Second)
+	schedule.NextDueAt = &nextDue
+	tx, err := s.db.Begin()
+	if err != nil {
+		return backup.Schedule{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, update := range updates {
+		encoded, err := json.Marshal(update.value)
+		if err != nil {
+			return backup.Schedule{}, err
+		}
+		if _, err := tx.Exec(`UPDATE backup_destinations SET retention_json=?,updated_at=? WHERE id=?`, string(encoded), now.Format(timeFormat), update.id); err != nil {
+			return backup.Schedule{}, err
+		}
+	}
+	if _, err := tx.Exec(`INSERT INTO backup_schedule(id,enabled,interval_seconds,on_usb_attach,last_started_at,next_due_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled,interval_seconds=excluded.interval_seconds,on_usb_attach=excluded.on_usb_attach,last_started_at=excluded.last_started_at,next_due_at=excluded.next_due_at,updated_at=excluded.updated_at`, schedule.ID, schedule.Enabled, schedule.IntervalSeconds, schedule.OnUSBAttach, timeValue(schedule.LastStartedAt), timeValue(schedule.NextDueAt), now.Format(timeFormat)); err != nil {
+		return backup.Schedule{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return backup.Schedule{}, err
+	}
+	return schedule, nil
+}
+
 func (s *Store) BackupSchedule() (backup.Schedule, error) {
 	if err := s.ensureBackupSchema(); err != nil {
 		return backup.Schedule{}, err
 	}
-	row := s.db.QueryRow(`SELECT id,enabled,interval_seconds,last_started_at,next_due_at,updated_at FROM backup_schedule ORDER BY id LIMIT 1`)
+	row := s.db.QueryRow(`SELECT id,enabled,interval_seconds,on_usb_attach,last_started_at,next_due_at,updated_at FROM backup_schedule ORDER BY id LIMIT 1`)
 	var value backup.Schedule
 	var lastStarted, nextDue sql.NullString
 	var updated string
-	if err := row.Scan(&value.ID, &value.Enabled, &value.IntervalSeconds, &lastStarted, &nextDue, &updated); err != nil {
+	if err := row.Scan(&value.ID, &value.Enabled, &value.IntervalSeconds, &value.OnUSBAttach, &lastStarted, &nextDue, &updated); err != nil {
 		if err == sql.ErrNoRows {
 			return backup.DefaultSchedule(), nil
 		}

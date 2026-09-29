@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -42,6 +43,7 @@ import (
 	"github.com/lumonas/lumonas/internal/store"
 	"github.com/lumonas/lumonas/internal/trace"
 	"github.com/lumonas/lumonas/internal/updates"
+	"github.com/lumonas/lumonas/internal/virtualization"
 )
 
 type apiServer struct {
@@ -49,11 +51,36 @@ type apiServer struct {
 	hub                         *events.Hub
 	log                         *slog.Logger
 	jobsMu                      sync.Mutex
+	runningJobMu                sync.Mutex
+	runningJobCancels           map[string]context.CancelFunc
+	folderSyncMu                sync.Mutex
+	folderSyncRunning           map[string]context.CancelFunc
+	folderSyncUSBState          map[string]bool
+	snapshotReplicationMu       sync.Mutex
+	snapshotReplicationRunning  map[string]context.CancelFunc
+	snapshotReplicationOps      map[string]snapshotReplicationActiveOps
+	snapshotReceiveOwners       map[string]string
+	quotaMu                     sync.Mutex
+	quotaMeasuredAt             time.Time
+	quotaUsageCache             map[string]int64
+	fileRequestMu               sync.Mutex
+	shareRelocationMu           sync.Mutex
+	shareRelocations            map[string]context.CancelFunc
+	sharePasswordMu             sync.Mutex
+	sharePasswordAttempts       map[string][]time.Time
+	integrityMu                 sync.Mutex
+	integrityRunning            map[string]bool
+	uploadMu                    sync.Mutex
 	version                     string
 	diskFunc                    func() ([]model.Disk, error)
 	authRequired                bool
 	dynamicAuth                 bool
 	dockerService               dockerruntime.Service
+	virtualizationService       virtualization.Service
+	usbMountState               map[string]bool
+	automaticBackupMu           sync.Mutex
+	automaticBackupPending      bool
+	automaticBackupQueue        []string
 	catalogFile                 string
 	notificationMu              sync.Mutex
 	notificationFailures        map[string]notificationFailureState
@@ -76,16 +103,20 @@ type apiServer struct {
 	fixStageMu                  sync.Mutex
 	passkeyCeremonies           map[string]passkeyCeremony
 	passkeyMu                   sync.Mutex
-	runtimeStateFunc     func() map[string]any
-	debianUpdatesFunc    func() map[string]any
-	dockerLoggingFunc    func() map[string]any
-	discoverPoolsFunc    func(disks []model.Disk) []model.Pool
+	runtimeStateFunc            func() map[string]any
+	debianUpdatesFunc           func() map[string]any
+	dockerLoggingFunc           func() map[string]any
+	discoverPoolsFunc           func(disks []model.Disk) []model.Pool
+	shareStorageResourcesFunc   func(context.Context) ([]shareStorageResource, error)
 	rateMu                      sync.Mutex
 	rateAttempts                map[string][]time.Time
 	clock                       func() time.Time
 	deploymentOptions           deploymentOptions
 	lanScanImpl                 func(ctx context.Context) ([]network.LanHost, error)
 	installer                   installerState
+	recoveryObjectiveMu         sync.Mutex
+	recoveryObjectiveCheckedAt  time.Time
+	recoveryObjectiveCached     []model.Alert
 }
 
 var version = "0.1.0-dev"
@@ -191,8 +222,12 @@ func main() {
 	}
 	server := &apiServer{store: db, hub: events.NewHub(), log: logger, version: *versionFlag, diskFunc: func() ([]model.Disk, error) { return collector.Disks(nil) }, authRequired: os.Getenv("LUMONAS_AUTH_REQUIRED") == "true", dynamicAuth: true, corsOrigins: parseCORSOrigins(), csrfTokens: make(map[string]csrfBinding), rateAttempts: make(map[string][]time.Time)}
 	server.dockerService = server.dockerServiceWithBroker(envOr("LUMONAS_STACK_ROOT", "/srv/lumonas/docker/stacks"))
+	server.virtualizationService = virtualization.WithMediaDirs(virtualization.New(nil), os.Getenv("LUMONAS_VM_MEDIA_DIR"), os.Getenv("LUMONAS_VM_DISK_DIR"))
 	server.catalogFile = envOr("LUMONAS_CATALOG_FILE", "/usr/share/lumonas/catalog/apps.json")
 	server.reconcileInterruptedBackups()
+	if err := db.ReconcileInterruptedFolderSyncRuns(); err != nil {
+		logger.Warn("interrupted folder sync reconciliation failed", "error", err)
+	}
 	reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	server.reconcilePendingDeployments(reconcileCtx)
 	reconcileCancel()
@@ -202,8 +237,10 @@ func main() {
 	go server.lanScanLoop()
 	go server.metricsLoop()
 	go server.metricsHistoryLoop()
+	go server.smartHistoryLoop()
 	go server.capacityLoop()
 	go server.backupLoop()
+	go server.restoreDrillLoop()
 	go server.upsMonitorLoop()
 	go server.scheduleLoop()
 	go server.retentionLoop()
@@ -252,6 +289,13 @@ func (s *apiServer) routes() http.Handler {
 func (s *apiServer) healthz(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+func (s *apiServer) fleetStatus(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": s.version, "health": s.serverHealth(), "checkedAt": time.Now().UTC()})
+}
 func (s *apiServer) readyz(w http.ResponseWriter, _ *http.Request) {
 	nasUUID, hasNASUUID := s.store.Meta("nas_uuid")
 	checks := map[string]bool{"database": hasNASUUID && strings.TrimSpace(nasUUID) != "", "privilegedBroker": false, "privilegedWorkers": false}
@@ -287,6 +331,13 @@ func (s *apiServer) privilegedWorkersReady(ctx context.Context) bool {
 
 func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 	endpoint := strings.TrimPrefix(r.URL.Path, "/api/v1")
+	vmParts := strings.Split(strings.TrimPrefix(endpoint, "/virtualization/vms/"), "/")
+	if s.apiRecoveryRoutes(w, r, endpoint) || s.filePortalRoutes(w, r, endpoint) || s.apiFileRoutes(w, r, endpoint) {
+		return
+	}
+	if s.folderSyncRoutes(w, r, endpoint) {
+		return
+	}
 	switch {
 	case r.Method == http.MethodGet && endpoint == "/auth/status":
 		s.authStatus(w, r)
@@ -298,6 +349,42 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.authLogout(w, r)
 	case r.Method == http.MethodGet && endpoint == "/auth/csrf":
 		s.csrfForSession(w, r)
+	case r.Method == http.MethodGet && endpoint == "/api-tokens":
+		s.listAPITokens(w, r)
+	case r.Method == http.MethodPost && endpoint == "/api-tokens":
+		s.createAPIToken(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/api-tokens/"):
+		s.deleteAPIToken(w, r, path.Base(endpoint))
+	case r.Method == http.MethodGet && endpoint == "/fleet/status":
+		s.fleetStatus(w, r)
+	case r.Method == http.MethodGet && endpoint == "/replication/peers":
+		s.replicationPeers(w, r)
+	case r.Method == http.MethodPost && endpoint == "/replication/peers":
+		s.saveReplicationPeer(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/replication/peers/") && strings.HasSuffix(endpoint, "/run"):
+		s.runReplication(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/replication/peers/"):
+		s.deleteReplicationPeer(w, r, path.Base(endpoint))
+	case r.Method == http.MethodPut && endpoint == "/replication/receive":
+		s.receiveReplication(w, r)
+	case r.Method == http.MethodGet && endpoint == "/replication/snapshot-tasks":
+		s.listSnapshotReplicationTasks(w, r)
+	case r.Method == http.MethodPost && endpoint == "/replication/snapshot-tasks":
+		s.createSnapshotReplicationTask(w, r)
+	case r.Method == http.MethodPut && strings.HasPrefix(endpoint, "/replication/snapshot-tasks/") && !strings.HasSuffix(endpoint, "/run") && !strings.HasSuffix(endpoint, "/cancel") && !strings.HasSuffix(endpoint, "/runs"):
+		s.updateSnapshotReplicationTask(w, r, path.Base(endpoint))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/replication/snapshot-tasks/") && strings.HasSuffix(endpoint, "/run"):
+		s.runSnapshotReplicationTask(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/replication/snapshot-tasks/") && strings.HasSuffix(endpoint, "/cancel"):
+		s.cancelSnapshotReplicationTask(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/replication/snapshot-tasks/") && strings.HasSuffix(endpoint, "/runs"):
+		s.snapshotReplicationRunHistory(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/replication/snapshot-tasks/"):
+		s.deleteSnapshotReplicationTask(w, r, path.Base(endpoint))
+	case r.Method == http.MethodPut && strings.HasPrefix(endpoint, "/replication/snapshots/") && strings.HasSuffix(endpoint, "/receive"):
+		s.receiveSnapshotReplication(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/replication/snapshots/") && strings.HasSuffix(endpoint, "/cancel"):
+		s.cancelSnapshotReceive(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodPost && endpoint == "/auth/passkeys/login/begin":
 		s.passkeyLoginBegin(w, r)
 	case r.Method == http.MethodPost && endpoint == "/auth/passkeys/login/finish":
@@ -351,6 +438,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.completeOnboarding(w, r)
 	case r.Method == http.MethodGet && endpoint == "/disks":
 		s.disks(w)
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/storage/disks/") && strings.HasSuffix(endpoint, "/smart-history"):
+		s.smartHistory(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/disks/"):
 		s.disk(w, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/pools":
@@ -389,6 +478,10 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.createStorageSnapshot(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/storage/snapshots/") && strings.HasSuffix(endpoint, "/files"):
 		s.storageSnapshotFiles(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/storage/snapshots/") && strings.HasSuffix(endpoint, "/compare"):
+		s.storageSnapshotCompare(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/snapshots/") && strings.HasSuffix(endpoint, "/restore"):
+		s.restoreStorageSnapshotEntries(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/storage/snapshots/"):
 		s.deleteStorageSnapshot(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/storage/safety":
@@ -399,30 +492,22 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.lockStorageSafety(w, r)
 	case r.Method == http.MethodPost && endpoint == "/storage/operations/plan":
 		s.planStorageOperation(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/disks/") && strings.HasSuffix(endpoint, "/unlock"):
+		s.unlockEncryptedDisk(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/disks/") && strings.HasSuffix(endpoint, "/retire"):
 		s.retireDisk(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/storage/operations/") && strings.HasSuffix(endpoint, "/confirm"):
 		s.confirmStorageOperation(w, r, path.Base(path.Dir(endpoint)))
-	case r.Method == http.MethodGet && endpoint == "/recovery/status":
-		s.recoveryStatus(w)
-	case r.Method == http.MethodPost && endpoint == "/recovery/key":
-		s.createRecoveryKey(w, r)
-	case r.Method == http.MethodGet && endpoint == "/recovery/plan":
-		s.recoveryPlan(w)
-	case r.Method == http.MethodPost && endpoint == "/recovery/restore/stage":
-		s.recoveryStage(w, r)
-	case r.Method == http.MethodPost && endpoint == "/recovery/export":
-		actor, ok := s.identityActor(w, r, true)
-		if !ok {
-			return
-		}
-		s.recoveryExport(w, r.Context(), actor)
 	case r.Method == http.MethodGet && endpoint == "/backups/status":
 		s.backupStatus(w, r)
 	case r.Method == http.MethodGet && endpoint == "/backups/schedule":
 		s.backupSchedule(w, r)
 	case r.Method == http.MethodPatch && endpoint == "/backups/schedule":
 		s.updateBackupSchedule(w, r)
+	case r.Method == http.MethodGet && endpoint == "/backups/policy-templates":
+		s.backupPolicyTemplates(w, r)
+	case r.Method == http.MethodPost && endpoint == "/backups/policy-template":
+		s.applyBackupPolicyTemplate(w, r)
 	case r.Method == http.MethodGet && endpoint == "/backups/destinations":
 		s.listBackupDestinations(w, r)
 	case r.Method == http.MethodPost && endpoint == "/backups/destinations":
@@ -443,12 +528,23 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.runBackupJob(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/backup/destinations":
 		s.backupDestinationSummaries(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/backup/destinations/") && strings.HasSuffix(endpoint, "/restore-check"):
+		s.backupDestinationRestoreCheck(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/backup/destinations/") && strings.HasSuffix(endpoint, "/restore"):
+		parts := strings.Split(endpoint, "/")
+		if len(parts) != 9 || parts[2] != "destinations" || parts[4] != "runs" || parts[6] != "virtual-machines" || parts[8] != "restore" {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
+		} else {
+			s.restoreBackupVirtualMachine(w, r, parts[3], parts[5], parts[7])
+		}
 	case r.Method == http.MethodGet && endpoint == "/backup/generations":
 		s.backupGenerations(w, r)
 	case r.Method == http.MethodGet && endpoint == "/backup/restore/plan":
 		s.backupRestorePlan(w, r)
 	case r.Method == http.MethodGet && endpoint == "/updates/status":
 		s.updatesStatus(w, r)
+	case r.Method == http.MethodGet && endpoint == "/updates/preflight":
+		s.updatePreflight(w, r)
 	case r.Method == http.MethodPost && endpoint == "/updates/apply":
 		s.applyUpdate(w, r)
 	case r.Method == http.MethodPost && endpoint == "/updates/slot/stage":
@@ -465,6 +561,16 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.settings(w, r)
 	case r.Method == http.MethodPatch && endpoint == "/settings":
 		s.updateSettings(w, r)
+	case r.Method == http.MethodGet && endpoint == "/security/certificate":
+		s.tlsCertificateStatus(w, r)
+	case r.Method == http.MethodPost && endpoint == "/security/certificate/import":
+		s.importTLSCertificate(w, r)
+	case r.Method == http.MethodPost && endpoint == "/security/certificate/acme":
+		s.configureTLSACME(w, r)
+	case r.Method == http.MethodPost && endpoint == "/security/certificate/acme/disable":
+		s.disableTLSACME(w, r)
+	case r.Method == http.MethodDelete && endpoint == "/settings/sessions":
+		s.revokeOtherSessions(w, r)
 	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/settings/sessions/"):
 		s.revokeSession(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/ssh/keys":
@@ -481,6 +587,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.job(w, path.Base(endpoint))
 	case r.Method == http.MethodPost && endpoint == "/jobs":
 		s.createJob(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/jobs/") && strings.HasSuffix(endpoint, "/cancel"):
+		s.cancelQueuedJob(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodPost && endpoint == "/acl/jobs":
 		s.createACLJob(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/acl/jobs/") && strings.HasSuffix(endpoint, "/cancel"):
@@ -489,6 +597,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.alerts(w)
 	case r.Method == http.MethodGet && endpoint == "/alerts/history":
 		s.alertHistory(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/alerts/") && strings.HasSuffix(endpoint, "/snooze"):
+		s.snoozeAlert(w, r, strings.TrimSuffix(strings.TrimPrefix(endpoint, "/alerts/"), "/snooze"))
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/alerts/"):
 		// Accept both /alerts/{id}/ack (web client) and /alerts/{id}.
 		s.ackAlert(w, strings.TrimSuffix(strings.TrimPrefix(endpoint, "/alerts/"), "/ack"))
@@ -516,12 +626,24 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.listNotificationDeliveries(w, r)
 	case r.Method == http.MethodGet && endpoint == "/schedules":
 		s.schedules(w, r)
+	case r.Method == http.MethodPost && endpoint == "/schedules":
+		s.createSnapshotSchedule(w, r)
+	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/schedules/"):
+		s.deleteCustomSchedule(w, r, scheduleID(endpoint))
 	case r.Method == http.MethodPatch && strings.HasPrefix(endpoint, "/schedules/"):
 		s.updateSchedule(w, r, scheduleID(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/activity":
 		s.activity(w)
 	case r.Method == http.MethodGet && endpoint == "/audit":
 		s.audit(w, r)
+	case r.Method == http.MethodGet && endpoint == "/audit/export":
+		s.exportAudit(w, r)
+	case r.Method == http.MethodGet && endpoint == "/system/logs":
+		s.systemLogs(w, r)
+	case r.Method == http.MethodGet && endpoint == "/audit/retention":
+		s.auditRetention(w, r)
+	case r.Method == http.MethodPut && endpoint == "/audit/retention":
+		s.updateAuditRetention(w, r)
 	case r.Method == http.MethodPost && endpoint == "/notifications/test":
 		s.notificationTest(w, r)
 	case r.Method == http.MethodGet && endpoint == "/system/metrics":
@@ -530,6 +652,14 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.metricsHistory(w, r)
 	case r.Method == http.MethodGet && endpoint == "/capacity/forecast":
 		s.capacityForecast(w, r)
+	case r.Method == http.MethodGet && endpoint == "/quotas":
+		s.listQuotas(w, r)
+	case r.Method == http.MethodPut && endpoint == "/quotas":
+		s.replaceQuotas(w, r)
+	case r.Method == http.MethodGet && endpoint == "/capacity/thresholds":
+		s.capacityThresholds(w, r)
+	case r.Method == http.MethodPut && endpoint == "/capacity/thresholds":
+		s.setCapacityThreshold(w, r)
 	case r.Method == http.MethodGet && endpoint == "/diagnostics/support-bundle":
 		s.supportBundle(w, r)
 	case r.Method == http.MethodGet && endpoint == "/network/interfaces":
@@ -614,6 +744,20 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.shutdownPower(w, r)
 	case r.Method == http.MethodGet && endpoint == "/shares":
 		s.listManagedShares(w, r)
+	case r.Method == http.MethodGet && endpoint == "/shares/storage-resources":
+		s.listShareStorageResources(w, r)
+	case r.Method == http.MethodPost && endpoint == "/shares/clients/disconnect":
+		s.disconnectShareClient(w, r)
+	case r.Method == http.MethodGet && endpoint == "/shares/clients":
+		s.shareClients(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/shares/") && strings.HasSuffix(endpoint, "/access-preview"):
+		s.shareAccessPreview(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/shares/") && strings.HasSuffix(endpoint, "/relocation/preview"):
+		s.previewShareRelocation(w, r, path.Base(path.Dir(path.Dir(endpoint))))
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/shares/") && strings.HasSuffix(endpoint, "/relocation"):
+		s.startShareRelocation(w, r, path.Base(path.Dir(endpoint)))
+	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/shares/") && strings.HasSuffix(endpoint, "/access-check"):
+		s.shareAccessCheck(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/shares/"):
 		s.getManagedShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodPost && endpoint == "/shares":
@@ -626,30 +770,6 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.updateManagedShare(w, r, path.Base(endpoint))
 	case r.Method == http.MethodDelete && strings.HasPrefix(endpoint, "/shares/"):
 		s.deleteManagedShare(w, r, path.Base(endpoint))
-	case r.Method == http.MethodGet && endpoint == "/files":
-		s.listFiles(w, r)
-	case r.Method == http.MethodGet && endpoint == "/files/search":
-		s.searchFiles(w, r)
-	case r.Method == http.MethodGet && endpoint == "/files/properties":
-		s.fileProperties(w, r)
-	case r.Method == http.MethodGet && endpoint == "/files/download":
-		s.downloadFile(w, r)
-	case r.Method == http.MethodPost && endpoint == "/files/mkdir":
-		s.makeDirectory(w, r)
-	case r.Method == http.MethodPost && endpoint == "/files/rename":
-		s.renameFile(w, r)
-	case r.Method == http.MethodPost && endpoint == "/files/delete":
-		s.deleteFiles(w, r)
-	case r.Method == http.MethodPost && endpoint == "/files/transfer":
-		s.transferFiles(w, r)
-	case r.Method == http.MethodPost && endpoint == "/files/upload":
-		s.uploadFile(w, r)
-	case r.Method == http.MethodGet && endpoint == "/files/recycle":
-		s.listRecycleBin(w, r)
-	case r.Method == http.MethodPost && endpoint == "/files/recycle/restore":
-		s.restoreRecycleBin(w, r)
-	case r.Method == http.MethodPost && endpoint == "/files/recycle/purge":
-		s.purgeRecycleBin(w, r)
 	case r.Method == http.MethodGet && endpoint == "/events":
 		s.stream(w, r)
 	case r.Method == http.MethodGet && endpoint == "/events/stream":
@@ -662,6 +782,8 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.dockerStacks(w, r)
 	case r.Method == http.MethodPost && endpoint == "/docker/stacks":
 		s.createDockerStack(w, r)
+	case r.Method == http.MethodPut && strings.HasPrefix(endpoint, "/docker/stacks/") && strings.HasSuffix(endpoint, "/recovery"):
+		s.updateDockerStackRecovery(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/docker/deployments":
 		s.dockerDeploymentsHandler(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/stacks/"):
@@ -684,12 +806,44 @@ func (s *apiServer) api(w http.ResponseWriter, r *http.Request) {
 		s.dockerImagePackImport(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/docker/images/"):
 		s.dockerImageAction(w, r, endpoint)
+	case r.Method == http.MethodGet && endpoint == "/virtualization/status":
+		s.virtualizationStatus(w, r)
+	case r.Method == http.MethodGet && endpoint == "/virtualization/media":
+		s.virtualizationMedia(w, r)
+	case r.Method == http.MethodPost && endpoint == "/virtualization/media":
+		s.virtualizationUploadMedia(w, r)
+	case r.Method == http.MethodGet && endpoint == "/virtualization/vms":
+		s.virtualMachines(w, r)
+	case r.Method == http.MethodGet && endpoint == "/virtualization/recoverable-vms":
+		s.virtualMachineRecoverables(w, r)
+	case r.Method == http.MethodPost && endpoint == "/virtualization/vms":
+		s.virtualMachineCreate(w, r)
+	case len(vmParts) == 1 && vmParts[0] != "" && r.Method == http.MethodDelete:
+		s.virtualMachineDelete(w, r, vmParts[0])
+	case len(vmParts) == 2 && vmParts[1] == "restore-definition" && r.Method == http.MethodPost:
+		s.virtualMachineRestoreDefinition(w, r, vmParts[0])
+	case len(vmParts) == 2 && vmParts[1] == "console" && (r.Method == http.MethodGet || r.Method == http.MethodPost || r.Method == http.MethodDelete):
+		s.virtualMachineConsole(w, r, vmParts[0])
+	case len(vmParts) == 2 && vmParts[1] == "snapshots" && r.Method == http.MethodGet:
+		s.virtualMachineSnapshots(w, r, vmParts[0])
+	case len(vmParts) == 2 && vmParts[1] == "snapshots" && r.Method == http.MethodPost:
+		s.virtualMachineSnapshotCreate(w, r, vmParts[0])
+	case len(vmParts) == 4 && vmParts[1] == "snapshots" && vmParts[3] == "revert" && r.Method == http.MethodPost:
+		s.virtualMachineSnapshotRevert(w, r, vmParts[0], vmParts[2])
+	case len(vmParts) == 3 && vmParts[1] == "snapshots" && r.Method == http.MethodDelete:
+		s.virtualMachineSnapshotDelete(w, r, vmParts[0], vmParts[2])
+	case r.Method == http.MethodPost && strings.HasPrefix(endpoint, "/virtualization/vms/") && strings.HasSuffix(endpoint, "/action"):
+		s.virtualMachineAction(w, r, path.Base(path.Dir(endpoint)))
 	case r.Method == http.MethodGet && endpoint == "/docker/volumes":
 		s.dockerVolumes(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(endpoint, "/docker/logs/"):
 		s.dockerLogs(w, r, path.Base(endpoint))
 	case r.Method == http.MethodGet && endpoint == "/health/components":
 		s.healthComponents(w)
+	case r.Method == http.MethodGet && endpoint == "/troubleshooting":
+		s.troubleshooting(w, r)
+	case r.Method == http.MethodGet && endpoint == "/dependencies/graph":
+		s.dependencyGraph(w, r)
 	default:
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "endpoint not found"})
 	}
@@ -814,7 +968,7 @@ func (s *apiServer) authLogin(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusAccepted, map[string]any{"twoFactorRequired": true, "challengeId": challengeID})
 		return
 	}
-	token, expires, err := s.store.CreateSessionForUser(userID, 12*time.Hour)
+	token, expires, err := s.store.CreateSessionForUserWithMetadata(userID, 12*time.Hour, store.SessionMetadata{IPAddress: clientIP(r), UserAgent: r.UserAgent()})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -835,7 +989,20 @@ func (s *apiServer) authLogout(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.authEnabled() || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/login/2fa" || r.URL.Path == "/api/v1/auth/passkeys/login/begin" || r.URL.Path == "/api/v1/auth/passkeys/login/finish" || r.URL.Path == "/api/v1/auth/logout" {
+		if !s.authEnabled() || r.URL.Path == "/healthz" || r.URL.Path == "/readyz" || r.URL.Path == "/api/v1/auth/status" || r.URL.Path == "/api/v1/auth/login" || r.URL.Path == "/api/v1/auth/login/2fa" || r.URL.Path == "/api/v1/auth/passkeys/login/begin" || r.URL.Path == "/api/v1/auth/passkeys/login/finish" || r.URL.Path == "/api/v1/auth/logout" || strings.HasPrefix(r.URL.Path, "/api/v1/public/file-requests/") || strings.HasPrefix(r.URL.Path, "/api/v1/public/file-share-links/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if raw := bearerToken(r); raw != "" {
+			_, scopes, ok := s.store.ResolveAPIToken(raw)
+			if !ok {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired API token"})
+				return
+			}
+			if !apiTokenAllows(scopes, r.Method, r.URL.Path) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "API token does not have permission for this operation"})
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -848,6 +1015,7 @@ func (s *apiServer) authMiddleware(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired session"})
 			return
 		}
+		_ = s.store.TouchSession(cookie.Value)
 		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
 			csrfToken := r.Header.Get("X-CSRF-Token")
 			if csrfToken == "" {
@@ -1054,6 +1222,11 @@ func (s *apiServer) disks(w http.ResponseWriter) {
 	if err := s.store.SaveDiskInventory(disks); err != nil && s.log != nil {
 		s.log.Warn("persist disk inventory failed", "error", err)
 	}
+	for _, disk := range disks {
+		if err := s.store.SaveSMARTSample(model.SMARTSample{DiskID: disk.ID, CapturedAt: time.Now().UTC(), Summary: disk.SMART, TemperatureC: disk.Temperature}); err != nil && s.log != nil {
+			s.log.Warn("persist SMART sample failed", "disk", disk.ID, "error", err)
+		}
+	}
 	writeJSON(w, http.StatusOK, disks)
 }
 
@@ -1221,6 +1394,7 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 		PlanHash              string `json:"planHash"`
 		Reauthenticated       bool   `json:"reauthenticated"`
 		StorageSafetyUnlocked bool   `json:"storageSafetyUnlocked"`
+		EncryptionPassphrase  string `json:"encryptionPassphrase,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -1254,8 +1428,23 @@ func (s *apiServer) confirmStorageOperation(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "storage plan revalidation failed: " + err.Error()})
 		return
 	}
+	requestedState := make(map[string]any, len(plan.RequestedState)+1)
+	for key, value := range plan.RequestedState {
+		requestedState[key] = value
+	}
+	if encrypted, _ := plan.RequestedState["encrypted"].(bool); encrypted {
+		if len(input.EncryptionPassphrase) < 12 || len(input.EncryptionPassphrase) > 256 || strings.ContainsAny(input.EncryptionPassphrase, "\r\n\x00") {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "encrypted formatting needs a 12–256 character passphrase without line breaks"})
+			return
+		}
+		requestedState["encryptionPassphrase"] = input.EncryptionPassphrase
+		input.EncryptionPassphrase = ""
+	} else if input.EncryptionPassphrase != "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unexpected encryption passphrase"})
+		return
+	}
 	expectedIdentity := map[string]string{"id": plan.Target.DiskID, "wwn": plan.Target.WWN, "serial": plan.Target.Serial, "model": plan.Target.Model, "gptDiskGuid": plan.Target.GPTDiskGUID, "partitionUuid": plan.Target.PartitionUUID, "filesystemUuid": plan.Target.FilesystemUUID, "sizeBytes": strconv.FormatUint(plan.Target.SizeBytes, 10)}
-	request := privileged.Request{Operation: string(plan.Action), OperationID: plan.OperationID, CorrelationID: requestCorrelationID(r), PlanHash: plan.PlanHash, TargetDiskID: plan.Target.DiskID, ExpectedIdentity: expectedIdentity, ExpectedState: map[string]string{"currentPath": plan.ExpectedState.CurrentPath, "mounted": strconv.FormatBool(plan.ExpectedState.Mounted), "role": plan.ExpectedState.Role, "poolId": plan.ExpectedState.PoolID}, RequestedState: plan.RequestedState, ExpiresAt: plan.ExpiresAt, Confirmed: true}
+	request := privileged.Request{Operation: string(plan.Action), OperationID: plan.OperationID, CorrelationID: requestCorrelationID(r), PlanHash: plan.PlanHash, TargetDiskID: plan.Target.DiskID, ExpectedIdentity: expectedIdentity, ExpectedState: map[string]string{"currentPath": plan.ExpectedState.CurrentPath, "mounted": strconv.FormatBool(plan.ExpectedState.Mounted), "role": plan.ExpectedState.Role, "poolId": plan.ExpectedState.PoolID}, RequestedState: requestedState, ExpiresAt: plan.ExpiresAt, Confirmed: true}
 	result, err := s.executePrivileged(r.Context(), request)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
@@ -1408,6 +1597,11 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context, a
 		compose[stack.Name+"/compose.yaml"] = []byte(stack.ComposeYAML)
 	}
 	appdata := s.collectDockerAppdata(ctx, stacks)
+	shareData, err := s.collectManagedShareData()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "shared data export failed: " + err.Error()})
+		return
+	}
 	var encrypted []byte
 	if secretPath := os.Getenv("LUMONAS_RECOVERY_SECRETS_FILE"); secretPath != "" {
 		encrypted, err = os.ReadFile(secretPath)
@@ -1421,7 +1615,7 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context, a
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "recovery state export failed: " + err.Error()})
 		return
 	}
-	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, LumoNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, Files: recoveryFiles, Appdata: appdata.Payloads, EncryptedData: encrypted}, []byte(key))
+	bundle, err := recovery.Create(recovery.Input{Manifest: recovery.Manifest{ConfigSchema: 1, LumoNASVersion: s.version, NASUUID: nasUUID, Generation: s.currentGeneration(), DiskIDs: diskIDs}, DesiredState: desired, Database: database, Compose: compose, Files: recoveryFiles, Appdata: appdata.Payloads, DatabaseDumps: appdata.DatabaseDumps, Shares: shareData.Payloads, EncryptedData: encrypted}, []byte(key))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "bundle creation failed: " + err.Error()})
 		return
@@ -1438,7 +1632,8 @@ func (s *apiServer) recoveryExport(w http.ResponseWriter, ctx context.Context, a
 		actor = actors[0]
 	}
 	s.publishActor(actor, "recovery.bundle.created", "info", nil, map[string]any{"generation": persisted.Manifest.Generation})
-	writeJSON(w, http.StatusCreated, map[string]any{"path": persisted.LatestPath, "manifest": persisted.Manifest, "verified": true, "appdataArchives": len(appdata.Payloads), "warnings": appdata.Warnings})
+	warnings := append(appdata.Warnings, shareData.Warnings...)
+	writeJSON(w, http.StatusCreated, map[string]any{"path": persisted.LatestPath, "manifest": persisted.Manifest, "verified": true, "appdataArchives": len(appdata.Payloads), "databaseDumps": len(appdata.DatabaseDumps), "shareArchives": len(shareData.Payloads), "warnings": warnings})
 }
 
 func (s *apiServer) pruneRecoveryBundles(directory string, keep int) {
@@ -1546,6 +1741,34 @@ func (s *apiServer) recoveryPlan(w http.ResponseWriter) {
 		plan.Warnings = append(plan.Warnings, "live disk inventory is unavailable; hardware identity is not verified")
 	}
 	writeJSON(w, http.StatusOK, plan)
+}
+
+func (s *apiServer) downloadRecoveryBundle(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	key := s.recoveryKeyString()
+	if key == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "LUMONAS_RECOVERY_KEY is not configured"})
+		return
+	}
+	bundlePath := filepath.Join(envOr("LUMONAS_RECOVERY_DIR", "/var/lib/lumonas/recovery"), "latest.mrb")
+	bundle, err := os.ReadFile(bundlePath)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recovery bundle not found"})
+		return
+	}
+	plan, err := recovery.Plan(bundle, []byte(key))
+	if err != nil || !plan.Verified {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "recovery bundle verification failed"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.lumonas.recovery")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=lumonas-recovery-generation-%d.mrb", plan.Manifest.Generation))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(bundle)
 }
 
 func (s *apiServer) recoveryStage(w http.ResponseWriter, r *http.Request) {
@@ -2180,7 +2403,37 @@ func (s *apiServer) alerts(w http.ResponseWriter) {
 	if err == nil {
 		alerts = append(alerts, generated...)
 	}
+	alerts = append(alerts, s.recoveryObjectiveAlerts(now)...)
+	alerts = append(alerts, s.capacityThresholdAlerts(now)...)
+	snoozed, _ := s.store.SnoozedAlerts(now)
+	for i := range alerts {
+		if acknowledged[alerts[i].ID] && alerts[i].State == "firing" {
+			alerts[i].State = "acknowledged"
+		}
+		if until, ok := snoozed[alerts[i].ID]; ok {
+			alerts[i].SnoozedUntil = &until
+		}
+	}
 	writeJSON(w, http.StatusOK, alerts)
+}
+
+func (s *apiServer) snoozeAlert(w http.ResponseWriter, r *http.Request, id string) {
+	if _, ok := s.identityActor(w, r, true); !ok {
+		return
+	}
+	var input struct {
+		Hours int `json:"hours"`
+	}
+	if err := jsonDecode(r, &input); err != nil || input.Hours < 1 || input.Hours > 168 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "hours must be between 1 and 168"})
+		return
+	}
+	until := time.Now().UTC().Add(time.Duration(input.Hours) * time.Hour)
+	if err := s.store.SnoozeAlert(id, until); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "snoozedUntil": until})
 }
 
 // alertHistory serves recently resolved rule-fired alerts so operators can
@@ -2267,12 +2520,85 @@ func (s *apiServer) audit(w http.ResponseWriter, r *http.Request) {
 			limit = parsed
 		}
 	}
-	entries, err := s.store.Audit(limit)
+	filters, err := parseAuditFilters(r)
 	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	page, err := s.store.AuditPage(filters, limit, r.URL.Query().Get("cursor"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if r.URL.Query().Get("page") == "1" || r.URL.Query().Get("cursor") != "" || hasAuditFilters(r) {
+		writeJSON(w, http.StatusOK, page)
+		return
+	}
+	writeJSON(w, http.StatusOK, page.Entries)
+}
+
+func (s *apiServer) exportAudit(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	filters, err := parseAuditFilters(r)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="lumonas-audit.csv"`)
+	writer := csv.NewWriter(w)
+	_ = writer.Write([]string{"timestamp", "actor", "action", "outcome", "resourceType", "resourceId", "correlationId", "operationId", "planHash", "generation", "metadata"})
+	cursor := ""
+	for {
+		page, pageErr := s.store.AuditPage(filters, 500, cursor)
+		if pageErr != nil {
+			return
+		}
+		for _, entry := range page.Entries {
+			metadata, _ := json.Marshal(entry.Metadata)
+			_ = writer.Write([]string{entry.Timestamp.UTC().Format(time.RFC3339), safeCSV(entry.Actor), safeCSV(entry.Action), safeCSV(entry.Outcome), safeCSV(entry.ResourceType), safeCSV(entry.ResourceID), safeCSV(entry.CorrelationID), safeCSV(entry.OperationID), safeCSV(entry.PlanHash), strconv.FormatInt(entry.Generation, 10), string(metadata)})
+		}
+		writer.Flush()
+		if !page.HasMore {
+			break
+		}
+		cursor = page.NextCursor
+	}
+}
+
+func (s *apiServer) auditRetention(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.identityActor(w, r, false); !ok {
+		return
+	}
+	days := 365
+	if value, ok := s.store.Meta("audit_retention_days"); ok {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed >= 30 && parsed <= 3650 {
+			days = parsed
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"retentionDays": days})
+}
+
+func (s *apiServer) updateAuditRetention(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	var input struct {
+		RetentionDays int `json:"retentionDays"`
+	}
+	if err := jsonDecode(r, &input); err != nil || input.RetentionDays < 30 || input.RetentionDays > 3650 {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "retentionDays must be between 30 and 3650"})
+		return
+	}
+	if err := s.store.SetMeta("audit_retention_days", strconv.Itoa(input.RetentionDays)); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, entries)
+	s.recordRequestAudit(r, actor, "audit.retention.update", "audit-log", map[string]any{"retentionDays": input.RetentionDays})
+	writeJSON(w, http.StatusOK, map[string]int{"retentionDays": input.RetentionDays})
 }
 
 func (s *apiServer) notificationTest(w http.ResponseWriter, r *http.Request) {
@@ -2378,6 +2704,15 @@ func (s *apiServer) decoratedDockerStacks(ctx context.Context) ([]dockerruntime.
 	}
 	for index := range stacks {
 		stacks[index] = dockerruntime.EnrichStack(stacks[index], catalog)
+		if profileJSON, ok := s.store.Meta(dockerRecoveryProfileKey(stacks[index].Name)); ok {
+			var profile struct {
+				AppdataPaths []string `json:"appdataPaths"`
+			}
+			if json.Unmarshal([]byte(profileJSON), &profile) == nil {
+				stacks[index].Recovery.AppdataPaths = appendUniquePaths(stacks[index].Recovery.AppdataPaths, profile.AppdataPaths)
+				stacks[index].RecoveryCoverage = dockerruntime.StackRecoveryCoverage(stacks[index].Recovery)
+			}
+		}
 	}
 	return stacks, nil
 }
@@ -2415,6 +2750,10 @@ func (s *apiServer) createDockerStack(w http.ResponseWriter, r *http.Request) {
 		for _, app := range catalog {
 			if app.ID != input.CatalogID {
 				continue
+			}
+			if !dockerruntime.CatalogInstallAllowed(app, envOr("LUMONAS_REQUIRE_SIGNED_CATALOG", "false") == "true") {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "catalog app signature is not trusted; install it from a verified catalog"})
+				return
 			}
 			mappings := make([]dockerruntime.StorageMapping, 0, len(input.StorageMap))
 			for _, item := range input.StorageMap {
@@ -2797,17 +3136,88 @@ func (s *apiServer) job(w http.ResponseWriter, id string) {
 	writeJSON(w, http.StatusOK, job)
 }
 
+func (s *apiServer) cancelQueuedJob(w http.ResponseWriter, r *http.Request, id string) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	s.jobsMu.Lock()
+	cancelled, err := s.store.CancelQueuedJob(id, time.Now().UTC())
+	s.jobsMu.Unlock()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if !cancelled {
+		job, loadErr := s.store.Job(id)
+		if loadErr != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "job not found"})
+			return
+		}
+		if job.State != "running" || (job.Type != "smart.short" && job.Type != "smart.extended" && job.Type != "filesystem.scrub" && job.Type != "share.relocate") {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "this running job cannot be interrupted safely; it will finish its current phase"})
+			return
+		}
+		s.runningJobMu.Lock()
+		cancelRun := s.runningJobCancels[id]
+		s.runningJobMu.Unlock()
+		if cancelRun == nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "job has reached a non-interruptible completion phase"})
+			return
+		}
+		cancelRun()
+		s.recordRequestAudit(r, actor, "job.cancel.requested", id, map[string]any{"type": job.Type, "state": job.State})
+		writeJSON(w, http.StatusAccepted, job)
+		return
+	}
+	job, _ := s.store.Job(id)
+	s.recordRequestAudit(r, actor, "job.cancel", id, map[string]any{"type": job.Type})
+	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: id}, map[string]any{"job": job})
+	writeJSON(w, http.StatusOK, job)
+}
+
 func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Type       string `json:"type"`
-		ResourceID string `json:"resourceId"`
+		Type             string `json:"type"`
+		ResourceID       string `json:"resourceId"`
+		CorrelationID    string `json:"correlationId"`
+		FilesystemKind   string `json:"filesystemKind"`
+		FilesystemSource string `json:"filesystemSource"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
-	if input.Type != "smart.short" && input.Type != "smart.extended" && input.Type != "snapraid.sync" && input.Type != "snapraid.scrub" {
+	if input.Type != "smart.short" && input.Type != "smart.extended" && input.Type != "snapraid.sync" && input.Type != "snapraid.scrub" && input.Type != "filesystem.scrub" {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{"error": "job type is not enabled in this runtime"})
+		return
+	}
+	if input.Type == "filesystem.scrub" {
+		actor, ok := s.identityActor(w, r, true)
+		if !ok {
+			return
+		}
+		kind := storage.SnapshotKind(strings.ToLower(strings.TrimSpace(input.FilesystemKind)))
+		source := strings.TrimSpace(input.FilesystemSource)
+		if err := storage.ValidateScrubSource(kind, source); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+			return
+		}
+		job := model.Job{ID: newID("job"), CorrelationID: input.CorrelationID, Actor: actor, Type: input.Type, Title: "Filesystem integrity scrub", ResourceID: source, State: "queued", CreatedAt: time.Now().UTC()}
+		if job.CorrelationID == "" {
+			job.CorrelationID = requestCorrelationID(r)
+		}
+		if err := s.admitJob(&job); err != nil {
+			if isJobResourceBusy(err) {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		go s.runFilesystemScrubJob(job, kind, source)
+		writeJSON(w, http.StatusAccepted, job)
 		return
 	}
 	if input.Type == "snapraid.sync" || input.Type == "snapraid.scrub" {
@@ -2815,7 +3225,10 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: input.Type, Title: strings.ReplaceAll(input.Type, ".", " "), ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+		job := model.Job{ID: newID("job"), CorrelationID: input.CorrelationID, Actor: actor, Type: input.Type, Title: strings.ReplaceAll(input.Type, ".", " "), ResourceID: "protection", State: "queued", CreatedAt: time.Now().UTC()}
+		if job.CorrelationID == "" {
+			job.CorrelationID = requestCorrelationID(r)
+		}
 		job.OperationID, job.PlanHash = job.ID, job.ID
 		if err := s.admitJob(&job); err != nil {
 			if isJobResourceBusy(err) {
@@ -2856,7 +3269,10 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	job := model.Job{ID: newID("job"), CorrelationID: requestCorrelationID(r), Actor: actor, Type: input.Type, Title: "SMART " + strings.TrimPrefix(input.Type, "smart.") + " validation", ResourceID: input.ResourceID, State: "queued", CreatedAt: time.Now().UTC()}
+	job := model.Job{ID: newID("job"), CorrelationID: input.CorrelationID, Actor: actor, Type: input.Type, Title: "SMART " + strings.TrimPrefix(input.Type, "smart.") + " validation", ResourceID: input.ResourceID, State: "queued", CreatedAt: time.Now().UTC()}
+	if job.CorrelationID == "" {
+		job.CorrelationID = requestCorrelationID(r)
+	}
 	if err := s.admitJob(&job); err != nil {
 		if isJobResourceBusy(err) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
@@ -2871,16 +3287,44 @@ func (s *apiServer) createJob(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiServer) runReadOnlyJob(job model.Job, target model.Disk) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.runningJobMu.Lock()
+	if s.runningJobCancels == nil {
+		s.runningJobCancels = make(map[string]context.CancelFunc)
+	}
+	s.runningJobCancels[job.ID] = cancel
+	s.runningJobMu.Unlock()
+	defer func() {
+		cancel()
+		s.runningJobMu.Lock()
+		delete(s.runningJobCancels, job.ID)
+		s.runningJobMu.Unlock()
+	}()
 	time.Sleep(50 * time.Millisecond)
 	now := time.Now().UTC()
 	progress := 10.0
+	started, err := s.store.StartQueuedJob(job.ID, "Validating disk identity", progress, now)
+	if err != nil || !started {
+		return
+	}
 	job.State, job.Stage, job.StartedAt, job.Progress = "running", "Validating disk identity", &now, &progress
-	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
-	time.Sleep(100 * time.Millisecond)
-	smart, err := collector.SMART(nil, target.CurrentPath)
+	select {
+	case <-ctx.Done():
+		finished := time.Now().UTC()
+		job.State, job.Stage, job.FinishedAt, job.Error = "cancelled", "Cancelled safely", &finished, ""
+		_ = s.store.SaveJob(job)
+		s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
+		return
+	case <-time.After(100 * time.Millisecond):
+	}
+	smart, err := collector.SMARTContext(ctx, nil, target.CurrentPath)
 	if err != nil {
-		job.State, job.Error, job.Stage, job.FinishedAt = "failed", err.Error(), "SMART read failed", &now
+		if ctx.Err() != nil {
+			job.State, job.Error, job.Stage, job.FinishedAt = "cancelled", "", "Cancelled safely", &now
+		} else {
+			job.State, job.Error, job.Stage, job.FinishedAt = "failed", err.Error(), "SMART read failed", &now
+		}
 		_ = s.store.SaveJob(job)
 		s.publish("job.state_changed", "warning", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 		return
@@ -2892,10 +3336,15 @@ func (s *apiServer) runReadOnlyJob(job model.Job, target model.Disk) {
 }
 
 func (s *apiServer) runProtectionJob(job model.Job) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	now := time.Now().UTC()
 	progress := 5.0
+	started, err := s.store.StartQueuedJob(job.ID, "Validating SnapRAID configuration", progress, now)
+	if err != nil || !started {
+		return
+	}
 	job.State, job.Stage, job.StartedAt, job.Progress = "running", "Validating SnapRAID configuration", &now, &progress
-	_ = s.store.SaveJob(job)
 	s.publish("job.state_changed", "info", &model.ResourceRef{Type: "job", ID: job.ID}, map[string]any{"job": job})
 	requested := map[string]any{"configPath": envOr("LUMONAS_SNAPRAID_CONFIG", "/etc/lumonas/snapraid.conf")}
 	if job.Type == "snapraid.scrub" {
@@ -2928,7 +3377,7 @@ func (s *apiServer) runProtectionJob(job model.Job) {
 		return
 	}
 	request := privileged.Request{Operation: job.Type, OperationID: job.ID, CorrelationID: job.CorrelationID, PlanHash: job.ID, RequestedState: requested, ExpiresAt: now.Add(30 * time.Minute), Confirmed: true}
-	result, err := s.executePrivileged(context.Background(), request)
+	result, err := s.executePrivileged(ctx, request)
 	if err != nil || !result.OK {
 		job.State, job.Stage, job.Error, job.FinishedAt = "failed", "SnapRAID operation failed", "", &now
 		if err != nil {
@@ -3317,7 +3766,7 @@ func (s *apiServer) requestMiddleware(next http.Handler) http.Handler {
 			if s.log != nil {
 				s.log.Info("http request",
 					"method", r.Method,
-					"path", r.URL.Path,
+					"path", safeRequestLogPath(r.URL.Path),
 					"status", observed.Status(),
 					"bytes", observed.Bytes(),
 					"duration_ms", time.Since(started).Seconds()*1000,
@@ -3361,6 +3810,9 @@ func (s *apiServer) requestMiddleware(next http.Handler) http.Handler {
 			limit := int64(32 << 20)
 			if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
 				limit = 2 << 30
+				if r.URL.Path == "/api/v1/virtualization/media" {
+					limit = (8 << 30) + (1 << 20)
+				}
 			}
 			if r.ContentLength > limit {
 				writeJSON(w, http.StatusRequestEntityTooLarge, map[string]string{"error": "request body too large"})
@@ -3373,6 +3825,27 @@ func (s *apiServer) requestMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func safeRequestLogPath(value string) string {
+	const prefix = "/api/v1/public/file-requests/"
+	if strings.HasPrefix(value, prefix) {
+		if strings.HasSuffix(value, "/upload") {
+			return prefix + ":token/upload"
+		}
+		return prefix + ":token"
+	}
+	const sharePrefix = "/api/v1/public/file-share-links/"
+	if strings.HasPrefix(value, sharePrefix) {
+		suffix := ""
+		if strings.HasSuffix(value, "/download") {
+			suffix = "/download"
+		} else if strings.HasSuffix(value, "/files") {
+			suffix = "/files"
+		}
+		return sharePrefix + ":token" + suffix
+	}
+	return value
 }
 
 func requestCorrelationID(r *http.Request) string {

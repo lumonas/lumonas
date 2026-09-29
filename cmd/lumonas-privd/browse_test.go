@@ -16,7 +16,7 @@ func browseTestSnapshot(t *testing.T) (source, name string) {
 	t.Helper()
 	pool := t.TempDir()
 	source = filepath.Join(pool, "main")
-	name = "nightly-20260913T100000Z"
+	name = "2026.09.13-10.00.00"
 	snapshotDir := filepath.Join(pool, "main.snapshots", name)
 	if err := os.MkdirAll(filepath.Join(snapshotDir, "media", "movies"), 0o750); err != nil {
 		t.Fatal(err)

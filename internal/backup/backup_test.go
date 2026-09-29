@@ -23,6 +23,35 @@ func TestDestinationValidationAndObjectName(t *testing.T) {
 	}
 }
 
+func TestDestinationValidationRejectsInvalidRetentionLock(t *testing.T) {
+	destination := Destination{ID: "local", Name: "Local", Type: DestinationLocal, Target: "/var/lib/lumonas/recovery", Retention: DefaultRetention()}
+	destination.Retention.ImmutableDays = -1
+	if err := destination.Validate(); err == nil {
+		t.Fatal("negative retention lock was accepted")
+	}
+	destination.Retention.ImmutableDays = 3651
+	if err := destination.Validate(); err == nil {
+		t.Fatal("overlong retention lock was accepted")
+	}
+}
+
+func TestProviderObjectLockRequiresS3AndRetentionDuration(t *testing.T) {
+	destination := Destination{ID: "local", Name: "Local", Type: DestinationLocal, Target: "/var/lib/lumonas/recovery", Retention: DefaultRetention()}
+	destination.Retention.ProviderObjectLock = true
+	if err := destination.Validate(); err == nil {
+		t.Fatal("provider object lock accepted for local destination")
+	}
+	destination = Destination{ID: "s3", Name: "Offsite", Type: DestinationS3, Target: "https://s3.example.test/bucket", Retention: DefaultRetention()}
+	destination.Retention.ProviderObjectLock = true
+	if err := destination.Validate(); err == nil {
+		t.Fatal("provider object lock accepted without an explicit retention period")
+	}
+	destination.Retention.ImmutableDays = 30
+	if err := destination.Validate(); err != nil {
+		t.Fatalf("valid S3 Object Lock policy rejected: %v", err)
+	}
+}
+
 func TestSHA256File(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "bundle.mrb")
 	if err := os.WriteFile(path, []byte("bundle"), 0o600); err != nil {

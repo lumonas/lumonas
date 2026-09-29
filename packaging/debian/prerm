@@ -7,11 +7,11 @@ set -eu
 case "${1:-}" in
 	upgrade|remove|deconfigure)
 		if [ -d /run/systemd/system ] && command -v systemctl >/dev/null 2>&1; then
-			for unit in lumonas-web.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-runtime.service lumonas-privd-general.service lumonas-privd-power.service lumonas-privd-network.service lumonas-privd-storage.service lumonas-privd.service; do
+			for unit in lumonas-web.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-runtime.service lumonas-privd-acme.service lumonas-privd-general.service lumonas-privd-power.service lumonas-privd-network.service lumonas-privd-storage.service lumonas-privd.service; do
 				systemctl stop "$unit"
 			done
 		else
-			for unit in lumonas-web.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-runtime.service lumonas-privd-general.service lumonas-privd-power.service lumonas-privd-network.service lumonas-privd-storage.service lumonas-privd.service; do
+			for unit in lumonas-web.service lumonas-jobs.target lumonas-services.target lumonas-storage.target lumonasd.service lumonas-runtime.service lumonas-privd-acme.service lumonas-privd-general.service lumonas-privd-power.service lumonas-privd-network.service lumonas-privd-storage.service lumonas-privd.service; do
 				systemctl stop "$unit" || true
 			done
 		fi

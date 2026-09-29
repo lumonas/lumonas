@@ -67,6 +67,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     await load()
   }
 
+  if (window.location.pathname.startsWith('/request/') || window.location.pathname.startsWith('/share/')) return <>{children}</>
   if (!status && !error) return <div className="flex h-dvh items-center justify-center bg-background text-muted-foreground">Connecting to LumoNAS…</div>
   if (error && !status) return <div className="flex h-dvh items-center justify-center bg-background p-6 text-sm text-destructive">{error}</div>
   if (!status || !status.required || status.authenticated) return <>{children}</>
@@ -85,7 +86,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   return (
     <main className="flex h-dvh items-center justify-center bg-background p-6">
       <form onSubmit={login} className="w-full max-w-sm space-y-5 rounded-xl border border-border bg-card p-6 shadow-xl">
-        <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">LumoNAS</p><h1 className="mt-2 text-2xl font-semibold text-foreground">Sign in</h1><p className="mt-1 text-sm text-muted-foreground">Use the local administrator account.</p></div>
+        <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">LumoNAS</p><h1 className="mt-2 text-2xl font-semibold text-foreground">Sign in</h1><p className="mt-1 text-sm text-muted-foreground">Use your NAS account to continue.</p></div>
         <label className="block text-sm text-muted-foreground">Username<input value={username} onChange={(event) => setUsername(event.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-foreground" autoComplete="username" /></label>
         <label className="block text-sm text-muted-foreground">Password<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="mt-2 w-full rounded-md border border-border bg-background px-3 py-2 text-foreground" autoComplete="current-password" /></label>
         {error && <p className="text-sm text-destructive">{error}</p>}

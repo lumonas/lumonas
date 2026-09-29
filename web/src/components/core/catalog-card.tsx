@@ -42,6 +42,9 @@ export function CatalogCard({
             </Badge>
           )}
           {installed && <Badge variant="success">Installed</Badge>}
+          {app.trustStatus === 'verified' && <Badge variant="success">Verified</Badge>}
+          {app.trustStatus === 'invalid' && <Badge variant="destructive">Untrusted</Badge>}
+          {(app.trustStatus == null || app.trustStatus === 'unverified') && <Badge variant="warning">Unverified</Badge>}
         </div>
       </div>
       <div className="min-w-0 flex-1">
@@ -59,8 +62,9 @@ export function CatalogCard({
           variant={installed ? 'outline' : 'default'}
           className="h-8 text-xs"
           onClick={() => onInstall(app)}
+          disabled={app.trustStatus === 'invalid'}
         >
-          {installed ? 'Install again' : 'Install'}
+          {app.trustStatus === 'invalid' ? 'Blocked' : installed ? 'Install again' : 'Install'}
         </Button>
         <a
           href={app.upstream}
@@ -72,6 +76,7 @@ export function CatalogCard({
           <ExternalLink className="size-3" />
         </a>
       </div>
+      {app.trustStatus !== 'verified' && <p className="text-xs text-muted-foreground">{app.trustMessage ?? 'The catalog signature could not be verified.'}</p>}
     </div>
   )
 }

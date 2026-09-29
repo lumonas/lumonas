@@ -38,6 +38,32 @@ export interface Disk {
   smart: SmartSummary
 }
 
+export interface SMARTSample {
+  diskId: string
+  capturedAt: string
+  summary: SmartSummary
+  temperatureC?: number
+}
+
+export interface SMARTTrend {
+  diskId: string
+  sampleCount: number
+  since?: string
+  temperatureSlope: number
+  reallocatedSlope: number
+  pendingSlope: number
+  uncorrectableSlope: number
+  crcSlope: number
+  status: HealthState
+  summary: string
+}
+
+export interface SMARTHistory {
+  diskId: string
+  samples: SMARTSample[]
+  trend: SMARTTrend
+}
+
 export interface PoolMember {
   diskId: string
   enabled: boolean
@@ -114,6 +140,12 @@ export interface JobSchedule {
   snapshotSource?: string
   snapshotLabel?: string
   snapshotKeep?: number
+  snapshotLockDays?: number
+  filesystemKind?: 'btrfs' | 'zfs'
+  filesystemSource?: string
+  relocationShareId?: string
+  relocationResourceId?: string
+  relocationRelativePath?: string
 }
 
 export type AlertSeverity = 'info' | 'attention' | 'warning' | 'critical'
@@ -127,6 +159,7 @@ export interface Alert {
   state: 'firing' | 'acknowledged' | 'resolved'
   startedAt: string
   resolvedAt?: string
+  snoozedUntil?: string
 }
 
 export type ActivityCategory =
@@ -227,11 +260,43 @@ export interface ShareProtocolConfig {
   hosts?: string
   readOnly?: boolean
   quotaBytes?: number
+  auditEnabled?: boolean
+  auditOperations?: string[]
+}
+
+export interface ShareStorageResource {
+  id: string
+  label: string
+  path: string
+  kind: 'pool' | 'disk'
+  totalBytes?: number
+  usedBytes?: number
+}
+
+export interface ShareRelocationPreview {
+  shareId: string
+  shareName: string
+  sourcePath: string
+  destinationRoot: string
+  relativePath: string
+  destinationPath: string
+  fileCount: number
+  bytes: number
+  plan: { changes: { path: string; action: string; bytes: number }[]; files: number; bytes: number; deletes: number }
+  planHash: string
+  retainsSource: boolean
+  requiresDowntime: boolean
+}
+
+export interface ShareRelocationScheduleResult {
+  schedule: JobSchedule
+  preview: ShareRelocationPreview
 }
 
 export interface Share {
   id: string
   name: string
+  path: string
   resourceId: string
   resourceLabel: string
   relativePath: string
@@ -241,6 +306,60 @@ export interface Share {
   protocols: ShareProtocolConfig[]
   access: { principalId: string; level: AccessLevel }[]
   usedBytes?: number
+}
+
+export interface ShareAccessPreviewEntry {
+  principalId: string
+  name: string
+  kind: 'user' | 'group' | 'service'
+  enabled: boolean
+  level: AccessLevel
+  grantedBy?: string[]
+  guest?: boolean
+}
+
+export interface ShareAccessPreview {
+  shareId: string
+  name: string
+  enabled: boolean
+  guestAccess: boolean
+  entries: ShareAccessPreviewEntry[]
+  accessRules: Array<{ principalId: string; level: AccessLevel }>
+}
+
+export interface SharePathAccessCheck {
+  shareId: string
+  principalId: string
+  path: string
+  shareEnabled: boolean
+  accountEnabled: boolean
+  shareLevel: AccessLevel
+  filesystemAccess: 'read' | 'write' | 'none' | 'unknown'
+  allowed: boolean
+  explanation: string
+  approximate: boolean
+}
+
+export interface ShareClientsSnapshot {
+  sessions: Array<{ sessionId: string; username: string; machine: string; dialect?: string; share?: string }>
+  openFiles: Array<{ path: string; sharePath?: string; opens: number }>
+  capturedAt: string
+  service: string
+}
+
+export interface TLSCertificateStatus {
+  state: 'disabled' | 'incomplete' | 'missing' | 'invalid' | 'not-yet-valid' | 'expired' | 'expiring' | 'valid'
+  configured: boolean
+  issuer?: string
+  subject?: string
+  dnsNames?: string[]
+  notBefore?: string
+  notAfter?: string
+  daysRemaining?: number
+  detail?: string
+  managedBy?: 'none' | 'manual' | 'letsencrypt'
+  autoRenewalConfigured: boolean
+  acmeFirewallConfigured: boolean
 }
 
 export type UserRole = 'owner' | 'operator' | 'readonly'
@@ -286,6 +405,71 @@ export interface FileEntry {
   modifiedAt: string
 }
 
+export interface FileRequestLink {
+  id: string
+  shareId: string
+  path: string
+  createdAt: string
+  expiresAt: string
+  maxFiles: number
+  maxBytes: number
+  receivedFiles: number
+  receivedBytes: number
+  revokedAt?: string
+}
+
+export interface FileShareLink {
+  id: string
+  shareId: string
+  path: string
+  createdAt: string
+  expiresAt: string
+  downloads: number
+  revokedAt?: string
+}
+
+export interface FileContentResult {
+  shareId: string
+  path: string
+  name: string
+  snippet: string
+  sizeBytes: number
+  modifiedAt: string
+}
+
+export interface FileContentIndexStatus {
+  shareId: string
+  documents: number
+  indexedAt: string | null
+  maxFileBytes: number
+  maxDocuments: number
+  maxIndexBytes: number
+}
+
+export interface FileContentIndexBuildResult extends FileContentIndexStatus {
+  skipped: number
+}
+
+export interface FileIntegrityReport {
+  baselineAt: string
+  verifiedAt: string
+  unchanged: number
+  changedCount: number
+  missingCount: number
+  addedCount: number
+  changed: string[]
+  missing: string[]
+  added: string[]
+}
+
+export interface FileIntegrityStatus {
+  shareId: string
+  fileCount: number
+  baselineAt?: string
+  report?: FileIntegrityReport
+  running: boolean
+}
+
 export interface RecycleEntry {
   id: string
   shareId: string
@@ -300,11 +484,23 @@ export interface RecoveryLayer {
   label: string
   status: 'current' | 'stale' | 'missing'
   detail: string
+  lastSuccessfulAt?: string | null
+}
+
+export interface RecoveryCoverage {
+  id: string
+  name: string
+  kind: 'share' | 'docker-appdata'
+  status: 'current' | 'stale' | 'missing'
+  detail: string
+  lastSuccessfulAt?: string | null
 }
 
 export interface RecoveryReadiness {
   score: number
   layers: RecoveryLayer[]
+  coverage?: RecoveryCoverage[]
+  warnings?: string[]
 }
 
 export interface HealthComponent {
@@ -321,6 +517,62 @@ export interface HealthBreakdown {
   components: HealthComponent[]
 }
 
+export interface RestoreDrill {
+  id: string
+  trigger: 'manual' | 'scheduled'
+  state: 'running' | 'successful' | 'failed'
+  bundlePath?: string
+  generation: number
+  startedAt: string
+  finishedAt?: string
+  verified: boolean
+  databaseValid: boolean
+  composeValid: boolean
+  secretsRestored: boolean
+  databaseRestored: boolean
+  appdataRestored?: string[]
+  sharesRestored?: string[]
+  servicesRehearsed?: string[]
+  servicesHealthy: boolean
+  appliedFiles: number
+  warnings?: string[]
+  error?: string
+}
+
+export interface RestoreDrillSchedule {
+  enabled: boolean
+  intervalSeconds: number
+  rpoHours: number
+  rtoMinutes: number
+  lastStartedAt?: string
+  nextDueAt?: string
+  updatedAt: string
+}
+
+export interface WorkloadRecoveryObjective {
+  workloadId: string
+  rpoHours: number
+  rtoMinutes: number
+  updatedAt: string
+}
+
+export interface TroubleshootingLink { label: string; path: string }
+export interface TroubleshootingIssue {
+  id: string
+  severity: HealthState
+  title: string
+  summary: string
+  cause?: string
+  steps: string[]
+  resource?: { type: string; id: string }
+  links?: TroubleshootingLink[]
+}
+export interface TroubleshootingReport { status: 'clear' | 'action_required'; issues: TroubleshootingIssue[] }
+
+export interface GraphNode { id: string; type: string; label: string; status: HealthState }
+export interface GraphEdge { from: string; to: string; relationship: string }
+export interface DependencyGraph { generatedAt: string; nodes: GraphNode[]; edges: GraphEdge[] }
+
 export interface BackupJob {
   id: string
   name: string
@@ -335,13 +587,49 @@ export interface BackupJob {
 
 export interface BackupDestination {
   id: string
-  type: 'usb' | 's3' | 'sftp' | 'nas'
+  destinationId?: string
+  enabled: boolean
+  type: 'usb' | 's3' | 'sftp' | 'nas' | 'cloud'
   label: string
   target?: string
   encrypted: boolean
   status: HealthState
+  immutableDays?: number
+  providerObjectLock?: boolean
   lastVerifiedAt?: string
   detail?: string
+}
+
+export interface BackupSchedule {
+  id: string
+  enabled: boolean
+  intervalSeconds: number
+  onUsbAttach: boolean
+  lastStartedAt?: string
+  nextDueAt?: string
+  updatedAt: string
+}
+
+export interface BackupPolicyTemplate {
+  id: string
+  name: string
+  description: string
+  intervalSeconds: number
+  generations: number
+  daily: number
+  monthly: number
+}
+
+export interface BackupRestoreCheck {
+  state: 'verified'
+  destinationId: string
+  runId: string
+  checksum: string
+  bytes: number
+  databaseRestored: boolean
+  appdataRestored: string[]
+  appliedFiles: number
+  serviceStartup: 'not_attempted'
 }
 
 export interface ConfigGeneration {
@@ -413,6 +701,7 @@ export interface AppSettings {
       ip: string
       scope: string
       lastActiveAt: string
+      expiresAt?: string
       current: boolean
     }[]
   }
@@ -451,6 +740,7 @@ export interface StorageSnapshot {
   name: string
   label?: string
   createdAt: string
+  protectedUntil?: string
 }
 
 export interface SnapshotEntry {
@@ -458,6 +748,24 @@ export interface SnapshotEntry {
   sizeBytes: number
   directory: boolean
   modifiedAt: string
+}
+
+export interface SnapshotChange {
+  path: string
+  kind: 'added' | 'deleted' | 'modified'
+  sizeBytes: number
+  modifiedAt: string
+}
+
+export interface SnapshotDiff {
+  snapshotFiles: number
+  currentFiles: number
+  added: number
+  deleted: number
+  modified: number
+  unchanged: number
+  reviewRecommended: boolean
+  changes: SnapshotChange[]
 }
 
 export interface StorageSnapshotFiles {
@@ -516,6 +824,65 @@ export interface InstallStatus {
 export interface StorageSafety {
   state: 'locked' | 'unlocked'
   unlockedUntil: string | null
+}
+
+export interface APITokenSummary {
+  id: string
+  name: string
+  scopes: ('read' | 'backup:write' | 'replication:receive' | 'fleet:status' | `workstation:backup:${string}` | `replication:snapshot:receive:${string}`)[]
+  createdAt: string
+  expiresAt?: string
+  lastUsedAt?: string
+}
+
+export interface ReplicationPeer {
+  id: string
+  name: string
+  url: string
+  createdAt: string
+  lastSyncAt?: string
+  lastError?: string
+  remoteStatus?: 'online' | 'offline'
+  remoteVersion?: string
+  remoteHealth?: string
+  remoteCheckedAt?: string
+}
+
+export interface SnapshotReplicationTask {
+  id: string
+  peerId: string
+  name: string
+  sourceShareId: string
+  destinationShareId: string
+  scheduleKind: 'manual' | 'daily' | 'weekly'
+  timeOfDay: string
+  weekday?: string
+  lastSnapshotName?: string
+  lastAttemptAt?: string
+  lastSyncAt?: string
+  lastError?: string
+  running?: boolean
+  createdAt: string
+}
+
+export interface SnapshotReplicationRun {
+  id: string
+  taskId: string
+  jobId: string
+  state: 'running' | 'successful' | 'failed' | 'cancelled'
+  stage: string
+  progress: number
+  bytes: number
+  snapshotName?: string
+  error?: string
+  createdAt: string
+  startedAt?: string
+  finishedAt?: string
+}
+
+export interface APITokenCreated {
+  token: string
+  summary: APITokenSummary
 }
 
 export interface ProtectionConfig {
@@ -579,6 +946,25 @@ export interface StorageOperationPlan {
   status: string
 }
 
+export interface DiskReplacementPlan {
+  operationId: string
+  retiredDiskId: string
+  retiredDataName: string
+  replacementDiskId: string
+  parityDiskId?: string
+  configGeneration: number
+  expiresAt: string
+  planHash: string
+  status: string
+}
+
+export interface DiskReplacementResult {
+  ok: boolean
+  jobId: string
+  slot: string
+  next: string
+}
+
 export interface RecoveryManifest {
   formatVersion: number
   configSchema: number
@@ -607,6 +993,7 @@ export interface RecoveryPlan {
   composeValid: boolean
   encryptedSecrets: boolean
   appdata?: { stack: string; containerPath: string; hostPath: string; archivePath: string; archiveBytes: number }[]
+  databaseDumps?: { stack: string; container: string; archivePath: string; archiveBytes: number }[]
   warnings?: string[]
 }
 
@@ -615,6 +1002,7 @@ export interface RecoveryExportResponse {
   manifest: RecoveryManifest
   verified: boolean
   appdataArchives: number
+  databaseDumps: number
   warnings: string[]
 }
 
@@ -642,6 +1030,12 @@ export interface AuditEntry {
   metadata?: Record<string, unknown>
 }
 
+export interface AuditPage {
+  entries: AuditEntry[]
+  nextCursor?: string
+  hasMore: boolean
+}
+
 export interface CapacityForecast {
   resourceId: string
   totalBytes: number
@@ -650,8 +1044,19 @@ export interface CapacityForecast {
   windowDays: number
   growthBytesPerDay: number
   daysToNinetyPercent?: number | null
+  daysToFull?: number | null
+  estimatedFullAt?: string
+  sampleAgeHours: number
+  stale: boolean
+  confidence: 'low' | 'medium' | 'high' | ''
   available: boolean
   message?: string
+}
+
+export interface CapacityThreshold {
+  resourceId: string
+  thresholdPercent: number
+  updatedAt: string
 }
 
 export interface SupportSession {
@@ -746,6 +1151,8 @@ export interface CatalogApp {
   recovery?: RecoveryContract
   appdataPaths?: string[]
   dbDumpContainer?: string
+  trustStatus?: 'verified' | 'unverified' | 'invalid'
+  trustMessage?: string
 }
 
 export type RecoveryStrategy = 'stop-backup' | 'snapshot' | 'custom' | 'none'
@@ -842,10 +1249,70 @@ export interface DockerContainer {
   startedAt?: string
 }
 
+export interface VirtualizationStatus {
+  libvirtAvailable: boolean
+  kvmAvailable: boolean
+  architecture: string
+  cpuCount: number
+  memoryBytes: number
+  reason?: string
+}
+
+export interface VirtualMachine {
+  name: string
+  uuid?: string
+  state: string
+  vcpus?: number
+  memoryKiB?: number
+  maximumMemoryKiB?: number
+  diskPath?: string
+  iso?: string
+}
+
+export interface VirtualizationMedia {
+  name: string
+  sizeBytes: number
+}
+
+export interface CreateVirtualMachineInput {
+  name: string
+  iso: string
+  vcpus: number
+  memoryMiB: number
+  diskGiB: number
+}
+
+export interface VirtualMachineSnapshot {
+  name: string
+  state?: string
+  creationTime?: string
+}
+
+export interface VirtualMachineConsole {
+  output: string
+  cursor: number
+  connected: boolean
+}
+
+export interface VirtualMachineDeleteResult {
+  name: string
+  diskPath: string
+  diskRemoved: boolean
+  definitionRetained: boolean
+}
+
+export interface RecoverableVirtualMachine {
+  name: string
+  diskPath: string
+  diskBytes: number
+}
+
 export interface DockerImage {
   id: string
   repo: string
   tag: string
+  localDigest?: string
+  remoteDigest?: string
   sizeBytes: number
   createdDaysAgo: number
   updateAvailable: boolean

@@ -7,6 +7,8 @@ import { JobsTab } from '@/features/monitoring/jobs-tab'
 import { MonitoringOverviewTab } from '@/features/monitoring/overview-tab'
 import { NotificationsTab } from '@/features/monitoring/notifications-tab'
 import { TimelineTab } from '@/features/monitoring/timeline-tab'
+import { TroubleshootingTab } from '@/features/monitoring/troubleshooting-tab'
+import { SystemLogsTab } from '@/features/monitoring/system-logs-tab'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
@@ -15,6 +17,8 @@ const TABS = [
   { value: 'notifications', label: 'Notifications' },
   { value: 'activity', label: 'Activity' },
   { value: 'audit', label: 'Audit' },
+  { value: 'troubleshooting', label: 'Troubleshooting' },
+  { value: 'logs', label: 'Logs' },
 ] as const
 
 export function MonitoringPage() {
@@ -48,6 +52,8 @@ export function MonitoringPage() {
         <TabsContent value="notifications"><NotificationsTab /></TabsContent>
         <TabsContent value="activity"><TimelineTab /></TabsContent>
         <TabsContent value="audit"><AuditTab /></TabsContent>
+        <TabsContent value="troubleshooting"><TroubleshootingTab /></TabsContent>
+        <TabsContent value="logs"><SystemLogsTab /></TabsContent>
       </Tabs>
     </div>
   )

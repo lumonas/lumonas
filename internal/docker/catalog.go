@@ -1,6 +1,8 @@
 package docker
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +10,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+)
+
+const (
+	CatalogTrustVerified   = "verified"
+	CatalogTrustUnverified = "unverified"
+	CatalogTrustInvalid    = "invalid"
 )
 
 type CatalogApp struct {
@@ -25,6 +33,8 @@ type CatalogApp struct {
 	Recovery        *RecoveryContract  `json:"recovery,omitempty"`
 	AppdataPaths    []string           `json:"appdataPaths,omitempty"`
 	DBDumpContainer string             `json:"dbDumpContainer,omitempty"`
+	TrustStatus     string             `json:"trustStatus,omitempty"`
+	TrustMessage    string             `json:"trustMessage,omitempty"`
 }
 type CatalogFormField struct {
 	ID              string `json:"id"`
@@ -100,7 +110,47 @@ func LoadCatalog(path string) ([]CatalogApp, error) {
 	if err := json.Unmarshal(data, &apps); err != nil {
 		return nil, err
 	}
+	status, message := catalogTrust(path, data, os.Getenv("LUMONAS_CATALOG_PUBLIC_KEY"))
+	for index := range apps {
+		apps[index].TrustStatus = status
+		apps[index].TrustMessage = message
+	}
 	return apps, nil
+}
+
+// VerifyCatalogSignature checks a detached standard-base64 Ed25519 signature
+// over the exact catalog bytes using a standard-base64 public key.
+func VerifyCatalogSignature(data []byte, signature, publicKey string) bool {
+	key, keyErr := base64.StdEncoding.DecodeString(strings.TrimSpace(publicKey))
+	sig, sigErr := base64.StdEncoding.DecodeString(strings.TrimSpace(signature))
+	return keyErr == nil && sigErr == nil && len(key) == ed25519.PublicKeySize && ed25519.Verify(ed25519.PublicKey(key), data, sig)
+}
+
+func catalogTrust(path string, data []byte, publicKey string) (string, string) {
+	signatureBytes, err := os.ReadFile(path + ".sig")
+	if errors.Is(err, os.ErrNotExist) {
+		return CatalogTrustUnverified, "Catalog signature is missing"
+	}
+	if err != nil {
+		return CatalogTrustInvalid, "Catalog signature could not be read"
+	}
+	if strings.TrimSpace(publicKey) == "" {
+		return CatalogTrustUnverified, "Catalog signature exists but no trusted public key is configured"
+	}
+	if !VerifyCatalogSignature(data, string(signatureBytes), publicKey) {
+		return CatalogTrustInvalid, "Catalog signature does not match the configured trusted key"
+	}
+	return CatalogTrustVerified, "Catalog signature verified"
+}
+
+// CatalogInstallAllowed rejects known-tampered catalogs and optionally makes
+// signatures mandatory for managed deployments. Unsigned development builds
+// remain usable when the strict policy is disabled.
+func CatalogInstallAllowed(app CatalogApp, requireSigned bool) bool {
+	if app.TrustStatus == CatalogTrustInvalid {
+		return false
+	}
+	return !requireSigned || app.TrustStatus == CatalogTrustVerified
 }
 
 // EnrichStack applies catalog-owned recovery metadata without changing the

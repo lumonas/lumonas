@@ -248,6 +248,24 @@ func (s *apiServer) saveNotificationRule(w http.ResponseWriter, r *http.Request)
 	if len(rule.Routes) == 0 {
 		rule.Routes = []string{"web"}
 	}
+	channels, err := s.store.ListNotificationChannels()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "notification channels could not be loaded"})
+		return
+	}
+	validRoutes := map[string]bool{"web": true, "*": true, "all": true}
+	for _, channel := range channels {
+		if channel.Configured {
+			validRoutes[channel.ID] = true
+			validRoutes[channel.Type] = true
+		}
+	}
+	for _, route := range rule.Routes {
+		if !validRoutes[route] {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "notification route must reference an available channel"})
+			return
+		}
+	}
 	// Creation always starts enabled — bool zero-value would otherwise
 	// create silently inactive rules; disable via PATCH after creation.
 	rule.Enabled = true

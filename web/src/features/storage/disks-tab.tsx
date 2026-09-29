@@ -26,6 +26,7 @@ export function DisksTab() {
       id: 'name',
       header: 'Name',
       sortValue: (d) => d.name,
+      searchValue: (d) => `${d.name} ${d.model} ${d.serial} ${d.wwn ?? ''}`,
       cell: (d) => (
         <div className="flex flex-col">
           <span className="font-mono text-[13px] font-medium">{d.name}</span>

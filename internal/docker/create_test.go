@@ -2,10 +2,88 @@ package docker
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"os"
 	"strings"
 	"testing"
 )
+
+func TestVerifyCatalogSignature(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte(`[{"id":"jellyfin"}]`)
+	signature := ed25519.Sign(privateKey, data)
+	encodedKey := base64.StdEncoding.EncodeToString(publicKey)
+	encodedSignature := base64.StdEncoding.EncodeToString(signature)
+	if !VerifyCatalogSignature(data, encodedSignature, encodedKey) {
+		t.Fatal("valid catalog signature was rejected")
+	}
+	if VerifyCatalogSignature(append(data, ' '), encodedSignature, encodedKey) {
+		t.Fatal("signature for different catalog bytes was accepted")
+	}
+	if VerifyCatalogSignature(data, encodedSignature, "invalid-key") {
+		t.Fatal("malformed trust key was accepted")
+	}
+}
+
+func TestCatalogInstallTrustPolicy(t *testing.T) {
+	for _, tc := range []struct {
+		status      string
+		require     bool
+		wantAllowed bool
+	}{
+		{CatalogTrustVerified, false, true},
+		{CatalogTrustVerified, true, true},
+		{CatalogTrustUnverified, false, true},
+		{CatalogTrustUnverified, true, false},
+		{CatalogTrustInvalid, false, false},
+		{CatalogTrustInvalid, true, false},
+	} {
+		if got := CatalogInstallAllowed(CatalogApp{TrustStatus: tc.status}, tc.require); got != tc.wantAllowed {
+			t.Errorf("CatalogInstallAllowed(%q, %t) = %t, want %t", tc.status, tc.require, got, tc.wantAllowed)
+		}
+	}
+}
+
+func TestLoadCatalogReportsSignatureTrust(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := t.TempDir() + "/apps.json"
+	data := []byte(`[{"id":"jellyfin","name":"Jellyfin"}]`)
+	if err := os.WriteFile(path, data, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("LUMONAS_CATALOG_PUBLIC_KEY", base64.StdEncoding.EncodeToString(publicKey))
+	if _, err := LoadCatalog(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path+".sig", []byte(base64.StdEncoding.EncodeToString(ed25519.Sign(privateKey, data))), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	apps, err := LoadCatalog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(apps) != 1 || apps[0].TrustStatus != CatalogTrustVerified {
+		t.Fatalf("signed catalog trust not surfaced: %#v", apps)
+	}
+	if err := os.WriteFile(path+".sig", []byte(base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	apps, err = LoadCatalog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if apps[0].TrustStatus != CatalogTrustInvalid {
+		t.Fatalf("invalid signature trust not surfaced: %#v", apps[0])
+	}
+}
 
 func TestCreateStackWritesComposeAtomically(t *testing.T) {
 	root := t.TempDir()

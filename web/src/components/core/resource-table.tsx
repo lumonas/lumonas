@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react'
+import { useId, useMemo, useState } from 'react'
+import { ArrowDown, ArrowUp, ChevronsUpDown, Search } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
 export interface Column<T> {
@@ -11,6 +12,7 @@ export interface Column<T> {
   sortValue?: (row: T) => string | number
   advanced?: boolean
   className?: string
+  searchValue?: (row: T) => string
 }
 
 export function ResourceTable<T extends { id: string }>({
@@ -20,6 +22,7 @@ export function ResourceTable<T extends { id: string }>({
   loading = false,
   emptyState,
   className,
+  pageSize = 50,
 }: {
   columns: Column<T>[]
   rows: T[]
@@ -27,26 +30,41 @@ export function ResourceTable<T extends { id: string }>({
   loading?: boolean
   emptyState?: React.ReactNode
   className?: string
+  pageSize?: number
 }) {
   const [advanced, setAdvanced] = useState(false)
   const [sort, setSort] = useState<{ id: string; dir: 1 | -1 } | null>(null)
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
+  const advancedId = useId()
 
   const hasAdvanced = columns.some((c) => c.advanced)
   const visibleColumns = columns.filter((c) => !c.advanced || advanced)
 
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase()
+    if (!query) return rows
+    return rows.filter((row) => columns.some((column) => (column.searchValue?.(row) ?? '').toLocaleLowerCase().includes(query)))
+  }, [rows, columns, search])
+
   const sortedRows = useMemo(() => {
-    if (!sort) return rows
+    if (!sort) return filteredRows
     const column = columns.find((c) => c.id === sort.id)
-    if (!column?.sortValue) return rows
-    return [...rows].sort((a, b) => {
+    if (!column?.sortValue) return filteredRows
+    return [...filteredRows].sort((a, b) => {
       const av = column.sortValue!(a)
       const bv = column.sortValue!(b)
       if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sort.dir
       return String(av).localeCompare(String(bv)) * sort.dir
     })
-  }, [rows, sort, columns])
+  }, [filteredRows, sort, columns])
+
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize))
+  const currentPage = Math.min(page, totalPages - 1)
+  const visibleRows = sortedRows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
 
   function toggleSort(id: string) {
+    setPage(0)
     setSort((current) => {
       if (current?.id !== id) return { id, dir: 1 }
       if (current.dir === 1) return { id, dir: -1 }
@@ -56,13 +74,26 @@ export function ResourceTable<T extends { id: string }>({
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
+      {columns.some((column) => column.searchValue) && (
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            value={search}
+            onChange={(event) => { setSearch(event.target.value); setPage(0) }}
+            placeholder="Filter this list…"
+            aria-label="Filter this list"
+            className="pl-8"
+          />
+        </div>
+      )}
+      {search.trim() && <p className="sr-only" aria-live="polite">{sortedRows.length} matching records</p>}
       {hasAdvanced && (
         <div className="flex items-center justify-end gap-2">
-          <label htmlFor="advanced-columns" className="cursor-pointer text-xs text-muted-foreground select-none">
+          <label htmlFor={advancedId} className="cursor-pointer text-xs text-muted-foreground select-none">
             Advanced columns
           </label>
           <Switch
-            id="advanced-columns"
+            id={advancedId}
             checked={advanced}
             onCheckedChange={setAdvanced}
             aria-label="Show advanced columns"
@@ -76,7 +107,7 @@ export function ResourceTable<T extends { id: string }>({
               {visibleColumns.map((column) => {
                 const sortable = column.sortValue != null
                 return (
-                  <th key={column.id} className={cn('px-3 py-2.5 text-left', column.className)}>
+                  <th key={column.id} className={cn('px-3 py-2.5 text-left', column.className)} aria-sort={sort?.id === column.id ? (sort.dir === 1 ? 'ascending' : 'descending') : undefined}>
                     {sortable ? (
                       <button
                         type="button"
@@ -122,7 +153,7 @@ export function ResourceTable<T extends { id: string }>({
                 </td>
               </tr>
             ) : (
-              sortedRows.map((row) => (
+              visibleRows.map((row) => (
                 <tr
                   key={row.id}
                   tabIndex={onRowClick ? 0 : undefined}
@@ -130,7 +161,10 @@ export function ResourceTable<T extends { id: string }>({
                   onKeyDown={
                     onRowClick
                       ? (e) => {
-                          if (e.key === 'Enter') onRowClick(row)
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            onRowClick(row)
+                          }
                         }
                       : undefined
                   }
@@ -150,6 +184,16 @@ export function ResourceTable<T extends { id: string }>({
           </tbody>
         </table>
       </div>
+      {!loading && sortedRows.length > pageSize && (
+        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span>{currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, sortedRows.length)} of {sortedRows.length}</span>
+          <div className="flex gap-2">
+            <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" disabled={currentPage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</button>
+            <span className="self-center">Page {currentPage + 1} of {totalPages}</span>
+            <button type="button" className="rounded border px-2 py-1 disabled:opacity-40" disabled={currentPage + 1 >= totalPages} onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}>Next</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

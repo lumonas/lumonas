@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react'
+import { Circle, Search } from 'lucide-react'
 import { useServer } from '@/api/queries'
 import { HealthDot } from '@/components/core/health-badge'
 import { JobsPopover } from '@/components/layout/JobsPopover'
@@ -8,10 +8,18 @@ import { UserMenu } from '@/components/layout/UserMenu'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
 import { useUiStore } from '@/stores/ui'
+import { useLiveConnection } from '@/stores/live-connection'
 
 export function TopBar() {
   const { data: server } = useServer()
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen)
+  const liveState = useLiveConnection((s) => s.state)
+  const liveLabel = {
+    connecting: 'Connecting to live updates',
+    live: 'Live updates connected',
+    reconnecting: 'Live updates reconnecting',
+    offline: 'Live updates offline',
+  }[liveState]
 
   return (
     <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur md:px-6">
@@ -45,6 +53,10 @@ export function TopBar() {
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
+        <span className="mr-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground" role="status" aria-label={liveLabel} title={liveLabel}>
+          <Circle className={`size-2 fill-current ${liveState === 'live' ? 'text-success' : liveState === 'offline' ? 'text-critical' : 'text-attention'}`} aria-hidden="true" />
+          <span className="hidden lg:inline">{liveState === 'live' ? 'Live' : liveState === 'reconnecting' ? 'Reconnecting' : liveState === 'offline' ? 'Offline' : 'Connecting'}</span>
+        </span>
         <JobsPopover />
         <NotificationsPopover />
         <UserMenu />

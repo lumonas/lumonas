@@ -17,6 +17,28 @@ import (
 	dockerruntime "github.com/lumonas/lumonas/internal/docker"
 )
 
+func TestAutomaticBackupQueuePreservesAndDeduplicatesTriggers(t *testing.T) {
+	server := &apiServer{}
+	if !server.enqueueAutomaticBackup("daily") {
+		t.Fatal("first trigger did not claim the worker")
+	}
+	if server.enqueueAutomaticBackup("usb.attach") {
+		t.Fatal("a queued trigger unexpectedly started another worker")
+	}
+	if server.enqueueAutomaticBackup("usb.attach") {
+		t.Fatal("duplicate queued trigger unexpectedly started another worker")
+	}
+	if got := server.nextAutomaticBackup(); got != "usb.attach" {
+		t.Fatalf("queued USB trigger = %q", got)
+	}
+	if got := server.nextAutomaticBackup(); got != "" || server.automaticBackupPending {
+		t.Fatalf("queue did not become idle: next=%q pending=%t", got, server.automaticBackupPending)
+	}
+	if !server.enqueueAutomaticBackup("manual.catchup") {
+		t.Fatal("new trigger after drain did not claim the worker")
+	}
+}
+
 func TestBackupDestinationAPIDoesNotReturnCredentials(t *testing.T) {
 	server := testServer(t)
 	t.Setenv("LUMONAS_RECOVERY_KEY", "backup-key")

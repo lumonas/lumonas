@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
+  Archive,
   ClipboardPaste,
   Copy,
   Download,
@@ -31,11 +32,14 @@ import { AlertBanner } from '@/components/core/alert-banner'
 import { EmptyState } from '@/components/core/empty-state'
 import { PageHeader } from '@/components/core/page-header'
 import { FileSearchDialog } from '@/features/files/file-search'
+import { SnapshotHistory } from '@/features/files/snapshot-history'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Kbd } from '@/components/ui/kbd'
 import { cn } from '@/lib/utils'
+import { formatBytes } from '@/lib/format'
 import type { FileEntry } from '@/api/types'
 import {
   ConflictDialog,
@@ -47,12 +51,23 @@ import {
 } from '@/features/files/file-dialogs'
 import { FilesTable, type FileAction } from '@/features/files/files-table'
 import { RecycleBin } from '@/features/files/recycle-bin'
+import { FileRequestManager } from '@/features/files/file-requests'
+import { FileIntegrityManager } from '@/features/files/file-integrity'
 
 interface Clipboard {
   op: 'copy' | 'cut'
   shareId: string
   fromPath: string
   names: string[]
+}
+
+interface UploadItem {
+  id: string
+  name: string
+  file: File | null
+  shareId: string
+  path: string
+  status: 'submitting' | 'queued' | 'failed'
 }
 
 function shareIdOf(searchParams: URLSearchParams, shares?: { id: string }[]): string | null {
@@ -86,13 +101,18 @@ export function FilesPage() {
   })
   const [query, setQuery] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [uploadQueue, setUploadQueue] = useState<UploadItem[]>([])
+  const [downloadProgress, setDownloadProgress] = useState<{ completed: number; total: number } | null>(null)
+  const [archivePending, setArchivePending] = useState(false)
   const [mkdirOpen, setMkdirOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null)
   const [deleteNames, setDeleteNames] = useState<string[] | null>(null)
   const [properties, setProperties] = useState<FileEntry | null>(null)
+  const [preview, setPreview] = useState<FileEntry | null>(null)
   const [conflict, setConflict] = useState<{ names: string[]; payload: TransferPayload } | null>(
     null,
   )
+  const [transferError, setTransferError] = useState<TransferPayload | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const mkdir = useMkdir()
@@ -138,6 +158,9 @@ export function FilesPage() {
 
   function handleAction(action: FileAction, entry: FileEntry) {
     switch (action) {
+      case 'preview':
+        setPreview(entry)
+        break
       case 'download':
         void downloadEntry(entry)
         break
@@ -166,7 +189,7 @@ export function FilesPage() {
         toast.info('Select one or more files to download')
         return
       }
-      void Promise.all(selected.map((entry) => downloadEntry(entry)))
+      void downloadSelected(selected)
       return
     }
     if (action === 'delete') {
@@ -178,20 +201,61 @@ export function FilesPage() {
     toast.success(action === 'copy' ? 'Copied to clipboard' : 'Cut to clipboard')
   }
 
-  async function downloadEntry(entry: FileEntry) {
-    if (!shareId) return
+  async function downloadEntry(entry: FileEntry, destinationShareId = shareId, destinationPath = path): Promise<boolean> {
+    if (!destinationShareId) return false
     try {
       const blob = await apiDownload(
-        `/files/download?share=${encodeURIComponent(shareId)}&path=${encodeURIComponent(path)}&name=${encodeURIComponent(entry.name)}`,
+        `/files/download?share=${encodeURIComponent(destinationShareId)}&path=${encodeURIComponent(destinationPath)}&name=${encodeURIComponent(entry.name)}`,
       )
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.download = entry.name
       anchor.click()
-      URL.revokeObjectURL(url)
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
+      return true
     } catch {
       toast.error(`Could not download “${entry.name}”`)
+      return false
+    }
+  }
+
+  async function downloadSelected(selected: FileEntry[]) {
+    const destinationShareId = shareId
+    const destinationPath = path
+    setDownloadProgress({ completed: 0, total: selected.length })
+    let failures = 0
+    for (const [index, entry] of selected.entries()) {
+      if (!(await downloadEntry(entry, destinationShareId, destinationPath))) failures += 1
+      setDownloadProgress({ completed: index + 1, total: selected.length })
+    }
+    setDownloadProgress(null)
+    if (failures === 0) toast.success(`Started ${selected.length} file downloads`)
+    else toast.warning(`${selected.length - failures} of ${selected.length} downloads started`)
+  }
+
+  async function downloadArchive(selected: FileEntry[]) {
+    if (!shareId || selected.length === 0) return
+    if (selected.length > 100) {
+      toast.error('Select up to 100 items for one archive')
+      return
+    }
+    const params = new URLSearchParams({ share: shareId, path })
+    selected.forEach((entry) => params.append('name', entry.name))
+    setArchivePending(true)
+    try {
+      const blob = await apiDownload(`/files/download/archive?${params.toString()}`)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = 'lumonas-files.zip'
+      anchor.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000)
+      toast.success('Archive download started')
+    } catch {
+      toast.error('Could not create the archive. Check the connection and try again.')
+    } finally {
+      setArchivePending(false)
     }
   }
 
@@ -206,6 +270,7 @@ export function FilesPage() {
       op: clipboard.op === 'cut' ? 'move' : 'copy',
       conflict: resolvedMode,
     }
+    setTransferError(null)
     transfer.mutate(payload, {
       onSuccess: (result) => {
         toast.success(
@@ -216,8 +281,22 @@ export function FilesPage() {
       onError: (error) => {
         const conflicts = extractConflicts(error)
         if (conflicts) setConflict({ names: conflicts, payload })
-        else toast.error('Transfer failed')
+        else {
+          setTransferError(payload)
+          toast.error('Transfer could not be queued. You can retry it here.')
+        }
       },
+    })
+  }
+
+  function retryTransfer(payload: TransferPayload) {
+    setTransferError(null)
+    transfer.mutate(payload, {
+      onSuccess: (result) => {
+        toast.success(`Transfer queued — ${result.transferred} item${result.transferred === 1 ? '' : 's'} will run in the background`)
+        if (payload.op === 'move') setClipboard(null)
+      },
+      onError: () => setTransferError(payload),
     })
   }
 
@@ -226,17 +305,37 @@ export function FilesPage() {
     paste(mode)
   }
 
+  function submitUpload(item: UploadItem) {
+    if (!item.file) return
+    const file = item.file
+    setUploadQueue((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: 'submitting' } : entry))
+    uploadFile.mutate(
+      { shareId: item.shareId, path: item.path, file },
+      {
+        onSuccess: (result) => {
+          setUploadQueue((current) => current.map((entry) => entry.id === item.id ? { ...entry, file: null, status: 'queued' } : entry))
+          toast.success(`“${result.name}” added to background jobs`)
+        },
+        onError: () => {
+          setUploadQueue((current) => current.map((entry) => entry.id === item.id ? { ...entry, status: 'failed' } : entry))
+          toast.error(`Could not queue “${item.name}”`)
+        },
+      },
+    )
+  }
+
   function uploadFiles(list: FileList | null) {
     if (!list || !shareId) return
-    for (const file of Array.from(list)) {
-      uploadFile.mutate(
-        { shareId, path, file },
-        {
-          onSuccess: (result) =>
-            toast.success(`Uploading “${result.name}” — running as a background job`),
-        },
-      )
-    }
+    const items = Array.from(list).map((file) => ({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      name: file.name,
+      file,
+      shareId,
+      path,
+      status: 'submitting' as const,
+    }))
+    setUploadQueue((current) => [...items, ...current].slice(0, 8))
+    for (const item of items) submitUpload(item)
   }
 
   const crossShare =
@@ -247,7 +346,7 @@ export function FilesPage() {
       <PageHeader
         title="Files"
         description="Administrative file management inside your shares — large transfers run as background jobs."
-        actions={<FileSearchDialog shareId={shareId} />}
+        actions={<div className="flex flex-wrap gap-2">{!binView ? <><Button asChild size="sm" variant="outline"><Link to="/my-files">Simple view</Link></Button><FileRequestManager shareId={shareId} path={path} /><SnapshotHistory shareId={shareId} sharePath={share?.path} currentPath={path} /><FileIntegrityManager shareId={shareId} /></> : null}<FileSearchDialog shareId={shareId} /></div>}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
@@ -417,9 +516,13 @@ export function FilesPage() {
                 <Scissors />
                 Cut
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => bulk('download')}>
+              <Button variant="ghost" size="sm" disabled={downloadProgress != null || archivePending} onClick={() => bulk('download')}>
                 <Download />
-                Download
+                {downloadProgress ? `Starting ${downloadProgress.completed}/${downloadProgress.total}` : 'Download'}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={archivePending || downloadProgress != null || selectedIds.size > 100} title={selectedIds.size > 100 ? 'Choose up to 100 items' : undefined} onClick={() => void downloadArchive(entries.filter((entry) => selectedIds.has(entry.id)))}>
+                <Archive />
+                {archivePending ? 'Building ZIP…' : 'Download ZIP'}
               </Button>
               <Button
                 variant="ghost"
@@ -441,12 +544,37 @@ export function FilesPage() {
             </div>
           )}
 
+          {downloadProgress && <p className="text-xs text-muted-foreground" role="status">Starting download {downloadProgress.completed} of {downloadProgress.total}…</p>}
+
           {crossShare && (
             <AlertBanner tone="info" title="Pasting from another storage resource">
               {clipboard?.op === 'cut'
                 ? 'Moving across resources is performed as copy + delete by a background job.'
                 : 'Copying across resources runs as a background job.'}
             </AlertBanner>
+          )}
+
+          {transferError && <AlertBanner tone="critical" title="Transfer failed to start" action={<Button size="sm" variant="outline" onClick={() => retryTransfer(transferError)} disabled={transfer.isPending}>Retry</Button>}>The selected files are still available to transfer. Check the connection and try again.</AlertBanner>}
+
+          {uploadQueue.length > 0 && (
+            <section className="rounded-lg border bg-card p-3" aria-label="Recent upload submissions">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-medium">Recent uploads</p>
+                <button type="button" className="text-xs text-muted-foreground underline-offset-4 hover:underline" onClick={() => setUploadQueue([])}>Clear</button>
+              </div>
+              <ul className="space-y-1.5">
+                {uploadQueue.slice(0, 5).map((item) => (
+                  <li key={item.id} className="flex items-center gap-2 text-xs">
+                    <span className={item.status === 'failed' ? 'text-critical' : item.status === 'queued' ? 'text-success' : 'text-muted-foreground'}>
+                      {item.status === 'failed' ? 'Failed' : item.status === 'queued' ? 'Queued' : 'Submitting'}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate" title={item.name}>{item.name}</span>
+                    {item.status === 'failed' ? <button type="button" className="font-medium text-primary underline-offset-4 hover:underline" onClick={() => submitUpload(item)}>Retry</button> : null}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-muted-foreground">Queued uploads continue as background jobs. Follow their progress in Jobs.</p>
+            </section>
           )}
 
           {shareId == null ? (
@@ -468,7 +596,7 @@ export function FilesPage() {
               }
             />
           ) : (
-            <FilesTable
+      <FilesTable
               key={selKey}
               entries={filtered}
               loading={files.isLoading}
@@ -528,6 +656,13 @@ export function FilesPage() {
           )
         }}
       />
+
+      <FilePreviewDialog
+        entry={preview}
+        shareId={shareId}
+        path={path}
+        onOpenChange={(open) => { if (!open) setPreview(null) }}
+      />
       <RenameDialog
         entry={renameTarget}
         onOpenChange={(open) => !open && setRenameTarget(null)}
@@ -575,5 +710,40 @@ export function FilesPage() {
         onResolve={resolveConflict}
       />
     </div>
+  )
+}
+
+function FilePreviewDialog({ entry, shareId, path, onOpenChange }: {
+  entry: FileEntry | null
+  shareId: string | null
+  path: string
+  onOpenChange: (open: boolean) => void
+}) {
+  if (!entry || !shareId) return null
+  const extension = entry.name.split('.').pop()?.toLowerCase() ?? ''
+  const image = ['avif', 'gif', 'jpg', 'jpeg', 'png', 'webp'].includes(extension)
+  const audio = ['m4a', 'mp3', 'oga', 'ogg', 'wav'].includes(extension)
+  const video = ['m4v', 'mp4', 'ogv', 'webm'].includes(extension)
+  const text = ['csv', 'json', 'log', 'txt', 'xml', 'yaml', 'yml'].includes(extension)
+  if (!image && !audio && !video && !text) return null
+  if (text && entry.sizeBytes > 2 * 1024 * 1024) return null
+  const params = new URLSearchParams({ share: shareId, path, name: entry.name, inline: '1' })
+  const source = `/api/v1/files/download?${params.toString()}`
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-auto">
+        <DialogHeader>
+          <DialogTitle className="truncate">{entry.name}</DialogTitle>
+          <DialogDescription>{image ? 'Image preview' : audio ? 'Audio preview' : video ? 'Video preview' : 'Text preview'} · {formatBytes(entry.sizeBytes)}</DialogDescription>
+        </DialogHeader>
+        <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-lg bg-muted/40 p-2">
+          {image ? <img src={source} alt={entry.name} className="max-h-[68vh] max-w-full object-contain" /> : null}
+          {audio ? <audio src={source} controls preload="metadata" className="w-full" /> : null}
+          {video ? <video src={source} controls preload="metadata" className="max-h-[68vh] max-w-full" /> : null}
+          {text ? <iframe src={source} title={`Preview of ${entry.name}`} sandbox="" className="h-[68vh] w-full rounded border bg-background" /> : null}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,8 +1,11 @@
 package collector
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os/exec"
 	"strings"
 
 	"github.com/lumonas/lumonas/internal/model"
@@ -44,6 +47,30 @@ func ReadSMART(run CommandRunner, path string) (SMARTDetails, error) {
 	if err != nil {
 		return SMARTDetails{}, fmt.Errorf("smartctl: %w", err)
 	}
+	return decodeSMART(out)
+}
+
+func ReadSMARTContext(ctx context.Context, run CommandRunner, path string) (SMARTDetails, error) {
+	if strings.TrimSpace(path) == "" {
+		return SMARTDetails{}, fmt.Errorf("disk path is required")
+	}
+	var out []byte
+	var err error
+	if run != nil {
+		out, err = run("smartctl", "-aj", path)
+	} else {
+		out, err = exec.CommandContext(ctx, "smartctl", "-aj", path).Output()
+	}
+	if err != nil {
+		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return SMARTDetails{}, ctx.Err()
+		}
+		return SMARTDetails{}, fmt.Errorf("smartctl: %w", err)
+	}
+	return decodeSMART(out)
+}
+
+func decodeSMART(out []byte) (SMARTDetails, error) {
 	var payload smartJSON
 	if err := json.Unmarshal(out, &payload); err != nil {
 		return SMARTDetails{}, fmt.Errorf("parse smartctl: %w", err)
@@ -81,5 +108,10 @@ func ReadSMART(run CommandRunner, path string) (SMARTDetails, error) {
 
 func SMART(run CommandRunner, path string) (model.SmartSummary, error) {
 	details, err := ReadSMART(run, path)
+	return details.Summary, err
+}
+
+func SMARTContext(ctx context.Context, run CommandRunner, path string) (model.SmartSummary, error) {
+	details, err := ReadSMARTContext(ctx, run, path)
 	return details.Summary, err
 }

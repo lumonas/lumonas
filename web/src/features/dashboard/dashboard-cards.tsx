@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   ArrowRight,
   Archive,
+  ClipboardCheck,
   CircleCheck,
   Container,
   Cpu,
@@ -11,7 +12,7 @@ import {
   ShieldCheck,
   Thermometer,
 } from 'lucide-react'
-import { useActivity, useAlerts, useCreateJob, useDisks, useDockerSummary, useJobs, useProtection, usePools, useServer } from '@/api/queries'
+import { useActivity, useAlerts, useBackupReadiness, useCreateJob, useDisks, useDockerSummary, useJobs, useMetrics, useProtection, usePools, useServer, useRecoveryStatus, useRestoreDrills, useRestoreDrillSchedule } from '@/api/queries'
 import { HealthBadge } from '@/components/core/health-badge'
 import { HealthExplanation } from '@/components/core/health-explanation'
 import { Metric } from '@/components/core/metric'
@@ -21,13 +22,17 @@ import { TimelineEvent } from '@/components/core/timeline-event'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useCurrentTime } from '@/hooks/useCurrentTime'
 import { useMetricsStore } from '@/stores/metrics'
 import { formatBytes, formatUptime, timeAgo } from '@/lib/format'
 import type { Alert } from '@/api/types'
+import { useLiveConnection } from '@/stores/live-connection'
 
 export function HealthCard() {
   const { data: server } = useServer()
   const { data: alerts } = useAlerts()
+  const metricsQuery = useMetrics()
+  const liveState = useLiveConnection((state) => state.state)
   const { metrics, cpuHistory } = useMetricsStore()
 
   const firing = (alerts ?? []).filter((a) => a.state === 'firing')
@@ -75,6 +80,13 @@ export function HealthCard() {
             RAM {formatBytes(metrics.ramUsedBytes)} / {formatBytes(metrics.ramTotalBytes)}
           </span>
         </div>
+        <p className="mt-2 text-[11px] text-muted-foreground" role="status">
+          {liveState === 'live'
+            ? 'Metrics are updating live.'
+            : metricsQuery.dataUpdatedAt
+              ? `Last metrics snapshot ${timeAgo(new Date(metricsQuery.dataUpdatedAt).toISOString())}.`
+              : 'Waiting for the first metrics snapshot.'}
+        </p>
         <div className="mt-5 border-t pt-5">
           <HealthExplanation />
         </div>
@@ -85,6 +97,17 @@ export function HealthCard() {
 
 const SEVERITY_ORDER = { critical: 0, warning: 1, attention: 2, info: 3 } as const
 
+function alertDestination(alert: Alert) {
+  const resource = alert.resource
+  if (resource?.type === 'disk' && resource.id) return `/storage?disk=${encodeURIComponent(resource.id)}`
+  if (resource?.type.startsWith('docker') || resource?.type === 'container' || resource?.type === 'stack') return '/docker'
+  if (resource?.type === 'backup') return '/backups?tab=recovery'
+  if (resource?.type === 'network') return '/network'
+  if (resource?.type === 'share' && resource.id) return `/shares?share=${encodeURIComponent(resource.id)}`
+  if (resource?.type === 'job') return '/monitoring?tab=jobs'
+  return '/monitoring?tab=alerts'
+}
+
 export function NeedsAttentionCard() {
   const { data: alerts } = useAlerts()
   const firing = ((alerts ?? []).filter((a) => a.state === 'firing') as Alert[]).sort(
@@ -93,8 +116,11 @@ export function NeedsAttentionCard() {
 
   return (
     <Card className="flex flex-col">
-      <CardHeader className="pb-3">
+      <CardHeader className="flex-row items-center justify-between pb-3">
         <CardTitle className="text-sm font-medium text-muted-foreground">Needs attention</CardTitle>
+        <Button size="sm" variant="ghost" className="h-7 text-xs" asChild>
+          <Link to="/monitoring?tab=alerts">All alerts <ArrowRight /></Link>
+        </Button>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
         {firing.length === 0 ? (
@@ -115,11 +141,11 @@ export function NeedsAttentionCard() {
                 <p className="mt-1.5 text-sm font-medium leading-snug">{alert.title}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{alert.description}</p>
               </div>
-              {alert.resource?.type === 'disk' && (
-                <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" asChild>
-                  <Link to={`/storage?disk=${alert.resource.id}`}>Inspect</Link>
-                </Button>
-              )}
+              <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" asChild>
+                <Link to={alertDestination(alert)}>
+                  {alert.resource?.type === 'disk' ? 'Inspect disk' : 'Review'}
+                </Link>
+              </Button>
             </div>
           ))
         )}
@@ -324,4 +350,52 @@ export function RecentActivityCard() {
       </CardContent>
     </Card>
   )
+}
+
+export function WhatChangedCard() {
+  const { data: activity } = useActivity()
+  const changes = (activity ?? []).filter((event) => ['config', 'security', 'update', 'network'].includes(event.category)).slice(0, 4)
+  return <Card>
+    <CardHeader className="flex-row items-center justify-between space-y-0 pb-4"><CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><Archive className="size-4" />What changed?</CardTitle><Button variant="ghost" size="sm" className="h-7 text-xs" asChild><Link to="/monitoring?tab=timeline">Timeline <ArrowRight /></Link></Button></CardHeader>
+    <CardContent className="flex flex-col gap-3">{changes.length === 0 ? <p className="py-2 text-sm text-muted-foreground">No configuration or security changes recorded yet.</p> : changes.map((event) => <TimelineEvent key={event.id} event={event} />)}</CardContent>
+  </Card>
+}
+
+export function SafeNASChecklistCard() {
+  const { data: readiness } = useBackupReadiness()
+  const { data: protection } = useProtection()
+  const { data: disks } = useDisks()
+  const { data: recovery } = useRecoveryStatus()
+  const { data: drills } = useRestoreDrills()
+  const { data: drillSchedule } = useRestoreDrillSchedule()
+  const now = useCurrentTime()
+  const rpoHours = drillSchedule?.rpoHours ?? 24
+  const bundleAgeHours = recovery?.manifest?.createdAt ? (now - Date.parse(recovery.manifest.createdAt)) / 3_600_000 : null
+  const latestDrill = (drills ?? []).find((drill) => drill.state === 'successful' && drill.generation === recovery?.manifest?.generation)
+  const drillCurrent = !!latestDrill?.finishedAt && now - Date.parse(latestDrill.finishedAt) <= (drillSchedule?.intervalSeconds ?? 604800) * 1000
+  const smartCurrent = (disks ?? []).length > 0 && (disks ?? []).every((disk) => {
+    const test = disk.smart.lastTest
+    return !!test && test.result === 'passed' && now - Date.parse(test.at) <= 90 * 86_400_000
+  })
+  const scrubCurrent = !!protection?.lastScrubAt && now - Date.parse(protection.lastScrubAt) <= 30 * 86_400_000
+  const recoveryChecks = (readiness?.layers ?? []).map((layer) => ({
+    label: layer.label,
+    detail: layer.detail,
+    complete: layer.status === 'current',
+    link: layer.id.includes('destination') || layer.id.includes('key') ? '/backups?tab=destinations' : '/backups?tab=recovery',
+  }))
+  const checks = [
+    ...recoveryChecks,
+    { label: `Recovery point within ${rpoHours}h RPO`, detail: bundleAgeHours == null ? 'No verified recovery bundle is available' : `Latest bundle is ${bundleAgeHours.toFixed(1)}h old`, complete: bundleAgeHours != null && bundleAgeHours <= rpoHours, link: '/backups?tab=recovery' },
+    { label: 'Latest recovery generation passed a canary restore', detail: drillCurrent ? `Last successful drill ${timeAgo(latestDrill!.finishedAt!)}` : 'Run a restore drill for the current bundle generation', complete: drillCurrent, link: '/backups?tab=recovery' },
+    { label: 'Parity scrub completed in the last 30 days', detail: protection?.lastScrubAt ? `Last scrub ${timeAgo(protection.lastScrubAt)}` : 'No scrub is recorded', complete: scrubCurrent, link: '/storage?tab=protection' },
+    { label: 'SMART tests passed in the last 90 days', detail: smartCurrent ? 'All discovered disks have a recent passing test' : 'At least one disk has no recent passing SMART test', complete: smartCurrent, link: '/storage?tab=disks' },
+    { label: 'Parity protection healthy', complete: protection?.status === 'healthy', link: '/storage?tab=protection' },
+    { label: 'All discovered disks healthy', complete: (disks ?? []).length > 0 && (disks ?? []).every((disk) => disk.health === 'healthy'), link: '/storage?tab=disks' },
+  ].sort((a, b) => Number(a.complete) - Number(b.complete))
+  const complete = checks.filter((check) => check.complete).length
+  return <Card>
+    <CardHeader className="flex-row items-center justify-between space-y-0 pb-4"><CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground"><ClipboardCheck className="size-4" />Safe NAS checklist</CardTitle><span className="text-xs text-muted-foreground">{complete}/{checks.length}</span></CardHeader>
+    <CardContent className="space-y-2">{checks.map((check) => <Link key={check.label} to={check.link} className="flex items-start gap-2 rounded-md px-1 py-1 text-sm hover:bg-muted/60"><CircleCheck className={check.complete ? 'mt-0.5 size-4 shrink-0 text-success' : 'mt-0.5 size-4 shrink-0 text-muted-foreground'} /><span className={check.complete ? '' : 'text-muted-foreground'}>{check.label}{'detail' in check && check.detail ? <span className="mt-0.5 block text-xs text-muted-foreground">{check.detail}</span> : null}</span>{!check.complete && <ArrowRight className="ml-auto mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}</Link>)}</CardContent>
+  </Card>
 }

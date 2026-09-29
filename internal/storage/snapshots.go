@@ -44,18 +44,17 @@ type SnapshotRunner func(ctx context.Context, name string, args ...string) ([]by
 var snapshotLabelPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 var snapshotNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$`)
 
-// SnapshotTimestamp renders the timestamp component of a snapshot name.
+// SnapshotTimestamp renders the UTC timestamp component used by Samba's
+// shadow_copy2 module. Keeping the on-disk name parseable lets Windows expose
+// these snapshots through the Previous Versions UI.
 func SnapshotTimestamp(now time.Time) string {
-	return now.UTC().Format("20060102T150405Z")
+	return now.UTC().Format("2006.01.02-15.04.05")
 }
 
-// SnapshotName combines the optional label with the timestamp.
-func SnapshotName(label string, now time.Time) string {
-	stamp := SnapshotTimestamp(now)
-	if label == "" {
-		return stamp
-	}
-	return label + "-" + stamp
+// SnapshotName returns a stable, filesystem-safe timestamp. Human labels are
+// persisted separately so the physical name remains consumable by SMB clients.
+func SnapshotName(_ string, now time.Time) string {
+	return SnapshotTimestamp(now)
 }
 
 // ValidateSnapshotSource checks a subvolume path (btrfs) or dataset (zfs).
@@ -132,7 +131,7 @@ func CreateBtrfsSnapshot(ctx context.Context, run SnapshotRunner, source, name s
 	if !snapshotNamePattern.MatchString(name) {
 		return errors.New("invalid snapshot name")
 	}
-	_, err := run(ctx, "btrfs", "subvolume", "snapshot", "-r", source, source+".snapshots/"+name)
+	_, err := run(ctx, "btrfs", "subvolume", "snapshot", "-r", source, filepath.Join(source+".snapshots", name))
 	return err
 }
 

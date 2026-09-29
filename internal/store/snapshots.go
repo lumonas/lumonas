@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS storage_snapshots (
   name TEXT NOT NULL,
   label TEXT,
   origin TEXT NOT NULL DEFAULT 'manual',
+  protected_until TEXT,
   created_at TEXT NOT NULL,
   UNIQUE(kind, source, name)
 );
@@ -27,6 +28,7 @@ func (s *Store) ensureSnapshotsSchema() error {
 		return err
 	}
 	hasOrigin := false
+	hasProtectedUntil := false
 	for rows.Next() {
 		var cid, notNull, primaryKey int
 		var name, dataType string
@@ -37,6 +39,9 @@ func (s *Store) ensureSnapshotsSchema() error {
 		}
 		if name == "origin" {
 			hasOrigin = true
+		}
+		if name == "protected_until" {
+			hasProtectedUntil = true
 		}
 	}
 	if err := rows.Err(); err != nil {
@@ -49,19 +54,25 @@ func (s *Store) ensureSnapshotsSchema() error {
 			return err
 		}
 	}
+	if !hasProtectedUntil {
+		if _, err := s.db.Exec(`ALTER TABLE storage_snapshots ADD COLUMN protected_until TEXT`); err != nil {
+			return err
+		}
+	}
 	_, err = s.db.Exec(`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(10, ?)`, time.Now().UTC().Format(timeFormat))
 	return err
 }
 
 // StorageSnapshotRecord is one persisted point-in-time snapshot.
 type StorageSnapshotRecord struct {
-	ID        string    `json:"id"`
-	Kind      string    `json:"kind"`
-	Source    string    `json:"source"`
-	Name      string    `json:"name"`
-	Label     string    `json:"label,omitempty"`
-	Origin    string    `json:"origin,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
+	ID             string     `json:"id"`
+	Kind           string     `json:"kind"`
+	Source         string     `json:"source"`
+	Name           string     `json:"name"`
+	Label          string     `json:"label,omitempty"`
+	Origin         string     `json:"origin,omitempty"`
+	ProtectedUntil *time.Time `json:"protectedUntil,omitempty"`
+	CreatedAt      time.Time  `json:"createdAt"`
 }
 
 // SaveStorageSnapshot persists a snapshot row. Re-saving an identical
@@ -79,8 +90,8 @@ func (s *Store) SaveStorageSnapshot(record StorageSnapshotRecord) (StorageSnapsh
 	if record.Origin == "" {
 		record.Origin = "manual"
 	}
-	_, err := s.db.Exec(`INSERT INTO storage_snapshots(id,kind,source,name,label,origin,created_at) VALUES(?,?,?,?,?,?,?)
-ON CONFLICT(kind,source,name) DO NOTHING`, record.ID, record.Kind, record.Source, record.Name, nullable(record.Label), record.Origin, record.CreatedAt.UTC().Format(timeFormat))
+	_, err := s.db.Exec(`INSERT INTO storage_snapshots(id,kind,source,name,label,origin,protected_until,created_at) VALUES(?,?,?,?,?,?,?,?)
+ON CONFLICT(kind,source,name) DO NOTHING`, record.ID, record.Kind, record.Source, record.Name, nullable(record.Label), record.Origin, nullableSnapshotTime(record.ProtectedUntil), record.CreatedAt.UTC().Format(timeFormat))
 	if err != nil {
 		return StorageSnapshotRecord{}, err
 	}
@@ -103,7 +114,7 @@ func (s *Store) StorageSnapshots(source string, limit int) ([]StorageSnapshotRec
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	query := `SELECT id,kind,source,name,COALESCE(label,''),origin,created_at FROM storage_snapshots`
+	query := `SELECT id,kind,source,name,COALESCE(label,''),origin,COALESCE(protected_until,''),created_at FROM storage_snapshots`
 	args := []any{}
 	if source != "" {
 		query += ` WHERE source=?`
@@ -116,7 +127,7 @@ func (s *Store) StorageSnapshots(source string, limit int) ([]StorageSnapshotRec
 
 // StorageSnapshot returns one persisted snapshot by id.
 func (s *Store) StorageSnapshot(id string) (StorageSnapshotRecord, bool, error) {
-	records, err := s.scanStorageSnapshots(`SELECT id,kind,source,name,COALESCE(label,''),origin,created_at FROM storage_snapshots WHERE id=?`, id)
+	records, err := s.scanStorageSnapshots(`SELECT id,kind,source,name,COALESCE(label,''),origin,COALESCE(protected_until,''),created_at FROM storage_snapshots WHERE id=?`, id)
 	if err != nil {
 		return StorageSnapshotRecord{}, false, err
 	}
@@ -128,7 +139,7 @@ func (s *Store) StorageSnapshot(id string) (StorageSnapshotRecord, bool, error) 
 
 // StorageSnapshotByTriple resolves a snapshot by its natural key.
 func (s *Store) StorageSnapshotByTriple(kind, source, name string) (StorageSnapshotRecord, bool, error) {
-	records, err := s.scanStorageSnapshots(`SELECT id,kind,source,name,COALESCE(label,''),origin,created_at FROM storage_snapshots WHERE kind=? AND source=? AND name=?`, kind, source, name)
+	records, err := s.scanStorageSnapshots(`SELECT id,kind,source,name,COALESCE(label,''),origin,COALESCE(protected_until,''),created_at FROM storage_snapshots WHERE kind=? AND source=? AND name=?`, kind, source, name)
 	if err != nil {
 		return StorageSnapshotRecord{}, false, err
 	}
@@ -157,12 +168,25 @@ func (s *Store) scanStorageSnapshots(query string, args ...any) ([]StorageSnapsh
 	result := make([]StorageSnapshotRecord, 0)
 	for rows.Next() {
 		var record StorageSnapshotRecord
-		var created string
-		if err := rows.Scan(&record.ID, &record.Kind, &record.Source, &record.Name, &record.Label, &record.Origin, &created); err != nil {
+		var created, protectedUntil string
+		if err := rows.Scan(&record.ID, &record.Kind, &record.Source, &record.Name, &record.Label, &record.Origin, &protectedUntil, &created); err != nil {
 			return nil, err
 		}
 		record.CreatedAt, _ = parseTime(created)
+		if protectedUntil != "" {
+			parsed, parseErr := parseTime(protectedUntil)
+			if parseErr == nil {
+				record.ProtectedUntil = &parsed
+			}
+		}
 		result = append(result, record)
 	}
 	return result, rows.Err()
+}
+
+func nullableSnapshotTime(value *time.Time) any {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+	return value.UTC().Format(timeFormat)
 }

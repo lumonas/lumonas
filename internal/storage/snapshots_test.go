@@ -25,15 +25,15 @@ func snapshotTestRunner(output string, commands *[]string, failFor map[string]sn
 	}
 }
 
-func TestSnapshotNamingUsesUTCStampAndLabel(t *testing.T) {
+func TestSnapshotNamingUsesSambaCompatibleUTCTimestamp(t *testing.T) {
 	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.FixedZone("test", 2*3600))
-	if got := SnapshotTimestamp(now); got != "20260913T100000Z" {
+	if got := SnapshotTimestamp(now); got != "2026.09.13-10.00.00" {
 		t.Fatalf("timestamp not normalized to UTC: %s", got)
 	}
-	if got := SnapshotName("nightly", now); got != "nightly-20260913T100000Z" {
-		t.Fatalf("unexpected labeled name: %s", got)
+	if got := SnapshotName("nightly", now); got != "2026.09.13-10.00.00" {
+		t.Fatalf("human label must not change the SMB-compatible name: %s", got)
 	}
-	if got := SnapshotName("", now); got != "20260913T100000Z" {
+	if got := SnapshotName("", now); got != "2026.09.13-10.00.00" {
 		t.Fatalf("unexpected bare name: %s", got)
 	}
 }
@@ -141,10 +141,10 @@ func TestBtrfsSnapshotLifecycle(t *testing.T) {
 func TestZfsSnapshotLifecycle(t *testing.T) {
 	var commands []string
 	runner := snapshotTestRunner("", &commands, nil)
-	if err := CreateZfsSnapshot(context.Background(), runner, "tank/media", "20260913T100000Z"); err != nil {
+	if err := CreateZfsSnapshot(context.Background(), runner, "tank/media", "2026.09.13-10.00.00"); err != nil {
 		t.Fatal(err)
 	}
-	listing := "tank/media@20260913T100000Z  Sun Sep 13 10:00 2026 1.05M\ntank/media@older            Sat Sep 12 09:00 2026 20K\ntank/other@elsewhere        Sat Sep 12 09:00 2026 20K\n"
+	listing := "tank/media@2026.09.13-10.00.00  Sun Sep 13 10:00 2026 1.05M\ntank/media@older            Sat Sep 12 09:00 2026 20K\ntank/other@elsewhere        Sat Sep 12 09:00 2026 20K\n"
 	listRunner := snapshotTestRunner(listing, &commands, nil)
 	snapshots, err := ListZfsSnapshots(context.Background(), listRunner, "tank/media")
 	if err != nil {
@@ -153,7 +153,7 @@ func TestZfsSnapshotLifecycle(t *testing.T) {
 	if len(snapshots) != 2 {
 		t.Fatalf("unexpected snapshot count: %#v", snapshots)
 	}
-	if snapshots[0].Name != "20260913T100000Z" || snapshots[1].Name != "older" {
+	if snapshots[0].Name != "2026.09.13-10.00.00" || snapshots[1].Name != "older" {
 		t.Fatalf("snapshots must be newest first: %#v", snapshots)
 	}
 	if snapshots[1].UsedBytes != 20<<10 {
@@ -163,7 +163,7 @@ func TestZfsSnapshotLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(commands, "\n")
-	if !strings.Contains(joined, "zfs snapshot tank/media@20260913T100000Z") {
+	if !strings.Contains(joined, "zfs snapshot tank/media@2026.09.13-10.00.00") {
 		t.Fatalf("unexpected create command: %s", joined)
 	}
 	if !strings.Contains(joined, "zfs destroy tank/media@older") {

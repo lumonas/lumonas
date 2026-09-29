@@ -264,17 +264,26 @@ function maybeStop() {
 }
 
 export class MockEventSource {
+  readonly readyState = 1
+
   constructor(_url: string) {
     ensureStarted()
   }
 
-  addEventListener(_type: 'message', listener: (event: { data: string }) => void) {
-    listeners.add(listener)
+  addEventListener(type: 'message', listener: (event: { data: string }) => void): void
+  addEventListener(type: 'open' | 'error', listener: (event: Event) => void): void
+  addEventListener(type: 'message' | 'open' | 'error', listener: ((event: { data: string }) => void) | ((event: Event) => void)) {
+    if (type === 'message') listeners.add(listener as (event: { data: string }) => void)
+    else if (type === 'open') queueMicrotask(() => (listener as (event: Event) => void)(new Event('open')))
   }
 
-  removeEventListener(_type: 'message', listener: (event: { data: string }) => void) {
-    listeners.delete(listener)
-    maybeStop()
+  removeEventListener(type: 'message', listener: (event: { data: string }) => void): void
+  removeEventListener(type: 'open' | 'error', listener: (event: Event) => void): void
+  removeEventListener(type: 'message' | 'open' | 'error', listener: ((event: { data: string }) => void) | ((event: Event) => void)) {
+    if (type === 'message') {
+      listeners.delete(listener as (event: { data: string }) => void)
+      maybeStop()
+    }
   }
 
   close() {

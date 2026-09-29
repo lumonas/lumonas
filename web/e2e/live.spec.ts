@@ -1,4 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
 
 test('serves the live UI and job events from the real daemon without MSW', async ({ page, request }) => {
   const apiResponse = await request.get('/api/v1/onboarding/state')
@@ -58,4 +61,65 @@ test('serves the live UI and job events from the real daemon without MSW', async
   await page.goto('/monitoring')
   await expect(page.getByRole('heading', { name: 'Monitoring' })).toBeVisible()
   expect(await page.evaluate(() => navigator.serviceWorker.controller)).toBeNull()
+})
+
+test('live daemon syncs files between temporary managed shares', async ({ request }) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'lumonas-sync-live-'))
+  const sourcePath = path.join(root, 'source')
+  const destinationPath = path.join(root, 'destination')
+  await mkdir(sourcePath)
+  await mkdir(destinationPath)
+  await writeFile(path.join(sourcePath, 'sample.txt'), 'live sync payload')
+  const createdShareIds: string[] = []
+  let taskId = ''
+  try {
+    async function createShare(name: string, sharePath: string) {
+      const response = await request.post('/api/v1/shares', { data: {
+        name,
+        path: sharePath,
+        enabled: true,
+        protocols: [{ protocol: 'rsync', enabled: true, readOnly: true }],
+        access: [],
+      } })
+      expect(response.ok(), `share creation failed (${response.status()}): ${await response.text()}`).toBeTruthy()
+      const value = await response.json() as { id: string }
+      createdShareIds.push(value.id)
+      return value.id
+    }
+    const sourceId = await createShare('Sync source', sourcePath)
+    const destinationId = await createShare('Sync destination', destinationPath)
+    const taskResponse = await request.post('/api/v1/folder-sync/tasks', { data: {
+      name: 'Live local sync',
+      source: { kind: 'share', shareId: sourceId },
+      destination: { kind: 'share', shareId: destinationId },
+      mode: 'copy',
+      deepCheck: true,
+      mirrorApproved: false,
+      scheduleKind: 'manual',
+      enabled: false,
+    } })
+    expect(taskResponse.ok()).toBeTruthy()
+    taskId = (await taskResponse.json() as { id: string }).id
+    const previewResponse = await request.post(`/api/v1/folder-sync/tasks/${taskId}/preview`)
+    expect(previewResponse.ok()).toBeTruthy()
+    const preview = await previewResponse.json() as { plan: { files: number; changes: { path: string }[] } }
+    expect(preview.plan.files).toBe(1)
+    expect(preview.plan.changes.map((change) => change.path)).toContain('sample.txt')
+    const started = await request.post(`/api/v1/folder-sync/tasks/${taskId}/run`, { data: {} })
+    expect(started.status()).toBe(202)
+    let state = 'running'
+    for (let attempt = 0; attempt < 50 && state === 'running'; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const runs = await request.get(`/api/v1/folder-sync/tasks/${taskId}/runs`)
+      expect(runs.ok()).toBeTruthy()
+      const history = await runs.json() as { state: string }[]
+      state = history[0]?.state ?? 'missing'
+    }
+    expect(state).toBe('successful')
+    expect(await readFile(path.join(destinationPath, 'sample.txt'), 'utf8')).toBe('live sync payload')
+  } finally {
+    if (taskId) await request.delete(`/api/v1/folder-sync/tasks/${taskId}`)
+    for (const id of createdShareIds.reverse()) await request.delete(`/api/v1/shares/${id}`)
+    await rm(root, { recursive: true, force: true })
+  }
 })

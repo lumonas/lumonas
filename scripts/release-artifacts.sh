@@ -10,7 +10,7 @@ case "$SOURCE_DATE_EPOCH" in
 esac
 mkdir -p "$RELEASE_DIR"
 if command -v syft >/dev/null 2>&1; then
-	for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw; do
+	for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw "$RELEASE_DIR"/lumonas-workstation_*_linux_amd64 "$RELEASE_DIR"/lumonas-workstation_*_linux_arm64 "$RELEASE_DIR"/lumonas-workstation_*_windows_amd64.exe "$RELEASE_DIR"/lumonas-workstation_*_darwin_amd64 "$RELEASE_DIR"/lumonas-workstation_*_darwin_arm64; do
 		[ -f "$artifact" ] || continue
 		syft "file:$artifact" -o spdx-json > "$artifact.sbom.json"
 	done
@@ -23,7 +23,7 @@ fi
 
 if [ "${LUMONAS_SIGN_ARTIFACTS:-false}" = "true" ]; then
   command -v cosign >/dev/null 2>&1 || { echo "cosign is required when LUMONAS_SIGN_ARTIFACTS=true" >&2; exit 1; }
-	for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw; do
+	for artifact in "$RELEASE_DIR"/*.deb "$RELEASE_DIR"/*.iso "$RELEASE_DIR"/*.qcow2 "$RELEASE_DIR"/*.raw "$RELEASE_DIR"/lumonas-workstation_*_linux_amd64 "$RELEASE_DIR"/lumonas-workstation_*_linux_arm64 "$RELEASE_DIR"/lumonas-workstation_*_windows_amd64.exe "$RELEASE_DIR"/lumonas-workstation_*_darwin_amd64 "$RELEASE_DIR"/lumonas-workstation_*_darwin_arm64; do
     [ -f "$artifact" ] || continue
     cosign sign-blob --yes \
       --output-signature "$artifact.sig" \
@@ -51,7 +51,7 @@ def sidecar(path):
         "sizeBytes": path.stat().st_size,
     }
 
-for pattern in ("*.deb", "*.iso", "*.qcow2", "*.raw"):
+for pattern in ("*.deb", "*.iso", "*.qcow2", "*.raw", "lumonas-workstation_*_linux_amd64", "lumonas-workstation_*_linux_arm64", "lumonas-workstation_*_windows_amd64.exe", "lumonas-workstation_*_darwin_amd64", "lumonas-workstation_*_darwin_arm64"):
     for path in release_dir.glob(pattern):
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         artifacts.append({
@@ -81,7 +81,7 @@ PY
 # every published payload, verification sidecar, and the manifest itself.
 (
 	cd "$RELEASE_DIR"
-	for artifact in *.deb *.iso *.qcow2 *.raw *.sbom.json *.sig *.bundle RELEASE-MANIFEST.json; do
+	for artifact in *.deb *.iso *.qcow2 *.raw lumonas-workstation_*_linux_amd64 lumonas-workstation_*_linux_arm64 lumonas-workstation_*_windows_amd64.exe lumonas-workstation_*_darwin_amd64 lumonas-workstation_*_darwin_arm64 *.sbom.json *.sig *.bundle RELEASE-MANIFEST.json; do
 		[ -f "$artifact" ] || continue
 		sha256sum "$artifact"
 	done

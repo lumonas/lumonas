@@ -20,6 +20,8 @@ tags:
     description: Disks, pools, SnapRAID protection
   - name: Docker
     description: Stacks, containers, images, volumes
+  - name: Virtualization
+    description: Host capabilities, local installer media, and virtual machines
   - name: Shares
     description: File shares and access rules
   - name: Files
@@ -40,6 +42,276 @@ tags:
     description: Health scoring and explanations
 
 paths:
+  /virtualization/status:
+    get:
+      tags: [Virtualization]
+      summary: Read host virtualization capabilities
+      operationId: getVirtualizationStatus
+      responses:
+        '200':
+          description: CPU, memory, KVM, and libvirt status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualizationStatus'}
+
+  /virtualization/media:
+    get:
+      tags: [Virtualization]
+      summary: List locally uploaded installer ISOs
+      operationId: listVirtualizationMedia
+      responses:
+        '200':
+          description: Available local installation media
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/VirtualizationMedia'}
+    post:
+      tags: [Virtualization]
+      summary: Upload an installer ISO (maximum 8 GiB)
+      operationId: uploadVirtualizationMedia
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: {type: string, format: binary}
+      responses:
+        '201':
+          description: ISO stored for local VM installation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualizationMedia'}
+        '413': {description: Upload exceeds 8 GiB}
+        '422': {description: Filename or media is invalid}
+
+  /virtualization/vms:
+    get:
+      tags: [Virtualization]
+      summary: List libvirt virtual machines
+      operationId: listVirtualMachines
+      responses:
+        '200':
+          description: VM inventory
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/VirtualMachine'}
+        '503': {description: Libvirt inventory is unavailable}
+    post:
+      tags: [Virtualization]
+      summary: Create and boot a VM installer
+      operationId: createVirtualMachine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateVirtualMachine'}
+      responses:
+        '201':
+          description: Guest defined and installer boot requested
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualMachine'}
+        '422': {description: Resource budget, media, or VM definition is invalid}
+
+  /virtualization/vms/{name}/action:
+    post:
+      tags: [Virtualization]
+      summary: Request a graceful VM lifecycle action
+      operationId: virtualMachineAction
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: {type: string, enum: [start, shutdown, reboot, suspend, resume]}
+      responses:
+        '202':
+          description: Lifecycle action accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualMachine'}
+        '422': {description: Action or VM name is invalid}
+
+  /virtualization/vms/{name}:
+    delete:
+      tags: [Virtualization]
+      summary: Remove a stopped LumoNAS-managed VM
+      operationId: deleteVirtualMachine
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$'}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmName, deleteDisk]
+              properties:
+                confirmName: {type: string}
+                deleteDisk: {type: boolean, description: Permanently remove the VM's managed qcow2 disk}
+      responses:
+        '200':
+          description: VM definition removed; response reports whether its disk was deleted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualMachineDeleteResult'}
+        '400': {description: Name confirmation is invalid}
+        '409': {description: VM is running, unmanaged, or its definition is unsafe}
+
+  /virtualization/recoverable-vms:
+    get:
+      tags: [Virtualization]
+      summary: List retained VM definitions and disks
+      operationId: listRecoverableVirtualMachines
+      responses:
+        '200':
+          description: VM definitions removed while retaining their recovery files
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/RecoverableVirtualMachine'}
+        '503': {description: Libvirt or managed image storage is unavailable}
+
+  /virtualization/vms/{name}/restore-definition:
+    post:
+      tags: [Virtualization]
+      summary: Verify a retained qcow2 disk and restore its VM definition
+      operationId: restoreVirtualMachineDefinition
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$'}}
+      responses:
+        '201':
+          description: VM definition restored; guest remains shut off
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualMachine'}
+        '409': {description: Saved disk or definition failed validation}
+
+  /virtualization/vms/{name}/console:
+    get:
+      tags: [Virtualization]
+      summary: Open or read a running VM serial console
+      operationId: readVirtualMachineConsole
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$'}}
+        - {name: cursor, in: query, required: false, schema: {type: integer, minimum: 0}}
+      responses:
+        '200':
+          description: New serial output since the requested cursor
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [output, cursor, connected]
+                properties:
+                  output: {type: string}
+                  cursor: {type: integer, minimum: 0}
+                  connected: {type: boolean}
+        '409': {description: VM is not running or console could not be opened}
+    post:
+      tags: [Virtualization]
+      summary: Send keyboard input to the VM serial console
+      operationId: writeVirtualMachineConsole
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$'}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [data]
+              properties:
+                data: {type: string, maxLength: 4096}
+      responses:
+        '202': {description: Keyboard input accepted}
+        '422': {description: Console is unavailable or input is invalid}
+    delete:
+      tags: [Virtualization]
+      summary: Close a VM serial console
+      operationId: closeVirtualMachineConsole
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$'}}
+      responses:
+        '204': {description: Console closed}
+
+  /virtualization/vms/{name}/snapshots:
+    get:
+      tags: [Virtualization]
+      summary: List snapshots for a VM
+      operationId: listVirtualMachineSnapshots
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Recovery points for this guest
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/VirtualMachineSnapshot'}}
+        '503': {description: Snapshot inventory is unavailable}
+    post:
+      tags: [Virtualization]
+      summary: Create a VM snapshot
+      operationId: createVirtualMachineSnapshot
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$'}
+      responses:
+        '201':
+          description: Snapshot created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/VirtualMachineSnapshot'}
+        '422': {description: Snapshot could not be created}
+
+  /virtualization/vms/{name}/snapshots/{snapshot}:
+    delete:
+      tags: [Virtualization]
+      summary: Delete a VM snapshot
+      operationId: deleteVirtualMachineSnapshot
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+        - {name: snapshot, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Snapshot deleted}
+        '422': {description: Snapshot could not be deleted}
+
+  /virtualization/vms/{name}/snapshots/{snapshot}/revert:
+    post:
+      tags: [Virtualization]
+      summary: Restore a VM snapshot
+      operationId: revertVirtualMachineSnapshot
+      parameters:
+        - {name: name, in: path, required: true, schema: {type: string}}
+        - {name: snapshot, in: path, required: true, schema: {type: string}}
+      responses:
+        '202': {description: Snapshot restore request accepted}
+        '422': {description: Snapshot could not be restored}
+
   /healthz:
     get:
       tags: [System]
@@ -89,6 +361,263 @@ paths:
               schema:
                 $ref: '#/components/schemas/ServerInfo'
 
+  /api-tokens:
+    get:
+      tags: [Auth]
+      summary: List the current owner's scoped API tokens
+      operationId: listApiTokens
+      responses:
+        '200':
+          description: Token summaries; token material is never returned
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/APITokenSummary'}}
+    post:
+      tags: [Auth]
+      summary: Create a scoped API token
+      operationId: createApiToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, scopes]
+              properties:
+                name: {type: string, minLength: 1, maxLength: 80}
+                scopes:
+                  type: array
+                  minItems: 1
+                  maxItems: 4
+                  items:
+                    oneOf:
+                      - {type: string, enum: [read, backup:write, replication:receive, fleet:status]}
+                      - {type: string, pattern: '^workstation:backup:[A-Za-z0-9_-]{1,128}$'}
+                expiresAt: {type: string, format: date-time}
+      responses:
+        '201':
+          description: Token material is returned once only
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/APITokenCreated'}
+
+  /api-tokens/{id}:
+    delete:
+      tags: [Auth]
+      summary: Revoke an API token
+      operationId: deleteApiToken
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '204': {description: Revoked}
+
+  /replication/peers:
+    get:
+      tags: [Backups]
+      summary: List paired LumoNAS replication peers
+      operationId: listReplicationPeers
+      responses:
+        '200':
+          description: Peer status without credentials
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/ReplicationPeer'}}
+    post:
+      tags: [Backups]
+      summary: Pair an HTTPS LumoNAS recovery replica
+      operationId: createReplicationPeer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, url, token]
+              properties:
+                name: {type: string, minLength: 1}
+                url: {type: string, format: uri, pattern: '^https://'}
+                token: {type: string, description: Receive-only replication token}
+                statusToken: {type: string, description: Optional fleet:status token for remote version and health}
+      responses:
+        '201': {description: Peer saved}
+
+  /fleet/status:
+    get:
+      tags: [System]
+      summary: Read minimal remote NAS version and health
+      description: Intended for a narrowly scoped fleet:status API token. Does not return device identity or configuration.
+      operationId: getFleetStatus
+      responses:
+        '200':
+          description: Remote fleet status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, version, health, checkedAt]
+                properties:
+                  status: {type: string, enum: [ok]}
+                  version: {type: string}
+                  health: {type: string}
+                  checkedAt: {type: string, format: date-time}
+        '401': {description: Authentication required}
+        '403': {description: Token lacks fleet:status scope}
+
+  /replication/peers/{id}:
+    delete:
+      tags: [Backups]
+      summary: Remove a replication peer
+      operationId: deleteReplicationPeer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '204': {description: Removed}
+
+  /replication/peers/{id}/run:
+    post:
+      tags: [Backups]
+      summary: Replicate the latest verified recovery bundle to a peer
+      operationId: runReplicationPeer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        '202': {description: Replication accepted}
+
+  /replication/receive:
+    put:
+      tags: [Backups]
+      summary: Receive a recovery bundle from a paired peer
+      description: Requires a bearer token scoped only to replication:receive.
+      operationId: receiveReplication
+      responses:
+        '201': {description: Bundle stored as an offline replica}
+
+  /replication/snapshot-tasks:
+    get:
+      tags: [Backups]
+      summary: List native Btrfs snapshot replication tasks
+      operationId: listSnapshotReplicationTasks
+      parameters:
+        - name: peerId
+          in: query
+          schema: {type: string}
+      responses:
+        '200': {description: Snapshot replication task configuration and latest state}
+    post:
+      tags: [Backups]
+      summary: Create a snapshot replication task
+      operationId: createSnapshotReplicationTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SnapshotReplicationTaskCreate'}
+      responses:
+        '201': {description: Task created}
+        '422': {description: Invalid shares, schedule, or destination}
+
+  /replication/snapshot-tasks/{id}:
+    put:
+      tags: [Backups]
+      summary: Update a snapshot replication task name, schedule, or receive token
+      operationId: updateSnapshotReplicationTask
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SnapshotReplicationTaskUpdate'}
+      responses:
+        '200': {description: Task updated}
+        '409': {description: Task is running or configuration conflicts}
+    delete:
+      tags: [Backups]
+      summary: Delete a snapshot replication task
+      operationId: deleteSnapshotReplicationTask
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Task removed}
+        '409': {description: Task is running}
+
+  /replication/snapshot-tasks/{id}/run:
+    post:
+      tags: [Backups]
+      summary: Start an incremental snapshot replication run
+      operationId: runSnapshotReplicationTask
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '202': {description: Run accepted and associated with a job}
+        '409': {description: Task already running}
+
+  /replication/snapshot-tasks/{id}/cancel:
+    post:
+      tags: [Backups]
+      summary: Cancel an active snapshot replication run
+      operationId: cancelSnapshotReplicationTask
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '202': {description: Cancellation requested}
+        '409': {description: No active run}
+
+  /replication/snapshot-tasks/{id}/runs:
+    get:
+      tags: [Backups]
+      summary: List recent snapshot replication run history
+      operationId: listSnapshotReplicationRuns
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200': {description: Recent progress, result, and error for each run}
+
+  /replication/snapshots/{shareId}/receive:
+    put:
+      tags: [Backups]
+      summary: Receive a Btrfs snapshot stream into one managed share
+      description: Requires a replication:snapshot:receive:{shareId} token scoped to this destination share. The stream is SHA-256 verified before privileged receive.
+      operationId: receiveBtrfsSnapshot
+      parameters:
+        - {name: shareId, in: path, required: true, schema: {type: string}}
+        - {name: X-LumoNAS-Snapshot-Name, in: header, required: true, schema: {type: string}}
+        - {name: X-LumoNAS-Snapshot-Parent, in: header, schema: {type: string}}
+        - {name: X-LumoNAS-Snapshot-SHA256, in: header, required: true, schema: {type: string, pattern: '^[a-f0-9]{64}$'}}
+        - {name: X-LumoNAS-Snapshot-Stream, in: header, required: true, schema: {type: string}}
+        - {name: X-LumoNAS-Snapshot-Operation, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': {description: Snapshot received and validated}
+        '413': {description: Stream exceeded the size limit}
+        '422': {description: Checksum, metadata, or Btrfs receive failed}
+
+  /replication/snapshots/{shareId}/cancel:
+    post:
+      tags: [Backups]
+      summary: Cancel an active receive operation for the scoped share
+      operationId: cancelBtrfsSnapshotReceive
+      parameters:
+        - {name: shareId, in: path, required: true, schema: {type: string}}
+        - {name: X-LumoNAS-Snapshot-Operation, in: header, required: true, schema: {type: string}}
+      responses:
+        '202': {description: Receiver cancellation requested}
+        '409': {description: Operation is not active for this share}
+
   /system/metrics:
     get:
       tags: [System]
@@ -101,6 +630,109 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SystemMetrics'
+
+  /system/logs:
+    get:
+      tags: [System]
+      summary: Search recent system and service journal entries
+      operationId: getSystemLogs
+      parameters:
+        - {name: unit, in: query, schema: {type: string}}
+        - {name: source, in: query, schema: {type: string, enum: [smb-audit]}}
+        - {name: q, in: query, schema: {type: string, maxLength: 200}}
+        - {name: since, in: query, schema: {type: string, maxLength: 40}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 200}}
+      responses:
+        '200': {description: Filtered journal entries}
+        '422': {description: Unsupported service filter}
+        '503': {description: System journal unavailable}
+
+  /quotas:
+    get:
+      tags: [Storage]
+      summary: List configured storage quotas with measured usage
+      operationId: listStorageQuotas
+      responses:
+        '200': {description: Share, user, and group quota status}
+        '503': {description: Usage scan was incomplete}
+    put:
+      tags: [Storage]
+      summary: Replace storage quota policies
+      operationId: replaceStorageQuotas
+      responses:
+        '200': {description: Saved quota policies}
+        '422': {description: Invalid target or limit}
+
+  /folder-sync/tasks:
+    get:
+      tags: [Backups]
+      summary: List folder sync tasks
+      operationId: listFolderSyncTasks
+      responses:
+        '200': {description: Folder sync tasks}
+    post:
+      tags: [Backups]
+      summary: Create a folder sync task
+      operationId: createFolderSyncTask
+      responses:
+        '200': {description: Saved task}
+        '422': {description: Invalid endpoints or schedule}
+  /folder-sync/tasks/{id}:
+    put:
+      tags: [Backups]
+      summary: Replace a folder sync task
+      operationId: updateFolderSyncTask
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Saved task}
+    delete:
+      tags: [Backups]
+      summary: Delete an idle folder sync task
+      operationId: deleteFolderSyncTask
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Deleted}
+        '409': {description: Task has an active run}
+  /folder-sync/tasks/{id}/preview:
+    post:
+      tags: [Backups]
+      summary: Preview planned folder sync changes
+      operationId: previewFolderSync
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Change plan and confirmation hash}
+  /folder-sync/tasks/{id}/run:
+    post:
+      tags: [Backups]
+      summary: Start a folder sync run
+      operationId: runFolderSync
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '202': {description: Run accepted}
+        '409': {description: Mirror preview is missing or stale}
+  /folder-sync/tasks/{id}/runs:
+    get:
+      tags: [Backups]
+      summary: List folder sync history
+      operationId: listFolderSyncRuns
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Recent task runs}
+  /folder-sync/tasks/{id}/runs/cancel:
+    post:
+      tags: [Backups]
+      summary: Cancel an active folder sync
+      operationId: cancelFolderSync
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      responses:
+        '202': {description: Cancellation requested}
+        '409': {description: No active run}
 
   /system/metrics/history:
     get:
@@ -181,6 +813,26 @@ paths:
                 $ref: '#/components/schemas/Disk'
         '404':
           description: Disk not found
+
+  /storage/disks/{id}/smart-history:
+    get:
+      tags: [Storage]
+      summary: Get SMART history and trend for a disk
+      operationId: getDiskSmartHistory
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: days
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 365, default: 30}
+      responses:
+        '200':
+          description: SMART history
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SMARTHistory'}
 
   /pools:
     get:
@@ -318,6 +970,11 @@ paths:
                   description: Absolute subvolume path (btrfs) or dataset name (zfs)
                 label:
                   type: string
+                retentionLockDays:
+                  type: integer
+                  minimum: 0
+                  maximum: 3650
+                  description: Prevent manual deletion and scheduled retention cleanup until this many days after creation.
       responses:
         '201':
           description: Snapshot created
@@ -357,7 +1014,7 @@ paths:
         '404':
           description: Snapshot not found
         '423':
-          description: Reauthentication and Storage Safety unlock required
+          description: Reauthentication and Storage Safety unlock required, or the snapshot retention lock has not expired
         '422':
           description: Privileged deletion failed
         '503':
@@ -393,6 +1050,78 @@ paths:
           description: Snapshot kind or path cannot be browsed
         '503':
           description: Privileged broker unavailable
+
+  /storage/snapshots/{id}/compare:
+    get:
+      tags: [Storage]
+      summary: Compare a Btrfs snapshot with its current managed share
+      operationId: compareStorageSnapshot
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Bounded metadata diff between snapshot and current files
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [snapshotFiles, currentFiles, added, deleted, modified, unchanged, reviewRecommended, changes]
+                properties:
+                  snapshotFiles: {type: integer}
+                  currentFiles: {type: integer}
+                  added: {type: integer}
+                  deleted: {type: integer}
+                  modified: {type: integer}
+                  unchanged: {type: integer}
+                  reviewRecommended: {type: boolean}
+                  changes:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      required: [path, kind, sizeBytes, modifiedAt]
+                      properties:
+                        path: {type: string}
+                        kind: {type: string, enum: [added, deleted, modified]}
+                        sizeBytes: {type: integer, format: int64}
+                        modifiedAt: {type: string, format: date-time}
+        '404':
+          description: Snapshot not found
+        '422':
+          description: Snapshot kind or comparison failed
+        '503':
+          description: Privileged broker unavailable
+
+  /storage/snapshots/{id}/restore:
+    post:
+      tags: [Storage]
+      summary: Queue a no-overwrite restore from a Btrfs snapshot into its managed share
+      operationId: restoreStorageSnapshotEntries
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareId, snapshotPath, targetPath, names]
+              properties:
+                shareId: {type: string}
+                snapshotPath: {type: string, description: Relative folder in the snapshot}
+                targetPath: {type: string, description: Existing relative folder in the same managed share}
+                names: {type: array, minItems: 1, maxItems: 100, items: {type: string}}
+      responses:
+        '202': {description: Restore job queued}
+        '400': {description: Invalid JSON}
+        '403': {description: Snapshot does not belong to this share}
+        '404': {description: Snapshot or share not found}
+        '409': {description: Restore would overwrite existing entries}
+        '422': {description: Snapshot kind or restore paths cannot be used}
 
   /storage/safety:
     get:
@@ -582,10 +1311,42 @@ paths:
                   type: string
                 requestedState:
                   type: object
-                  description: 'For filesystem.create: filesystem (ext4|xfs), mountPath (canonical branch path), optional label (max 12 chars).'
+                  description: 'For filesystem.create: filesystem (ext4|xfs), mountPath (canonical branch path), optional label (max 12 chars), and encrypted=true to use LUKS2. The passphrase is supplied only during confirmation and is never stored in the plan.'
       responses:
         '201':
           description: Operation plan
+
+  /storage/disks/{id}/unlock:
+    post:
+      tags: [Storage]
+      summary: Unlock and mount a LUKS encrypted disk
+      operationId: unlockEncryptedDisk
+      description: Requires mutation rights and an active storage safety window. The passphrase is sent to the privileged worker for this request only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [passphrase]
+              properties:
+                passphrase:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+      responses:
+        '200':
+          description: Encrypted volume unlocked and mounted
+        '409':
+          description: Disk identity changed or unlock failed
+        '423':
+          description: Storage safety window is locked
 
   /storage/disks/{id}/retire:
     post:
@@ -641,6 +1402,9 @@ paths:
       responses:
         '201':
           description: Replacement plan
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiskReplacementPlan'}
         '422':
           description: Retired disk not protected, replacement unsuitable, or config unreadable
 
@@ -668,6 +1432,9 @@ paths:
       responses:
         '202':
           description: Replacement started; format + config applied, parity recovery queued
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiskReplacementResult'}
         '409':
           description: Plan hash or identity revalidation failed
         '423':
@@ -842,6 +1609,21 @@ paths:
         '200':
           description: Volume list
 
+  /shares/storage-resources:
+    get:
+      tags: [Shares]
+      summary: List currently mounted locations that can host shares
+      operationId: listShareStorageResources
+      responses:
+        '200':
+          description: Mounted pools and eligible data disks
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/ShareStorageResource'}
+        '503': {description: Storage discovery unavailable}
+
   /shares:
     get:
       tags: [Shares]
@@ -881,8 +1663,9 @@ paths:
       summary: List files
       operationId: listFiles
       parameters:
-        - name: shareId
+        - name: share
           in: query
+          required: true
           schema:
             type: string
         - name: path
@@ -895,9 +1678,14 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/FileEntry'
+                type: object
+                required: [shareId, path, entries]
+                properties:
+                  shareId: {type: string}
+                  path: {type: string}
+                  entries:
+                    type: array
+                    items: {$ref: '#/components/schemas/FileEntry'}
 
   /network/connections:
     get:
@@ -1315,7 +2103,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/BackupRun'
+                  $ref: '#/components/schemas/BackupRunEntry'
 
   /backups/run:
     post:
@@ -1368,6 +2156,29 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Alert'
+
+  /alerts/{id}/snooze:
+    post:
+      tags: [Monitoring]
+      summary: Temporarily snooze an alert
+      operationId: snoozeAlert
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hours]
+              properties:
+                hours: {type: integer, minimum: 1, maximum: 168}
+      responses:
+        '200': {description: Snooze expiry}
+        '422': {description: Invalid snooze duration}
 
   /alerts/history:
     get:
@@ -1586,6 +2397,91 @@ paths:
       responses:
         '200':
           description: Principal list
+
+  /security/certificate:
+    get:
+      tags: [Settings]
+      summary: Inspect configured TLS certificate validity and names
+      operationId: get-security-certificate
+      responses:
+        '200':
+          description: Certificate summary without private-key material
+        '4XX':
+          description: Client error
+
+  /security/certificate/import:
+    post:
+      tags: [Settings]
+      summary: Validate and install a TLS certificate pair
+      operationId: import-security-certificate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [certificate, privateKey]
+              properties:
+                certificate:
+                  type: string
+                  description: PEM certificate chain, maximum 1 MiB
+                privateKey:
+                  type: string
+                  description: Matching PEM private key, maximum 1 MiB
+      responses:
+        '202':
+          description: Certificate installation job queued
+        '422':
+          description: Certificate is invalid, expired, or does not match its private key
+        '4XX':
+          description: Client error
+
+  /security/certificate/acme:
+    post:
+      tags: [Settings]
+      summary: Configure Let's Encrypt with HTTP-01 and automatic renewal
+      operationId: configure-security-certificate-acme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [domain, email, agreeToTerms, allowPort80]
+              properties:
+                domain:
+                  type: string
+                  description: Fully qualified public DNS name
+                email:
+                  type: string
+                  format: email
+                agreeToTerms:
+                  type: boolean
+                allowPort80:
+                  type: boolean
+                  description: Explicit consent to add the managed local TCP port 80 firewall binding
+      responses:
+        '202':
+          description: ACME issuance and renewal setup queued
+        '409':
+          description: ACME is already configured
+        '422':
+          description: Domain, email, or terms consent is invalid
+        '4XX':
+          description: Client error
+
+  /security/certificate/acme/disable:
+    post:
+      tags: [Settings]
+      summary: Disable Let's Encrypt renewal while keeping the active certificate
+      operationId: disable-security-certificate-acme
+      responses:
+        '200':
+          description: Automatic renewal disabled
+        '409':
+          description: ACME renewal is not configured
+        '4XX':
+          description: Client error
 
   /settings:
     get:
@@ -1888,6 +2784,17 @@ paths:
         '4XX':
           description: Client error
 
+  /updates/preflight:
+    get:
+      tags: [Settings]
+      summary: Check recovery, image, rollback and free-space readiness before slot activation
+      operationId: get-updates-preflight
+      responses:
+        '200':
+          description: Update activation readiness checks
+        '4XX':
+          description: Client error
+
   /acl/jobs:
     post:
       tags: [Monitoring]
@@ -1906,6 +2813,15 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
+
+  /settings/sessions:
+    delete:
+      tags: [Auth]
+      summary: Revoke other active sessions
+      operationId: revoke-other-settings-sessions
+      responses:
+        '200': {description: Count of revoked sessions}
+        '4XX': {description: Client error}
 
   /settings/sessions/{id}:
     delete:
@@ -2005,17 +2921,108 @@ paths:
       tags: [Monitoring]
       summary: Audit log entries
       operationId: get-audit
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        - in: query
+          name: cursor
+          schema: { type: string }
+        - in: query
+          name: page
+          description: Set to 1 to return the paginated response envelope.
+          schema: { type: string }
+        - in: query
+          name: actor
+          schema: { type: string }
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: outcome
+          schema: { type: string }
+        - in: query
+          name: resourceType
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AuditEntry'
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEntry'
+                  - $ref: '#/components/schemas/AuditPage'
         '202':
           description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /audit/export:
+    get:
+      tags: [Monitoring]
+      summary: Export retained audit history as CSV
+      operationId: get-audit-export
+      parameters:
+        - in: query
+          name: actor
+          schema: { type: string }
+        - in: query
+          name: action
+          schema: { type: string }
+        - in: query
+          name: outcome
+          schema: { type: string }
+        - in: query
+          name: resourceType
+          schema: { type: string }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: CSV export
+        '4XX':
+          description: Client error
+
+  /audit/retention:
+    get:
+      tags: [Monitoring]
+      summary: Get audit retention period
+      operationId: get-audit-retention
+      responses:
+        '200':
+          description: Retention configuration
+    put:
+      tags: [Monitoring]
+      summary: Update audit retention period
+      operationId: put-audit-retention
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated retention
         '4XX':
           description: Client error
 
@@ -2031,6 +3038,51 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
+
+  /backup/destinations/{id}/restore-check:
+    post:
+      tags: [Backups]
+      summary: Download and extract a destination copy in temporary storage
+      operationId: post-backup-destinations-id-restore-check
+      responses:
+        '200':
+          description: Restore payload verified
+        '4XX':
+          description: Client error
+
+  /backup/destinations/{id}/runs/{runId}/virtual-machines/{name}/restore:
+    post:
+      tags: [Backups]
+      summary: Restore a verified virtual machine backup
+      description: Verifies the remote VM disk and managed definition, installs them without overwriting existing files, registers the VM, and leaves it stopped.
+      operationId: restoreBackupVirtualMachine
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: runId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: name
+          in: path
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmName]
+              properties:
+                confirmName: {type: string}
+      responses:
+        '201':
+          description: Restored VM definition; guest remains stopped
+        '4XX':
+          description: VM backup was missing, invalid, or could not be restored
 
   /backup/jobs:
     get:
@@ -2087,6 +3139,38 @@ paths:
           description: OK
         '202':
           description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /backups/policy-templates:
+    get:
+      tags: [Backups]
+      summary: List backup cadence and retention templates
+      operationId: get-backups-policy-templates
+      responses:
+        '200':
+          description: Available backup policy templates
+        '4XX':
+          description: Client error
+
+  /backups/policy-template:
+    post:
+      tags: [Backups]
+      summary: Apply a backup policy template to schedule and destinations
+      operationId: post-backups-policy-template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateId]
+              properties:
+                templateId:
+                  type: string
+      responses:
+        '200':
+          description: Updated backup schedule
         '4XX':
           description: Client error
 
@@ -2162,6 +3246,30 @@ paths:
           description: OK
         '202':
           description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /capacity/thresholds:
+    get:
+      tags: [Settings]
+      summary: List appliance-wide capacity warning thresholds
+      operationId: get-capacity-thresholds
+      responses:
+        '200':
+          description: Capacity thresholds
+    put:
+      tags: [Settings]
+      summary: Set an appliance-wide capacity warning threshold
+      operationId: put-capacity-thresholds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated capacity threshold
         '4XX':
           description: Client error
 
@@ -2322,6 +3430,30 @@ paths:
         '4XX':
           description: Client error
 
+  /docker/stacks/{id}/recovery:
+    put:
+      tags: [Docker]
+      summary: Update a stack's recovery app data paths
+      operationId: updateDockerStackRecoveryProfile
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appdataPaths]
+              properties:
+                appdataPaths:
+                  type: array
+                  maxItems: 32
+                  items: {type: string, maxLength: 512}
+      responses:
+        '200': {description: Updated stack recovery profile}
+        '400': {description: Invalid recovery paths}
+        '404': {description: Stack not found}
+
   /files/delete:
     post:
       tags: [Files]
@@ -2351,6 +3483,43 @@ paths:
           description: OK
         '202':
           description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /files/download/archive:
+    get:
+      tags: [Files]
+      summary: Download selected files and folders as a ZIP archive
+      operationId: get-files-download-archive
+      parameters:
+        - name: share
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: query
+          required: true
+          description: Repeat this parameter for each selected item (maximum 100).
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            items:
+              type: string
+      responses:
+        '200':
+          description: ZIP archive stream
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
         '4XX':
           description: Client error
 
@@ -2398,6 +3567,211 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
+
+  /file-requests:
+    get:
+      tags: [Files]
+      summary: List upload request links for a managed share
+      operationId: get-file-requests
+      parameters:
+        - in: query
+          name: shareId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Upload request links; capability tokens are never returned }
+    post:
+      tags: [Files]
+      summary: Create an expiring, limited upload link
+      operationId: post-file-requests
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareId, expiresInHours, maxFiles, maxBytes]
+              properties:
+                shareId: { type: string }
+                path: { type: string }
+                expiresInHours: { type: integer, minimum: 1, maximum: 720 }
+                maxFiles: { type: integer, minimum: 1, maximum: 1000 }
+                maxBytes: { type: integer, minimum: 1, maximum: 1099511627776 }
+      responses:
+        '201': { description: Created; raw bearer link is returned once }
+        '422': { description: Invalid scope or limits }
+
+  /file-share-links:
+    get:
+      tags: [Files]
+      summary: List read-only folder links for a managed share
+      operationId: get-file-share-links
+      parameters:
+        - in: query
+          name: shareId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Link metadata; capability and password hashes are never returned }
+    post:
+      tags: [Files]
+      summary: Create a scoped, expiring read-only folder link
+      operationId: post-file-share-links
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareId, expiresInHours]
+              properties:
+                shareId: { type: string }
+                path: { type: string }
+                expiresInHours: { type: integer, minimum: 1, maximum: 720 }
+                password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        '201': { description: Created; raw bearer link is returned once }
+        '422': { description: Invalid path, expiration, or password }
+
+  /file-share-links/{id}:
+    delete:
+      tags: [Files]
+      summary: Revoke a read-only folder link
+      operationId: delete-file-share-links-id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Link revoked }
+        '404': { description: Link not found or already revoked }
+
+  /public/file-share-links/{token}:
+    get:
+      tags: [Files]
+      summary: Read public metadata for a read-only folder link
+      operationId: get-public-file-share-links-token
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-Share-Password
+          required: false
+          schema: { type: string }
+      responses:
+        '200': { description: Shared folder metadata }
+        '401': { description: Password is required or invalid }
+        '404': { description: Invalid, expired, or revoked link }
+
+  /public/file-share-links/{token}/files:
+    get:
+      tags: [Files]
+      summary: Browse a read-only shared folder
+      operationId: get-public-file-share-links-token-files
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+        - in: query
+          name: path
+          required: false
+          schema: { type: string }
+        - in: header
+          name: X-Share-Password
+          required: false
+          schema: { type: string }
+      responses:
+        '200': { description: Entries within the link scope }
+        '401': { description: Password is required or invalid }
+        '403': { description: Requested folder is outside the link scope }
+
+  /public/file-share-links/{token}/download:
+    get:
+      tags: [Files]
+      summary: Download one file from a read-only folder link
+      operationId: get-public-file-share-links-token-download
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+        - in: query
+          name: path
+          required: false
+          schema: { type: string }
+        - in: query
+          name: name
+          required: true
+          schema: { type: string }
+        - in: header
+          name: X-Share-Password
+          required: false
+          schema: { type: string }
+      responses:
+        '200': { description: File bytes }
+        '401': { description: Password is required or invalid }
+        '403': { description: Requested file is outside the link scope }
+
+  /file-requests/{id}:
+    delete:
+      tags: [Files]
+      summary: Revoke an upload link
+      operationId: delete-file-requests-id
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '204': { description: Link revoked }
+        '404': { description: Link not found or already revoked }
+
+  /public/file-requests/{token}:
+    get:
+      tags: [Files]
+      summary: Read limited upload-link metadata
+      operationId: get-public-file-requests-token
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Upload limits and expiry; no directory listing is exposed }
+        '404': { description: Invalid, expired, or revoked link }
+
+  /public/file-requests/{token}/upload:
+    post:
+      tags: [Files]
+      summary: Upload one file using an upload link
+      operationId: post-public-file-requests-token-upload
+      security: []
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '201': { description: File uploaded within the link's limits }
+        '409': { description: Link is expired, revoked, or out of allowance }
+        '413': { description: Upload exceeds the file or request limit }
 
   /files/recycle/purge:
     post:
@@ -2469,6 +3843,101 @@ paths:
         '4XX':
           description: Client error
 
+  /files/search-index:
+    get:
+      tags: [Files]
+      summary: Read per-share content-index status and safety limits
+      operationId: get-files-search-index
+      parameters:
+        - in: query
+          name: shareId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Indexed text-document count and last build time }
+    post:
+      tags: [Files]
+      summary: Build a bounded text-content index for one managed share
+      operationId: post-files-search-index
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareId]
+              properties:
+                shareId: { type: string }
+      responses:
+        '200': { description: Index build completed; unsupported, binary, oversized, and symlinked files are skipped }
+        '422': { description: Share scan failed }
+
+  /files/content-search:
+    get:
+      tags: [Files]
+      summary: Search indexed text content within one managed share
+      operationId: get-files-content-search
+      parameters:
+        - in: query
+          name: share
+          required: true
+          schema: { type: string }
+        - in: query
+          name: q
+          required: true
+          schema: { type: string, minLength: 3, maxLength: 128 }
+      responses:
+        '200': { description: Matching files with text snippets }
+        '409': { description: Build an index for the share before searching its contents }
+
+  /files/integrity:
+    get:
+      tags: [Files]
+      summary: Read a share checksum baseline and latest verification report
+      operationId: get-files-integrity
+      parameters:
+        - in: query
+          name: shareId
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: Baseline metadata, verification differences, and active scan state }
+
+  /files/integrity/baseline:
+    post:
+      tags: [Files]
+      summary: Queue a SHA-256 checksum baseline scan for one managed share
+      operationId: post-files-integrity-baseline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareId]
+              properties:
+                shareId: { type: string }
+      responses:
+        '202': { description: Background baseline scan job }
+
+  /files/integrity/verify:
+    post:
+      tags: [Files]
+      summary: Queue a checksum verification against the stored baseline
+      operationId: post-files-integrity-verify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareId]
+              properties:
+                shareId: { type: string }
+      responses:
+        '202': { description: Background verification job }
+        '409': { description: A baseline is required before verification }
+
   /files/transfer:
     post:
       tags: [Files]
@@ -2506,6 +3975,91 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
+
+  /files/uploads:
+    post:
+      tags: [Files]
+      summary: Create a resumable upload session
+      operationId: post-files-uploads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shareId, name, sizeBytes]
+              properties:
+                shareId: { type: string }
+                path: { type: string }
+                name: { type: string }
+                sizeBytes: { type: integer, minimum: 0, maximum: 1099511627776 }
+                expectedSha256: { type: string }
+                replaceExisting: { type: boolean, description: Replace an existing regular file only when its size and modification time still match the reviewed values. }
+                expectedSizeBytes: { type: integer, minimum: 0 }
+                expectedModifiedAt: { type: string, format: date-time }
+      responses:
+        '201':
+          description: Upload session created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSession' }
+        '4XX':
+          description: Client error
+
+  /files/uploads/{uploadId}:
+    parameters:
+      - in: path
+        name: uploadId
+        required: true
+        schema: { type: string }
+    get:
+      tags: [Files]
+      summary: Get resumable upload progress
+      operationId: get-files-uploads-uploadId
+      responses:
+        '200':
+          description: Current byte offset
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadSession' }
+        '404': { description: Upload session not found }
+    put:
+      tags: [Files]
+      summary: Append one resumable upload chunk
+      operationId: put-files-uploads-uploadId
+      parameters:
+        - in: header
+          name: Upload-Offset
+          required: true
+          schema: { type: integer, minimum: 0 }
+      requestBody:
+        required: true
+        content:
+          application/offset+octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '204': { description: Chunk persisted; Upload-Offset response header contains the next offset }
+        '422': { description: Offset or chunk is invalid }
+    delete:
+      tags: [Files]
+      summary: Cancel and remove a resumable upload
+      operationId: delete-files-uploads-uploadId
+      responses:
+        '204': { description: Upload session removed }
+
+  /files/uploads/{uploadId}/complete:
+    post:
+      tags: [Files]
+      summary: Verify and publish a complete upload
+      operationId: post-files-uploads-uploadId-complete
+      parameters:
+        - in: path
+          name: uploadId
+          required: true
+          schema: { type: string }
+      responses:
+        '201': { description: Uploaded file published }
+        '409': { description: Upload incomplete or checksum mismatch }
 
   /groups:
     get:
@@ -2596,6 +4150,41 @@ paths:
           description: OK
         '202':
           description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /jobs/{id}/cancel:
+    post:
+      tags: [Monitoring]
+      summary: Cancel a queued job before execution starts
+      operationId: post-jobs-id-cancel
+      responses:
+        '200':
+          description: Cancelled job
+        '4XX':
+          description: Client error
+
+  /recovery/workload-objectives:
+    get:
+      tags: [Backups]
+      summary: List per-workload recovery objectives
+      operationId: get-recovery-workload-objectives
+      responses:
+        '200':
+          description: Workload recovery objectives
+    put:
+      tags: [Backups]
+      summary: Set a workload RPO and RTO
+      operationId: put-recovery-workload-objectives
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated workload objectives
         '4XX':
           description: Client error
 
@@ -3018,6 +4607,21 @@ paths:
         '4XX':
           description: Client error
 
+  /recovery/download:
+    get:
+      tags: [Backups]
+      summary: Download the latest verified recovery bundle
+      operationId: get-recovery-download
+      responses:
+        '200':
+          description: Recovery bundle download
+          content:
+            application/vnd.lumonas.recovery:
+              schema: { type: string, format: binary }
+        '404': { description: Recovery bundle not found }
+        '503': { description: Recovery key is not configured }
+        '422': { description: Recovery bundle verification failed }
+
   /recovery/restore/stage:
     post:
       tags: [Backups]
@@ -3037,6 +4641,40 @@ paths:
         '4XX':
           description: Client error
 
+  /recovery/restore/stage-appdata:
+    post:
+      tags: [Backups]
+      summary: Stage verified app data for one workload
+      operationId: stageRecoveryAppdata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stack, confirmed, reauthenticated]
+              properties:
+                stack: {type: string, minLength: 1}
+                confirmed: {type: boolean, const: true}
+                reauthenticated: {type: boolean, const: true}
+      responses:
+        '202':
+          description: Selected workload app data staged and verified
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [scope, stack, directory, files, verified, generation]
+                properties:
+                  scope: {type: string, const: appdata}
+                  stack: {type: string}
+                  directory: {type: string}
+                  files: {type: array, items: {type: string}}
+                  verified: {type: boolean}
+                  generation: {type: integer, format: int64}
+        '423': {description: Explicit confirmation and reauthentication are required}
+        '422': {description: App data staging failed}
+
   /recovery/status:
     get:
       tags: [Backups]
@@ -3054,6 +4692,91 @@ paths:
         '4XX':
           description: Client error
 
+  /recovery/drills:
+    get:
+      tags: [Backups]
+      summary: List restore drill results
+      operationId: listRestoreDrills
+      responses:
+        '200':
+          description: Restore drill history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/RestoreDrill'}
+
+  /recovery/drills/run:
+    post:
+      tags: [Backups]
+      summary: Run a restore drill in an isolated root
+      operationId: runRestoreDrill
+      responses:
+        '202':
+          description: Restore drill started
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RestoreDrill'}
+        '409': {description: A restore drill is already running}
+
+  /recovery/drills/schedule:
+    get:
+      tags: [Backups]
+      summary: Get restore drill schedule
+      operationId: getRestoreDrillSchedule
+      responses:
+        '200':
+          description: Restore drill schedule
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RestoreDrillSchedule'}
+    patch:
+      tags: [Backups]
+      summary: Update restore drill schedule
+      operationId: updateRestoreDrillSchedule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: {type: boolean}
+                intervalSeconds: {type: integer, minimum: 3600, maximum: 31536000}
+                rpoHours: {type: integer, minimum: 1, maximum: 8760}
+                rtoMinutes: {type: integer, minimum: 1, maximum: 10080}
+      responses:
+        '200':
+          description: Updated restore drill schedule
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RestoreDrillSchedule'}
+
+  /troubleshooting:
+    get:
+      tags: [Health]
+      summary: Get guided troubleshooting recommendations
+      operationId: getTroubleshooting
+      responses:
+        '200':
+          description: Actionable health issues
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TroubleshootingReport'}
+
+  /dependencies/graph:
+    get:
+      tags: [Health]
+      summary: Get resource dependency graph
+      operationId: getDependencyGraph
+      responses:
+        '200':
+          description: Resource relationships
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DependencyGraph'}
+        '503': {description: Disk discovery unavailable}
+
   /schedules:
     get:
       tags: [Monitoring]
@@ -3066,6 +4789,30 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
+    post:
+      tags: [Monitoring]
+      summary: Create a filesystem snapshot policy
+      operationId: post-schedules
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: {type: string, minLength: 1, maxLength: 80}
+                kind: {type: string, enum: [daily, weekly]}
+                timeOfDay: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+                weekday: {type: string}
+                snapshotKind: {type: string, enum: [btrfs, zfs]}
+                snapshotSource: {type: string}
+                snapshotLabel: {type: string}
+                snapshotKeep: {type: integer, minimum: 1, maximum: 365}
+                snapshotLockDays: {type: integer, minimum: 0, maximum: 3650}
+                enabled: {type: boolean}
+      responses:
+        '201': {description: Created}
+        '4XX': {description: Client error}
 
   /schedules/{id}:
     patch:
@@ -3078,6 +4825,15 @@ paths:
           application/json:
             schema:
               type: object
+              properties:
+                enabled: {type: boolean}
+                timeOfDay: {type: string}
+                weekday: {type: string}
+                snapshotKind: {type: string, enum: [btrfs, zfs]}
+                snapshotSource: {type: string}
+                snapshotLabel: {type: string}
+                snapshotKeep: {type: integer, minimum: 1, maximum: 365}
+                snapshotLockDays: {type: integer, minimum: 0, maximum: 3650}
       responses:
         '200':
           description: OK
@@ -3085,6 +4841,13 @@ paths:
           description: Accepted (async job queued)
         '4XX':
           description: Client error
+    delete:
+      tags: [Monitoring]
+      summary: Delete a user-created snapshot policy
+      operationId: delete-schedules-id
+      responses:
+        '204': {description: Deleted}
+        '4XX': {description: Client error}
 
   /services:
     get:
@@ -3102,6 +4865,42 @@ paths:
                   $ref: '#/components/schemas/ServiceStatus'
         '202':
           description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /shares/clients:
+    get:
+      tags: [Shares]
+      summary: List connected SMB clients and open files
+      operationId: get-shares-clients
+      responses:
+        '200':
+          description: Current Samba sessions and open file handles
+        '503':
+          description: Samba status data is unavailable
+
+  /shares/clients/disconnect:
+    post:
+      tags: [Shares]
+      summary: Disconnect all SMB sessions from a client IP
+      operationId: post-shares-clients-disconnect
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address, confirmed]
+              properties:
+                address:
+                  type: string
+                confirmed:
+                  type: boolean
+      responses:
+        '200':
+          description: Client sessions disconnected
+        '423':
+          description: Explicit confirmation is required
         '4XX':
           description: Client error
 
@@ -3162,6 +4961,91 @@ paths:
           description: OK
         '202':
           description: Accepted (async job queued)
+        '4XX':
+          description: Client error
+
+  /shares/{id}/access-preview:
+    get:
+      tags: [Shares]
+      summary: Preview effective direct, group, and guest access
+      operationId: get-shares-id-access-preview
+      responses:
+        '200':
+          description: Effective access for each active principal
+        '4XX':
+          description: Client error
+
+  /shares/{id}/access-check:
+    get:
+      tags: [Shares]
+      summary: Diagnose a user's access to a path within a share
+      operationId: get-shares-id-access-check
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: principal
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Configured share access and approximate Unix mode-bit diagnosis
+        '4XX':
+          description: Client error
+
+  /shares/{id}/relocation/preview:
+    post:
+      tags: [Shares]
+      summary: Preview a copy-and-verify move for an existing share
+      operationId: post-shares-id-relocation-preview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShareRelocationTarget'
+      responses:
+        '200':
+          description: Deep-hash relocation plan; preview does not create the destination
+        '4XX':
+          description: Client error
+
+  /shares/{id}/relocation:
+    post:
+      tags: [Shares]
+      summary: Start a confirmed share relocation job
+      operationId: post-shares-id-relocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target, planHash, confirmed]
+              properties:
+                target:
+                  $ref: '#/components/schemas/ShareRelocationTarget'
+                planHash: {type: string}
+                confirmed: {type: boolean}
+                scheduleKind: {type: string, enum: [manual, daily, weekly]}
+                timeOfDay: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+                weekday: {type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]}
+      responses:
+        '201':
+          description: Relocation schedule saved
+        '202':
+          description: Relocation job queued
+        '409':
+          description: Preview is stale or SMB clients remain connected
         '4XX':
           description: Client error
 
@@ -3244,6 +5128,19 @@ paths:
           application/json:
             schema:
               type: object
+              required: [planHash, reauthenticated, storageSafetyUnlocked]
+              properties:
+                planHash:
+                  type: string
+                reauthenticated:
+                  type: boolean
+                storageSafetyUnlocked:
+                  type: boolean
+                encryptionPassphrase:
+                  type: string
+                  minLength: 12
+                  maxLength: 256
+                  description: Used only for encrypted filesystem.create operations; never persisted.
       responses:
         '200':
           description: OK
@@ -3560,6 +5457,122 @@ paths:
 
 components:
   schemas:
+    BackupSchedule:
+      type: object
+      required: [id, enabled, intervalSeconds, onUsbAttach, updatedAt]
+      properties:
+        id: {type: string}
+        enabled: {type: boolean}
+        intervalSeconds: {type: integer, format: int64}
+        onUsbAttach: {type: boolean}
+        lastStartedAt: {type: string, format: date-time}
+        nextDueAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+
+    ShareAccessPreview:
+      type: object
+      required: [shareId, name, enabled, guestAccess, entries, accessRules]
+      properties:
+        shareId: {type: string}
+        name: {type: string}
+        enabled: {type: boolean}
+        guestAccess: {type: boolean}
+        entries:
+          type: array
+          items:
+            type: object
+            required: [principalId, name, kind, enabled, level]
+            properties:
+              principalId: {type: string}
+              name: {type: string}
+              kind: {type: string, enum: [user, group, service]}
+              enabled: {type: boolean}
+              level: {type: string, enum: [read, write, admin]}
+              grantedBy: {type: array, items: {type: string}}
+              guest: {type: boolean}
+        accessRules:
+          type: array
+          items:
+            type: object
+            required: [principalId, level]
+            properties:
+              principalId: {type: string}
+              level: {type: string, enum: [read, write, admin]}
+
+    VirtualMachineConsole:
+      type: object
+      required: [output, cursor, connected]
+      properties:
+        output: {type: string}
+        cursor: {type: integer, minimum: 0}
+        connected: {type: boolean}
+
+    VirtualizationStatus:
+      type: object
+      required: [libvirtAvailable, kvmAvailable, architecture, cpuCount, memoryBytes]
+      properties:
+        libvirtAvailable: {type: boolean}
+        kvmAvailable: {type: boolean}
+        architecture: {type: string}
+        cpuCount: {type: integer}
+        memoryBytes: {type: integer, format: int64}
+        reason: {type: string}
+
+    VirtualizationMedia:
+      type: object
+      required: [name, sizeBytes]
+      properties:
+        name: {type: string}
+        sizeBytes: {type: integer, format: int64}
+
+    CreateVirtualMachine:
+      type: object
+      required: [name, iso, vcpus, memoryMiB, diskGiB]
+      properties:
+        name: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$'}
+        iso: {type: string}
+        vcpus: {type: integer, minimum: 1, maximum: 64}
+        memoryMiB: {type: integer, minimum: 512, maximum: 1048576}
+        diskGiB: {type: integer, minimum: 8, maximum: 16384}
+
+    VirtualMachine:
+      type: object
+      required: [name, state]
+      properties:
+        name: {type: string}
+        uuid: {type: string}
+        state: {type: string}
+        vcpus: {type: integer}
+        memoryKiB: {type: integer, format: int64}
+        maximumMemoryKiB: {type: integer, format: int64}
+        diskPath: {type: string}
+        iso: {type: string}
+
+    VirtualMachineDeleteResult:
+      type: object
+      required: [name, diskPath, diskRemoved, definitionRetained]
+      properties:
+        name: {type: string}
+        diskPath: {type: string}
+        diskRemoved: {type: boolean}
+        definitionRetained: {type: boolean}
+
+    RecoverableVirtualMachine:
+      type: object
+      required: [name, diskPath, diskBytes]
+      properties:
+        name: {type: string}
+        diskPath: {type: string}
+        diskBytes: {type: integer, format: int64}
+
+    VirtualMachineSnapshot:
+      type: object
+      required: [name]
+      properties:
+        name: {type: string}
+        state: {type: string}
+        creationTime: {type: string}
+
     AuthSession:
       type: object
       required: [username, expiresAt, csrfToken]
@@ -4211,6 +6224,69 @@ components:
           type: string
         status:
           $ref: '#/components/schemas/HealthState'
+        protocols:
+          type: array
+          items:
+            type: object
+            properties:
+              protocol: {type: string}
+              enabled: {type: boolean}
+              auditEnabled: {type: boolean}
+              auditOperations:
+                type: array
+                items: {type: string}
+
+    ShareStorageResource:
+      type: object
+      required: [id, label, path, kind]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        path: {type: string}
+        kind: {type: string, enum: [pool, disk]}
+        totalBytes: {type: integer, format: int64}
+        usedBytes: {type: integer, format: int64}
+
+    ShareRelocationTarget:
+      type: object
+      required: [resourceId, relativePath]
+      properties:
+        resourceId: {type: string}
+        relativePath: {type: string, description: Relative path within the selected mounted storage location}
+
+    ShareRelocationPreview:
+      type: object
+      required: [shareId, shareName, sourcePath, destinationPath, fileCount, bytes, plan, planHash, retainsSource, requiresDowntime]
+      properties:
+        shareId: {type: string}
+        shareName: {type: string}
+        sourcePath: {type: string}
+        destinationRoot: {type: string}
+        relativePath: {type: string}
+        destinationPath: {type: string}
+        fileCount: {type: integer}
+        bytes: {type: integer}
+        planHash: {type: string}
+        retainsSource: {type: boolean}
+        requiresDowntime: {type: boolean}
+        plan:
+          type: object
+          properties:
+            changes:
+              type: array
+            items: {type: object}
+            files: {type: integer}
+            bytes: {type: integer}
+            deletes: {type: integer}
+
+    ShareRelocationScheduleResult:
+      type: object
+      required: [schedule, preview]
+      properties:
+        schedule:
+          $ref: '#/components/schemas/JobSchedule'
+        preview:
+          $ref: '#/components/schemas/ShareRelocationPreview'
 
     FileEntry:
       type: object
@@ -4416,6 +6492,20 @@ components:
         status:
           $ref: '#/components/schemas/HealthState'
 
+    BackupRestoreCheck:
+      type: object
+      required: [state, destinationId, runId, checksum, bytes, databaseRestored, appdataRestored, appliedFiles, serviceStartup]
+      properties:
+        state: {type: string, enum: [verified]}
+        destinationId: {type: string}
+        runId: {type: string}
+        checksum: {type: string}
+        bytes: {type: integer, format: int64}
+        databaseRestored: {type: boolean}
+        appdataRestored: {type: array, items: {type: string}}
+        appliedFiles: {type: integer}
+        serviceStartup: {type: string, enum: [not_attempted]}
+
     RecoveryReadiness:
       type: object
       properties:
@@ -4434,6 +6524,29 @@ components:
                 type: string
               detail:
                 type: string
+              lastSuccessfulAt:
+                type: string
+                format: date-time
+                nullable: true
+        coverage:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecoveryCoverage'
+        warnings:
+          type: array
+          items:
+            type: string
+
+    RecoveryCoverage:
+      type: object
+      required: [id, name, kind, status, detail]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        kind: {type: string, enum: [share, docker-appdata]}
+        status: {type: string, enum: [current, stale, missing]}
+        detail: {type: string}
+        lastSuccessfulAt: {type: string, format: date-time, nullable: true}
 
     ConfigGeneration:
       type: object
@@ -4471,6 +6584,9 @@ components:
           type: string
           format: date-time
         resolvedAt:
+          type: string
+          format: date-time
+        snoozedUntil:
           type: string
           format: date-time
 
@@ -4535,6 +6651,34 @@ components:
         metadata:
           type: object
           additionalProperties: true
+
+    AuditPage:
+      type: object
+      required: [entries, hasMore]
+      properties:
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/AuditEntry' }
+        nextCursor:
+          type: string
+        hasMore:
+          type: boolean
+
+    UploadSession:
+      type: object
+      required: [id, shareId, path, name, sizeBytes, receivedBytes, state, createdAt]
+      properties:
+        id: { type: string }
+        shareId: { type: string }
+        path: { type: string }
+        name: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        receivedBytes: { type: integer, format: int64 }
+        replaceExisting: { type: boolean }
+        expectedSizeBytes: { type: integer, format: int64 }
+        expectedModifiedAt: { type: string, format: date-time }
+        state: { type: string, enum: [uploading, completed] }
+        createdAt: { type: string, format: date-time }
 
     ServiceStatus:
       type: object
@@ -4698,9 +6842,27 @@ components:
         finishedAt: {type: string, format: date-time}
         error: {type: string}
 
+    BackupRunEntry:
+      type: object
+      required: [run, copies]
+      properties:
+        run: {$ref: '#/components/schemas/BackupRun'}
+        copies:
+          type: array
+          items:
+            type: object
+            required: [id, runId, destinationId, object, state, verified]
+            properties:
+              id: {type: string}
+              runId: {type: string}
+              destinationId: {type: string}
+              object: {type: string}
+              state: {type: string}
+              verified: {type: boolean}
+
     CapacityForecast:
       type: object
-      required: [resourceId, totalBytes, usedBytes, sampleCount, windowDays, growthBytesPerDay, available]
+      required: [resourceId, totalBytes, usedBytes, sampleCount, windowDays, growthBytesPerDay, sampleAgeHours, stale, confidence, available]
       properties:
         resourceId: {type: string}
         totalBytes: {type: integer, format: int64}
@@ -4709,8 +6871,21 @@ components:
         windowDays: {type: integer}
         growthBytesPerDay: {type: number, format: double}
         daysToNinetyPercent: {type: number, nullable: true}
+        daysToFull: {type: number, nullable: true}
+        estimatedFullAt: {type: string, format: date-time}
+        sampleAgeHours: {type: number, format: double}
+        stale: {type: boolean}
+        confidence: {type: string, enum: [low, medium, high, '']}
         available: {type: boolean}
         message: {type: string}
+
+    CapacityThreshold:
+      type: object
+      required: [resourceId, thresholdPercent]
+      properties:
+        resourceId: {type: string}
+        thresholdPercent: {type: integer, minimum: 50, maximum: 99}
+        updatedAt: {type: string, format: date-time}
 
     CatalogApp:
       type: object
@@ -4743,6 +6918,8 @@ components:
         recovery: {$ref: '#/components/schemas/RecoveryContract'}
         appdataPaths: {type: array, items: {type: string}}
         dbDumpContainer: {type: string}
+        trustStatus: {type: string, enum: [verified, unverified, invalid], description: Runtime catalog signature verification status}
+        trustMessage: {type: string, description: Runtime reason for the trust status}
 
     Checkpoint:
       type: object
@@ -4794,6 +6971,10 @@ components:
         snapshotSource: {type: string}
         snapshotLabel: {type: string}
         snapshotKeep: {type: integer, minimum: 1, maximum: 365}
+        snapshotLockDays: {type: integer, minimum: 0, maximum: 3650}
+        relocationShareId: {type: string}
+        relocationResourceId: {type: string}
+        relocationRelativePath: {type: string}
 
     LogLine:
       type: object
@@ -5018,6 +7199,7 @@ components:
         source: {type: string}
         name: {type: string}
         label: {type: string}
+        protectedUntil: {type: string, format: date-time}
         createdAt: {type: string, format: date-time}
 
     SnapshotEntry:
@@ -5040,6 +7222,181 @@ components:
             $ref: '#/components/schemas/SnapshotEntry'
         total: {type: integer, minimum: 0}
 
+    SnapshotChange:
+      type: object
+      required: [path, kind, sizeBytes, modifiedAt]
+      properties:
+        path: {type: string}
+        kind: {type: string, enum: [added, deleted, modified]}
+        sizeBytes: {type: integer, format: int64}
+        modifiedAt: {type: string, format: date-time}
+
+    SnapshotDiff:
+      type: object
+      required: [snapshotFiles, currentFiles, added, deleted, modified, unchanged, reviewRecommended, changes]
+      properties:
+        snapshotFiles: {type: integer, minimum: 0}
+        currentFiles: {type: integer, minimum: 0}
+        added: {type: integer, minimum: 0}
+        deleted: {type: integer, minimum: 0}
+        modified: {type: integer, minimum: 0}
+        unchanged: {type: integer, minimum: 0}
+        reviewRecommended: {type: boolean}
+        changes:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/SnapshotChange'}
+
+    SharePathAccessCheck:
+      type: object
+      required: [shareId, principalId, path, shareEnabled, accountEnabled, shareLevel, filesystemAccess, allowed, explanation, approximate]
+      properties:
+        shareId: {type: string}
+        principalId: {type: string}
+        path: {type: string}
+        shareEnabled: {type: boolean}
+        accountEnabled: {type: boolean}
+        shareLevel: {type: string, enum: [none, read, write, readwrite]}
+        filesystemAccess: {type: string, enum: [read, write, none, unknown]}
+        allowed: {type: boolean}
+        explanation: {type: string}
+        approximate: {type: boolean}
+
+    ShareClientsSnapshot:
+      type: object
+      required: [sessions, openFiles, capturedAt, service]
+      properties:
+        sessions:
+          type: array
+          items:
+            type: object
+            required: [sessionId, username, machine]
+            properties:
+              sessionId: {type: string}
+              username: {type: string}
+              machine: {type: string}
+              dialect: {type: string}
+              share: {type: string}
+        openFiles:
+          type: array
+          items:
+            type: object
+            required: [path, opens]
+            properties:
+              path: {type: string}
+              sharePath: {type: string}
+              opens: {type: integer, minimum: 0}
+        capturedAt: {type: string, format: date-time}
+        service: {type: string}
+
+    TLSCertificateStatus:
+      type: object
+      required: [state, configured, autoRenewalConfigured, acmeFirewallConfigured]
+      properties:
+        state: {type: string, enum: [disabled, incomplete, missing, invalid, not-yet-valid, expired, expiring, valid]}
+        configured: {type: boolean}
+        issuer: {type: string}
+        subject: {type: string}
+        dnsNames: {type: array, items: {type: string}}
+        notBefore: {type: string, format: date-time}
+        notAfter: {type: string, format: date-time}
+        daysRemaining: {type: integer}
+        detail: {type: string}
+        managedBy: {type: string, enum: [none, manual, letsencrypt]}
+        autoRenewalConfigured: {type: boolean}
+        acmeFirewallConfigured: {type: boolean}
+
+    FileRequestLink:
+      type: object
+      required: [id, shareId, path, createdAt, expiresAt, maxFiles, maxBytes, receivedFiles, receivedBytes]
+      properties:
+        id: {type: string}
+        shareId: {type: string}
+        path: {type: string}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        maxFiles: {type: integer, minimum: 1}
+        maxBytes: {type: integer, format: int64, minimum: 1}
+        receivedFiles: {type: integer, minimum: 0}
+        receivedBytes: {type: integer, format: int64, minimum: 0}
+        revokedAt: {type: string, format: date-time}
+
+    FileShareLink:
+      type: object
+      required: [id, shareId, path, createdAt, expiresAt, downloads]
+      properties:
+        id: {type: string}
+        shareId: {type: string}
+        path: {type: string}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        downloads: {type: integer, minimum: 0}
+        revokedAt: {type: string, format: date-time}
+
+    FileContentResult:
+      type: object
+      required: [shareId, path, name, snippet, sizeBytes, modifiedAt]
+      properties:
+        shareId: {type: string}
+        path: {type: string}
+        name: {type: string}
+        snippet: {type: string}
+        sizeBytes: {type: integer, format: int64, minimum: 0}
+        modifiedAt: {type: string, format: date-time}
+
+    FileContentIndexStatus:
+      type: object
+      required: [shareId, documents, indexedAt, maxFileBytes, maxDocuments, maxIndexBytes]
+      properties:
+        shareId: {type: string}
+        documents: {type: integer, minimum: 0}
+        indexedAt: {type: string, format: date-time, nullable: true}
+        maxFileBytes: {type: integer, format: int64, minimum: 0}
+        maxDocuments: {type: integer, minimum: 0}
+        maxIndexBytes: {type: integer, format: int64, minimum: 0}
+
+    FileContentIndexBuildResult:
+      allOf:
+        - $ref: '#/components/schemas/FileContentIndexStatus'
+        - type: object
+          required: [skipped]
+          properties:
+            skipped: {type: integer, minimum: 0}
+
+    FileIntegrityStatus:
+      type: object
+      required: [shareId, fileCount, running]
+      properties:
+        shareId: {type: string}
+        fileCount: {type: integer, minimum: 0}
+        baselineAt: {type: string, format: date-time}
+        report:
+          type: object
+          required: [baselineAt, verifiedAt, unchanged, changedCount, missingCount, addedCount, changed, missing, added]
+          properties:
+            baselineAt: {type: string, format: date-time}
+            verifiedAt: {type: string, format: date-time}
+            unchanged: {type: integer, minimum: 0}
+            changedCount: {type: integer, minimum: 0}
+            missingCount: {type: integer, minimum: 0}
+            addedCount: {type: integer, minimum: 0}
+            changed: {type: array, items: {type: string}}
+            missing: {type: array, items: {type: string}}
+            added: {type: array, items: {type: string}}
+        running: {type: boolean}
+
+    BackupPolicyTemplate:
+      type: object
+      required: [id, name, description, intervalSeconds, generations, daily, monthly]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        description: {type: string}
+        intervalSeconds: {type: integer, minimum: 0}
+        generations: {type: integer, minimum: 0}
+        daily: {type: integer, minimum: 0}
+        monthly: {type: integer, minimum: 0}
+
     StorageOperationPlan:
       type: object
       required: [operationId, action, target, requestedState, dependencySnapshot, configGeneration, expiresAt, planHash, status]
@@ -5060,6 +7417,126 @@ components:
       properties:
         state: {type: string, enum: [locked, unlocked]}
         unlockedUntil: {type: string, format: date-time, nullable: true}
+
+    DiskReplacementPlan:
+      type: object
+      required: [operationId, retiredDiskId, retiredDataName, replacementDiskId, configGeneration, expiresAt, planHash, status]
+      properties:
+        operationId: {type: string}
+        retiredDiskId: {type: string}
+        retiredDataName: {type: string}
+        replacementDiskId: {type: string}
+        parityDiskId: {type: string}
+        configGeneration: {type: integer}
+        expiresAt: {type: string, format: date-time}
+        planHash: {type: string}
+        status: {type: string}
+
+    DiskReplacementResult:
+      type: object
+      required: [ok, jobId, slot, next]
+      properties:
+        ok: {type: boolean}
+        jobId: {type: string}
+        slot: {type: string}
+        next: {type: string}
+
+    APITokenSummary:
+      type: object
+      required: [id, name, scopes, createdAt]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        scopes:
+          type: array
+          items:
+            oneOf:
+              - {type: string, enum: [read, backup:write, replication:receive, fleet:status]}
+              - {type: string, pattern: '^workstation:backup:[A-Za-z0-9_-]{1,128}$', description: Share-bound workstation backup and restore}
+              - {type: string, pattern: '^replication:snapshot:receive:[A-Za-z0-9_-]{1,128}$', description: Btrfs snapshot receiver scoped to one destination share}
+        createdAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        lastUsedAt: {type: string, format: date-time}
+
+    APITokenCreated:
+      type: object
+      required: [token, summary]
+      properties:
+        token: {type: string, description: Returned only on creation}
+        summary: {$ref: '#/components/schemas/APITokenSummary'}
+
+    ReplicationPeer:
+      type: object
+      required: [id, name, url, createdAt]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        url: {type: string, format: uri}
+        createdAt: {type: string, format: date-time}
+        lastSyncAt: {type: string, format: date-time}
+        lastError: {type: string}
+        remoteStatus: {type: string, enum: [online, offline]}
+        remoteVersion: {type: string}
+        remoteHealth: {type: string}
+        remoteCheckedAt: {type: string, format: date-time}
+
+    SnapshotReplicationTaskCreate:
+      type: object
+      required: [peerId, name, sourceShareId, destinationShareId, receiveToken]
+      properties:
+        peerId: {type: string}
+        name: {type: string, minLength: 1, maxLength: 120}
+        sourceShareId: {type: string}
+        destinationShareId: {type: string, pattern: '^[A-Za-z0-9_-]{1,128}$'}
+        receiveToken: {type: string, writeOnly: true}
+        scheduleKind: {type: string, enum: [manual, daily, weekly], default: manual}
+        timeOfDay: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+        weekday: {type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]}
+
+    SnapshotReplicationTaskUpdate:
+      type: object
+      properties:
+        name: {type: string, minLength: 1, maxLength: 120}
+        receiveToken: {type: string, writeOnly: true, description: Omit to keep the currently stored token}
+        scheduleKind: {type: string, enum: [manual, daily, weekly]}
+        timeOfDay: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+        weekday: {type: string, enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]}
+
+    SnapshotReplicationTask:
+      type: object
+      required: [id, peerId, name, sourceShareId, destinationShareId, scheduleKind, timeOfDay, createdAt]
+      properties:
+        id: {type: string}
+        peerId: {type: string}
+        name: {type: string}
+        sourceShareId: {type: string}
+        destinationShareId: {type: string}
+        scheduleKind: {type: string, enum: [manual, daily, weekly]}
+        timeOfDay: {type: string}
+        weekday: {type: string}
+        lastSnapshotName: {type: string}
+        lastAttemptAt: {type: string, format: date-time}
+        lastSyncAt: {type: string, format: date-time}
+        lastError: {type: string}
+        running: {type: boolean}
+        createdAt: {type: string, format: date-time}
+
+    SnapshotReplicationRun:
+      type: object
+      required: [id, taskId, jobId, state, stage, progress, bytes, createdAt]
+      properties:
+        id: {type: string}
+        taskId: {type: string}
+        jobId: {type: string}
+        state: {type: string, enum: [running, successful, failed, cancelled]}
+        stage: {type: string}
+        progress: {type: number, minimum: 0, maximum: 100}
+        bytes: {type: integer, minimum: 0}
+        snapshotName: {type: string}
+        error: {type: string}
+        createdAt: {type: string, format: date-time}
+        startedAt: {type: string, format: date-time}
+        finishedAt: {type: string, format: date-time}
 
     TwoFactorSetup:
       type: object
@@ -5116,3 +7593,129 @@ components:
               band: {type: string}
               security: {type: string}
               secure: {type: boolean}
+
+    SMARTSample:
+      type: object
+      required: [diskId, capturedAt, summary]
+      properties:
+        diskId: {type: string}
+        capturedAt: {type: string, format: date-time}
+        summary: {$ref: '#/components/schemas/SmartSummary'}
+        temperatureC: {type: number}
+
+    SMARTTrend:
+      type: object
+      required: [diskId, sampleCount, temperatureSlope, reallocatedSlope, pendingSlope, uncorrectableSlope, crcSlope, status, summary]
+      properties:
+        diskId: {type: string}
+        sampleCount: {type: integer}
+        since: {type: string, format: date-time}
+        temperatureSlope: {type: number}
+        reallocatedSlope: {type: number}
+        pendingSlope: {type: number}
+        uncorrectableSlope: {type: number}
+        crcSlope: {type: number}
+        status: {$ref: '#/components/schemas/HealthState'}
+        summary: {type: string}
+
+    SMARTHistory:
+      type: object
+      required: [diskId, samples, trend]
+      properties:
+        diskId: {type: string}
+        samples: {type: array, items: {$ref: '#/components/schemas/SMARTSample'}}
+        trend: {$ref: '#/components/schemas/SMARTTrend'}
+
+    RestoreDrill:
+      type: object
+      required: [id, trigger, state, generation, startedAt, verified, databaseValid, composeValid, secretsRestored, databaseRestored, appliedFiles]
+      properties:
+        id: {type: string}
+        trigger: {type: string, enum: [manual, scheduled]}
+        state: {type: string, enum: [running, successful, failed]}
+        bundlePath: {type: string}
+        generation: {type: integer}
+        startedAt: {type: string, format: date-time}
+        finishedAt: {type: string, format: date-time}
+        verified: {type: boolean}
+        databaseValid: {type: boolean}
+        composeValid: {type: boolean}
+        secretsRestored: {type: boolean}
+        databaseRestored: {type: boolean}
+        appdataRestored: {type: array, items: {type: string}}
+        appliedFiles: {type: integer}
+        warnings: {type: array, items: {type: string}}
+        error: {type: string}
+
+    RestoreDrillSchedule:
+      type: object
+      required: [enabled, intervalSeconds, rpoHours, rtoMinutes, updatedAt]
+      properties:
+        enabled: {type: boolean}
+        intervalSeconds: {type: integer}
+        rpoHours: {type: integer, minimum: 1, maximum: 8760}
+        rtoMinutes: {type: integer, minimum: 1, maximum: 10080}
+        lastStartedAt: {type: string, format: date-time}
+        nextDueAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+
+    WorkloadRecoveryObjective:
+      type: object
+      required: [workloadId, rpoHours, rtoMinutes, updatedAt]
+      properties:
+        workloadId: {type: string}
+        rpoHours: {type: integer, minimum: 1, maximum: 8760}
+        rtoMinutes: {type: integer, minimum: 1, maximum: 10080}
+        updatedAt: {type: string, format: date-time}
+
+    TroubleshootingLink:
+      type: object
+      required: [label, path]
+      properties:
+        label: {type: string}
+        path: {type: string}
+
+    TroubleshootingIssue:
+      type: object
+      required: [id, severity, title, summary, steps]
+      properties:
+        id: {type: string}
+        severity: {$ref: '#/components/schemas/HealthState'}
+        title: {type: string}
+        summary: {type: string}
+        cause: {type: string}
+        steps: {type: array, items: {type: string}}
+        resource: {$ref: '#/components/schemas/ResourceRef'}
+        links: {type: array, items: {$ref: '#/components/schemas/TroubleshootingLink'}}
+
+    TroubleshootingReport:
+      type: object
+      required: [status, issues]
+      properties:
+        status: {type: string, enum: [clear, action_required]}
+        issues: {type: array, items: {$ref: '#/components/schemas/TroubleshootingIssue'}}
+
+    GraphNode:
+      type: object
+      required: [id, type, label, status]
+      properties:
+        id: {type: string}
+        type: {type: string}
+        label: {type: string}
+        status: {$ref: '#/components/schemas/HealthState'}
+
+    GraphEdge:
+      type: object
+      required: [from, to, relationship]
+      properties:
+        from: {type: string}
+        to: {type: string}
+        relationship: {type: string}
+
+    DependencyGraph:
+      type: object
+      required: [generatedAt, nodes, edges]
+      properties:
+        generatedAt: {type: string, format: date-time}
+        nodes: {type: array, items: {$ref: '#/components/schemas/GraphNode'}}
+        edges: {type: array, items: {$ref: '#/components/schemas/GraphEdge'}}

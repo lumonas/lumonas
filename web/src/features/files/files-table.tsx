@@ -20,7 +20,14 @@ import { cn } from '@/lib/utils'
 import { formatDateTime, formatBytes } from '@/lib/format'
 import type { FileEntry } from '@/api/types'
 
-export type FileAction = 'download' | 'copy' | 'cut' | 'rename' | 'properties' | 'delete'
+export type FileAction = 'preview' | 'download' | 'copy' | 'cut' | 'rename' | 'properties' | 'delete'
+
+function isPreviewable(entry: FileEntry) {
+  if (entry.type !== 'file') return false
+  const text = /\.(csv|json|log|txt|xml|ya?ml)$/i.test(entry.name)
+  if (text && entry.sizeBytes > 2 * 1024 * 1024) return false
+  return text || /\.(avif|gif|jpe?g|png|webp|m4a|mp3|oga|ogg|wav|m4v|mp4|ogv|webm)$/i.test(entry.name)
+}
 
 export function FilesTable({
   entries,
@@ -132,9 +139,10 @@ export function FilesTable({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         {entry.type === 'file' && (
-                          <DropdownMenuItem onSelect={() => onAction('download', entry)}>
-                            Download
-                          </DropdownMenuItem>
+                          <>
+                            {isPreviewable(entry) && <DropdownMenuItem onSelect={() => onAction('preview', entry)}>Preview</DropdownMenuItem>}
+                            <DropdownMenuItem onSelect={() => onAction('download', entry)}>Download</DropdownMenuItem>
+                          </>
                         )}
                         <DropdownMenuItem onSelect={() => onAction('copy', entry)}>
                           Copy

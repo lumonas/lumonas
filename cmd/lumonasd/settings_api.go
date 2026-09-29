@@ -46,6 +46,25 @@ func (s *apiServer) revokeSession(w http.ResponseWriter, r *http.Request, id str
 	writeJSON(w, http.StatusNoContent, nil)
 }
 
+func (s *apiServer) revokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+	actor, ok := s.identityActor(w, r, true)
+	if !ok {
+		return
+	}
+	cookie, err := r.Cookie("lumonas_session")
+	if err != nil || cookie.Value == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sign in with a browser session to keep this device active"})
+		return
+	}
+	count, err := s.store.DeleteOtherSessions(cookie.Value)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	s.recordRequestAudit(r, actor, "settings.sessions.revoke_others", "sessions", map[string]any{"revoked": count})
+	writeJSON(w, http.StatusOK, map[string]int64{"revoked": count})
+}
+
 func (s *apiServer) updateSettings(w http.ResponseWriter, r *http.Request) {
 	actor, ok := s.identityActor(w, r, true)
 	if !ok {
@@ -497,12 +516,24 @@ func (s *apiServer) sessionViews(currentDigest string) []map[string]any {
 	}
 	views := make([]map[string]any, 0, len(sessions))
 	for _, session := range sessions {
+		device := strings.TrimSpace(session.UserAgent)
+		if device == "" {
+			device = "Unknown device"
+		}
+		ip := session.IPAddress
+		if ip == "" {
+			ip = "Unknown"
+		}
+		lastActive := session.LastSeenAt
+		if lastActive.IsZero() {
+			lastActive = session.CreatedAt
+		}
 		views = append(views, map[string]any{
 			"id":           session.ID,
-			"device":       session.Username,
-			"ip":           "local",
+			"device":       device,
+			"ip":           ip,
 			"scope":        "management",
-			"lastActiveAt": session.CreatedAt.Format(time.RFC3339),
+			"lastActiveAt": lastActive.Format(time.RFC3339),
 			"expiresAt":    session.ExpiresAt.Format(time.RFC3339),
 			"current":      currentDigest != "" && session.ID == currentDigest,
 		})
