@@ -7,7 +7,9 @@ name: Sign catalog
 # key and commits the result.
 #
 # Run it (Actions -> Sign catalog -> Run workflow) after editing the catalog.
-# Editing the catalog without re-signing fails CI, because the backend job runs
+# It pushes the re-signed signature to a branch; open that branch as a pull
+# request so the full pipeline runs before it lands on main. Editing the
+# catalog without re-signing fails CI, because the backend job runs
 # `make catalog-verify` on every push.
 
 on:
@@ -47,17 +49,29 @@ jobs:
       - name: Verify the new signature
         run: make catalog-verify
 
-      - name: Commit the signature
+      - name: Propose the re-signed catalog
         env:
           REASON: ${{ inputs.reason }}
         run: |
           set -eu
           if git diff --quiet -- catalog/apps.json.sig; then
-            echo "catalog/apps.json.sig is already current; nothing to commit" >&2
+            echo "catalog/apps.json.sig is already current; nothing to propose" >&2
             exit 1
           fi
+          # Propose the signature on a branch instead of pushing straight to
+          # main. A push made with the bot token does not start a CI run, so
+          # main would sit on a commit that fails the catalog signature gate
+          # until someone noticed. A branch can be opened as a pull request,
+          # which does run the full pipeline.
+          branch="chore/re-sign-catalog-$(date -u +%Y%m%d%H%M%S)"
           git config user.name 'lumonas-release-bot'
           git config user.email 'release@lumonas.local'
+          git checkout -b "$branch"
           git add catalog/apps.json.sig
           git commit -m "chore(catalog): re-sign app catalog" -m "${REASON}"
-          git push origin HEAD:main
+          git push origin "$branch"
+          {
+            echo "Branch: \`$branch\`"
+            echo
+            echo "${REASON}"
+          } >> "$GITHUB_STEP_SUMMARY"
