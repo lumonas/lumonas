@@ -60,11 +60,13 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 	}
 	result := make([]model.Disk, 0, len(response.BlockDevices))
 	for _, d := range response.BlockDevices {
-		// Only whole devices are manageable. A loopback attachment is reported
-		// by lsblk as type "loop" until it carries a partition table, so it is
-		// accepted only once it holds one, which is also when it starts
-		// reporting the identity the storage layer plans are keyed on.
-		if d.Type != "disk" && !(d.Type == "loop" && strings.TrimSpace(d.PTUUID) != "") {
+		// Only whole devices are manageable. lsblk reports a loopback attachment
+		// as type "loop" rather than "disk", so accept it once it carries an
+		// identity of its own: a partition-table GUID, or more commonly the
+		// filesystem UUID it gains once formatted. Without one it is still just
+		// a file and must never be offered as a destructive target.
+		if d.Type != "disk" &&
+			!(d.Type == "loop" && (strings.TrimSpace(d.PTUUID) != "" || strings.TrimSpace(d.UUID) != "")) {
 			continue
 		}
 		d = enrichFromUdev(run, d)

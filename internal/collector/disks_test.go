@@ -38,31 +38,33 @@ func TestDisksReadOnlyIdentityAgainstRealDevice(t *testing.T) {
 	}
 }
 
-// A loopback attachment is only manageable once it carries a partition table,
-// because that is when lsblk starts reporting a stable identity for it. Before
-// that it must stay out of the inventory so it cannot be offered as a
-// destructive target.
-func TestDisksExcludeUnpartitionedLoopbackButKeepPartitioned(t *testing.T) {
-	withoutTable := []byte(`{"blockdevices":[{"name":"loop0","path":"/dev/loop0","type":"loop","size":100,"model":"","serial":"","wwn":"","uuid":""}]}`)
-	withTable := []byte(`{"blockdevices":[{"name":"loop1","path":"/dev/loop1","type":"loop","size":100,"model":"","serial":"","wwn":"","uuid":"fs-uuid","ptuuid":"gpt-disk-guid"}]}`)
+// A loopback attachment becomes manageable once it carries an identity of its
+// own, either a partition-table GUID or the filesystem UUID it gains when
+// formatted. Before that it is still just a file and must stay out of the
+// inventory so it cannot be offered as a destructive target.
+func TestDisksExcludeBareLoopbackButKeepIdentified(t *testing.T) {
+	bare := []byte(`{"blockdevices":[{"name":"loop0","path":"/dev/loop0","type":"loop","size":100,"model":"","serial":"","wwn":"","uuid":""}]}`)
+	fromFS := []byte(`{"blockdevices":[{"name":"loop1","path":"/dev/loop1","type":"loop","size":100,"model":"","serial":"","wwn":"","uuid":"fs-uuid","ptuuid":""}]}`)
+	fromTable := []byte(`{"blockdevices":[{"name":"loop2","path":"/dev/loop2","type":"loop","size":100,"model":"","serial":"","wwn":"","uuid":"","ptuuid":"gpt-disk-guid"}]}`)
 
-	unpartitioned, err := Disks(func(string, ...string) ([]byte, error) { return withoutTable, nil })
+	excluded, err := Disks(func(string, ...string) ([]byte, error) { return bare, nil })
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(unpartitioned) != 0 {
-		t.Fatalf("unpartitioned loopback device must not be offered: %#v", unpartitioned)
+	if len(excluded) != 0 {
+		t.Fatalf("bare loopback device must not be offered: %#v", excluded)
 	}
 
-	partitioned, err := Disks(func(string, ...string) ([]byte, error) { return withTable, nil })
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(partitioned) != 1 {
-		t.Fatalf("partitioned loopback device was dropped: %#v", partitioned)
-	}
-	if partitioned[0].ID != "gpt:gpt-disk-guid" {
-		t.Fatalf("unexpected identity %q", partitioned[0].ID)
+	for name, payload := range map[string][]byte{"filesystem uuid": fromFS, "partition table": fromTable} {
+		t.Run(name, func(t *testing.T) {
+			disks, err := Disks(func(string, ...string) ([]byte, error) { return payload, nil })
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(disks) != 1 {
+				t.Fatalf("loopback device with a %s was dropped: %#v", name, disks)
+			}
+		})
 	}
 }
 
