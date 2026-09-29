@@ -128,5 +128,11 @@ chmod 0755 "$OUT/DEBIAN/postinst" "$OUT/DEBIAN/prerm" "$OUT/usr/lib/lumonas/"*
 # SOURCE_DATE_EPOCH this makes repeated builds from the same source produce
 # byte-identical artifacts instead of embedding checkout/build mtimes.
 find "$OUT" -exec touch -h --date="@$SOURCE_DATE_EPOCH" {} +
-dpkg-deb --root-owner-group --build "$OUT" "$ROOT/lumonas_${VERSION}_${DEB_ARCH}.deb"
-echo "Created $ROOT/lumonas_${VERSION}_${DEB_ARCH}.deb"
+ARTIFACT="$ROOT/lumonas_${VERSION}_${DEB_ARCH}.deb"
+dpkg-deb --root-owner-group --build "$OUT" "$ARTIFACT"
+# A caller may normalise VERSION, so report the artifact that was actually
+# written rather than requiring the caller to predict the name.
+if [ -n "${LUMONAS_DEB_VERSION_FILE:-}" ]; then
+	printf '%s\n' "$ARTIFACT" >"$LUMONAS_DEB_VERSION_FILE"
+fi
+echo "Created $ARTIFACT"
