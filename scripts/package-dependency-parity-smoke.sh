@@ -13,7 +13,9 @@ for package in \
 	network-manager systemd-resolved smartmontools lm-sensors nut-client mergerfs snapraid rclone grub-efi-amd64 dosfstools efibootmgr \
 	e2fsprogs xfsprogs cryptsetup certbot docker.io docker-compose samba samba-common-bin samba-vfs-modules \
 	nfs-kernel-server rsync vsftpd avahi-daemon nftables; do
-	if ! grep -Eq "(^|[ ,])${package}([, ]|$)" "$CONTROL"; then
+	# A dependency may carry an architecture qualifier, which must directly
+	# follow the package name with no separating space (dpkg requires it).
+	if ! grep -Eq "(^|[ ,])${package}(\[[^]]*\])?([, ]|$)" "$CONTROL"; then
 		echo "package $package is missing from Debian control metadata" >&2
 		exit 1
 	fi

@@ -103,7 +103,13 @@ import sys
 
 source, loop, target = sys.argv[1:]
 devices = json.load(open(source, encoding="utf-8")).get("blockdevices", [])
-disk = next((item for item in devices if item.get("type") == "disk" and item.get("path") == loop), None)
+# A loopback attachment is reported by lsblk as type "loop" until it carries a
+# partition table, and as type "disk" once one is written. Accept either so the
+# same helper serves both the partitioned and unpartitioned fixtures.
+disk = next(
+    (item for item in devices if item.get("type") in ("disk", "loop") and item.get("path") == loop),
+    None,
+)
 if disk is None:
     raise SystemExit(f"loop device was not returned by lsblk: {loop}")
 wwn = str(disk.get("wwn") or "").strip()
