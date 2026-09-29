@@ -39,8 +39,8 @@ Eleven catalog entries pointed at images that no longer exist:
 | bazarr | `linuxserver/bazarr:1.5` | repointed to `1.6.2` |
 | uptime-kuma | `louislam/uptime-kuma:1.21` | repointed to `2.5.5` |
 | watchtower | `containrrr/watchtower:1.7` | repointed to `1.7.1` |
-| organizr | `linuxserver/organizr:2.1` | repointed to `latest`; upstream publishes no stable tag |
-| homarr | `ghcr.io/homarr-labs/homarr:1.0` | repointed to `latest` |
+| organizr | `linuxserver/organizr:2.1` | repointed to `f6d984d2-ls56` |
+| homarr | `ghcr.io/homarr-labs/homarr:1.0` | repointed to `v1.59.3` |
 | pihole | `pihole/pihole:2024.11.0` | repointed to `2026.09.0` |
 | minio | `minio/minio:RELEASE.2025-02-28T09-55-16Z` | **removed**, repository no longer exists on Docker Hub |
 | vaultwarden-backup | `tigattack/vaultwarden-backup:1.8` | **removed**, repository no longer exists |
@@ -48,6 +48,18 @@ Eleven catalog entries pointed at images that no longer exist:
 MinIO and Vaultwarden Backup were removed rather than repointed because no
 replacement image could be verified as existing. Re-adding either entry needs a
 source that actually resolves.
+
+## Pinning
+
+Every catalog image is pinned to an immutable tag, and the availability gate
+rejects `latest`, `stable`, `main`, `edge`, `nightly` and `develop`. A floating
+tag is a problem in two ways: an install is not reproducible, and the image
+behind the tag can change without the catalog changing, which silently
+invalidates the accepted vulnerability baseline for that entry.
+
+Use a version tag, or a build tag such as linuxserver's `f6d984d2-ls56` where
+upstream publishes no semver. Upgrading an app then becomes a deliberate change
+that shows up in review, which is also when the baseline should be refreshed.
 
 ## Changing the baseline
 

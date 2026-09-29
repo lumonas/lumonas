@@ -52,6 +52,7 @@ resolve_image() {
 failed=0
 throttled=0
 checked=0
+floating=0
 for image in $(python3 - "$ROOT/catalog/apps.json" <<'PY'
 import json
 import sys
@@ -67,6 +68,15 @@ PY
 ); do
 	[ -n "$image" ] || continue
 	checked=$((checked + 1))
+	# A floating tag makes an install irreproducible and makes the accepted
+	# vulnerability baseline unstable, because the image behind the tag changes
+	# without the catalog changing.
+	case "${image##*:}" in
+		latest | stable | main | edge | nightly | develop | edge-dev)
+			echo "floating tag: $image" >&2
+			floating=$((floating + 1))
+			;;
+	esac
 	case "$(resolve_image "$image")" in
 		found) echo "resolves: $image" ;;
 		missing)
@@ -79,6 +89,14 @@ PY
 			;;
 	esac
 done
+
+if [ "$floating" -ne 0 ]; then
+	echo "" >&2
+	echo "$floating catalog image(s) use a floating tag." >&2
+	echo "Pin an immutable version or digest so installs are reproducible and" >&2
+	echo "the accepted vulnerability baseline stays meaningful." >&2
+	exit 1
+fi
 
 if [ "$failed" -ne 0 ]; then
 	echo "" >&2

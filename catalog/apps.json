@@ -59,7 +59,7 @@
     "description": "A home automation hub with broad device support.",
     "accent": "warning",
     "upstream": "https://home-assistant.io",
-    "image": "ghcr.io/home-assistant/home-assistant:stable",
+    "image": "ghcr.io/home-assistant/home-assistant:2025.9.3",
     "ports": [8123],
     "form": [
       {"id":"CONFIG","label":"Configuration storage","type":"storage_ref","required":true,"containerPath":"/config","defaultResource":"apps"},
@@ -324,7 +324,7 @@
     "description": "Scan, index and archive all your physical documents.",
     "accent": "success",
     "upstream": "https://paperless-ngx.com",
-    "image": "ghcr.io/paperless-ngx/paperless-ngx:latest",
+    "image": "ghcr.io/paperless-ngx/paperless-ngx:2.18.4",
     "ports": [8000],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8000"},
@@ -423,7 +423,7 @@
     "description": "A way to organize your self-hosted services with a single sign-on portal.",
     "accent": "info",
     "upstream": "https://organizr.tv",
-    "image": "linuxserver/organizr:latest",
+    "image": "linuxserver/organizr:f6d984d2-ls56",
     "ports": [80],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"80"},
@@ -446,7 +446,7 @@
     "description": "A sleek and modern dashboard for managing your self-hosted services.",
     "accent": "primary",
     "upstream": "https://homarr.dev",
-    "image": "ghcr.io/homarr-labs/homarr:latest",
+    "image": "ghcr.io/homarr-labs/homarr:v1.59.3",
     "ports": [7575],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"7575"},
