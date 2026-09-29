@@ -43,7 +43,18 @@ export SOURCE_DATE_EPOCH
 LOCK_SHA256="$(sha256sum "$ROOT/web/pnpm-lock.yaml" | awk '{print $1}')"
 CATALOG_SHA256="$(sha256sum "$ROOT/catalog/apps.json" | awk '{print $1}')"
 DEB_DEPENDS="$(awk -F': ' '/^Depends:/{print $2; exit}' "$ROOT/packaging/debian/control")"
+# A Debian control file cannot express an architecture-qualified dependency:
+# dpkg rejects "pkg[arch]" outright. The bootloader package therefore cannot
+# live in the shared control file, so it is selected per architecture here and
+# injected into the generated control below. That keeps the source control file
+# architecture neutral and parseable for every target.
 DEB_RECOMMENDS="$(awk -F': ' '/^Recommends:/{print $2; exit}' "$ROOT/packaging/debian/control")"
+case "$DEB_ARCH" in
+	amd64) ARCH_BOOTLOADER=grub-efi-amd64 ;;
+	arm64) ARCH_BOOTLOADER=grub-efi-arm64 ;;
+	*) echo "unsupported Debian package architecture: $DEB_ARCH" >&2; exit 1 ;;
+esac
+DEB_RECOMMENDS="$DEB_RECOMMENDS, $ARCH_BOOTLOADER"
 rm -rf "$OUT"
 mkdir -p "$OUT/DEBIAN" "$OUT/usr/lib/lumonas" "$OUT/usr/share/lumonas/web" "$OUT/usr/share/lumonas/catalog" "$OUT/lib/systemd/system" "$OUT/etc/lumonas" "$OUT/etc/docker" "$OUT/etc/systemd/journald.conf.d"
 mkdir -p "$OUT/lib/systemd/system/smbd.service.d" "$OUT/lib/systemd/system/rsync.service.d" "$OUT/lib/systemd/system/vsftpd.service.d" "$OUT/lib/systemd/system/docker.service.d" "$OUT/lib/systemd/system/nfs-server.service.d" "$OUT/lib/systemd/system/ssh.service.d" "$OUT/lib/systemd/system/avahi-daemon.service.d"
@@ -83,7 +94,10 @@ if [ -f "$ROOT/catalog/apps.json.sig" ]; then
 	cp "$ROOT/catalog/apps.json.sig" "$OUT/usr/share/lumonas/catalog/apps.json.sig"
 fi
 install -m 0750 "$ROOT/packaging/scripts/install-disk.sh" "$OUT/usr/share/lumonas/install-disk"
-sed -e "s/^Version:.*/Version: $VERSION/" -e "s/^Architecture:.*/Architecture: $DEB_ARCH/" "$ROOT/packaging/debian/control" > "$OUT/DEBIAN/control"
+sed -e "s/^Version:.*/Version: $VERSION/" \
+	-e "s/^Architecture:.*/Architecture: $DEB_ARCH/" \
+	-e "s/^Recommends:.*/Recommends: $DEB_RECOMMENDS/" \
+	"$ROOT/packaging/debian/control" > "$OUT/DEBIAN/control"
 printf '%s\n' \
 	'{' \
 	'  "schemaVersion": 1,' \

@@ -9,13 +9,16 @@ ISO="$ROOT/installer/build-iso.sh"
 # These packages are part of the appliance integration baseline. The QEMU
 # image deliberately uses --no-install-recommends, so it must list every
 # integration explicitly instead of relying on Debian metadata.
+BUILD_DEB="$ROOT/packaging/build-deb.sh"
+
+# The bootloader package is architecture specific and cannot live in the shared
+# control file, because dpkg rejects a "pkg[arch]" dependency. It is selected by
+# build-deb.sh per architecture, so check it there rather than in the control.
 for package in \
-	network-manager systemd-resolved smartmontools lm-sensors nut-client mergerfs snapraid rclone grub-efi-amd64 dosfstools efibootmgr \
+	network-manager systemd-resolved smartmontools lm-sensors nut-client mergerfs snapraid rclone dosfstools efibootmgr \
 	e2fsprogs xfsprogs cryptsetup certbot docker.io docker-compose samba samba-common-bin samba-vfs-modules \
 	nfs-kernel-server rsync vsftpd avahi-daemon nftables; do
-	# A dependency may carry an architecture qualifier, which must directly
-	# follow the package name with no separating space (dpkg requires it).
-	if ! grep -Eq "(^|[ ,])${package}(\[[^]]*\])?([, ]|$)" "$CONTROL"; then
+	if ! grep -Eq "(^|[ ,])${package}([, ]|$)" "$CONTROL"; then
 		echo "package $package is missing from Debian control metadata" >&2
 		exit 1
 	fi
@@ -28,5 +31,23 @@ for package in \
 		exit 1
 	fi
 done
+
+# Each supported architecture must map to its own bootloader package, and the
+# shared control file must stay free of architecture qualifiers that dpkg
+# cannot parse.
+for entry in "amd64 grub-efi-amd64" "arm64 grub-efi-arm64"; do
+	# shellcheck disable=SC2086
+	set -- $entry
+	arch=$1
+	bootloader=$2
+	if ! grep -Fq "$arch) ARCH_BOOTLOADER=$bootloader" "$BUILD_DEB"; then
+		echo "architecture $arch does not select bootloader $bootloader" >&2
+		exit 1
+	fi
+done
+if grep -Eq '^[[:space:]]*[^:]*\[[a-z0-9][^]]*\]' "$CONTROL"; then
+	echo "Debian control file contains an architecture-qualified dependency, which dpkg rejects" >&2
+	exit 1
+fi
 
 echo "LumoNAS package dependency parity verified"
