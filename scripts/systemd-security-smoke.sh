@@ -14,7 +14,9 @@ if ! command -v systemd-analyze >/dev/null 2>&1; then
 	exit 0
 fi
 
-systemd-analyze verify "$UNIT_DIR"/*.service
+# shellcheck source=scripts/systemd-verify-lib.sh
+. "$ROOT/scripts/systemd-verify-lib.sh"
+verify_units verify "$UNIT_DIR"/*.service
 
 python3 - "$UNIT_DIR" <<'PY'
 import pathlib
