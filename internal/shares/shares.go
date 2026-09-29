@@ -73,8 +73,14 @@ func (s Store) Save(values []Share) error {
 	return os.Rename(tempPath, s.Path)
 }
 
+// shareNamePattern is compiled once. Validate is on the share create/update
+// path and is also fuzzed under the race detector, where recompiling this on
+// every call dominated the run and could push a single execution past the
+// fuzzing deadline.
+var shareNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$`)
+
 func Validate(share Share) error {
-	if !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _.-]{0,63}$`).MatchString(share.Name) {
+	if !shareNamePattern.MatchString(share.Name) {
 		return errors.New("share name contains unsupported characters")
 	}
 	if !filepath.IsAbs(share.Path) || filepath.Clean(share.Path) != share.Path || strings.ContainsAny(share.Path, "\x00\r\n") {
