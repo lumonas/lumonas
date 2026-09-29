@@ -40,10 +40,11 @@ mkdir -p "$WORK/ext4-mount" "$WORK/xfs-mount" "$WORK/branch-a" "$WORK/branch-b" 
 make_disk() {
 	image=$1
 	filesystem=$2
-	# mkfs.xfs refuses any filesystem smaller than 300MB, so size the backing
-	# image per filesystem before the loop device is attached.
+	# mkfs.xfs refuses any filesystem smaller than 300MB, and the same images
+	# back the mergerfs pool and SnapRAID parity fixtures, which need room for
+	# filesystem metadata as well as a few files. Size every image generously.
 	case "$filesystem" in
-		ext4) truncate -s 64M "$image" ;;
+		ext4) truncate -s 512M "$image" ;;
 		xfs) truncate -s 512M "$image" ;;
 		*) echo "unsupported test filesystem: $filesystem" >&2; exit 1 ;;
 	esac

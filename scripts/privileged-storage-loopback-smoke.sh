@@ -242,7 +242,12 @@ assert_ok "$WORK/format.json"
 
 discover_identity "$LOOP" "$WORK/identity-after-format.json"
 mkdir -p /srv/disks
-MOUNT_PATH="$(mktemp -d /srv/disks/lumonas-privileged-loopback.XXXXXX)"
+# The broker only accepts the canonical /srv/disks/<disk-id> branch path, and
+# the mount request is keyed on the post-format identity, so derive the
+# directory from that identity rather than using a random name.
+FORMATTED_DISK_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$WORK/identity-after-format.json")"
+MOUNT_PATH="/srv/disks/$FORMATTED_DISK_ID"
+mkdir -p "$MOUNT_PATH"
 MOUNT_REQUEST="$(python3 -c 'import json,sys; print(json.dumps({"filesystem":"ext4","mountPath":sys.argv[1],"readOnly":True}))' "$MOUNT_PATH")"
 send_request filesystem.mount loop-mount "$WORK/identity-after-format.json" "$MOUNT_REQUEST" "$WORK/mount.json"
 assert_ok "$WORK/mount.json"
