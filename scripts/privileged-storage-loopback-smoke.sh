@@ -243,10 +243,13 @@ assert_ok "$WORK/format.json"
 discover_identity "$LOOP" "$WORK/identity-after-format.json"
 mkdir -p /srv/disks
 # The broker only accepts the canonical /srv/disks/<disk-id> branch path, and
-# the mount request is keyed on the post-format identity, so derive the
-# directory from that identity rather than using a random name.
+# the mount request is keyed on the post-format identity. Derive the directory
+# from that identity, applying the same sanitisation the storage layer uses
+# (anything outside [A-Za-z0-9._-] becomes "_"), so the colon in an id such as
+# "uuid:<guid>" does not leak into the path.
 FORMATTED_DISK_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["id"])' "$WORK/identity-after-format.json")"
-MOUNT_PATH="/srv/disks/$FORMATTED_DISK_ID"
+SAFE_DISK_ID="$(printf '%s' "$FORMATTED_DISK_ID" | tr -c 'A-Za-z0-9._-' '_')"
+MOUNT_PATH="/srv/disks/$SAFE_DISK_ID"
 mkdir -p "$MOUNT_PATH"
 MOUNT_REQUEST="$(python3 -c 'import json,sys; print(json.dumps({"filesystem":"ext4","mountPath":sys.argv[1],"readOnly":True}))' "$MOUNT_PATH")"
 send_request filesystem.mount loop-mount "$WORK/identity-after-format.json" "$MOUNT_REQUEST" "$WORK/mount.json"
