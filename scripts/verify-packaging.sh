@@ -13,6 +13,16 @@ require_line() {
 	fi
 }
 
+reject_line() {
+	file=$1
+	pattern=$2
+	reason=$3
+	if grep -F -- "$pattern" "$file" >/dev/null 2>&1; then
+		echo "'$pattern' must not appear in $file: $reason" >&2
+		exit 1
+	fi
+}
+
 for unit in lumonas-web.service lumonasd.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service; do
 	[ -f "$SYSTEMD/$unit" ] || { echo "missing systemd unit: $unit" >&2; exit 1; }
 	require_line "$SYSTEMD/$unit" 'NoNewPrivileges=true'
@@ -189,6 +199,27 @@ require_line "$ROOT/scripts/qemu-build-image.sh" 'sourceCommit=$LUMONAS_SOURCE_C
 require_line "$ROOT/scripts/qemu-build-image.sh" 'snapshot.debian.org/archive/debian/20260201T000000Z'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'Acquire::Check-Valid-Until'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'LUMONAS_DEBIAN_MIRROR must use HTTPS'
+# sfdisk accepts the BIOS boot partition only by its full GPT type GUID. The
+# "bios_grub" name and the numeric code 4 are both rejected with "Failed to add
+# #1 partition: Invalid argument", and sfdisk then leaves no partition table at
+# all, so the image builds as an unpartitioned file and every later step fails
+# with an unrelated-looking error. Guard the form so that cannot regress.
+require_line "$ROOT/scripts/qemu-build-image.sh" '21686148-6449-6E6F-744E-656564454649'
+reject_line "$ROOT/scripts/qemu-build-image.sh" ',bios_grub' \
+	'sfdisk rejects the bios_grub type name; use the 21686148-6449-6E6F-744E-656564454649 type GUID'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'sfdisk --verify'
+# The QEMU smoke tests install a throwaway SSH key and update fixture that must
+# not survive into the uploaded artifact. The image is a partitioned GPT disk,
+# so it cannot be cleaned with "mount -o loop": that attaches the whole-disk
+# device, fails with "wrong fs type", and leaves the credentials in place. The
+# cleanup therefore lives in a script that attaches partitions and verifies the
+# key is gone, and the job must call that rather than doing it inline.
+require_line "$ROOT/scripts/qemu-clean-image.sh" 'losetup --find --show --partscan'
+require_line "$ROOT/scripts/qemu-clean-image.sh" 'root/.ssh/authorized_keys'
+require_line "$ROOT/scripts/qemu-clean-image.sh" 'the ephemeral SSH key is still present after cleaning'
+require_line "$ROOT/.github/workflows/ci.yml" 'scripts/qemu-clean-image.sh'
+reject_line "$ROOT/.github/workflows/ci.yml" 'mount -o loop' \
+	'a partitioned QEMU image cannot be mounted with -o loop; use scripts/qemu-clean-image.sh'
 require_line "$ROOT/installer/build-iso.sh" 'snapshot.debian.org/archive/debian/20260201T000000Z'
 require_line "$ROOT/installer/build-iso.sh" 'Acquire::Check-Valid-Until=false'
 require_line "$ROOT/installer/build-iso.sh" 'LUMONAS_DEBIAN_MIRROR must use HTTPS'
@@ -290,9 +321,13 @@ require_line "$ROOT/Makefile" 'qemu-uefi-ab-smoke:'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'LUMONAS_QEMU_SSH_PUBLIC_KEY'
 require_line "$ROOT/.github/workflows/ci.yml" 'Create ephemeral QEMU SSH key'
 require_line "$ROOT/.github/workflows/ci.yml" 'Remove ephemeral QEMU SSH access'
-require_line "$ROOT/.github/workflows/ci.yml" 'authorized_keys'
-require_line "$ROOT/.github/workflows/ci.yml" 'update-fixture/package'
-require_line "$ROOT/.github/workflows/ci.yml" 'LUMONAS_UPDATE_PUBLIC_KEY='
+# The removal itself lives in qemu-clean-image.sh, because a partitioned QEMU
+# image cannot be cleaned with "mount -o loop". Assert the job reaches that
+# script and that the script removes each artifact the smoke tests leave.
+require_line "$ROOT/.github/workflows/ci.yml" 'scripts/qemu-clean-image.sh'
+require_line "$ROOT/scripts/qemu-clean-image.sh" 'authorized_keys'
+require_line "$ROOT/scripts/qemu-clean-image.sh" 'update-fixture/package'
+require_line "$ROOT/scripts/qemu-clean-image.sh" 'LUMONAS_UPDATE_PUBLIC_KEY='
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" '"privilegedBroker":true'
 require_line "$ROOT/scripts/iso-smoke.sh" '"privilegedBroker":true'
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" '"privilegedBroker":true'

@@ -41,10 +41,19 @@ sfdisk "$OUTPUT" <<'PARTITIONS'
 label: gpt
 unit: sectors
 first-lba: 2048
-2048,4096,bios_grub
+# The BIOS boot partition must be named by its full GPT type GUID. sfdisk
+# rejects both the "bios_grub" name and the numeric type code 4 with
+# "Failed to add #1 partition: Invalid argument", and then writes no partition
+# table at all, so the image builds as an unpartitioned file and every later
+# step fails. Reproduced with util-linux 2.41.
+2048,4096,21686148-6449-6E6F-744E-656564454649
 6144,262144,uefi
 268288,,linux
 PARTITIONS
+
+# A GPT table that sfdisk half-wrote would otherwise surface much later as a
+# confusing mount or grub-install failure, so confirm the layout took.
+sfdisk --verify "$OUTPUT" >/dev/null
 
 LOOP="$(losetup --find --show --partscan "$OUTPUT")"
 case "$LOOP" in

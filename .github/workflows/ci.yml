@@ -369,18 +369,7 @@ jobs:
       - run: LUMONAS_UEFI_AB_ASSERT=true LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" LUMONAS_QEMU_SSH_KEY="$RUNNER_TEMP/lumonas-qemu-ssh" LUMONAS_UEFI_AB_SSH_PORT=18024 LUMONAS_UEFI_AB_WEB_PORT=18025 bash scripts/qemu-uefi-ab-smoke.sh
       - name: Remove ephemeral QEMU SSH access
         if: always()
-        run: |
-          test -f "$PWD/build/qemu/lumonas-debian13.raw" || exit 0
-          clean_mount="$RUNNER_TEMP/lumonas-qemu-clean"
-          sudo mkdir -p "$clean_mount"
-          sudo mount -o loop "$PWD/build/qemu/lumonas-debian13.raw" "$clean_mount"
-          sudo rm -f "$clean_mount/root/.ssh/authorized_keys"
-          sudo rmdir "$clean_mount/root/.ssh" 2>/dev/null || true
-          sudo rm -f "$clean_mount/etc/systemd/system/multi-user.target.wants/ssh.service"
-          sudo rm -f "$clean_mount/var/lib/lumonas/update-fixture/package"
-          sudo rmdir "$clean_mount/var/lib/lumonas/update-fixture" 2>/dev/null || true
-          sudo sed -i '/^LUMONAS_UPDATE_PUBLIC_KEY=/d' "$clean_mount/etc/lumonas/lumonasd.env"
-          sudo umount "$clean_mount"
+        run: sudo env LUMONAS_QEMU_IMAGE="$PWD/build/qemu/lumonas-debian13.raw" sh scripts/qemu-clean-image.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
