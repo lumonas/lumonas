@@ -60,7 +60,11 @@ func Disks(run CommandRunner) ([]model.Disk, error) {
 	}
 	result := make([]model.Disk, 0, len(response.BlockDevices))
 	for _, d := range response.BlockDevices {
-		if d.Type != "disk" {
+		// Only whole devices are manageable. A loopback attachment is reported
+		// by lsblk as type "loop" until it carries a partition table, so it is
+		// accepted only once it holds one, which is also when it starts
+		// reporting the identity the storage layer plans are keyed on.
+		if d.Type != "disk" && !(d.Type == "loop" && strings.TrimSpace(d.PTUUID) != "") {
 			continue
 		}
 		d = enrichFromUdev(run, d)

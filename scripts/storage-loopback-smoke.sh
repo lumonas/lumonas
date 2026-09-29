@@ -121,7 +121,10 @@ make_disk "$MUTATION_IMAGE" ext4
 MUTATION_LOOP=$LAST_LOOP
 MUTATION_UUID=$LAST_UUID
 [ -n "$MUTATION_UUID" ] || { echo "mutation disk identity discovery failed" >&2; exit 1; }
-if findmnt -rn -T "$MUTATION_LOOP" >/dev/null 2>&1; then
+# Match the device as a mount *source*. -T would match the mount covering the
+# loop backing file, which always exists, and so would report the disposable
+# disk as mounted no matter what was actually mounted from it.
+if findmnt -rn -S "$MUTATION_LOOP" >/dev/null 2>&1; then
 	echo "mutation disk unexpectedly mounted before format" >&2
 	exit 1
 fi

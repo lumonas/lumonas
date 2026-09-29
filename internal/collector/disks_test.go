@@ -38,6 +38,34 @@ func TestDisksReadOnlyIdentityAgainstRealDevice(t *testing.T) {
 	}
 }
 
+// A loopback attachment is only manageable once it carries a partition table,
+// because that is when lsblk starts reporting a stable identity for it. Before
+// that it must stay out of the inventory so it cannot be offered as a
+// destructive target.
+func TestDisksExcludeUnpartitionedLoopbackButKeepPartitioned(t *testing.T) {
+	withoutTable := []byte(`{"blockdevices":[{"name":"loop0","path":"/dev/loop0","type":"loop","size":100,"model":"","serial":"","wwn":"","uuid":""}]}`)
+	withTable := []byte(`{"blockdevices":[{"name":"loop1","path":"/dev/loop1","type":"loop","size":100,"model":"","serial":"","wwn":"","uuid":"fs-uuid","ptuuid":"gpt-disk-guid"}]}`)
+
+	unpartitioned, err := Disks(func(string, ...string) ([]byte, error) { return withoutTable, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unpartitioned) != 0 {
+		t.Fatalf("unpartitioned loopback device must not be offered: %#v", unpartitioned)
+	}
+
+	partitioned, err := Disks(func(string, ...string) ([]byte, error) { return withTable, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(partitioned) != 1 {
+		t.Fatalf("partitioned loopback device was dropped: %#v", partitioned)
+	}
+	if partitioned[0].ID != "gpt:gpt-disk-guid" {
+		t.Fatalf("unexpected identity %q", partitioned[0].ID)
+	}
+}
+
 func TestDisksUseStableIdentityAcrossDevicePathChanges(t *testing.T) {
 	first := []byte(`{"blockdevices":[{"name":"sdb","path":"/dev/sdb","type":"disk","size":100,"model":"Test","serial":"SERIAL-1","wwn":"wwn-1","rota":true,"tran":"sata"}]}`)
 	second := []byte(`{"blockdevices":[{"name":"sdc","path":"/dev/sdc","type":"disk","size":100,"model":"Test","serial":"SERIAL-1","wwn":"wwn-1","rota":true,"tran":"sata"}]}`)

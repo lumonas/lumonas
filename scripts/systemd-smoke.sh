@@ -107,6 +107,9 @@ for unit in "$STAGE"/etc/systemd/system/*.service "$STAGE"/etc/systemd/system/*.
 done
 # shellcheck disable=SC2086
 [ -n "$LUMONAS_VERIFY_UNITS" ] || { echo "no LumoNAS units were staged" >&2; exit 1; }
+# --root already sets the unit search path, so do not also point
+# SYSTEMD_UNIT_PATH at the staged directory: systemd would then look for units
+# under <root><path> and fail to resolve the staged .target files.
 # shellcheck disable=SC2086
-SYSTEMD_UNIT_PATH="$STAGE/etc/systemd/system" systemd-analyze --root="$STAGE" verify $LUMONAS_VERIFY_UNITS
+systemd-analyze --root="$STAGE" verify $LUMONAS_VERIFY_UNITS
 echo "LumoNAS systemd units verified"
