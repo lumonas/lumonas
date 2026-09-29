@@ -132,7 +132,7 @@
     "description": "Alternative Bitwarden-compatible server written in Rust.",
     "accent": "warning",
     "upstream": "https://github.com/dani-garcia/vaultwarden",
-    "image": "vaultwarden/server:1.32.5",
+    "image": "vaultwarden/server:1.37.3-alpine",
     "ports": [8222],
     "popular": true,
     "form": [
@@ -157,7 +157,7 @@
     "description": "HTTP reverse proxy with automatic service discovery and HTTPS.",
     "accent": "info",
     "upstream": "https://traefik.io",
-    "image": "traefik:v3.2",
+    "image": "traefik:v3.6",
     "ports": [80, 443, 8080],
     "form": [
       {"id":"HTTP_PORT","label":"HTTP port","type":"port","required":true,"defaultValue":"80"},
@@ -182,7 +182,7 @@
     "description": "Visual management for your Docker environments.",
     "accent": "info",
     "upstream": "https://portainer.io",
-    "image": "portainer/portainer-ce:2.21.5",
+    "image": "portainer/portainer-ce:2.45.1",
     "ports": [9000],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"9000"},
@@ -324,7 +324,7 @@
     "description": "Scan, index and archive all your physical documents.",
     "accent": "success",
     "upstream": "https://paperless-ngx.com",
-    "image": "ghcr.io/paperless-ngx/paperless-ngx:2.13",
+    "image": "ghcr.io/paperless-ngx/paperless-ngx:latest",
     "ports": [8000],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8000"},
@@ -377,7 +377,7 @@
     "description": "Open source analytics and monitoring solution.",
     "accent": "warning",
     "upstream": "https://grafana.com",
-    "image": "grafana/grafana:11.3.0",
+    "image": "grafana/grafana:13.2-slim",
     "ports": [3000],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"3000"},
@@ -492,7 +492,7 @@
     "description": "Open-source systems monitoring and alerting toolkit.",
     "accent": "warning",
     "upstream": "https://prometheus.io",
-    "image": "prom/prometheus:v2.54.1",
+    "image": "prom/prometheus:v3.13.4",
     "ports": [9090],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"9090"},
@@ -559,7 +559,7 @@
     "description": "Deploy a lightweight file manager and WebDAV service against a selected LumoNAS share.",
     "accent": "info",
     "upstream": "https://filebrowser.org",
-    "image": "filebrowser/filebrowser:v2.32.0",
+    "image": "filebrowser/filebrowser:v2.63.23",
     "ports": [8080],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8080"},
