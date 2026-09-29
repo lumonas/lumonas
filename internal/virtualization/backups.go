@@ -664,14 +664,17 @@ func (s Service) RestoreBackupGuest(ctx context.Context, name, definitionSource 
 		return Domain{}, errors.New("VM backup disks exceed currently free VM storage")
 	}
 	mediaTargets := make([]struct{ source, target string }, 0, len(mediaDefinitions))
+	var mediaFreeBytes uint64
 	if len(mediaDefinitions) > 0 {
 		if err := os.MkdirAll(mediaDir, 0750); err != nil {
 			return Domain{}, fmt.Errorf("create installer media directory: %w", err)
 		}
-	}
-	mediaFreeBytes, err := availableStorageBytes(mediaDir)
-	if err != nil {
-		return Domain{}, fmt.Errorf("check installer media restore capacity: %w", err)
+		// Only meaningful when the definition actually attaches media; probing
+		// a directory that may not exist would fail a disk-only restore.
+		mediaFreeBytes, err = availableStorageBytes(mediaDir)
+		if err != nil {
+			return Domain{}, fmt.Errorf("check installer media restore capacity: %w", err)
+		}
 	}
 	var mediaRequired uint64
 	for filename, target := range mediaDefinitions {

@@ -26,12 +26,37 @@ for unit in "$ROOT"/packaging/systemd/*.service "$ROOT"/packaging/systemd/*.targ
 	[ -f "$unit" ] || continue
 	cp "$unit" "$STAGE/etc/systemd/system/"
 done
+
+# systemd-analyze needs the boot targets and the distro units the LumoNAS units
+# depend on, otherwise it cannot construct a start transaction at all. Stage
+# the distro units first, because each one may also own a drop-in directory.
+for target in sysinit.target basic.target shutdown.target rescue.target emergency.target \
+	local-fs.target swap.target umount.target network-online.target remote-fs.target \
+	network.target multi-user.target graphical.target timers.target; do
+	printf '[Unit]\nDescription=Stub %s for unit verification\n' "$target" >"$STAGE/etc/systemd/system/$target"
+done
+# Ordering units the packaged units reference by name.
+for unit in systemd-modules-load systemd-journald systemd-udevd systemd-tmpfiles-setup \
+	sysinit early-boot; do
+	{
+		printf '[Unit]\nDescription=Stub %s for unit verification\n' "$unit"
+		printf '[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n'
+		printf '[Install]\nWantedBy=sysinit.target\n'
+	} >"$STAGE/etc/systemd/system/$unit.service"
+done
+for unit in avahi-daemon docker nfs-server rsync smbd ssh vsftpd; do
+	{
+		printf '[Unit]\nDescription=Stub %s for unit verification\n' "$unit"
+		printf '[Service]\nType=oneshot\nExecStart=/bin/true\nRemainAfterExit=yes\n'
+		printf '[Install]\nWantedBy=multi-user.target\n'
+	} >"$STAGE/etc/systemd/system/$unit.service"
+done
 for dropin in "$ROOT"/packaging/systemd/*.d; do
 	[ -d "$dropin" ] || continue
-	name="$(basename "$dropin" .d)"
-	mkdir -p "$STAGE/etc/systemd/system/$name"
-	cp "$dropin"/* "$STAGE/etc/systemd/system/$name/" 2>/dev/null || true
+	mkdir -p "$STAGE/etc/systemd/system/$(basename "$dropin")"
+	cp "$dropin"/* "$STAGE/etc/systemd/system/$(basename "$dropin")/" 2>/dev/null || true
 done
+
 # Executables the units and their drop-ins reference by absolute path.
 for executable in \
 	/usr/lib/lumonas/lumonasd \
@@ -49,6 +74,8 @@ for executable in \
 	/usr/sbin/smbd \
 	/usr/bin/systemctl \
 	/usr/bin/apt-get \
+	/bin/true \
+	/usr/lib/systemd/systemd \
 	/usr/sbin/snapraid \
 	/usr/bin/mergerfs \
 	/usr/bin/dpkg; do

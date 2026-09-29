@@ -12,7 +12,21 @@ import (
 	"testing"
 )
 
+// requireLibvirtGroup skips tests that stage qemu backups, because the staging
+// helper chowns to the libvirt group. The packaged appliance depends on that
+// package, but a bare CI or developer machine may not have it.
+func requireLibvirtGroup(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		return
+	}
+	if _, err := user.LookupGroup("libvirt"); err != nil {
+		t.Skip("libvirt group is not available in this test environment")
+	}
+}
+
 func TestBackupManagedDisksConvertsStoppedManagedVM(t *testing.T) {
+	requireLibvirtGroup(t)
 	vmDir := t.TempDir()
 	recoveryDir := t.TempDir()
 	definitionPath := filepath.Join(vmDir, "guest-1.xml")
@@ -67,6 +81,7 @@ func TestBackupManagedDisksConvertsStoppedManagedVM(t *testing.T) {
 }
 
 func TestBackupManagedDisksFailsClosedForUnmanagedVM(t *testing.T) {
+	requireLibvirtGroup(t)
 	vmDir := t.TempDir()
 	service := New(func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		switch strings.Join(args, " ") {
@@ -86,6 +101,7 @@ func TestBackupManagedDisksFailsClosedForUnmanagedVM(t *testing.T) {
 }
 
 func TestBackupManagedDisksIncludesEveryDiskAndInstallerISO(t *testing.T) {
+	requireLibvirtGroup(t)
 	vmDir := t.TempDir()
 	mediaDir := t.TempDir()
 	recoveryDir := t.TempDir()
@@ -146,11 +162,7 @@ func TestBackupManagedDisksIncludesEveryDiskAndInstallerISO(t *testing.T) {
 }
 
 func TestRunningMultiDiskBackupUsesOneConsistentLibvirtJob(t *testing.T) {
-	if runtime.GOOS == "linux" {
-		if _, err := user.LookupGroup("libvirt"); err != nil {
-			t.Skip("libvirt group is not available in this test environment")
-		}
-	}
+	requireLibvirtGroup(t)
 	vmDir := t.TempDir()
 	recoveryDir := t.TempDir()
 	diskA := filepath.Join(vmDir, "guest-1.qcow2")
@@ -239,6 +251,7 @@ func TestBackupManagedDisksDoesNotRequireLibvirtWithoutManagedVMs(t *testing.T) 
 }
 
 func TestRestoreBackupGuestInstallsValidatedFilesWithoutStartingVM(t *testing.T) {
+	requireLibvirtGroup(t)
 	vmDir := t.TempDir()
 	backupDir := t.TempDir()
 	diskSource := filepath.Join(backupDir, "guest-1.qcow2")
@@ -296,6 +309,7 @@ func TestRestoreBackupGuestInstallsValidatedFilesWithoutStartingVM(t *testing.T)
 }
 
 func TestRestoreBackupGuestCleansFilesWhenLibvirtRejectsDefinition(t *testing.T) {
+	requireLibvirtGroup(t)
 	vmDir := t.TempDir()
 	backupDir := t.TempDir()
 	diskSource := filepath.Join(backupDir, "guest-1.qcow2")
@@ -335,6 +349,7 @@ func TestRestoreBackupGuestCleansFilesWhenLibvirtRejectsDefinition(t *testing.T)
 }
 
 func TestRestoreBackupGuestRestoresMultipleDisksAndInstallerMedia(t *testing.T) {
+	requireLibvirtGroup(t)
 	vmDir := t.TempDir()
 	mediaDir := filepath.Join(t.TempDir(), "media")
 	backupDir := t.TempDir()
