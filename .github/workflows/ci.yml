@@ -578,6 +578,6 @@ jobs:
           LUMONAS_COSIGN_CERTIFICATE_IDENTITY_REGEXP: "${{ github.server_url }}/${{ github.repository }}/.github/workflows/.+@refs/tags/${{ github.ref_name }}"
           LUMONAS_COSIGN_CERTIFICATE_OIDC_ISSUER: https://token.actions.githubusercontent.com
         run: LUMONAS_REQUIRE_RELEASE_SET=true bash scripts/verify-release.sh build/releases
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: build/releases/*
