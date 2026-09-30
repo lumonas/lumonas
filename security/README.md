@@ -129,6 +129,35 @@ against a concrete case: the diff is additive because the database learned
 about these, not because nobody read the previous entries. Check the same way
 when the next refresh comes.
 
+## The 2026-10-01 kernel refresh
+
+Four identifiers were added across two images, and none were removed:
+
+| Image | Added | Already accepted for |
+|---|---|---|
+| `ghcr.io/home-assistant/home-assistant:2025.9.3` | CVE-2026-75804, CVE-2026-84782 | jellyfin, nextcloud, paperless, netdata |
+| `nextcloud:35.0.1` | CVE-2026-97496, CVE-2026-97991 | nothing |
+
+The home-assistant pair is the same two identifiers the previous entry
+records, now on a fourth and fifth image carrying the same packages. That
+they recur is the point of listing where else they are accepted.
+
+The nextcloud pair is genuinely new to this project. Both are Linux kernel
+advisories: `drm/amdkfd: Fix OOB memory exposure in get_wave_state()` and
+`vdpa_sim_blk: reject out-of-range sector starts`, both fixed in
+`6.12.111` / `6.18.53`. They are reported against the kernel version the
+image was built against, not against a kernel LumoNAS ships — the host runs
+its own, and the guest kernel is Debian's. Neither is reachable from inside
+a container. `nextcloud:35.0.1` is also the newest tag Docker Hub lists for
+that image, so there is no pin to move: the fixed kernel is not available
+in any published build of it. This image already accepts a long tail of
+sibling advisories against the same reported version (CVE-2026-93817,
+CVE-2026-89846, CVE-2026-98039 and others).
+
+Both entries stay until the underlying images are rebuilt on a newer base.
+For nextcloud that is a matter of waiting for upstream; there is nothing to
+choose here.
+
 ## Baseline drift is expected, not an incident
 
 The scanner's vulnerability database is live. New advisories are published for
