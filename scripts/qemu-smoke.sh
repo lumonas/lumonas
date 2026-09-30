@@ -180,17 +180,22 @@ trap cleanup EXIT
 # One command per write, with a pause between them. Writing the whole sequence
 # in one burst overruns the guest's serial receive buffer and the commands come
 # back interleaved and truncated, which reads like the guest ignoring them.
+#
+# No `echo`: GRUB 2.12 has no such command and answers "can't find command",
+# which would look like a broken channel. `ls` lists what it can enumerate and
+# a bare `set` prints every variable, prefix included. GRUB echoes each command
+# as it receives it, so the commands are identifiable in the log without
+# markers.
 grub_console_diagnostic() {
   grub_send() {
     printf '%s\n' "$1" >&9 2>/dev/null || true
-    sleep 3
+    sleep 4
   }
+  printf '\n' >&9 2>/dev/null || true
   sleep 2
   grub_send 'set pager=0'
-  grub_send 'echo ===LUMONASGRUBDIAG==='
-  grub_send 'echo PREFIX_IS=$prefix'
   grub_send 'ls'
-  grub_send 'echo ===ENDGRUBDIAG==='
+  grub_send 'set'
   sleep 5
 }
 
