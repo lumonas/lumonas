@@ -171,18 +171,21 @@ trap cleanup EXIT
 # narrowed from the build side. GRUB reports its own prefix and its own view of
 # the disks, which distinguishes "cannot read any disk" from "read the disk but
 # not this filesystem" from "found the prefix but the config is unreadable".
-# Ctrl-A c leaves the QEMU monitor and returns to the guest serial console.
+#
+# No monitor escape here. With "-serial mon:stdio" the mux starts in console
+# mode, so the guest's output is already being printed and keystrokes go
+# straight to it; sending Ctrl-A c switches *into* the monitor and the commands
+# are then read by the QEMU monitor as "(qemu) echo ..." instead of by GRUB.
 grub_console_diagnostic() {
   {
-    printf '\001c'
-    printf 'echo ===LUMONAS GRUB DIAGNOSTIC===\n'
+    printf 'echo ===LUMONASGRUBDIAG===\n'
     printf 'set pager=0\n'
     printf 'echo PREFIX_IS=$prefix\n'
     printf 'ls\n'
-    printf 'echo ===END GRUB DIAGNOSTIC===\n'
+    printf 'echo ===ENDGRUBDIAG===\n'
     sleep 1
   } >&9 2>/dev/null || true
-  sleep 8
+  sleep 10
 }
 
 for attempt in $(seq 1 60); do
