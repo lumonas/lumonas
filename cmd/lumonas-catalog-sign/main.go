@@ -61,7 +61,14 @@ func verifyCatalog(catalogPath, signaturePath, encodedKey string) error {
 		return errors.New("detached signature must be standard-base64")
 	}
 	if !ed25519.Verify(ed25519.PublicKey(key), catalog, signature) {
-		return errors.New("catalog signature does not match the configured trusted key")
+		// This is the message a routine catalog pin bump produces, because the
+		// pin and the detached signature are committed separately. Naming the
+		// remedy here is the difference between a five-second fix and an
+		// afternoon spent suspecting the release key.
+		return errors.New("catalog signature does not match the configured trusted key; " +
+			"either catalog/apps.json was edited without re-signing, or the public key in " +
+			"packaging/debian/lumonasd.env.example is not the release key. " +
+			"To re-sign: Actions -> Sign catalog -> Run workflow, then merge the branch it pushes")
 	}
 	return nil
 }

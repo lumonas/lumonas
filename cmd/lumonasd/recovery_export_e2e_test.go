@@ -38,7 +38,16 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	}
 
 	server := testServer(t)
-	server.catalogFile = filepath.Join("..", "..", "catalog", "apps.json")
+	catalogPath := filepath.Join("..", "..", "catalog", "apps.json")
+	server.catalogFile = catalogPath
+	// The catalog image must be read from the catalog rather than repeated as a
+	// literal here. EnrichStack matches a stack to a catalog entry by exact image
+	// string, so a pinned literal silently stopped matching the moment a routine
+	// catalog pin moved, and the stack fell back to the conservative default
+	// contract: no database dump and no appdata, reported only as an export
+	// warning. Reading the real catalog keeps this test asserting what actually
+	// ships instead of re-asserting a version that maintenance will change.
+	immichImage := catalogRecoveryImage(t, catalogPath, "immich")
 	stackRoot := filepath.Join(root, "stacks")
 	server.dockerService = dockerruntime.New(stackRoot, func(_ context.Context, _ string, args ...string) ([]byte, error) {
 		command := strings.Join(args, " ")
@@ -61,7 +70,7 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 	postRecoveryUser(t, server, `{"name":"operator","password":"operator-password-123","managementRole":"admin"}`, "/api/v1/users", http.StatusCreated)
 	postRecoveryUser(t, server, `{"id":"lan","uuid":"11111111-1111-1111-1111-111111111111","name":"LAN","interface":"eth0","enabled":true,"type":"ethernet","ipv4":{"method":"auto"},"ipv6":{"method":"disabled"},"reauthenticated":true}`, "/api/v1/network/connections", http.StatusCreated)
 	postRecoveryUser(t, server, fmt.Sprintf(`{"id":"share-media","name":"Media","path":%q,"enabled":true,"protocols":[{"protocol":"smb","enabled":true},{"protocol":"nfs","enabled":true}],"access":[]}`, shareRoot), "/api/v1/shares", http.StatusCreated)
-	postRecoveryUser(t, server, `{"name":"media","catalogId":"immich","composeYaml":"services:\n  media:\n    image: ghcr.io/immich-app/immich-server:v1.116.0\n    volumes:\n      - /srv/lumonas/docker/appdata/media/upload:/usr/src/app/upload\n      - /srv/lumonas/docker/appdata/media/postgres:/var/lib/postgresql/data\n"}`, "/api/v1/docker/stacks", http.StatusCreated)
+	postRecoveryUser(t, server, fmt.Sprintf(`{"name":"media","catalogId":"immich","composeYaml":"services:\n  media:\n    image: %s\n    volumes:\n      - /srv/lumonas/docker/appdata/media/upload:/usr/src/app/upload\n      - /srv/lumonas/docker/appdata/media/postgres:/var/lib/postgresql/data\n"}`, immichImage), "/api/v1/docker/stacks", http.StatusCreated)
 
 	exportResponse := httptest.NewRecorder()
 	server.routes().ServeHTTP(exportResponse, httptest.NewRequest(http.MethodPost, "/api/v1/recovery/export", nil))
@@ -118,7 +127,7 @@ func TestRecoveryExportAndApplyConfiguredRuntime(t *testing.T) {
 		t.Fatalf("restored share file = %q, err=%v", got, err)
 	}
 	compose, err := os.ReadFile(filepath.Join(restoredRoot, "srv/lumonas/docker/stacks/media/compose.yaml"))
-	if err != nil || !strings.Contains(string(compose), "ghcr.io/immich-app/immich-server:v1.116.0") {
+	if err != nil || !strings.Contains(string(compose), immichImage) {
 		t.Fatalf("restored Compose file = %q, err=%v", compose, err)
 	}
 	networkConfig, err := os.ReadFile(filepath.Join(restoredRoot, "etc/lumonas/recovery/network-connections.json"))
@@ -161,6 +170,32 @@ func containsRecoveryFile(files []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// catalogRecoveryImage returns the pinned image for a catalog entry, and fails
+// the test when the entry is absent or no longer declares a dumpable database.
+// A catalog change that drops either is a real product change, and saying so
+// here is far more useful than an export-warning cascade further down.
+func catalogRecoveryImage(t *testing.T, path, id string) string {
+	t.Helper()
+	apps, err := dockerruntime.LoadCatalog(path)
+	if err != nil {
+		t.Fatalf("catalog %s could not be loaded: %v", path, err)
+	}
+	for _, app := range apps {
+		if app.ID != id {
+			continue
+		}
+		if app.Image == "" {
+			t.Fatalf("catalog entry %q has no pinned image", id)
+		}
+		if app.Recovery == nil || app.Recovery.DBDump == nil || app.Recovery.DBDump.Container == "" {
+			t.Fatalf("catalog entry %q no longer declares a database dump contract", id)
+		}
+		return app.Image
+	}
+	t.Fatalf("catalog entry %q is missing from %s", id, path)
+	return ""
 }
 
 func hasPrincipalNamed(values []identity.Principal, name string) bool {
