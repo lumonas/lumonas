@@ -59,6 +59,16 @@ for disk in data1 data2 data3 parity; do
 done
 
 IMAGE_FORMAT="${LUMONAS_QEMU_IMAGE_FORMAT:-raw}"
+
+# Every request to the appliance must be bounded. Without an explicit timeout
+# curl blocks indefinitely if the appliance accepts the connection but does not
+# answer, which turns "the appliance is not ready" into a job that hangs until
+# the runner's own limit instead of failing within the retry budget below: a
+# request left unbounded ran for over an hour before the step was killed. A
+# refused connection fails immediately, so this only bounds the case where
+# something accepts the socket and then goes quiet.
+CURL_BOUNDS="${LUMONAS_CURL_BOUNDS:---connect-timeout 3 --max-time 10}"
+
 run_qemu() {
   data_a=data1
   data_b=data2
@@ -136,24 +146,24 @@ cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null |
 trap cleanup EXIT
 
 for attempt in $(seq 1 60); do
-  if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
-     curl -kfsS https://127.0.0.1:18080/readyz >"$LOG.ready" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/server >"$LOG.server" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/network/lan/hosts >"$LOG.lan-hosts" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.metrics" 2>/dev/null && \
-     curl -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
-     curl -kfsS 'https://127.0.0.1:18080/api/v1/audit?limit=100' >"$LOG.audit" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/health/components >"$LOG.health" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/docker/summary >"$LOG.docker-summary" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/docker/containers >"$LOG.docker-containers" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/docker/images >"$LOG.docker-images" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/docker/volumes >"$LOG.docker-volumes" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
-     curl -kfsS https://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
+  if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/readyz >"$LOG.ready" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/server >"$LOG.server" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/network/lan/hosts >"$LOG.lan-hosts" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.metrics" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS 'https://127.0.0.1:18080/api/v1/audit?limit=100' >"$LOG.audit" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/health/components >"$LOG.health" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/docker/summary >"$LOG.docker-summary" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/docker/containers >"$LOG.docker-containers" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/docker/images >"$LOG.docker-images" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/docker/volumes >"$LOG.docker-volumes" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/settings >"$LOG.settings" 2>/dev/null && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/onboarding/state >/dev/null 2>&1 && \
+     curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/services >"$LOG.services" 2>/dev/null; then
        grep -F '"privilegedBroker":true' "$LOG.ready" >/dev/null 2>&1 || {
       echo "QEMU readiness response did not confirm the privileged broker" >&2
       cat "$LOG.ready" >&2 || true
@@ -212,10 +222,10 @@ for attempt in $(seq 1 60); do
         done
         ssh_guest 'systemctl restart lumonasd.service'
         for restart_attempt in $(seq 1 30); do
-          if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
-             curl -kfsS https://127.0.0.1:18080/readyz >"$LOG.restart-ready" 2>/dev/null && \
-             curl -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.restart-jobs" 2>/dev/null && \
-             curl -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.restart-metrics" 2>/dev/null; then
+          if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
+             curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/readyz >"$LOG.restart-ready" 2>/dev/null && \
+             curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/jobs >"$LOG.restart-jobs" 2>/dev/null && \
+             curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/system/metrics >"$LOG.restart-metrics" 2>/dev/null; then
             python3 "$ROOT/scripts/validate-api-response.py" readiness "$LOG.restart-ready"
             python3 "$ROOT/scripts/validate-api-response.py" jobs "$LOG.restart-jobs"
             python3 "$ROOT/scripts/validate-api-response.py" metrics "$LOG.restart-metrics"
@@ -246,11 +256,11 @@ for attempt in $(seq 1 60); do
       RECOVERY_STATUS_LOG="$LOG.recovery-status"
       RECOVERY_PLAN_LOG="$LOG.recovery-plan"
       RECOVERY_STAGE_LOG="$LOG.recovery-stage"
-      if curl -kfsS -X POST https://127.0.0.1:18080/api/v1/recovery/key >"$RECOVERY_KEY_LOG" 2>/dev/null && \
-         curl -kfsS -X POST https://127.0.0.1:18080/api/v1/recovery/export >"$RECOVERY_EXPORT_LOG" 2>/dev/null && \
-         curl -kfsS https://127.0.0.1:18080/api/v1/recovery/status >"$RECOVERY_STATUS_LOG" 2>/dev/null && \
-         curl -kfsS https://127.0.0.1:18080/api/v1/recovery/plan >"$RECOVERY_PLAN_LOG" 2>/dev/null && \
-         curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"confirmed":true,"reauthenticated":true}' https://127.0.0.1:18080/api/v1/recovery/restore/stage >"$RECOVERY_STAGE_LOG" 2>/dev/null && \
+      if curl $CURL_BOUNDS -kfsS -X POST https://127.0.0.1:18080/api/v1/recovery/key >"$RECOVERY_KEY_LOG" 2>/dev/null && \
+         curl $CURL_BOUNDS -kfsS -X POST https://127.0.0.1:18080/api/v1/recovery/export >"$RECOVERY_EXPORT_LOG" 2>/dev/null && \
+         curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/recovery/status >"$RECOVERY_STATUS_LOG" 2>/dev/null && \
+         curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/recovery/plan >"$RECOVERY_PLAN_LOG" 2>/dev/null && \
+         curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' -d '{"confirmed":true,"reauthenticated":true}' https://127.0.0.1:18080/api/v1/recovery/restore/stage >"$RECOVERY_STAGE_LOG" 2>/dev/null && \
          grep -F 'retry: 3000' "$EVENTS_LOG" >/dev/null 2>&1 && \
          grep -F 'system.metrics' "$EVENTS_LOG" >/dev/null 2>&1 && \
          grep -F '"verified":true' "$RECOVERY_EXPORT_LOG" >/dev/null 2>&1 && \
@@ -277,13 +287,13 @@ request = {
 }
 json.dump(request, open(sys.argv[2], "w", encoding="utf-8"), separators=(",", ":"))
 PY
-          if curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$UPDATE_REQUEST_LOG" https://127.0.0.1:18080/api/v1/updates/apply >"$UPDATE_REQUEST_LOG.response" 2>/dev/null && \
+          if curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$UPDATE_REQUEST_LOG" https://127.0.0.1:18080/api/v1/updates/apply >"$UPDATE_REQUEST_LOG.response" 2>/dev/null && \
           grep -F '"pendingSlot":"b"' "$UPDATE_REQUEST_LOG.response" >/dev/null 2>&1 && \
-          curl -kfsS -X POST -H 'Content-Type: application/json' -d "{\"healthy\":true,\"version\":$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["manifest"]["version"]))' "$LUMONAS_QEMU_UPDATE_FIXTURE")}" https://127.0.0.1:18080/api/v1/updates/health >"$UPDATE_HEALTH_LOG" 2>/dev/null && \
+          curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' -d "{\"healthy\":true,\"version\":$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["manifest"]["version"]))' "$LUMONAS_QEMU_UPDATE_FIXTURE")}" https://127.0.0.1:18080/api/v1/updates/health >"$UPDATE_HEALTH_LOG" 2>/dev/null && \
           grep -F '"activeSlot":"b"' "$UPDATE_HEALTH_LOG" >/dev/null 2>&1 && \
-          curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"reason":"qemu smoke rollback"}' https://127.0.0.1:18080/api/v1/updates/rollback >"$UPDATE_ROLLBACK_LOG" 2>/dev/null && \
+          curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' -d '{"reason":"qemu smoke rollback"}' https://127.0.0.1:18080/api/v1/updates/rollback >"$UPDATE_ROLLBACK_LOG" 2>/dev/null && \
           grep -F '"activeSlot":"a"' "$UPDATE_ROLLBACK_LOG" >/dev/null 2>&1 && \
-          curl -kfsS https://127.0.0.1:18080/api/v1/updates/status >"$UPDATE_STATUS_LOG" 2>/dev/null && \
+          curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/updates/status >"$UPDATE_STATUS_LOG" 2>/dev/null && \
           grep -F '"activeSlot":"a"' "$UPDATE_STATUS_LOG" >/dev/null 2>&1; then
             python3 "$ROOT/scripts/validate-api-response.py" updates-status "$UPDATE_STATUS_LOG"
             echo "QEMU signed update promotion and rollback verified"
@@ -299,9 +309,9 @@ PY
         LUMONAS_QEMU_REORDER=true run_qemu >"$LOG.reordered" 2>&1 &
         QEMU_PID=$!
         for reorder_attempt in $(seq 1 60); do
-          if curl -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
-             curl -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null && \
-             curl -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history.reordered" 2>/dev/null; then
+          if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
+             curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null && \
+             curl $CURL_BOUNDS -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history.reordered" 2>/dev/null; then
             grep -F '"capturedAt"' "$LOG.metrics-history.reordered" >/dev/null 2>&1 || continue
             python3 "$ROOT/scripts/validate-api-response.py" metrics-history "$LOG.metrics-history.reordered"
             snapshot_disk_identities "$LOG.disks.reordered" "$LOG.identities.reordered"

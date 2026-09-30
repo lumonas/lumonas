@@ -252,7 +252,7 @@ if "metrics-history" not in qemu_smoke.read_text(encoding="utf-8"):
 for marker in ("LUMONAS_QEMU_UPDATE_ASSERT", "updates/apply", "qemu smoke rollback", "activeSlot"):
     if marker not in qemu_smoke.read_text(encoding="utf-8"):
         raise SystemExit(f"QEMU smoke does not exercise signed update rollback: {marker}")
-if "if curl -kfsS -X POST -H" not in qemu_smoke.read_text(encoding="utf-8"):
+if "if curl $CURL_BOUNDS -kfsS -X POST -H" not in qemu_smoke.read_text(encoding="utf-8"):
     raise SystemExit("QEMU signed-update smoke must guard the apply request with a shell conditional")
 disk_identity_smoke = pathlib.Path(sys.argv[1]).parent.parent.parent / "scripts" / "disk-identity-smoke.sh"
 if "DisksPromoteMountedPartitionMetadata" not in disk_identity_smoke.read_text(encoding="utf-8"):
@@ -313,7 +313,7 @@ for marker in ("privilegedWorkersReady", "worker.ping."):
     if marker not in daemon_source:
         raise SystemExit(f"daemon readiness is missing {marker}")
 live_recovery_text = live_recovery_source.read_text(encoding="utf-8")
-for marker in ("SOURCE_API=\"https://127.0.0.1:18083\"", "curl -kfsS \"$SOURCE_API/healthz\"", "SOURCE_COOKIES=", "SOURCE_CSRF=", "X-CSRF-Token: $SOURCE_CSRF", "api/v1/recovery/export"):
+for marker in ("SOURCE_API=\"https://127.0.0.1:18083\"", "curl $CURL_BOUNDS -kfsS \"$SOURCE_API/healthz\"", "SOURCE_COOKIES=", "SOURCE_CSRF=", "X-CSRF-Token: $SOURCE_CSRF", "api/v1/recovery/export"):
     if marker not in live_recovery_text:
         raise SystemExit(f"live recovery source is missing its HTTPS/auth contract: {marker}")
 for marker in ("live recovery source shutdown request failed", "live recovery source appliance did not power off cleanly", "wait \"$SOURCE_PID\""):

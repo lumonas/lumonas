@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+# Every request to the appliance must be bounded. Without an explicit timeout
+# curl blocks indefinitely if the appliance accepts the connection but does not
+# answer, which turns a failure into a job that hangs until the runner's own
+# limit. A refused connection fails immediately, so this only bounds the case
+# where something accepts the socket and then goes quiet.
+CURL_BOUNDS="${LUMONAS_CURL_BOUNDS:---connect-timeout 3 --max-time 10}"
+
+
 ASSERT_MODE="${LUMONAS_ISO_ASSERT:-false}"
 if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
 	if [ "$ASSERT_MODE" = "true" ]; then
@@ -56,13 +64,13 @@ qemu-system-x86_64 \
 QEMU_PID=$!
 
 for attempt in $(seq 1 90); do
-	if curl -kfsS https://127.0.0.1:18081/healthz >/dev/null 2>&1 && \
-		curl -kfsS https://127.0.0.1:18081/readyz >"$LOG.ready" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18081/api/v1/server >"$LOG.server" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18081/api/v1/disks >"$LOG.disks" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18081/api/v1/system/metrics >"$LOG.metrics" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18081/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18081/api/v1/services >"$LOG.services" 2>/dev/null; then
+	if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18081/healthz >/dev/null 2>&1 && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18081/readyz >"$LOG.ready" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18081/api/v1/server >"$LOG.server" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18081/api/v1/disks >"$LOG.disks" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18081/api/v1/system/metrics >"$LOG.metrics" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18081/api/v1/jobs >"$LOG.jobs" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18081/api/v1/services >"$LOG.services" 2>/dev/null; then
 		grep -F '"privilegedBroker":true' "$LOG.ready" >/dev/null
 		ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 		python3 "$ROOT/scripts/validate-api-response.py" readiness "$LOG.ready"

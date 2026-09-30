@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+# Every request to the appliance must be bounded. Without an explicit timeout
+# curl blocks indefinitely if the appliance accepts the connection but does not
+# answer, which turns a failure into a job that hangs until the runner's own
+# limit. A refused connection fails immediately, so this only bounds the case
+# where something accepts the socket and then goes quiet.
+CURL_BOUNDS="${LUMONAS_CURL_BOUNDS:---connect-timeout 3 --max-time 10}"
+
+
 ASSERT_MODE="${LUMONAS_RECOVERY_ASSERT:-false}"
 if [ "$(id -u)" -ne 0 ]; then
 	if [ "$ASSERT_MODE" = "true" ]; then
@@ -99,13 +107,13 @@ QEMU_PID=$!
 
 API_READY=false
 for attempt in $(seq 1 120); do
-	if curl -kfsS https://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
-		curl -kfsS https://127.0.0.1:18082/readyz >"$WORK/ready.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/api/v1/server >"$WORK/server.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/api/v1/disks >"$WORK/disks.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/api/v1/system/metrics >"$WORK/metrics.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/api/v1/jobs >"$WORK/jobs.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/api/v1/services >"$WORK/services.json" 2>/dev/null; then
+	if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/readyz >"$WORK/ready.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/api/v1/server >"$WORK/server.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/api/v1/disks >"$WORK/disks.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/api/v1/system/metrics >"$WORK/metrics.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/api/v1/jobs >"$WORK/jobs.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/api/v1/services >"$WORK/services.json" 2>/dev/null; then
 		API_READY=true
 	fi
 	if ! kill -0 "$QEMU_PID" 2>/dev/null; then
@@ -198,18 +206,18 @@ qemu-system-x86_64 \
 QEMU_PID=$!
 recovered_ready=false
 for attempt in $(seq 1 120); do
-	if curl -kfsS https://127.0.0.1:18084/healthz >/dev/null 2>&1 && \
-		curl -kfsS https://127.0.0.1:18084/readyz >"$WORK/recovered-ready.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/disks >"$WORK/recovered-disks.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/system/metrics >"$WORK/recovered-metrics.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/jobs >"$WORK/recovered-jobs.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/health/components >"$WORK/recovered-health.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/docker/summary >"$WORK/recovered-docker-summary.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/docker/containers >"$WORK/recovered-docker-containers.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/docker/images >"$WORK/recovered-docker-images.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/docker/volumes >"$WORK/recovered-docker-volumes.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18084/api/v1/services >"$WORK/recovered-services.json" 2>/dev/null; then
+	if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/healthz >/dev/null 2>&1 && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/readyz >"$WORK/recovered-ready.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/server >"$WORK/recovered-server.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/disks >"$WORK/recovered-disks.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/system/metrics >"$WORK/recovered-metrics.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/jobs >"$WORK/recovered-jobs.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/health/components >"$WORK/recovered-health.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/docker/summary >"$WORK/recovered-docker-summary.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/docker/containers >"$WORK/recovered-docker-containers.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/docker/images >"$WORK/recovered-docker-images.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/docker/volumes >"$WORK/recovered-docker-volumes.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18084/api/v1/services >"$WORK/recovered-services.json" 2>/dev/null; then
 		recovered_ready=true
 		break
 	fi

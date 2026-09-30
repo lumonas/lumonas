@@ -270,14 +270,28 @@ require_line "$ROOT/scripts/loop-partition-lib.sh" 'mount_image_root'
 # block format, and the smoke tests identify their disks by serial, so the
 # serial has to be set through virtio-blk-pci. Comments are stripped so the
 # explanation can name the rejected form.
-for qemu_script in qemu-smoke.sh qemu-ab-smoke.sh qemu-uefi-ab-smoke.sh qemu-recovery-smoke.sh \
-	qemu-installer-smoke.sh qemu-live-recovery-source.sh iso-smoke.sh; do
-	[ -f "$ROOT/scripts/$qemu_script" ] || continue
-	if grep -v '^[[:space:]]*#' "$ROOT/scripts/$qemu_script" | grep -F -- '-drive "file=' | grep -q 'serial='; then
-		echo "scripts/$qemu_script sets serial= on -drive, which QEMU rejects; attach the drive with if=none,id= and set serial on virtio-blk-pci" >&2
-		exit 1
-	fi
-done
+	for qemu_script in qemu-smoke.sh qemu-ab-smoke.sh qemu-uefi-ab-smoke.sh qemu-recovery-smoke.sh \
+		qemu-installer-smoke.sh qemu-live-recovery-source.sh iso-smoke.sh; do
+		[ -f "$ROOT/scripts/$qemu_script" ] || continue
+		if grep -v '^[[:space:]]*#' "$ROOT/scripts/$qemu_script" | grep -F -- '-drive "file=' | grep -q 'serial='; then
+			echo "scripts/$qemu_script sets serial= on -drive, which QEMU rejects; attach the drive with if=none,id= and set serial on virtio-blk-pci" >&2
+			exit 1
+		fi
+		# Every request to the appliance must be bounded. curl with no timeout
+		# blocks indefinitely once the appliance accepts the connection and goes
+		# quiet, which turns "not ready" into a job that hangs until the runner
+		# kills it rather than failing inside its own retry budget. Exclude lines
+		# that only name the tool, such as a "command -v curl" prerequisite.
+		unbounded=$(grep -v '^[[:space:]]*#' "$ROOT/scripts/$qemu_script" \
+			| grep 'curl ' \
+			| grep -v 'max-time' | grep -v 'connect-timeout' | grep -v 'CURL_BOUNDS' \
+			| grep -v 'command -v curl' | grep -v 'for command in' | grep -c 'curl -' || true)
+		if [ "$unbounded" -ne 0 ]; then
+			echo "scripts/$qemu_script has a curl call with no timeout; prefix it with \$CURL_BOUNDS so a hung appliance fails instead of hanging" >&2
+			exit 1
+		fi
+		require_line "$ROOT/scripts/$qemu_script" 'CURL_BOUNDS='
+	done
 require_line "$ROOT/scripts/qemu-smoke.sh" 'virtio-blk-pci,drive=system,serial=LUMONAS-SYSTEM'
 # Comments are stripped so the explanation of why "mount -o loop" is wrong can
 # name it; only an actual mount command is a violation.
@@ -361,7 +375,7 @@ require_line "$ROOT/Makefile" 'update-fixture:'
 require_line "$ROOT/cmd/lumonas-update-fixture/main.go" 'ed25519.Sign'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'LUMONAS_QEMU_UPDATE_ASSERT'
 require_line "$ROOT/scripts/qemu-smoke.sh" 'qemu smoke rollback'
-require_line "$ROOT/scripts/qemu-smoke.sh" 'if curl -kfsS -X POST -H'
+require_line "$ROOT/scripts/qemu-smoke.sh" 'if curl $CURL_BOUNDS -kfsS -X POST -H'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'LUMONAS_UPDATE_FIXTURE'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'update-fixture/package'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'chown -R lumonas:lumonas /var/lib/lumonas/update-fixture'
@@ -685,7 +699,7 @@ require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'recovered replacement disk 
 require_line "$ROOT/scripts/qemu-recovery-smoke.sh" 'wait "$QEMU_PID"'
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'api/v1/recovery/export'
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'SOURCE_API="https://127.0.0.1:18083"'
-require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'curl -kfsS "$SOURCE_API/healthz"'
+require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'curl $CURL_BOUNDS -kfsS "$SOURCE_API/healthz"'
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'SOURCE_COOKIES='
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'SOURCE_CSRF='
 require_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'X-CSRF-Token: $SOURCE_CSRF'

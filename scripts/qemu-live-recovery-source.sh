@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+# Every request to the appliance must be bounded. Without an explicit timeout
+# curl blocks indefinitely if the appliance accepts the connection but does not
+# answer, which turns a failure into a job that hangs until the runner's own
+# limit. A refused connection fails immediately, so this only bounds the case
+# where something accepts the socket and then goes quiet.
+CURL_BOUNDS="${LUMONAS_CURL_BOUNDS:---connect-timeout 3 --max-time 10}"
+
+
 SOURCE_IMAGE=${1:-}
 WORK=${2:-}
 [ -f "$SOURCE_IMAGE" ] || { echo "live recovery source image not found: $SOURCE_IMAGE" >&2; exit 1; }
@@ -70,10 +78,10 @@ SOURCE_PID=$!
 
 source_ready=false
 for attempt in $(seq 1 120); do
-	if curl -kfsS "$SOURCE_API/healthz" >/dev/null 2>&1 && \
-		curl -kfsS "$SOURCE_API/readyz" >"$WORK/source-ready.json" 2>/dev/null && \
-		curl -kfsS "$SOURCE_API/api/v1/server" >"$WORK/source-server.json" 2>/dev/null && \
-		curl -kfsS "$SOURCE_API/api/v1/services" >"$WORK/source-services.json" 2>/dev/null; then
+	if curl $CURL_BOUNDS -kfsS "$SOURCE_API/healthz" >/dev/null 2>&1 && \
+		curl $CURL_BOUNDS -kfsS "$SOURCE_API/readyz" >"$WORK/source-ready.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS "$SOURCE_API/api/v1/server" >"$WORK/source-server.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS "$SOURCE_API/api/v1/services" >"$WORK/source-services.json" 2>/dev/null; then
 		source_ready=true
 		break
 	fi
@@ -87,9 +95,9 @@ grep -F '"privilegedBroker":true' "$WORK/source-ready.json" >/dev/null
 python3 "$ROOT/scripts/validate-api-response.py" server "$WORK/source-server.json"
 python3 "$ROOT/scripts/validate-api-response.py" services "$WORK/source-services.json"
 
-curl -kfsS -X POST "$SOURCE_API/api/v1/recovery/key" >"$WORK/source-key.json"
+curl $CURL_BOUNDS -kfsS -X POST "$SOURCE_API/api/v1/recovery/key" >"$WORK/source-key.json"
 python3 -c 'import json,sys; value=json.load(open(sys.argv[1],encoding="utf-8")).get("key","").strip(); assert value; open(sys.argv[2],"w",encoding="utf-8").write(value+"\n")' "$WORK/source-key.json" "$WORK/recovery.key"
-curl -kfsS "$SOURCE_API/api/v1/disks" >"$WORK/source-disks.json"
+curl $CURL_BOUNDS -kfsS "$SOURCE_API/api/v1/disks" >"$WORK/source-disks.json"
 python3 - "$WORK/source-disks.json" "$WORK/source-onboarding.json" "$WORK/source-protection.json" "$WORK/source-layout.json" <<'PY'
 import json
 import re
@@ -107,8 +115,8 @@ def branch(disk_id):
     return "/srv/disks/" + re.sub(r"[^A-Za-z0-9._-]", "_", disk_id)
 json.dump({"data": data, "parity": parity[0], "all": data + parity, "branches": {item: branch(item) for item in data + parity}}, open(sys.argv[4], "w", encoding="utf-8"))
 PY
-curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-onboarding.json" "$SOURCE_API/api/v1/onboarding/complete" >"$WORK/source-onboarding-result.json"
-curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"reauthenticated":true}' "$SOURCE_API/api/v1/storage/safety/unlock" >"$WORK/source-storage-unlock.json"
+curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-onboarding.json" "$SOURCE_API/api/v1/onboarding/complete" >"$WORK/source-onboarding-result.json"
+curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' -d '{"reauthenticated":true}' "$SOURCE_API/api/v1/storage/safety/unlock" >"$WORK/source-storage-unlock.json"
 
 storage_plan_and_confirm() {
 	local disk_id=$1
@@ -120,7 +128,7 @@ import sys
 disk_id, mount_path, output = sys.argv[1:]
 json.dump({"action": "filesystem.create", "diskId": disk_id, "requestedState": {"filesystem": "ext4", "mountPath": mount_path, "label": "lumonas"}}, open(output, "w", encoding="utf-8"))
 PY
-	curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/storage-plan-$suffix.json" "$SOURCE_API/api/v1/storage/operations/plan" >"$WORK/storage-plan-result-$suffix.json"
+	curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/storage-plan-$suffix.json" "$SOURCE_API/api/v1/storage/operations/plan" >"$WORK/storage-plan-result-$suffix.json"
 	python3 - "$WORK/storage-plan-result-$suffix.json" "$WORK/storage-confirm-$suffix.json" <<'PY'
 import json
 import sys
@@ -134,7 +142,7 @@ import sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["operationId"])
 PY
 )
-	curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/storage-confirm-$suffix.json" "$SOURCE_API/api/v1/storage/operations/$operation_id/confirm" >"$WORK/storage-confirm-result-$suffix.json"
+	curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/storage-confirm-$suffix.json" "$SOURCE_API/api/v1/storage/operations/$operation_id/confirm" >"$WORK/storage-confirm-result-$suffix.json"
 }
 
 python3 - "$WORK/source-layout.json" <<'PY' >"$WORK/source-storage-ids"
@@ -163,7 +171,7 @@ import sys
 layout = json.load(open(sys.argv[1], encoding="utf-8"))
 json.dump({"name": "media", "diskIds": layout["data"]}, open(sys.argv[2], "w", encoding="utf-8"))
 PY
-curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-pool-plan.json" "$SOURCE_API/api/v1/storage/pools/plan" >"$WORK/source-pool-result.json"
+curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-pool-plan.json" "$SOURCE_API/api/v1/storage/pools/plan" >"$WORK/source-pool-result.json"
 python3 - "$WORK/source-pool-result.json" "$WORK/source-pool-confirm.json" <<'PY'
 import json
 import sys
@@ -176,22 +184,22 @@ import sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["operationId"])
 PY
 )
-curl -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-pool-confirm.json" "$SOURCE_API/api/v1/storage/pools/$pool_operation/confirm" >"$WORK/source-pool-confirm-result.json"
-curl -kfsS -X PUT -H 'Content-Type: application/json' --data-binary @"$WORK/source-protection.json" "$SOURCE_API/api/v1/storage/protection/config" >"$WORK/source-protection-result.json"
-curl -kfsS "$SOURCE_API/api/v1/storage/mounts" >"$WORK/source-mounts.json"
-curl -kfsS "$SOURCE_API/api/v1/pools" >"$WORK/source-pools.json"
-curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"id":"lan","uuid":"11111111-1111-1111-1111-111111111111","name":"LAN","interface":"eth0","enabled":true,"type":"ethernet","ipv4":{"method":"auto"},"ipv6":{"method":"disabled"},"reauthenticated":true}' "$SOURCE_API/api/v1/network/connections" >"$WORK/source-network.json"
-curl -kfsS "$SOURCE_API/api/v1/network/connections" >"$WORK/source-networks.json"
-curl -kfsS -X POST -H 'Content-Type: application/json' -d '{"name":"operator","password":"operator-password-123","managementRole":"admin"}' "$SOURCE_API/api/v1/users" >"$WORK/source-user.json"
+curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' --data-binary @"$WORK/source-pool-confirm.json" "$SOURCE_API/api/v1/storage/pools/$pool_operation/confirm" >"$WORK/source-pool-confirm-result.json"
+curl $CURL_BOUNDS -kfsS -X PUT -H 'Content-Type: application/json' --data-binary @"$WORK/source-protection.json" "$SOURCE_API/api/v1/storage/protection/config" >"$WORK/source-protection-result.json"
+curl $CURL_BOUNDS -kfsS "$SOURCE_API/api/v1/storage/mounts" >"$WORK/source-mounts.json"
+curl $CURL_BOUNDS -kfsS "$SOURCE_API/api/v1/pools" >"$WORK/source-pools.json"
+curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' -d '{"id":"lan","uuid":"11111111-1111-1111-1111-111111111111","name":"LAN","interface":"eth0","enabled":true,"type":"ethernet","ipv4":{"method":"auto"},"ipv6":{"method":"disabled"},"reauthenticated":true}' "$SOURCE_API/api/v1/network/connections" >"$WORK/source-network.json"
+curl $CURL_BOUNDS -kfsS "$SOURCE_API/api/v1/network/connections" >"$WORK/source-networks.json"
+curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' -d '{"name":"operator","password":"operator-password-123","managementRole":"admin"}' "$SOURCE_API/api/v1/users" >"$WORK/source-user.json"
 SOURCE_COOKIES="$WORK/source-cookies.txt"
-curl -kfsS -c "$SOURCE_COOKIES" -X POST -H 'Content-Type: application/json' -d '{"username":"operator","password":"operator-password-123"}' "$SOURCE_API/api/v1/auth/login" >"$WORK/source-login.json"
+curl $CURL_BOUNDS -kfsS -c "$SOURCE_COOKIES" -X POST -H 'Content-Type: application/json' -d '{"username":"operator","password":"operator-password-123"}' "$SOURCE_API/api/v1/auth/login" >"$WORK/source-login.json"
 SOURCE_CSRF=$(python3 -c 'import json,sys; value=json.load(open(sys.argv[1],encoding="utf-8")).get("csrfToken","").strip(); assert value; print(value)' "$WORK/source-login.json")
-curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' -d '{"id":"share-media","name":"Media","path":"/srv/pools/media","enabled":true,"protocols":[{"protocol":"smb","enabled":true}],"access":[]}' "$SOURCE_API/api/v1/shares" >"$WORK/source-share.json"
-curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' --data-binary @- "$SOURCE_API/api/v1/docker/stacks" >"$WORK/source-stack.json" <<'JSON'
+curl $CURL_BOUNDS -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' -d '{"id":"share-media","name":"Media","path":"/srv/pools/media","enabled":true,"protocols":[{"protocol":"smb","enabled":true}],"access":[]}' "$SOURCE_API/api/v1/shares" >"$WORK/source-share.json"
+curl $CURL_BOUNDS -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' --data-binary @- "$SOURCE_API/api/v1/docker/stacks" >"$WORK/source-stack.json" <<'JSON'
 {"name":"media","composeYaml":"services:\n  media:\n    image: example/media:latest\n    volumes:\n      - /srv/lumonas/docker/appdata/media:/config\n"}
 JSON
-curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST "$SOURCE_API/api/v1/recovery/export" >"$WORK/source-export.json"
-if ! curl -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' -d '{"action":"poweroff","confirmed":true,"reauthenticated":true}' "$SOURCE_API/api/v1/power/shutdown" >/dev/null 2>&1; then
+curl $CURL_BOUNDS -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST "$SOURCE_API/api/v1/recovery/export" >"$WORK/source-export.json"
+if ! curl $CURL_BOUNDS -kfsS -b "$SOURCE_COOKIES" -H "X-CSRF-Token: $SOURCE_CSRF" -X POST -H 'Content-Type: application/json' -d '{"action":"poweroff","confirmed":true,"reauthenticated":true}' "$SOURCE_API/api/v1/power/shutdown" >/dev/null 2>&1; then
 	echo "live recovery source shutdown request failed" >&2
 	cat "$SOURCE_LOG" >&2 || true
 	exit 1

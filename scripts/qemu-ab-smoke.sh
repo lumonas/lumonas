@@ -6,6 +6,14 @@
 # real UEFI firmware reboot path.
 set -eu
 
+# Every request to the appliance must be bounded. Without an explicit timeout
+# curl blocks indefinitely if the appliance accepts the connection but does not
+# answer, which turns a failure into a job that hangs until the runner's own
+# limit. A refused connection fails immediately, so this only bounds the case
+# where something accepts the socket and then goes quiet.
+CURL_BOUNDS="${LUMONAS_CURL_BOUNDS:---connect-timeout 3 --max-time 10}"
+
+
 ASSERT_MODE="${LUMONAS_AB_ASSERT:-false}"
 
 if [ "$ASSERT_MODE" != "true" ]; then
@@ -155,10 +163,10 @@ print("bootnext fail-closed ok")
 PY'
 
 # 5. Confirming without a healthy pending boot conflicts at the API layer.
-STATUS="$(curl -kfsS https://127.0.0.1:18080/api/v1/updates/status 2>/dev/null || echo)"
+STATUS="$(curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/updates/status 2>/dev/null || echo)"
 [ -n "$STATUS" ] || { echo "updates status unavailable through the API" >&2; exit 1; }
 CONFIRM_RESPONSE="$DATA_DIR/confirm.json"
-CONFIRM_STATUS=$(curl -ksS -o "$CONFIRM_RESPONSE" -w '%{http_code}' -X POST https://127.0.0.1:18080/api/v1/updates/slot/confirm 2>/dev/null || true)
+CONFIRM_STATUS=$(curl $CURL_BOUNDS -ksS -o "$CONFIRM_RESPONSE" -w '%{http_code}' -X POST https://127.0.0.1:18080/api/v1/updates/slot/confirm 2>/dev/null || true)
 [ "$CONFIRM_STATUS" = "409" ] || {
 	echo "slot confirm should fail closed without a pending slot (HTTP $CONFIRM_STATUS)" >&2
 	cat "$CONFIRM_RESPONSE" >&2 || true

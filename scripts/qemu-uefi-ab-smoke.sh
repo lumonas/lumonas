@@ -6,6 +6,14 @@
 # comes back from that disk.
 set -eu
 
+# Every request to the appliance must be bounded. Without an explicit timeout
+# curl blocks indefinitely if the appliance accepts the connection but does not
+# answer, which turns a failure into a job that hangs until the runner's own
+# limit. A refused connection fails immediately, so this only bounds the case
+# where something accepts the socket and then goes quiet.
+CURL_BOUNDS="${LUMONAS_CURL_BOUNDS:---connect-timeout 3 --max-time 10}"
+
+
 ASSERT_MODE="${LUMONAS_UEFI_AB_ASSERT:-false}"
 if [ "$ASSERT_MODE" != "true" ]; then
 	echo "Set LUMONAS_UEFI_AB_ASSERT=true with LUMONAS_QEMU_IMAGE to run the UEFI A/B smoke" >&2
@@ -85,7 +93,7 @@ ssh_guest() {
 
 start_guest
 for attempt in $(seq 1 90); do
-	if curl -kfsS "https://127.0.0.1:$WEB_PORT/healthz" >/dev/null 2>&1 && ssh_guest true >/dev/null 2>&1; then
+	if curl $CURL_BOUNDS -kfsS "https://127.0.0.1:$WEB_PORT/healthz" >/dev/null 2>&1 && ssh_guest true >/dev/null 2>&1; then
 		break
 	fi
 	if [ "$attempt" = 90 ]; then
@@ -171,7 +179,7 @@ systemctl reboot' || true
 # The firmware reboot is expected to drop SSH. Wait for the same guest to
 # return and prove that the root filesystem came from the inactive disk.
 for attempt in $(seq 1 120); do
-	if curl -kfsS "https://127.0.0.1:$WEB_PORT/healthz" >/dev/null 2>&1 && \
+	if curl $CURL_BOUNDS -kfsS "https://127.0.0.1:$WEB_PORT/healthz" >/dev/null 2>&1 && \
 		ssh_guest 'test "$(findmnt -n -o SOURCE /)" = /dev/vdb3 && test -f /etc/lumonas/uefi-slot-marker' >/dev/null 2>&1; then
 		echo "LumoNAS UEFI A/B boot flip passed"
 		exit 0

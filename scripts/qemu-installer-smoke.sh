@@ -1,6 +1,14 @@
 #!/bin/sh
 set -eu
 
+# Every request to the appliance must be bounded. Without an explicit timeout
+# curl blocks indefinitely if the appliance accepts the connection but does not
+# answer, which turns a failure into a job that hangs until the runner's own
+# limit. A refused connection fails immediately, so this only bounds the case
+# where something accepts the socket and then goes quiet.
+CURL_BOUNDS="${LUMONAS_CURL_BOUNDS:---connect-timeout 3 --max-time 10}"
+
+
 ASSERT_MODE="${LUMONAS_INSTALLER_ASSERT:-false}"
 CONTRACT_ASSERT="${LUMONAS_INSTALLER_CONTRACT_ASSERT:-$ASSERT_MODE}"
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -69,10 +77,10 @@ QEMU_PID=$!
 
 live_ready=false
 for attempt in $(seq 1 120); do
-	if curl -kfsS https://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
-		curl -kfsS https://127.0.0.1:18082/readyz >"$WORK/live-ready.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/api/v1/install/targets >"$WORK/targets.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18082/install >"$WORK/install.html" 2>/dev/null; then
+	if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/healthz >/dev/null 2>&1 && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/readyz >"$WORK/live-ready.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/api/v1/install/targets >"$WORK/targets.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/install >"$WORK/install.html" 2>/dev/null; then
 		live_ready=true
 		break
 	fi
@@ -118,7 +126,7 @@ json.dump({
     "uefi": False,
 }, open(sys.argv[2], "w", encoding="utf-8"), separators=(",", ":"))
 PY
-curl -kfsS -X POST -H 'Content-Type: application/json' \
+curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' \
 	--data-binary @"$WORK/plan-request.json" \
 	https://127.0.0.1:18082/api/v1/install/plan >"$WORK/plan.json"
 python3 - "$WORK/plan.json" "$TARGET_ID" "$WORK/plan.hash" <<'PY'
@@ -145,7 +153,7 @@ json.dump({
     "adminPassword": "a-very-strong-test-password",
 }, open(sys.argv[2], "w", encoding="utf-8"), separators=(",", ":"))
 PY
-curl -kfsS -X POST -H 'Content-Type: application/json' \
+curl $CURL_BOUNDS -kfsS -X POST -H 'Content-Type: application/json' \
 	--data-binary @"$WORK/apply-request.json" \
 	https://127.0.0.1:18082/api/v1/install/apply >"$WORK/apply.json"
 grep -F '"status":"succeeded"' "$WORK/apply.json" >/dev/null || {
@@ -156,7 +164,7 @@ grep -F '"status":"succeeded"' "$WORK/apply.json" >/dev/null || {
 
 install_succeeded=false
 for attempt in $(seq 1 30); do
-	if curl -kfsS https://127.0.0.1:18082/api/v1/install/status >"$WORK/install-status.json" 2>/dev/null && \
+	if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18082/api/v1/install/status >"$WORK/install-status.json" 2>/dev/null && \
 		grep -F '"stage":"succeeded"' "$WORK/install-status.json" >/dev/null; then
 		install_succeeded=true
 		break
@@ -191,9 +199,9 @@ QEMU_PID=$!
 
 installed_ready=false
 for attempt in $(seq 1 120); do
-	if curl -kfsS https://127.0.0.1:18083/healthz >/dev/null 2>&1 && \
-		curl -kfsS https://127.0.0.1:18083/readyz >"$WORK/installed-ready.json" 2>/dev/null && \
-		curl -kfsS https://127.0.0.1:18083/api/v1/auth/status >"$WORK/auth-status.json" 2>/dev/null; then
+	if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18083/healthz >/dev/null 2>&1 && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18083/readyz >"$WORK/installed-ready.json" 2>/dev/null && \
+		curl $CURL_BOUNDS -kfsS https://127.0.0.1:18083/api/v1/auth/status >"$WORK/auth-status.json" 2>/dev/null; then
 		installed_ready=true
 		break
 	fi
@@ -212,10 +220,10 @@ python3 "$ROOT/scripts/validate-api-response.py" readiness "$WORK/installed-read
 grep -F '"configured":true' "$WORK/auth-status.json" >/dev/null
 
 printf '%s\n' '{"username":"admin","password":"a-very-strong-test-password"}' >"$WORK/login.json"
-curl -kfsS -c "$WORK/cookies.txt" -X POST -H 'Content-Type: application/json' \
+curl $CURL_BOUNDS -kfsS -c "$WORK/cookies.txt" -X POST -H 'Content-Type: application/json' \
 	--data-binary @"$WORK/login.json" \
 	https://127.0.0.1:18083/api/v1/auth/login >"$WORK/login-response.json"
-curl -kfsS -b "$WORK/cookies.txt" https://127.0.0.1:18083/api/v1/server >"$WORK/installed-server.json"
+curl $CURL_BOUNDS -kfsS -b "$WORK/cookies.txt" https://127.0.0.1:18083/api/v1/server >"$WORK/installed-server.json"
 python3 "$ROOT/scripts/validate-api-response.py" server "$WORK/installed-server.json"
 
 if [ "$CONTRACT_ASSERT" = "true" ]; then
@@ -229,11 +237,11 @@ if [ "$CONTRACT_ASSERT" = "true" ]; then
 			services) path=/api/v1/services; output="$WORK/installed-services.json"; validator=services ;;
 		esac
 		if [ "$endpoint" != "server" ]; then
-			curl -kfsS -b "$WORK/cookies.txt" "https://127.0.0.1:18083$path" >"$output"
+			curl $CURL_BOUNDS -kfsS -b "$WORK/cookies.txt" "https://127.0.0.1:18083$path" >"$output"
 		fi
 		python3 "$ROOT/scripts/validate-api-response.py" "$validator" "$output"
 	done
-	curl -kfsS -b "$WORK/cookies.txt" https://127.0.0.1:18083/ >"$WORK/installed-index.html"
+	curl $CURL_BOUNDS -kfsS -b "$WORK/cookies.txt" https://127.0.0.1:18083/ >"$WORK/installed-index.html"
 	grep -F '<title>LumoNAS</title>' "$WORK/installed-index.html" >/dev/null
 	grep -F '<div id="root"></div>' "$WORK/installed-index.html" >/dev/null
 	grep -F '"id":"lumonas-web.service","name":"lumonas-web.service","active":true,"state":"running","user":"lumonas"' "$WORK/installed-services.json" >/dev/null
@@ -243,7 +251,7 @@ if [ "$CONTRACT_ASSERT" = "true" ]; then
 	python3 "$ROOT/scripts/validate-sse.py" "$installed_events_log" system.metrics
 fi
 
-installer_status_code="$(curl -ksS -o /dev/null -w '%{http_code}' -b "$WORK/cookies.txt" https://127.0.0.1:18083/api/v1/install/status)"
+installer_status_code="$(curl $CURL_BOUNDS -ksS -o /dev/null -w '%{http_code}' -b "$WORK/cookies.txt" https://127.0.0.1:18083/api/v1/install/status)"
 [ "$installer_status_code" = "404" ] || {
 	echo "installer endpoint remained available after installation: HTTP $installer_status_code" >&2
 	exit 1
