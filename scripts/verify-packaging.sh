@@ -234,7 +234,7 @@ require_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$B
 require_line "$ROOT/scripts/qemu-build-image.sh" "BIOS_PREFIX='(hd0,gpt3)/boot/grub'"
 # part_gpt and ext2 are what turn the prefix into a readable filesystem, so an
 # empty or truncated module list produces a core image that enumerates nothing.
-require_line "$ROOT/scripts/qemu-build-image.sh" "BIOS_GRUB_MODULES='biosdisk part_gpt ext2 search search_fs_uuid normal linux configfile'"
+require_line "$ROOT/scripts/qemu-build-image.sh" "BIOS_GRUB_MODULES='biosdisk part_gpt ext2 search search_fs_uuid normal linux configfile test echo loadenv serial terminal gzio xzio lzopio all_video video gfxterm gfxmenu chain cat ls regexp sleep keystatus'"
 require_line "$ROOT/scripts/qemu-build-image.sh" '"$BIOS_SETUP" -d "$BIOS_STAGE" -c core.img'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'cp /usr/lib/grub/i386-pc/*.mod "$WORK/mnt/boot/grub/i386-pc/"'
 reject_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$BIOS_PREFIX" -o /boot' \

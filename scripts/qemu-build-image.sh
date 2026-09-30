@@ -248,13 +248,22 @@ EOF
 # Where a prefix must survive renumbering, search --fs-uuid is the tool, and
 # this image is not that case.
 BIOS_PREFIX='(hd0,gpt3)/boot/grub'
-# part_gpt and ext2 are what let GRUB enumerate (hd0,gpt3) and read the
-# filesystem behind the prefix; biosdisk is what reaches the controller. normal
-# is preloaded because the original failure was GRUB unable to load normal.mod
-# from a prefix it could not resolve. search and search_fs_uuid are preloaded
-# because the generated grub.cfg opens with a "search --fs-uuid --set=root"
-# line, and a core image without them aborts on that line before the menu.
-BIOS_GRUB_MODULES='biosdisk part_gpt ext2 search search_fs_uuid normal linux configfile'
+# Preloaded because a module is only reachable from the prefix once the prefix
+# resolves, but the generated grub.cfg uses these before it insmods anything.
+# Booting the built image with a short module list produced, on serial:
+#   error: can't find command `['.        (from test)
+#   error: can't find command `echo'.     (from echo)
+#   error: can't find command `load_env'. (from loadenv, via 00_header)
+#   error: terminal `serial' isn't found. (from serial)
+#   error: file `/boot/grub/i386-pc/bli.mod' not found.
+# followed by "Press any key to continue...". On an unattended serial console
+# nothing sends that key, so the guest waits forever. test, echo, loadenv,
+# serial, terminal and gzio are therefore not optional.
+#
+# bli and fwsetup are not shipped by grub-pc-bin and cannot be preloaded; they
+# belong to os-prober and are only reached through a conditional insmod, so
+# their absence is reported and ignored.
+BIOS_GRUB_MODULES='biosdisk part_gpt ext2 search search_fs_uuid normal linux configfile test echo loadenv serial terminal gzio xzio lzopio all_video video gfxterm gfxmenu chain cat ls regexp sleep keystatus'
 [ -d /usr/lib/grub/i386-pc ] || {
 	echo "host is missing /usr/lib/grub/i386-pc; install grub-pc-bin to build the BIOS bootloader" >&2
 	exit 1
