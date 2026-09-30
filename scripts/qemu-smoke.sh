@@ -405,6 +405,13 @@ if [ -n "$SSH_KEY" ] && [ "$SSH_ASSERT" = "true" ]; then
 	ssh_guest 'systemctl is-active lumonasd.service lumonas-web.service docker.service containerd.service' >&2 2>&1 || true
 	echo "--- docker.service journal ---" >&2
 	ssh_guest 'journalctl -u docker.service -n 40 --no-pager || true' >&2 2>&1 || true
+	# The worker units can fail before they log anything useful, and a unit that
+	# cannot start at all explains itself only in its own journal and in
+	# systemctl status, not on the console.
+	echo "--- privileged worker status ---" >&2
+	ssh_guest 'systemctl --no-pager --full status lumonas-privd-acme.service lumonas-privd-general.service || true' >&2 2>&1 || true
+	echo "--- letsencrypt paths the acme unit requires ---" >&2
+	ssh_guest 'ls -ld /etc/letsencrypt /var/lib/letsencrypt /var/log/letsencrypt 2>&1 || true' >&2 2>&1 || true
 	echo "--- lumonasd.service journal ---" >&2
 	ssh_guest 'journalctl -u lumonasd.service -n 30 --no-pager || true' >&2 2>&1 || true
 	echo "--- last boot errors ---" >&2
