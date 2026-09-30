@@ -227,26 +227,32 @@ EOF
 #
 # grub-mkimage bakes the prefix into core.img and grub-bios-setup places the
 # bootstrap and the core image, so the prefix is a stated fact rather than
-# something inferred from a device the builder cannot enumerate. "/boot/grub"
-# carries no device on purpose: GRUB then locates that directory by searching its
-# disks at boot, so nothing depends on the order the image is enumerated in.
+# something inferred from a device the builder cannot enumerate. Only
+# grub-mkimage exposes the prefix at all: grub-install has no such option and
+# derives one by mapping the boot directory onto a partition, which is what is
+# unreliable for a loop device and is also why grub-probe resolves nothing here.
 #
-# The prefix is a device-qualified filesystem UUID, searched for at boot. Two
-# earlier shapes were wrong in instructive ways. Leaving grub-install to derive
-# the prefix produced a core that loaded and then could not find /boot/grub at
-# all. A device-less "/boot/grub" is no better: the guest now reaches a working
-# grub> prompt instead of rescue, and then has nothing to enumerate, because a
-# device-less prefix only resolves if something has already found a disk. Only
-# grub-mkimage exposes the prefix at all, since grub-install has no such option.
+# The prefix names the root partition directly. Left to grub-install the prefix
+# came out pointing at the BIOS boot partition and the guest stopped at
+# "file /boot/grub/i386-pc/normal.mod not found"; a device-less "/boot/grub" and
+# a search --fs-uuid prefix both produced a bare "grub>" prompt instead, because
+# a device-less prefix has no disk to enumerate and the search never resolved,
+# leaving root set to the search text rather than to a device.
 #
-# Anchoring on the filesystem UUID rather than (hd0,gpt3) means the prefix does
-# not depend on the guest enumerating the disk the same way the builder did,
-# which is the one thing a loop-built image cannot promise. search_fs_uuid is
-# preloaded into the core image below so this lookup cannot itself need a module
-# that has not been loaded yet.
+# The guest's own diagnostic settled it: "ls" reported
+# (hd0) (hd0,gpt3) (hd0,gpt2) (hd0,gpt1) (hd1) (hd2) (hd3) (hd4), so GRUB
+# enumerates the disk and every partition, and the layout above puts the root
+# third. Address it as gpt3 and skip the search.
 #
-# Needs the host's BIOS modules, which CI installs as grub-pc-bin.
-BIOS_GRUB_MODULES='biosdisk part_gpt ext2 search search_fs_uuid normal linux configfile'
+# The appliance image has exactly one disk, so the BIOS device number is fixed.
+# Where a prefix must survive renumbering, search --fs-uuid is the tool, and
+# this image is not that case.
+BIOS_PREFIX='(hd0,gpt3)/boot/grub'
+# part_gpt and ext2 are what let GRUB enumerate (hd0,gpt3) and read the
+# filesystem behind the prefix; biosdisk is what reaches the controller. normal
+# is preloaded because the original failure was GRUB unable to load normal.mod
+# from a prefix it could not resolve.
+BIOS_GRUB_MODULES='biosdisk part_gpt ext2 normal linux configfile'
 [ -d /usr/lib/grub/i386-pc ] || {
 	echo "host is missing /usr/lib/grub/i386-pc; install grub-pc-bin to build the BIOS bootloader" >&2
 	exit 1
