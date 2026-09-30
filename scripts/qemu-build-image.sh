@@ -252,6 +252,27 @@ grub-install --target=i386-pc --boot-directory=/boot --recheck "$LUMONAS_LOOP_DE
 	verify_boot_chain
 fi
 echo "boot chain verified: BIOS (i386-pc) and UEFI (BOOTX64.EFI) loaders present"
+
+# Report what GRUB actually ended up with, because "the modules exist and the
+# install reported success" is not the same as "the embedded core will find
+# them". A BIOS image can satisfy every check above and still drop to
+# "grub rescue>" with normal.mod not found, which means the prefix baked into
+# core.img points at a partition that does not contain /boot/grub. Print the
+# facts needed to tell those cases apart: the device GRUB thinks it is installed
+# against, the module directory, the core image location, and its prefix.
+echo "--- GRUB diagnostics ---"
+echo "loop device for install: $LUMONAS_LOOP_DEVICE"
+echo "grub-probe on /boot: $(grub-probe --target=i386-pc --device-map=/boot/grub/device.map /boot 2>&1 || true)"
+echo "grub-probe on /: $(grub-probe --target=i386-pc / 2>&1 || true)"
+echo "/boot/grub/i386-pc entries: $(ls /boot/grub/i386-pc 2>/dev/null | wc -l)"
+echo "/boot/grub/grub.cfg present: $([ -s /boot/grub/grub.cfg ] && echo yes || echo no)"
+# The core image is either in the post-MBR gap or in the bios_grub partition;
+# report which, since that tells us where the firmware will look for it.
+echo "post-MBR gap signature: $(dd if="$LUMONAS_LOOP_DEVICE" bs=512 skip=1 count=4 2>/dev/null | strings | head -2 | tr '\n' ' ')"
+bios_part="${LUMONAS_LOOP_DEVICE}1"
+case "$LUMONAS_LOOP_DEVICE" in *[0-9]) bios_part="${LUMONAS_LOOP_DEVICE}p1" ;; esac
+echo "bios_grub partition signature: $(dd if="$bios_part" bs=512 count=8 2>/dev/null | strings | head -2 | tr '\n' ' ')"
+echo "--- end GRUB diagnostics ---"
 EOF
 
 if [ -n "$UPDATE_FIXTURE" ]; then
