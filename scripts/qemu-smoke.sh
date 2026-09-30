@@ -110,7 +110,17 @@ run_qemu() {
 # guest stops at a bare "grub>" prompt, whatever prefix the image carries. The
 # data disks stay on virtio-blk because only GRUB needs to read the system disk,
 # and the data disks are identified by serial for the device reorder assertions.
-qemu-system-x86_64 \
+# exec, so the background subshell this runs in is *replaced* by QEMU and
+# $QEMU_PID is QEMU's own pid. Without it the function body is more than one
+# command, so the shell forks QEMU as a child of the subshell instead of
+# exec'ing it: `kill $QEMU_PID` then kills the subshell, QEMU is orphaned,
+# and it keeps holding the hostfwd port and the image lock. The device
+# reorder then measured the original, still-running VM: the reordered QEMU
+# failed to bind the port, the readiness curls answered against the orphan,
+# and both inventories were the same VM's. The assertion reported that no
+# transient path had changed, which is exactly what a VM that never
+# reordered looks like.
+exec qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -m "${LUMONAS_QEMU_MEMORY:-4096}" \
   -smp 2 \
