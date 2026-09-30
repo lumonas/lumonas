@@ -87,6 +87,25 @@ baseline.
    # Actions -> Sign catalog -> Run workflow, then open the branch it pushes.
    ```
 
+## Reproduce a failure on the same architecture as the gate
+
+These images are multi-arch, and Trivy scans the variant that matches the host
+it runs on. CI runs this gate on amd64, so a scan run on Apple Silicon reads
+the **arm64** layers of the same tag and reports a different finding set for the
+same image. The two CVEs that failed this gate for `jellyfin/jellyfin:12.1` are
+in openssl, which is built per architecture: an arm64 scan reported 13
+findings and looked clean, the amd64 scan reported 15 and named them.
+
+Force the architecture when reproducing:
+
+```sh
+docker run --rm --platform linux/amd64 aquasec/trivy:0.58.1 image \
+  --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+  --no-progress --format json IMAGE:TAG
+```
+
+A finding that will not reproduce locally is usually this, not a stale database.
+
 ## Baseline drift is expected, not an incident
 
 The scanner's vulnerability database is live. New advisories are published for
