@@ -243,12 +243,6 @@ echo "boot chain verified: BIOS (i386-pc) and UEFI (BOOTX64.EFI) loaders present
 # Report the prefix GRUB resolved: that is what decides whether the embedded
 # core finds /boot/grub at boot, and it is the one fact that separates
 # "the modules are present" from "GRUB can reach them".
-#
-# The same fact is then enforced, because a wrong prefix produces an image that
-# passes every check above and still dies in the guest: the firmware loads
-# core.img, GRUB cannot read /boot/grub and drops to "grub rescue>" with
-# normal.mod not found. That is a 25-minute QEMU failure with an unhelpful
-# message, so resolve the prefix here, where the reason is still knowable.
 bios_part="${LOOP}1"
 case "$LOOP" in *[0-9]) bios_part="${LOOP}p1" ;; esac
 root_probe="$(grub-probe --target=i386-pc "$WORK/mnt" 2>/dev/null || true)"
@@ -259,23 +253,28 @@ echo "boot/grub/i386-pc entries: $(ls "$WORK/mnt/boot/grub/i386-pc" 2>/dev/null 
 # grep -a rather than a strings(1) pipeline: binutils is not guaranteed on the
 # build host, and a missing strings(1) turns this into an empty count that
 # reads exactly like "no GRUB signature found", which is how the previous
-# diagnostic reported a healthy image as broken.
-echo "bios_grub partition GRUB signatures: $(dd if="$bios_part" bs=512 count=16 2>/dev/null | grep -aoc GRUB || true)"
+# diagnostic reported a healthy image as broken. Informational only.
+echo "bios_grub partition GRUB signatures (informational): $(dd if="$bios_part" bs=512 count=16 2>/dev/null | grep -aoc GRUB || true)"
 echo "--- end GRUB diagnostics ---"
 
-# The layout above puts the BIOS boot partition first and the root third, so a
-# prefix naming the first partition is the failure this guard exists to catch.
-if [ -z "$root_probe" ]; then
-	echo "build: grub-probe could not resolve the mounted root, so the BIOS prefix cannot be trusted" >&2
-	exit 1
+# Fail only on positive evidence that the prefix names the BIOS boot partition,
+# which is what drops the guest into "grub rescue>". Do not fail when the prefix
+# cannot be measured: grub-probe cannot map a loop partition onto a GRUB drive,
+# so on this builder it is normally unavailable, and treating that as proof of a
+# broken image blocks every build without testing anything. Where the prefix is
+# unmeasurable, qemu-smoke is the oracle, so say so rather than guessing.
+if [ -n "$root_probe" ]; then
+	case "$root_probe" in
+		*[g]pt1* | *[m]sdos1*)
+			echo "build: GRUB resolves the root filesystem to the BIOS boot partition ($root_probe) instead of $ROOT_PART" >&2
+			echo "build: core.img would search the BIOS boot partition for /boot/grub and the guest would reach 'grub rescue>'" >&2
+			exit 1
+			;;
+	esac
+else
+	echo "warning: grub-probe could not resolve the mounted root, so the BIOS prefix is unverified here" >&2
+	echo "warning: expected for a loop-backed builder; qemu-smoke remains the gate on whether the image boots" >&2
 fi
-case "$root_probe" in
-	*[g]pt1* | *[m]sdos1*)
-		echo "build: GRUB resolves the root filesystem to the BIOS boot partition ($root_probe) instead of $ROOT_PART" >&2
-		echo "build: core.img would search the BIOS boot partition for /boot/grub and the guest would reach 'grub rescue>'" >&2
-		exit 1
-		;;
-esac
 if [ -n "$UPDATE_FIXTURE" ]; then
 	cat >>"$WORK/mnt/etc/lumonas/lumonasd.env" <<ENV
 LUMONAS_UPDATE_PUBLIC_KEY=$UPDATE_PUBLIC_KEY
