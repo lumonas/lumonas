@@ -322,7 +322,14 @@ require_line "$ROOT/scripts/loop-partition-lib.sh" 'mount_image_root'
 		fi
 		require_line "$ROOT/scripts/$qemu_script" 'CURL_BOUNDS='
 	done
-require_line "$ROOT/scripts/qemu-smoke.sh" 'virtio-blk-pci,drive=system,serial=LUMONAS-SYSTEM'
+# The appliance system disk is on AHCI, so it carries no device serial and is
+# identified by its GPT disk GUID and filesystem UUID instead. The data and
+# parity disks stay on virtio-blk precisely because those serial-based
+# assertions need one.
+reject_line "$ROOT/scripts/qemu-smoke.sh" 'virtio-blk-pci,drive=system' \
+	'GRUB cannot read a virtio-blk system disk; attach it over AHCI'
+reject_line "$ROOT/scripts/qemu-live-recovery-source.sh" 'virtio-blk-pci,drive=system' \
+	'GRUB cannot read a virtio-blk system disk; attach it over AHCI'
 # Comments are stripped so the explanation of why "mount -o loop" is wrong can
 # name it; only an actual mount command is a violation.
 if grep -v '^[[:space:]]*#' "$ROOT/scripts/qemu-live-recovery-source.sh" | grep -F -- 'mount -o loop' >/dev/null 2>&1; then

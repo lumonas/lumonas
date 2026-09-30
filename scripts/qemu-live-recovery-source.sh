@@ -55,12 +55,18 @@ for disk in data1 data2 data3 parity; do
 	qemu-img create -f qcow2 "$SOURCE_DATA/$disk.qcow2" 1G >/dev/null
 done
 
+# The system disk is attached over AHCI, not virtio-blk: GRUB's BIOS disk layer
+# speaks ATA/AHCI over int13h and grub-pc-bin ships no virtio driver, so a
+# virtio-blk system disk boots in the firmware and then stops at a bare "grub>"
+# prompt. AHCI cannot carry a device serial, so the system disk is identified by
+# its GPT disk GUID and filesystem UUID instead, which are at least as stable.
 qemu-system-x86_64 \
 	-machine q35,accel=tcg \
 	-m 2048 \
 	-smp 2 \
+	-device "ich9-ahci,id=lumonas-ahci" \
 	-drive "file=$SOURCE_RAW,if=none,id=system,format=raw" \
-		-device "virtio-blk-pci,drive=system,serial=LUMONAS-SYSTEM" \
+		-device "ide-hd,drive=system,bus=lumonas-ahci.0" \
 	-drive "file=$SOURCE_DATA/data1.qcow2,if=none,id=data1,format=qcow2" \
 		-device "virtio-blk-pci,drive=data1,serial=LUMONAS-DATA1" \
 	-drive "file=$SOURCE_DATA/data2.qcow2,if=none,id=data2,format=qcow2" \
