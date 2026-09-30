@@ -218,22 +218,54 @@ EOF
 # Install the BIOS bootloader from the host, against the mounted root, so
 # grub-probe is not guessing inside a chroot that only has a bind-mounted /dev.
 #
-# The prefix is passed explicitly and device-less. Left to itself grub-install
-# derives the prefix by mapping the boot directory onto a partition, and that
-# mapping is unreliable for a loop device: grub-probe cannot resolve one, which
-# is exactly what the diagnostics below show. The core image then loads and
-# runs, and fails with "file /boot/grub/i386-pc/normal.mod not found" because it
-# is searching a partition that does not hold /boot.
+# The prefix is built explicitly rather than left to grub-install. The guest
+# loads core.img, runs it, and then fails with "file /boot/grub/i386-pc/normal.mod
+# not found", so the core is present and working and only the prefix is wrong.
+# grub-install offers no way to set it: it derives the prefix by mapping the boot
+# directory onto a partition, and that mapping is what is unreliable for a loop
+# device, which is also why grub-probe cannot resolve one here.
 #
-# "/boot/grub" with no device tells GRUB to search its disks for that directory
-# at boot, so the prefix no longer depends on how the image is enumerated, which
-# is the one thing a loop-built image cannot predict. Needs the host's BIOS
-# modules, which CI installs as grub-pc-bin.
+# grub-mkimage bakes the prefix into core.img and grub-bios-setup places the
+# bootstrap and the core image, so the prefix is a stated fact rather than
+# something inferred from a device the builder cannot enumerate. "/boot/grub"
+# carries no device on purpose: GRUB then locates that directory by searching its
+# disks at boot, so nothing depends on the order the image is enumerated in.
+#
+# Needs the host's BIOS modules, which CI installs as grub-pc-bin.
+BIOS_GRUB_MODULES='biosdisk part_gpt ext2 normal linux search search_fs_uuid configfile'
+BIOS_PREFIX='/boot/grub'
 [ -d /usr/lib/grub/i386-pc ] || {
 	echo "host is missing /usr/lib/grub/i386-pc; install grub-pc-bin to build the BIOS bootloader" >&2
 	exit 1
 }
-grub-install --target=i386-pc --boot-directory="$WORK/mnt/boot" --prefix=/boot/grub --recheck "$LOOP"
+command -v grub-mkimage >/dev/null 2>&1 || {
+	echo "host is missing grub-mkimage; install grub2-common to build the BIOS bootloader" >&2
+	exit 1
+}
+# grub-pc-bin ships the real binary under the module directory; the /usr/sbin
+# symlink comes from grub-pc, which is a configuration package and may not be
+# installed on a build host.
+BIOS_SETUP=/usr/lib/grub/i386-pc/grub-bios-setup
+[ -x "$BIOS_SETUP" ] || BIOS_SETUP="$(command -v grub-bios-setup || true)"
+[ -n "$BIOS_SETUP" ] && [ -x "$BIOS_SETUP" ] || {
+	echo "host is missing grub-bios-setup; install grub-pc-bin to build the BIOS bootloader" >&2
+	exit 1
+}
+
+# grub-bios-setup resolves --core-image relative to --directory, so stage the
+# GRUB images together with the freshly built core image rather than writing a
+# generated file into the host's /usr/lib.
+BIOS_STAGE="$WORK/bios"
+mkdir -p "$BIOS_STAGE"
+cp -a /usr/lib/grub/i386-pc/. "$BIOS_STAGE/"
+grub-mkimage -O i386-pc -p "$BIOS_PREFIX" -o "$BIOS_STAGE/core.img" $BIOS_GRUB_MODULES
+[ -s "$BIOS_STAGE/core.img" ] || { echo "build: grub-mkimage produced no core.img" >&2; exit 1; }
+echo "BIOS core image built: $(wc -c <"$BIOS_STAGE/core.img") bytes, prefix $BIOS_PREFIX"
+# --skip-fs-probe: without it grub-bios-setup walks /proc/mounts looking for a
+# filesystem to embed into, which resolves entries that do not exist in a build
+# container or a chroot-like environment. The GPT layout already says where the
+# BIOS bootloader belongs.
+"$BIOS_SETUP" -d "$BIOS_STAGE" -c core.img --no-rs-codes --skip-fs-probe -f "$LOOP"
 
 # Prove the boot chain this image claims to have, while it can still be fixed.
 # grub-install reports "Installation finished. No error reported." even when the
