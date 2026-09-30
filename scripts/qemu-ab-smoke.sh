@@ -38,7 +38,7 @@ SSH_PORT="${LUMONAS_AB_SSH_PORT:-2223}"
 start_guest() {
 	qemu-system-x86_64 \
 		-machine q35,accel=tcg \
-		-m 2048 \
+		-m "${LUMONAS_QEMU_MEMORY:-4096}" \
 		-smp 2 \
 		-drive "file=$LUMONAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT" \
 		-drive "file=$DATA_DIR/slot-b.qcow2,if=none,id=slotb,format=qcow2" \

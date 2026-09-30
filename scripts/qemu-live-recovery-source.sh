@@ -62,7 +62,7 @@ done
 # its GPT disk GUID and filesystem UUID instead, which are at least as stable.
 qemu-system-x86_64 \
 	-machine q35,accel=tcg \
-	-m 2048 \
+	-m "${LUMONAS_QEMU_MEMORY:-4096}" \
 	-smp 2 \
 	-device "ich9-ahci,id=lumonas-ahci" \
 	-drive "file=$SOURCE_RAW,if=none,id=system,format=raw" \

@@ -69,7 +69,7 @@ cp "$OVMF_VARS_TEMPLATE" "$DATA_DIR/OVMF_VARS.fd"
 start_guest() {
 	qemu-system-x86_64 \
 		-machine q35,accel=tcg \
-		-m 2048 \
+		-m "${LUMONAS_QEMU_MEMORY:-4096}" \
 		-smp 2 \
 		-drive "if=pflash,format=raw,readonly=on,file=$OVMF_CODE" \
 		-drive "if=pflash,format=raw,file=$DATA_DIR/OVMF_VARS.fd" \
