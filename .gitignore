@@ -3,6 +3,14 @@
 /lumonas-web
 /lumonas-privd
 /lumonas-recover
+# The remaining cmd/ binaries are built by `make` into bin/, but a bare
+# `go build ./cmd/<name>` drops one in the repository root, where it is easy
+# to commit by accident.
+/lumonas-catalog-sign
+/lumonas-migrate
+/lumonas-recovery-fixture
+/lumonas-update-fixture
+/lumonas-workstation
 /build/
 /coverage/
 .pnpm-store/
