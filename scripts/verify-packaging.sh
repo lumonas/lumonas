@@ -225,7 +225,16 @@ done
 # /dev is a bind mount, and bakes a prefix pointing at the bios_grub partition:
 # the image then has a correct /boot/grub/i386-pc and GRUB still drops to
 # "grub rescue>" with normal.mod not found.
-require_line "$ROOT/scripts/qemu-build-image.sh" 'grub-install --target=i386-pc --boot-directory="$WORK/mnt/boot"'
+#
+# The bootloader is written with grub-mkimage and grub-bios-setup rather than
+# grub-install, because grub-install has no option to set the prefix and derives
+# one from a device mapping that is exactly what is unreliable here. Assert the
+# host-side build and the placement, and keep rejecting an in-chroot install.
+require_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$BIOS_PREFIX" -o "$BIOS_STAGE/core.img"'
+require_line "$ROOT/scripts/qemu-build-image.sh" '"$BIOS_SETUP" -d "$BIOS_STAGE" -c core.img'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'cp /usr/lib/grub/i386-pc/*.mod "$WORK/mnt/boot/grub/i386-pc/"'
+reject_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$BIOS_PREFIX" -o /boot' \
+	'the BIOS core image must be built on the host, not inside the chroot'
 reject_line "$ROOT/scripts/qemu-build-image.sh" 'grub-install --target=i386-pc --boot-directory=/boot' \
 	'the BIOS install must run on the host against the mounted root, not inside the chroot'
 require_line "$ROOT/.github/workflows/ci.yml" 'grub-pc-bin'

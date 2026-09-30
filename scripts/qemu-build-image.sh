@@ -252,6 +252,14 @@ BIOS_SETUP=/usr/lib/grub/i386-pc/grub-bios-setup
 	exit 1
 }
 
+# grub-install used to populate the image's own BIOS modules as a side effect of
+# installing the bootloader. grub-mkimage and grub-bios-setup only write core.img
+# and the bootstrap, so without this the image carries no /boot/grub/i386-pc at
+# all and the guest cannot load a single module from the prefix. Nothing else
+# puts them there: the chroot only installs the UEFI loader.
+mkdir -p "$WORK/mnt/boot/grub/i386-pc"
+cp /usr/lib/grub/i386-pc/*.mod "$WORK/mnt/boot/grub/i386-pc/"
+
 # grub-bios-setup resolves --core-image relative to --directory, so stage the
 # GRUB images together with the freshly built core image rather than writing a
 # generated file into the host's /usr/lib.
