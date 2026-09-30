@@ -106,6 +106,29 @@ docker run --rm --platform linux/amd64 aquasec/trivy:0.58.1 image \
 
 A finding that will not reproduce locally is usually this, not a stale database.
 
+## The 2026-09-30 openssl refresh
+
+Seven identifiers were added across three images, and none were removed:
+
+| Image | Added |
+|---|---|
+| `nextcloud:35.0.1` | CVE-2026-75804, CVE-2026-80864, CVE-2026-84782 |
+| `ghcr.io/paperless-ngx/paperless-ngx:3.2.1` | CVE-2026-75804, CVE-2026-84782 |
+| `netdata/netdata:v2.11.1` | CVE-2026-75804, CVE-2026-84782 |
+
+All of them are advisories against packages the images already carry, published
+after the entries were written. Two are openssl, fixed in `3.5.7-1~deb13u3`; the
+images are on `u2`. The third is `linux-libc-dev`, fixed in `6.12.111-1`. None
+can be removed by moving a pin, because no newer build of any of these three
+images has picked up the fixed package yet. The same two openssl identifiers
+were already accepted for `jellyfin/jellyfin:12.1` in the previous commit, and
+they appear here on three more images for the same reason.
+
+This entry exists because the "only ever grows" warning above is worth reading
+against a concrete case: the diff is additive because the database learned
+about these, not because nobody read the previous entries. Check the same way
+when the next refresh comes.
+
 ## Baseline drift is expected, not an incident
 
 The scanner's vulnerability database is live. New advisories are published for
