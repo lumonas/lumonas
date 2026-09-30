@@ -232,6 +232,13 @@ done
 # host-side build and the placement, and keep rejecting an in-chroot install.
 require_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$BIOS_PREFIX" -o "$BIOS_STAGE/core.img"'
 require_line "$ROOT/scripts/qemu-build-image.sh" "BIOS_PREFIX='(hd0,gpt3)/boot/grub'"
+# A second assignment later in the file silently wins, and a presence-only check
+# cannot see that: the prefix was set correctly, then reassigned to the search
+# form three lines before grub-mkimage, and every build shipped the wrong one
+# while this gate passed. Refuse the reassignment outright.
+reject_line "$ROOT/scripts/qemu-build-image.sh" 'BIOS_PREFIX="(hd0,search' \
+	'BIOS_PREFIX is set once, above; a later assignment overrides the prefix the build actually bakes'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$BIOS_PREFIX"'
 # part_gpt and ext2 are what turn the prefix into a readable filesystem, so an
 # empty or truncated module list produces a core image that enumerates nothing.
 require_line "$ROOT/scripts/qemu-build-image.sh" "BIOS_GRUB_MODULES='biosdisk part_gpt ext2 search search_fs_uuid normal linux configfile test echo loadenv serial terminal gzio xzio lzopio all_video video gfxterm gfxmenu chain cat ls regexp sleep keystatus'"

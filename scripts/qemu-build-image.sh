@@ -296,7 +296,6 @@ cp /usr/lib/grub/i386-pc/*.mod "$WORK/mnt/boot/grub/i386-pc/"
 BIOS_STAGE="$WORK/bios"
 mkdir -p "$BIOS_STAGE"
 cp -a /usr/lib/grub/i386-pc/. "$BIOS_STAGE/"
-BIOS_PREFIX="(hd0,search --fs-uuid --set=root $ROOT_UUID)/boot/grub"
 grub-mkimage -O i386-pc -p "$BIOS_PREFIX" -o "$BIOS_STAGE/core.img" $BIOS_GRUB_MODULES
 [ -s "$BIOS_STAGE/core.img" ] || { echo "build: grub-mkimage produced no core.img" >&2; exit 1; }
 echo "BIOS core image built: $(wc -c <"$BIOS_STAGE/core.img") bytes, prefix $BIOS_PREFIX"
