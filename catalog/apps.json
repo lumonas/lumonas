@@ -81,7 +81,7 @@
     "description": "A safe home for all your data with file sync, sharing, and collaboration tools.",
     "accent": "primary",
     "upstream": "https://nextcloud.com",
-    "image": "nextcloud:30.0.12",
+    "image": "nextcloud:35.0.1",
     "ports": [8080],
     "popular": true,
     "form": [
