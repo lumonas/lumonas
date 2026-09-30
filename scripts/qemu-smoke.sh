@@ -184,9 +184,11 @@ trap cleanup EXIT
 # stay inside the FIFO, and short commands like "set pager=0" were arriving
 # intact, which is what identified the limit.
 #
-# No `echo`: GRUB 2.12 has no such command and answers "can't find command",
-# which would look like a broken channel. GRUB echoes each command as it
-# receives it, so the log stays readable without markers.
+# Only commands confirmed to exist in this core image. `echo` and `cat` are
+# both absent -- the core carries only the modules named in the build, and
+# neither echo nor cat is among them -- and asking for one yields "can't find
+# command", which reads as a broken guest rather than a missing module. `ls` and
+# `set` are built in, and a bare `set` prints every variable including prefix.
 grub_console_diagnostic() {
   grub_send() {
     cmd=$1
@@ -202,7 +204,7 @@ grub_console_diagnostic() {
   }
   grub_send 'set pager=0'
   grub_send 'ls (hd0,gpt3)/boot/grub'
-  grub_send 'cat (hd0,gpt3)/boot/grub/grub.cfg'
+  grub_send 'set'
   sleep 5
 }
 
