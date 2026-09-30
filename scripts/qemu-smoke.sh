@@ -69,6 +69,16 @@ IMAGE_FORMAT="${LUMONAS_QEMU_IMAGE_FORMAT:-raw}"
 # something accepts the socket and then goes quiet.
 CURL_BOUNDS="${LUMONAS_CURL_BOUNDS:---connect-timeout 3 --max-time 10}"
 
+# QEMU writes the guest console straight to this file. It used to go to stdout
+# and be captured by `run_qemu >"$LOG"`, but stdio is block-buffered when it is
+# not a terminal, so the captured log stopped at 16 seconds of guest time and
+# lost everything after it -- including the reason the appliance never became
+# ready. A file-backed chardev is written as the guest produces it.
+#
+# Defined here rather than next to $LOG because the non-asserting mode calls
+# run_qemu before $LOG exists, and `set -u` would reject the reference.
+SERIAL_LOG="${LUMONAS_QEMU_SERIAL_LOG:-/tmp/lumonas-qemu-serial.log}"
+
 run_qemu() {
   data_a=data1
   data_b=data2
@@ -117,8 +127,8 @@ qemu-system-x86_64 \
   -device "virtio-blk-pci,drive=parity,serial=LUMONAS-PARITY" \
   -netdev user,id=n1,restrict=on,hostfwd=tcp::18080-:8081${SSH_FORWARD:-} \
   -device virtio-net-pci,netdev=n1 \
-  -nographic \
-  -serial mon:stdio \
+  -display none \
+  -serial "file:$SERIAL_LOG" \
   -no-reboot
 }
 
@@ -156,6 +166,7 @@ fi
 
 LOG="${LUMONAS_QEMU_LOG:-/tmp/lumonas-qemu-smoke.log}"
 INDEX_LOG="$LOG.index"
+: >"$SERIAL_LOG"
 run_qemu >"$LOG" 2>&1 &
 QEMU_PID=$!
 cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null || true; }
@@ -382,12 +393,11 @@ PY
   sleep 2
 done
 echo "QEMU appliance did not become ready within ${READY_BUDGET_SECONDS}s; log: $LOG" >&2
-# The bootloader probe is gone: the guest boots past GRUB now, and with stdin
-# still wired to the console those commands were typed at the login prompt
-# ("set pager=0" / "Password:" / "Login incorrect") rather than at GRUB, which
-# is noise in exactly the log this line points at.
-#
-# The appliance boots with the kernel console unsilenced, so the systemd output
-# that explains why readiness never arrived is in this dump.
+# Dump the guest console, not QEMU's own stdout. The guest console is what
+# explains a readiness failure, and it is captured separately because stdio
+# buffering used to truncate it.
+echo "--- guest console (${SERIAL_LOG}) ---" >&2
+tail -n 400 "$SERIAL_LOG" >&2 || true
+echo "--- qemu stdout ---" >&2
 cat "$LOG" >&2 || true
 exit 1

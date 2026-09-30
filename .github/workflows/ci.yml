@@ -386,6 +386,7 @@ jobs:
           path: |
             build/qemu/lumonas-debian13.raw
             build/qemu/qemu-smoke.log*
+            build/qemu/qemu-smoke.log.serial
           if-no-files-found: warn
 
   package-permissions:
