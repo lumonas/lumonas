@@ -25,7 +25,14 @@ CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUI
 AmbientCapabilities=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
 LockPersonality=true
 MemoryDenyWriteExecute=true
-MemoryMax=128M
+# This worker serves updates.debian.status, which runs "apt-get -s
+# dist-upgrade" against the package lists. That simulation resolves the whole
+# system and needs well over 128M: at 128M the guest OOM-kills it during first
+# boot and the log shows "Memory cgroup out of memory: Killed process (apt-get)"
+# rather than anything that names a limit. The bound is still finite and still
+# enforced; it is simply large enough for the operation this unit exists to
+# perform.
+MemoryMax=512M
 CPUQuota=100%
 TasksMax=64
 TimeoutStopSec=10s
