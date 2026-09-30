@@ -211,7 +211,15 @@ GRUB_TIMEOUT=1
 GRUB
 update-grub
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=LumoNAS --removable --no-nvram
-grub-install --target=i386-pc --recheck "$LUMONAS_LOOP_DEVICE"
+# Install the BIOS bootloader into the loop device's embedding gap, but resolve
+# the prefix and the module directory from the mounted root filesystem rather
+# than letting grub-probe infer the root from the partscan loop device. On a
+# whole-disk partscan loop, probe can resolve (hd0) to the bios_grub partition
+# instead of the root partition; the image then still contains a correct
+# /boot/grub/i386-pc, but the embedded core looks for it on the wrong partition
+# and drops to "grub rescue>" with "normal.mod not found". Pointing the install
+# at the boot directory of the filesystem being built removes that ambiguity.
+grub-install --target=i386-pc --boot-directory=/boot --recheck "$LUMONAS_LOOP_DEVICE"
 
 # Prove the boot chain this image claims to have, while it can still be fixed.
 # Both grub-install calls report "Installation finished. No error reported."
@@ -231,7 +239,15 @@ verify_boot_chain() {
 }
 if ! verify_boot_chain; then
 	echo "boot chain incomplete after the first install; retrying the BIOS install" >&2
-	grub-install --target=i386-pc --recheck "$LUMONAS_LOOP_DEVICE"
+	# Install the BIOS bootloader into the loop device's embedding gap, but resolve
+# the prefix and the module directory from the mounted root filesystem rather
+# than letting grub-probe infer the root from the partscan loop device. On a
+# whole-disk partscan loop, probe can resolve (hd0) to the bios_grub partition
+# instead of the root partition; the image then still contains a correct
+# /boot/grub/i386-pc, but the embedded core looks for it on the wrong partition
+# and drops to "grub rescue>" with "normal.mod not found". Pointing the install
+# at the boot directory of the filesystem being built removes that ambiguity.
+grub-install --target=i386-pc --boot-directory=/boot --recheck "$LUMONAS_LOOP_DEVICE"
 	update-grub
 	verify_boot_chain
 fi
