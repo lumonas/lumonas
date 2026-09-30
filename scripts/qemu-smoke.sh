@@ -86,6 +86,13 @@ run_qemu() {
 # '<fmt>' does not support the option 'serial'". Those disks are identified by
 # serial in the assertions below, so the serial has to be set through the
 # device.
+#
+# 4 GB, not 2. The appliance runs Docker, Samba, NFS, mergerfs, snapraid, NUT
+# and Avahi together, and at 2 GB the guest hits its cgroup limit during first
+# boot and the kernel kills a process instead of reporting the shortage:
+# "Memory cgroup out of memory: Killed process 1248 (apt-get)". That reads as
+# an unattended hang rather than as a memory setting, because nothing in the
+# console says which limit was hit.
 # The system disk is attached over AHCI, not virtio-blk. GRUB's BIOS disk layer
 # speaks ATA/AHCI over int13h and grub-pc-bin ships no virtio driver at all, so a
 # virtio-blk system disk is a disk the firmware can boot and GRUB cannot read:
@@ -95,7 +102,7 @@ run_qemu() {
 # and the data disks are identified by serial for the device reorder assertions.
 qemu-system-x86_64 \
   -machine q35,accel=tcg \
-  -m 2048 \
+  -m "${LUMONAS_QEMU_MEMORY:-4096}" \
   -smp 2 \
   -device "ich9-ahci,id=lumonas-ahci" \
   -drive "file=$LUMONAS_QEMU_IMAGE,if=none,id=system,format=$IMAGE_FORMAT" \
