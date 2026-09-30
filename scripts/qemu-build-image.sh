@@ -216,17 +216,24 @@ grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=LumoN
 EOF
 
 # Install the BIOS bootloader from the host, against the mounted root, so
-# grub-probe can map the root filesystem to a real device instead of guessing
-# inside the chroot, where it sees only a bind-mounted /dev and bakes a prefix
-# pointing at the bios_grub partition. The image then carries a perfectly good
-# /boot/grub/i386-pc, yet GRUB drops to "grub rescue>" with normal.mod not
-# found because it is looking on the wrong partition. Needs the host's BIOS
+# grub-probe is not guessing inside a chroot that only has a bind-mounted /dev.
+#
+# The prefix is passed explicitly and device-less. Left to itself grub-install
+# derives the prefix by mapping the boot directory onto a partition, and that
+# mapping is unreliable for a loop device: grub-probe cannot resolve one, which
+# is exactly what the diagnostics below show. The core image then loads and
+# runs, and fails with "file /boot/grub/i386-pc/normal.mod not found" because it
+# is searching a partition that does not hold /boot.
+#
+# "/boot/grub" with no device tells GRUB to search its disks for that directory
+# at boot, so the prefix no longer depends on how the image is enumerated, which
+# is the one thing a loop-built image cannot predict. Needs the host's BIOS
 # modules, which CI installs as grub-pc-bin.
 [ -d /usr/lib/grub/i386-pc ] || {
 	echo "host is missing /usr/lib/grub/i386-pc; install grub-pc-bin to build the BIOS bootloader" >&2
 	exit 1
 }
-grub-install --target=i386-pc --boot-directory="$WORK/mnt/boot" --recheck "$LOOP"
+grub-install --target=i386-pc --boot-directory="$WORK/mnt/boot" --prefix=/boot/grub --recheck "$LOOP"
 
 # Prove the boot chain this image claims to have, while it can still be fixed.
 # grub-install reports "Installation finished. No error reported." even when the
