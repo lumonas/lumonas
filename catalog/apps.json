@@ -31,7 +31,7 @@
     "description": "High performance photo and video backup solution.",
     "accent": "primary",
     "upstream": "https://immich.app",
-    "image": "ghcr.io/immich-app/immich-server:v1.116.0",
+    "image": "ghcr.io/immich-app/immich-server:v1.121.0",
     "ports": [2283],
     "popular": true,
     "form": [
@@ -324,7 +324,7 @@
     "description": "Scan, index and archive all your physical documents.",
     "accent": "success",
     "upstream": "https://paperless-ngx.com",
-    "image": "ghcr.io/paperless-ngx/paperless-ngx:2.18.4",
+    "image": "ghcr.io/paperless-ngx/paperless-ngx:3.2.1",
     "ports": [8000],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"8000"},
@@ -446,7 +446,7 @@
     "description": "A sleek and modern dashboard for managing your self-hosted services.",
     "accent": "primary",
     "upstream": "https://homarr.dev",
-    "image": "ghcr.io/homarr-labs/homarr:v1.59.3",
+    "image": "ghcr.io/homarr-labs/homarr:v1.77.2",
     "ports": [7575],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"7575"},
