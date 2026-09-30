@@ -15,6 +15,15 @@ install -d -o lumonas -g lumonas -m 0700 /var/lib/lumonas/replication-incoming
 install -d -o root -g libvirt -m 0755 /var/lib/libvirt/images
 install -d -o lumonas -g libvirt -m 0755 /var/lib/libvirt/images/lumonas
 install -d -o root -g root -m 0755 /var/tmp/lumonas-transcode
+# certbot's postinst creates /etc/letsencrypt but neither /var/lib/letsencrypt
+# nor /var/log/letsencrypt, and lumonas-privd-acme.service names all three in
+# ReadWritePaths. systemd refuses to start a unit whose ReadWritePaths are
+# missing, so the worker died with 226/NAMESPACE before it ever ran, and the
+# services contract never saw it. /etc/letsencrypt is re-stated here with
+# certbot's own mode so this package, not another one's postinst, is what
+# guarantees the path exists.
+install -d -o root -g root -m 0755 /etc/letsencrypt
+install -d -o root -g lumonas -m 0750 /var/lib/letsencrypt /var/log/letsencrypt
 
 # Do not grant the daemon direct Docker socket access. The Docker socket is
 # root-equivalent; lumonasd reaches it only through the typed read-only and

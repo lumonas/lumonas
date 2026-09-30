@@ -23,6 +23,45 @@ reject_line() {
 	fi
 }
 
+# Every ReadWritePaths= entry must name a directory that already exists before
+# the unit starts. systemd refuses to start a unit whose ReadWritePaths are
+# missing, and reports it as 226/NAMESPACE -- the unit never runs and logs
+# nothing, so the only symptom is a service the appliance reports as failed.
+#
+# lumonas-privd-acme.service named /var/lib/letsencrypt and
+# /var/log/letsencrypt, which certbot's postinst does not create. That worker
+# failed on every boot and the readiness contract waited on a unit that could
+# never become active. No string-presence check on the unit can catch that,
+# because the unit itself was written correctly.
+check_read_write_paths_resolve() {
+	unit=$1
+	# Only install -d arguments count as "created", and only on lines that are
+	# not comments, so a path named in prose does not pass for a guarantee.
+	created=" $(sed -n 's/^[^#]*install -d //p' "$ROOT/packaging/debian/postinst" | tr ' ' '\n' | grep '^/' | tr '\n' ' ')"
+	# Paths the base system provides regardless of what this package installs.
+	pre_existing=" /etc/systemd/system /run /tmp /var/tmp /dev/shm "
+	status=0
+	for path in $(sed -n 's/^ReadWritePaths=//p' "$unit"); do
+		# systemd creates this from the unit's own RuntimeDirectory.
+		if [ "$path" = "/run/lumonas" ]; then
+			grep -q '^RuntimeDirectory=lumonas$' "$unit" || {
+				echo "$unit writes $path but sets no RuntimeDirectory=lumonas" >&2
+				status=1
+			}
+			continue
+		fi
+		case "$created$pre_existing" in
+		*" $path "*)
+			continue
+			;;
+		esac
+		echo "$unit requires $path to be writable, but no packaging step creates it" >&2
+		echo "  systemd will refuse to start the unit with 226/NAMESPACE" >&2
+		status=1
+	done
+	return $status
+}
+
 for unit in lumonas-web.service lumonasd.service lumonas-privd.service lumonas-privd-storage.service lumonas-privd-network.service lumonas-privd-power.service lumonas-privd-general.service lumonas-privd-acme.service; do
 	[ -f "$SYSTEMD/$unit" ] || { echo "missing systemd unit: $unit" >&2; exit 1; }
 	require_line "$SYSTEMD/$unit" 'NoNewPrivileges=true'
@@ -30,6 +69,7 @@ for unit in lumonas-web.service lumonasd.service lumonas-privd.service lumonas-p
 	require_line "$SYSTEMD/$unit" 'MemoryMax='
 	require_line "$SYSTEMD/$unit" 'TasksMax='
 	require_line "$SYSTEMD/$unit" 'Group=lumonas'
+	check_read_write_paths_resolve "$SYSTEMD/$unit"
 done
 
 for target in lumonas-jobs.target lumonas-services.target lumonas-storage.target; do
