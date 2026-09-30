@@ -177,24 +177,31 @@ trap cleanup EXIT
 # straight to it; sending Ctrl-A c switches *into* the monitor and the commands
 # are then read by the QEMU monitor as "(qemu) echo ..." instead of by GRUB.
 #
-# One command per write, with a pause between them. Writing the whole sequence
-# in one burst overruns the guest's serial receive buffer and the commands come
-# back interleaved and truncated, which reads like the guest ignoring them.
+# Sent in small chunks. A GRUB command longer than the 16550 UART's 16 byte
+# receive FIFO is truncated: "ls (hd0,gpt3)/boot/grub" arrived as
+# "ls (hd0,gpt3)/b" with the following command run into it, which reads like a
+# guest that cannot parse the path. Eight byte chunks with a pause between them
+# stay inside the FIFO, and short commands like "set pager=0" were arriving
+# intact, which is what identified the limit.
 #
 # No `echo`: GRUB 2.12 has no such command and answers "can't find command",
-# which would look like a broken channel. `ls` lists what it can enumerate and
-# a bare `set` prints every variable, prefix included. GRUB echoes each command
-# as it receives it, so the commands are identifiable in the log without
-# markers.
+# which would look like a broken channel. GRUB echoes each command as it
+# receives it, so the log stays readable without markers.
 grub_console_diagnostic() {
   grub_send() {
-    printf '%s\n' "$1" >&9 2>/dev/null || true
-    sleep 4
+    cmd=$1
+    total=${#cmd}
+    offset=0
+    while [ "$offset" -lt "$total" ]; do
+      printf '%s' "$(printf '%s' "$cmd" | cut -c$((offset + 1))-$((offset + 8)))" >&9 2>/dev/null || true
+      sleep 1
+      offset=$((offset + 8))
+    done
+    printf '\n' >&9 2>/dev/null || true
+    sleep 3
   }
-  printf '\n' >&9 2>/dev/null || true
-  sleep 2
   grub_send 'set pager=0'
-  grub_send 'ls'
+  grub_send 'ls (hd0,gpt3)'
   grub_send 'ls (hd0,gpt3)/boot/grub'
   grub_send 'set prefix'
   sleep 5
