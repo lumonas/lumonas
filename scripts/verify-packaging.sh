@@ -231,8 +231,12 @@ done
 # one from a device mapping that is exactly what is unreliable here. Assert the
 # host-side build and the placement, and keep rejecting an in-chroot install.
 require_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$BIOS_PREFIX" -o "$BIOS_STAGE/core.img"'
+require_line "$ROOT/scripts/qemu-build-image.sh" 'BIOS_PREFIX="(hd0,search --fs-uuid --set=root $ROOT_UUID)/boot/grub"'
 require_line "$ROOT/scripts/qemu-build-image.sh" '"$BIOS_SETUP" -d "$BIOS_STAGE" -c core.img'
 require_line "$ROOT/scripts/qemu-build-image.sh" 'cp /usr/lib/grub/i386-pc/*.mod "$WORK/mnt/boot/grub/i386-pc/"'
+# search_fs_uuid must be in the core image: the prefix itself performs the
+# lookup, so it cannot depend on a module that has not been loaded yet.
+require_line "$ROOT/scripts/qemu-build-image.sh" 'search_fs_uuid'
 reject_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$BIOS_PREFIX" -o /boot' \
 	'the BIOS core image must be built on the host, not inside the chroot'
 reject_line "$ROOT/scripts/qemu-build-image.sh" 'grub-install --target=i386-pc --boot-directory=/boot' \
