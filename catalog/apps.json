@@ -254,7 +254,7 @@
     "description": "Request management and media discovery for Jellyfin/Plex.",
     "accent": "primary",
     "upstream": "https://overseerr.dev",
-    "image": "linuxserver/overseerr:1.34.0",
+    "image": "linuxserver/overseerr:1.35.0",
     "ports": [5055],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"5055"},
@@ -377,7 +377,7 @@
     "description": "Open source analytics and monitoring solution.",
     "accent": "warning",
     "upstream": "https://grafana.com",
-    "image": "grafana/grafana:13.2-slim",
+    "image": "grafana/grafana:13.2.3-slim",
     "ports": [3000],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"3000"},
@@ -469,7 +469,7 @@
     "description": "An open-source authentication and authorization server with 2FA and SSO.",
     "accent": "warning",
     "upstream": "https://www.authelia.com",
-    "image": "authelia/authelia:4.39",
+    "image": "authelia/authelia:4.39.28",
     "ports": [9091],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"9091"},
@@ -492,7 +492,7 @@
     "description": "Open-source systems monitoring and alerting toolkit.",
     "accent": "warning",
     "upstream": "https://prometheus.io",
-    "image": "prom/prometheus:v3.13.4",
+    "image": "prom/prometheus:v3.15.0",
     "ports": [9090],
     "form": [
       {"id":"PORT","label":"Web port","type":"port","required":true,"defaultValue":"9090"},

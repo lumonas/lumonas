@@ -211,69 +211,46 @@ GRUB_TIMEOUT=1
 GRUB
 update-grub
 grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=LumoNAS --removable --no-nvram
-# Install the BIOS bootloader into the loop device's embedding gap, but resolve
-# the prefix and the module directory from the mounted root filesystem rather
-# than letting grub-probe infer the root from the partscan loop device. On a
-# whole-disk partscan loop, probe can resolve (hd0) to the bios_grub partition
-# instead of the root partition; the image then still contains a correct
-# /boot/grub/i386-pc, but the embedded core looks for it on the wrong partition
-# and drops to "grub rescue>" with "normal.mod not found". Pointing the install
-# at the boot directory of the filesystem being built removes that ambiguity.
-grub-install --target=i386-pc --boot-directory=/boot --recheck "$LUMONAS_LOOP_DEVICE"
+# The BIOS install deliberately does not run here; it happens on the host after
+# this chroot closes, so that grub-probe can see the real devices.
+EOF
+
+# Install the BIOS bootloader from the host, against the mounted root, so
+# grub-probe can map the root filesystem to a real device instead of guessing
+# inside the chroot, where it sees only a bind-mounted /dev and bakes a prefix
+# pointing at the bios_grub partition. The image then carries a perfectly good
+# /boot/grub/i386-pc, yet GRUB drops to "grub rescue>" with normal.mod not
+# found because it is looking on the wrong partition. Needs the host's BIOS
+# modules, which CI installs as grub-pc-bin.
+[ -d /usr/lib/grub/i386-pc ] || {
+	echo "host is missing /usr/lib/grub/i386-pc; install grub-pc-bin to build the BIOS bootloader" >&2
+	exit 1
+}
+grub-install --target=i386-pc --boot-directory="$WORK/mnt/boot" --recheck "$LOOP"
 
 # Prove the boot chain this image claims to have, while it can still be fixed.
-# Both grub-install calls report "Installation finished. No error reported."
-# even when the result is unusable, and a BIOS image whose /boot/grub/i386-pc is
-# empty still boots: SeaBIOS loads the embedded core.img, GRUB reports
-# "file `/boot/grub/i386-pc/normal.mod' not found" and drops to "grub rescue>",
-# which the smoke test sees only as "the appliance did not become ready".
-# Check the artefacts the firmware will actually look for, and retry the BIOS
-# install once before giving up, so a bad image fails the build rather than
-# being published.
-verify_boot_chain() {
-	[ -s /boot/grub/grub.cfg ] || { echo "verify_boot_chain: /boot/grub/grub.cfg is missing or empty" >&2; return 1; }
-	[ -f /boot/grub/i386-pc/normal.mod ] || { echo "verify_boot_chain: /boot/grub/i386-pc/normal.mod is missing" >&2; return 1; }
-	[ -f /boot/grub/i386-pc/linux.mod ] || { echo "verify_boot_chain: /boot/grub/i386-pc/linux.mod is missing" >&2; return 1; }
-	[ -s /boot/efi/EFI/BOOT/BOOTX64.EFI ] || { echo "verify_boot_chain: the EFI fallback loader is missing" >&2; return 1; }
-	return 0
-}
-if ! verify_boot_chain; then
-	echo "boot chain incomplete after the first install; retrying the BIOS install" >&2
-	# Install the BIOS bootloader into the loop device's embedding gap, but resolve
-# the prefix and the module directory from the mounted root filesystem rather
-# than letting grub-probe infer the root from the partscan loop device. On a
-# whole-disk partscan loop, probe can resolve (hd0) to the bios_grub partition
-# instead of the root partition; the image then still contains a correct
-# /boot/grub/i386-pc, but the embedded core looks for it on the wrong partition
-# and drops to "grub rescue>" with "normal.mod not found". Pointing the install
-# at the boot directory of the filesystem being built removes that ambiguity.
-grub-install --target=i386-pc --boot-directory=/boot --recheck "$LUMONAS_LOOP_DEVICE"
-	update-grub
-	verify_boot_chain
-fi
+# grub-install reports "Installation finished. No error reported." even when the
+# result is unusable, and an image whose embedded core points at the wrong
+# partition still boots: the firmware loads core.img, GRUB cannot resolve its
+# prefix and drops to "grub rescue>", which the smoke test can only report as
+# "the appliance did not become ready". Check what the firmware will look for.
+[ -s "$WORK/mnt/boot/grub/grub.cfg" ] || { echo "build: boot/grub/grub.cfg is missing or empty" >&2; exit 1; }
+[ -f "$WORK/mnt/boot/grub/i386-pc/normal.mod" ] || { echo "build: boot/grub/i386-pc/normal.mod is missing" >&2; exit 1; }
+[ -f "$WORK/mnt/boot/grub/i386-pc/linux.mod" ] || { echo "build: boot/grub/i386-pc/linux.mod is missing" >&2; exit 1; }
+[ -s "$WORK/mnt/boot/efi/EFI/BOOT/BOOTX64.EFI" ] || { echo "build: the EFI fallback loader is missing" >&2; exit 1; }
 echo "boot chain verified: BIOS (i386-pc) and UEFI (BOOTX64.EFI) loaders present"
 
-# Report what GRUB actually ended up with, because "the modules exist and the
-# install reported success" is not the same as "the embedded core will find
-# them". A BIOS image can satisfy every check above and still drop to
-# "grub rescue>" with normal.mod not found, which means the prefix baked into
-# core.img points at a partition that does not contain /boot/grub. Print the
-# facts needed to tell those cases apart: the device GRUB thinks it is installed
-# against, the module directory, the core image location, and its prefix.
+# Report the prefix GRUB resolved: that is what decides whether the embedded
+# core finds /boot/grub at boot, and it is the one fact that separates
+# "the modules are present" from "GRUB can reach them".
 echo "--- GRUB diagnostics ---"
-echo "loop device for install: $LUMONAS_LOOP_DEVICE"
-echo "grub-probe on /boot: $(grub-probe --target=i386-pc --device-map=/boot/grub/device.map /boot 2>&1 || true)"
-echo "grub-probe on /: $(grub-probe --target=i386-pc / 2>&1 || true)"
-echo "/boot/grub/i386-pc entries: $(ls /boot/grub/i386-pc 2>/dev/null | wc -l)"
-echo "/boot/grub/grub.cfg present: $([ -s /boot/grub/grub.cfg ] && echo yes || echo no)"
-# The core image is either in the post-MBR gap or in the bios_grub partition;
-# report which, since that tells us where the firmware will look for it.
-echo "post-MBR gap signature: $(dd if="$LUMONAS_LOOP_DEVICE" bs=512 skip=1 count=4 2>/dev/null | strings | head -2 | tr '\n' ' ')"
-bios_part="${LUMONAS_LOOP_DEVICE}1"
-case "$LUMONAS_LOOP_DEVICE" in *[0-9]) bios_part="${LUMONAS_LOOP_DEVICE}p1" ;; esac
-echo "bios_grub partition signature: $(dd if="$bios_part" bs=512 count=8 2>/dev/null | strings | head -2 | tr '\n' ' ')"
+echo "grub-probe for the mounted root: $(grub-probe --target=i386-pc "$WORK/mnt" 2>&1 || true)"
+echo "grub-probe for the boot directory: $(grub-probe --target=i386-pc "$WORK/mnt/boot" 2>&1 || true)"
+echo "boot/grub/i386-pc entries: $(ls "$WORK/mnt/boot/grub/i386-pc" 2>/dev/null | wc -l)"
+bios_part="${LOOP}1"
+case "$LOOP" in *[0-9]) bios_part="${LOOP}p1" ;; esac
+echo "bios_grub partition GRUB signatures: $(dd if="$bios_part" bs=512 count=16 2>/dev/null | strings | grep -c GRUB || true)"
 echo "--- end GRUB diagnostics ---"
-EOF
 
 if [ -n "$UPDATE_FIXTURE" ]; then
 	cat >>"$WORK/mnt/etc/lumonas/lumonasd.env" <<ENV

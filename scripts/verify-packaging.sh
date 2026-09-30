@@ -213,13 +213,22 @@ require_line "$ROOT/scripts/qemu-build-image.sh" 'sfdisk --verify'
 # as far as a "grub rescue>" prompt, which the smoke test can only report as
 # "the appliance did not become ready". Require the build to check the artefacts
 # the firmware will look for.
-for boot_marker in 'verify_boot_chain' \
-	'[ -f /boot/grub/i386-pc/normal.mod ]' \
-	'[ -f /boot/grub/i386-pc/linux.mod ]' \
-	'[ -s /boot/efi/EFI/BOOT/BOOTX64.EFI ]' \
-	'[ -s /boot/grub/grub.cfg ]'; do
+for boot_marker in 'boot chain verified: BIOS (i386-pc) and UEFI (BOOTX64.EFI) loaders present' \
+	'[ -f "$WORK/mnt/boot/grub/i386-pc/normal.mod" ]' \
+	'[ -f "$WORK/mnt/boot/grub/i386-pc/linux.mod" ]' \
+	'[ -s "$WORK/mnt/boot/efi/EFI/BOOT/BOOTX64.EFI" ]' \
+	'[ -s "$WORK/mnt/boot/grub/grub.cfg" ]'; do
 	require_line "$ROOT/scripts/qemu-build-image.sh" "$boot_marker"
 done
+# The BIOS install must run on the host, not inside the chroot. grub-probe
+# cannot map the root filesystem to a GRUB device from inside the chroot, where
+# /dev is a bind mount, and bakes a prefix pointing at the bios_grub partition:
+# the image then has a correct /boot/grub/i386-pc and GRUB still drops to
+# "grub rescue>" with normal.mod not found.
+require_line "$ROOT/scripts/qemu-build-image.sh" 'grub-install --target=i386-pc --boot-directory="$WORK/mnt/boot"'
+reject_line "$ROOT/scripts/qemu-build-image.sh" 'grub-install --target=i386-pc --boot-directory=/boot' \
+	'the BIOS install must run on the host against the mounted root, not inside the chroot'
+require_line "$ROOT/.github/workflows/ci.yml" 'grub-pc-bin'
 # The appliance boots both UEFI and BIOS. grub-pc Conflicts grub-efi-amd64, so
 # asking apt for both aborts the whole image build; grub-efi-amd64-bin provides
 # the same EFI modules without the conflict. Match the bare metapackage as a
