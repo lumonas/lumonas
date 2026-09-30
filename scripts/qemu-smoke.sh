@@ -201,9 +201,8 @@ grub_console_diagnostic() {
     sleep 3
   }
   grub_send 'set pager=0'
-  grub_send 'ls (hd0,gpt3)'
   grub_send 'ls (hd0,gpt3)/boot/grub'
-  grub_send 'set prefix'
+  grub_send 'cat (hd0,gpt3)/boot/grub/grub.cfg'
   sleep 5
 }
 

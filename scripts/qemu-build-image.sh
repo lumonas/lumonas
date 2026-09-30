@@ -251,8 +251,10 @@ BIOS_PREFIX='(hd0,gpt3)/boot/grub'
 # part_gpt and ext2 are what let GRUB enumerate (hd0,gpt3) and read the
 # filesystem behind the prefix; biosdisk is what reaches the controller. normal
 # is preloaded because the original failure was GRUB unable to load normal.mod
-# from a prefix it could not resolve.
-BIOS_GRUB_MODULES='biosdisk part_gpt ext2 normal linux configfile'
+# from a prefix it could not resolve. search and search_fs_uuid are preloaded
+# because the generated grub.cfg opens with a "search --fs-uuid --set=root"
+# line, and a core image without them aborts on that line before the menu.
+BIOS_GRUB_MODULES='biosdisk part_gpt ext2 search search_fs_uuid normal linux configfile'
 [ -d /usr/lib/grub/i386-pc ] || {
 	echo "host is missing /usr/lib/grub/i386-pc; install grub-pc-bin to build the BIOS bootloader" >&2
 	exit 1
