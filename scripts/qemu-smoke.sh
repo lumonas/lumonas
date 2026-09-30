@@ -156,66 +156,18 @@ fi
 
 LOG="${LUMONAS_QEMU_LOG:-/tmp/lumonas-qemu-smoke.log}"
 INDEX_LOG="$LOG.index"
-# QEMU's serial is multiplexed onto stdio together with the monitor, so the
-# console has to be reachable on stdin to interrogate the bootloader. A FIFO
-# with a writer held open keeps the guest from seeing EOF on the serial line.
-CONSOLE_IN="$LOG.console.in"
-rm -f "$CONSOLE_IN"
-mkfifo "$CONSOLE_IN"
-run_qemu <"$CONSOLE_IN" >"$LOG" 2>&1 &
+run_qemu >"$LOG" 2>&1 &
 QEMU_PID=$!
-exec 9>"$CONSOLE_IN"
-cleanup() {
-  kill "$QEMU_PID" 2>/dev/null || true
-  wait "$QEMU_PID" 2>/dev/null || true
-  exec 9>&- 2>/dev/null || true
-  rm -f "$CONSOLE_IN" 2>/dev/null || true
-}
+cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null || true; }
 trap cleanup EXIT
 
-# Ask the bootloader what it can see. Every prefix shape tried so far produced a
-# byte-identical bare "grub>" prompt, so the failure is no longer usefully
-# narrowed from the build side. GRUB reports its own prefix and its own view of
-# the disks, which distinguishes "cannot read any disk" from "read the disk but
-# not this filesystem" from "found the prefix but the config is unreadable".
-#
-# No monitor escape here. With "-serial mon:stdio" the mux starts in console
-# mode, so the guest's output is already being printed and keystrokes go
-# straight to it; sending Ctrl-A c switches *into* the monitor and the commands
-# are then read by the QEMU monitor as "(qemu) echo ..." instead of by GRUB.
-#
-# Sent in small chunks. A GRUB command longer than the 16550 UART's 16 byte
-# receive FIFO is truncated: "ls (hd0,gpt3)/boot/grub" arrived as
-# "ls (hd0,gpt3)/b" with the following command run into it, which reads like a
-# guest that cannot parse the path. Eight byte chunks with a pause between them
-# stay inside the FIFO, and short commands like "set pager=0" were arriving
-# intact, which is what identified the limit.
-#
-# Only commands confirmed to exist in this core image. `echo` and `cat` are
-# both absent -- the core carries only the modules named in the build, and
-# neither echo nor cat is among them -- and asking for one yields "can't find
-# command", which reads as a broken guest rather than a missing module. `ls` and
-# `set` are built in, and a bare `set` prints every variable including prefix.
-grub_console_diagnostic() {
-  grub_send() {
-    cmd=$1
-    total=${#cmd}
-    offset=0
-    while [ "$offset" -lt "$total" ]; do
-      printf '%s' "$(printf '%s' "$cmd" | cut -c$((offset + 1))-$((offset + 8)))" >&9 2>/dev/null || true
-      sleep 1
-      offset=$((offset + 8))
-    done
-    printf '\n' >&9 2>/dev/null || true
-    sleep 3
-  }
-  grub_send 'set pager=0'
-  grub_send 'ls (hd0,gpt3)/boot/grub'
-  grub_send 'set'
-  sleep 5
-}
-
-for attempt in $(seq 1 60); do
+# Readiness gets a budget in seconds rather than a count of attempts. Each
+# attempt runs the full contract probe, about a dozen sequential curls, so 60
+# attempts was really several minutes of work and the number said nothing about
+# how long the guest was given. Sizing it in seconds is the only way to make the
+# budget legible.
+READY_BUDGET_SECONDS="${LUMONAS_QEMU_READY_TIMEOUT:-600}"
+for attempt in $(seq 1 "$READY_BUDGET_SECONDS"); do
   if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
      curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/readyz >"$LOG.ready" 2>/dev/null && \
      curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
@@ -376,9 +328,9 @@ PY
         snapshot_disk_identities "$LOG.disks" "$LOG.identities.initial"
         kill "$QEMU_PID" 2>/dev/null || true
         wait "$QEMU_PID" 2>/dev/null || true
-        LUMONAS_QEMU_REORDER=true run_qemu <"$CONSOLE_IN" >"$LOG.reordered" 2>&1 &
+        LUMONAS_QEMU_REORDER=true run_qemu >"$LOG.reordered" 2>&1 &
         QEMU_PID=$!
-        for reorder_attempt in $(seq 1 60); do
+        for reorder_attempt in $(seq 1 "$READY_BUDGET_SECONDS"); do
           if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
              curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null && \
              curl $CURL_BOUNDS -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history.reordered" 2>/dev/null; then
@@ -418,9 +370,13 @@ PY
   fi
   sleep 2
 done
-echo "QEMU appliance did not become ready; log: $LOG" >&2
-# The guest is most likely sitting at a bootloader prompt. Ask it what it sees
-# before dumping the console, so the log explains itself.
-grub_console_diagnostic
+echo "QEMU appliance did not become ready after ${READY_BUDGET_SECONDS}s; log: $LOG" >&2
+# The bootloader probe is gone: the guest boots past GRUB now, and with stdin
+# still wired to the console those commands were being typed at the login
+# prompt ("set pager=0" / "Password:" / "Login incorrect") rather than at
+# GRUB, which is noise in exactly the log this line points at.
+#
+# The appliance boots with the kernel console unsilenced, so the systemd
+# output that explains why readiness never arrived is in this dump.
 cat "$LOG" >&2 || true
 exit 1

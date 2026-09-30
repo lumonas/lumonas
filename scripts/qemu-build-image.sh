@@ -204,7 +204,12 @@ if [ -n "$LUMONAS_QEMU_SSH_PUBLIC_KEY" ]; then
 fi
 sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
 cat >/etc/default/grub <<'GRUB'
-GRUB_CMDLINE_LINUX_DEFAULT="quiet console=ttyS0,115200n8"
+# No "quiet". This console is the only view of the guest once the kernel hands
+# over, and a silent boot turns "the appliance did not become ready" into a
+# question with no way to answer it: every failure so far in this image looked
+# identical from the harness, and the reasons were only visible with the
+# service output present.
+GRUB_CMDLINE_LINUX_DEFAULT="console=ttyS0,115200n8 systemd.show_status=1"
 GRUB_TERMINAL="serial"
 GRUB_SERIAL_COMMAND="serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1"
 GRUB_TIMEOUT=1
