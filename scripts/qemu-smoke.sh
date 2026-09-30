@@ -161,13 +161,21 @@ QEMU_PID=$!
 cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null || true; }
 trap cleanup EXIT
 
-# Readiness gets a budget in seconds rather than a count of attempts. Each
-# attempt runs the full contract probe, about a dozen sequential curls, so 60
-# attempts was really several minutes of work and the number said nothing about
-# how long the guest was given. Sizing it in seconds is the only way to make the
-# budget legible.
+# Readiness is bounded by wall clock, not by a count of attempts. An attempt
+# runs the whole contract probe -- about a dozen sequential curls -- and then
+# sleeps, so counting attempts measures neither seconds nor the time the guest
+# was actually given. The old "60 attempts" was several minutes of work under a
+# number that read like 60 seconds.
+#
+# An earlier version of this used `seq 1 $READY_BUDGET_SECONDS`, which is the
+# same mistake under the new variable's name: 600 iterations at twelve curls
+# and a two second sleep each is hours, not ten minutes.
 READY_BUDGET_SECONDS="${LUMONAS_QEMU_READY_TIMEOUT:-600}"
-for attempt in $(seq 1 "$READY_BUDGET_SECONDS"); do
+ready_deadline=$(( $(date +%s) + READY_BUDGET_SECONDS ))
+# The iteration cap only guarantees termination if the guest answers instantly;
+# the deadline is what actually ends the wait.
+for attempt in $(seq 1 10000); do
+  [ "$(date +%s)" -lt "$ready_deadline" ] || break
   if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
      curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/readyz >"$LOG.ready" 2>/dev/null && \
      curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/ >"$INDEX_LOG" 2>/dev/null && \
@@ -330,7 +338,10 @@ PY
         wait "$QEMU_PID" 2>/dev/null || true
         LUMONAS_QEMU_REORDER=true run_qemu >"$LOG.reordered" 2>&1 &
         QEMU_PID=$!
-        for reorder_attempt in $(seq 1 "$READY_BUDGET_SECONDS"); do
+        # The reordered boot gets its own budget, measured from the reboot.
+        reorder_deadline=$(( $(date +%s) + READY_BUDGET_SECONDS ))
+        for reorder_attempt in $(seq 1 10000); do
+          [ "$(date +%s)" -lt "$reorder_deadline" ] || break
           if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
              curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/api/v1/disks >"$LOG.disks.reordered" 2>/dev/null && \
              curl $CURL_BOUNDS -kfsS 'https://127.0.0.1:18080/api/v1/system/metrics/history?hours=1&limit=10' >"$LOG.metrics-history.reordered" 2>/dev/null; then
@@ -370,13 +381,13 @@ PY
   fi
   sleep 2
 done
-echo "QEMU appliance did not become ready after ${READY_BUDGET_SECONDS}s; log: $LOG" >&2
+echo "QEMU appliance did not become ready within ${READY_BUDGET_SECONDS}s; log: $LOG" >&2
 # The bootloader probe is gone: the guest boots past GRUB now, and with stdin
-# still wired to the console those commands were being typed at the login
-# prompt ("set pager=0" / "Password:" / "Login incorrect") rather than at
-# GRUB, which is noise in exactly the log this line points at.
+# still wired to the console those commands were typed at the login prompt
+# ("set pager=0" / "Password:" / "Login incorrect") rather than at GRUB, which
+# is noise in exactly the log this line points at.
 #
-# The appliance boots with the kernel console unsilenced, so the systemd
-# output that explains why readiness never arrived is in this dump.
+# The appliance boots with the kernel console unsilenced, so the systemd output
+# that explains why readiness never arrived is in this dump.
 cat "$LOG" >&2 || true
 exit 1
