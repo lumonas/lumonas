@@ -176,16 +176,22 @@ trap cleanup EXIT
 # mode, so the guest's output is already being printed and keystrokes go
 # straight to it; sending Ctrl-A c switches *into* the monitor and the commands
 # are then read by the QEMU monitor as "(qemu) echo ..." instead of by GRUB.
+#
+# One command per write, with a pause between them. Writing the whole sequence
+# in one burst overruns the guest's serial receive buffer and the commands come
+# back interleaved and truncated, which reads like the guest ignoring them.
 grub_console_diagnostic() {
-  {
-    printf 'echo ===LUMONASGRUBDIAG===\n'
-    printf 'set pager=0\n'
-    printf 'echo PREFIX_IS=$prefix\n'
-    printf 'ls\n'
-    printf 'echo ===ENDGRUBDIAG===\n'
-    sleep 1
-  } >&9 2>/dev/null || true
-  sleep 10
+  grub_send() {
+    printf '%s\n' "$1" >&9 2>/dev/null || true
+    sleep 3
+  }
+  sleep 2
+  grub_send 'set pager=0'
+  grub_send 'echo ===LUMONASGRUBDIAG==='
+  grub_send 'echo PREFIX_IS=$prefix'
+  grub_send 'ls'
+  grub_send 'echo ===ENDGRUBDIAG==='
+  sleep 5
 }
 
 for attempt in $(seq 1 60); do
