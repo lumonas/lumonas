@@ -149,10 +149,41 @@ fi
 
 LOG="${LUMONAS_QEMU_LOG:-/tmp/lumonas-qemu-smoke.log}"
 INDEX_LOG="$LOG.index"
-run_qemu >"$LOG" 2>&1 &
+# QEMU's serial is multiplexed onto stdio together with the monitor, so the
+# console has to be reachable on stdin to interrogate the bootloader. A FIFO
+# with a writer held open keeps the guest from seeing EOF on the serial line.
+CONSOLE_IN="$LOG.console.in"
+rm -f "$CONSOLE_IN"
+mkfifo "$CONSOLE_IN"
+run_qemu <"$CONSOLE_IN" >"$LOG" 2>&1 &
 QEMU_PID=$!
-cleanup() { kill "$QEMU_PID" 2>/dev/null || true; wait "$QEMU_PID" 2>/dev/null || true; }
+exec 9>"$CONSOLE_IN"
+cleanup() {
+  kill "$QEMU_PID" 2>/dev/null || true
+  wait "$QEMU_PID" 2>/dev/null || true
+  exec 9>&- 2>/dev/null || true
+  rm -f "$CONSOLE_IN" 2>/dev/null || true
+}
 trap cleanup EXIT
+
+# Ask the bootloader what it can see. Every prefix shape tried so far produced a
+# byte-identical bare "grub>" prompt, so the failure is no longer usefully
+# narrowed from the build side. GRUB reports its own prefix and its own view of
+# the disks, which distinguishes "cannot read any disk" from "read the disk but
+# not this filesystem" from "found the prefix but the config is unreadable".
+# Ctrl-A c leaves the QEMU monitor and returns to the guest serial console.
+grub_console_diagnostic() {
+  {
+    printf '\001c'
+    printf 'echo ===LUMONAS GRUB DIAGNOSTIC===\n'
+    printf 'set pager=0\n'
+    printf 'echo PREFIX_IS=$prefix\n'
+    printf 'ls\n'
+    printf 'echo ===END GRUB DIAGNOSTIC===\n'
+    sleep 1
+  } >&9 2>/dev/null || true
+  sleep 8
+}
 
 for attempt in $(seq 1 60); do
   if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
@@ -315,7 +346,7 @@ PY
         snapshot_disk_identities "$LOG.disks" "$LOG.identities.initial"
         kill "$QEMU_PID" 2>/dev/null || true
         wait "$QEMU_PID" 2>/dev/null || true
-        LUMONAS_QEMU_REORDER=true run_qemu >"$LOG.reordered" 2>&1 &
+        LUMONAS_QEMU_REORDER=true run_qemu <"$CONSOLE_IN" >"$LOG.reordered" 2>&1 &
         QEMU_PID=$!
         for reorder_attempt in $(seq 1 60); do
           if curl $CURL_BOUNDS -kfsS https://127.0.0.1:18080/healthz >/dev/null 2>&1 && \
@@ -358,5 +389,8 @@ PY
   sleep 2
 done
 echo "QEMU appliance did not become ready; log: $LOG" >&2
+# The guest is most likely sitting at a bootloader prompt. Ask it what it sees
+# before dumping the console, so the log explains itself.
+grub_console_diagnostic
 cat "$LOG" >&2 || true
 exit 1
