@@ -80,17 +80,26 @@ run_qemu() {
     data_c=data2
     parity_disk=parity
   fi
-# Each disk is attached with "if=none" plus an explicit virtio-blk device so
-# the serial can be set on the device. "serial=" is not a -drive option: QEMU
-# rejects it for every block format with "Block format '<fmt>' does not support
-# the option 'serial'". The disks are identified by serial in the assertions
-# below, so the serial has to be set through the device.
+# The data and parity disks are attached with "if=none" plus an explicit
+# virtio-blk device so the serial can be set on the device. "serial=" is not a
+# -drive option: QEMU rejects it for every block format with "Block format
+# '<fmt>' does not support the option 'serial'". Those disks are identified by
+# serial in the assertions below, so the serial has to be set through the
+# device.
+# The system disk is attached over AHCI, not virtio-blk. GRUB's BIOS disk layer
+# speaks ATA/AHCI over int13h and grub-pc-bin ships no virtio driver at all, so a
+# virtio-blk system disk is a disk the firmware can boot and GRUB cannot read:
+# the core image loads from the embedded gap, then every prefix fails and the
+# guest stops at a bare "grub>" prompt, whatever prefix the image carries. The
+# data disks stay on virtio-blk because only GRUB needs to read the system disk,
+# and the data disks are identified by serial for the device reorder assertions.
 qemu-system-x86_64 \
   -machine q35,accel=tcg \
   -m 2048 \
   -smp 2 \
+  -device "ich9-ahci,id=lumonas-ahci" \
   -drive "file=$LUMONAS_QEMU_IMAGE,if=none,id=system,format=$IMAGE_FORMAT" \
-  -device "virtio-blk-pci,drive=system,serial=LUMONAS-SYSTEM" \
+  -device "ide-hd,drive=system,bus=lumonas-ahci.0" \
   -drive "file=$DATA_DIR/$data_a.qcow2,if=none,id=data_a,format=qcow2" \
   -device "virtio-blk-pci,drive=data_a,serial=LUMONAS-$(printf '%s' "$data_a" | tr '[:lower:]' '[:upper:]')" \
   -drive "file=$DATA_DIR/$data_b.qcow2,if=none,id=data_b,format=qcow2" \

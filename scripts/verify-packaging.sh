@@ -242,6 +242,14 @@ reject_line "$ROOT/scripts/qemu-build-image.sh" 'grub-mkimage -O i386-pc -p "$BI
 reject_line "$ROOT/scripts/qemu-build-image.sh" 'grub-install --target=i386-pc --boot-directory=/boot' \
 	'the BIOS install must run on the host against the mounted root, not inside the chroot'
 require_line "$ROOT/.github/workflows/ci.yml" 'grub-pc-bin'
+# The appliance system disk must be on a bus GRUB's BIOS disk layer can read.
+# grub-pc-bin ships ahci, ata, pata, scsi and nativedisk but no virtio driver, so
+# a virtio-blk system disk boots in the firmware and then stops at a bare "grub>"
+# prompt no matter what prefix the image carries.
+require_line "$ROOT/scripts/qemu-smoke.sh" '-device "ich9-ahci,id=lumonas-ahci"'
+require_line "$ROOT/scripts/qemu-smoke.sh" '-device "ide-hd,drive=system,bus=lumonas-ahci.0"'
+reject_line "$ROOT/scripts/qemu-smoke.sh" 'virtio-blk-pci,drive=system' \
+	'GRUB cannot read a virtio-blk system disk; attach it over AHCI'
 # The appliance boots both UEFI and BIOS. grub-pc Conflicts grub-efi-amd64, so
 # asking apt for both aborts the whole image build; grub-efi-amd64-bin provides
 # the same EFI modules without the conflict. Match the bare metapackage as a
