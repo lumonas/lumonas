@@ -366,6 +366,25 @@ PY
             if cmp -s "$LOG.ids.initial" "$LOG.ids.reordered"; then
               if cmp -s "$LOG.paths.initial" "$LOG.paths.reordered"; then
                 echo "QEMU appliance device reorder did not change any transient device path" >&2
+                # The invariant is that identity survives reordering; the proof
+                # that anything reordered is that the transient paths moved.
+                # Report what the guest actually enumerated, because whether the
+                # disks arrived in a different order or QEMU handed them the
+                # same slots regardless is not answerable from this side.
+                diff -u "$LOG.ids.initial" "$LOG.ids.reordered" >&2 || true
+                diff -u "$LOG.paths.initial" "$LOG.paths.reordered" >&2 || true
+                # The two inventories are a couple of kilobytes. Print them
+                # rather than the diff: when the paths are unchanged the
+                # question is what the guest reported, not how the two lists
+                # differ.
+                echo "--- disks before reorder ---" >&2
+                cat "$LOG.disks" >&2 || true
+                echo "--- disks after reorder ---" >&2
+                cat "$LOG.disks.reordered" >&2 || true
+                if [ -n "$SSH_KEY" ] && [ "$SSH_ASSERT" = "true" ]; then
+                  echo "--- guest block devices after reorder ---" >&2
+                  ssh_guest 'lsblk -o NAME,SERIAL,TRAN 2>/dev/null || ls -l /dev/sd* /dev/vd* 2>&1' >&2 2>&1 || true
+                fi
                 exit 1
               fi
               echo "QEMU appliance smoke test passed (disks=$disk_count, recovery=verified, stable identities=verified, reorder=verified, update=$UPDATE_ASSERT)"
