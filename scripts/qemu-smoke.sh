@@ -393,6 +393,24 @@ PY
   sleep 2
 done
 echo "QEMU appliance did not become ready within ${READY_BUDGET_SECONDS}s; log: $LOG" >&2
+
+# Ask the guest what happened. The serial console shows systemd's unit status
+# and the kernel ring, but a service that hangs writes its reason to the
+# journal, not the console -- docker.service was observed starting and never
+# finishing, with nothing on the console beyond that. SSH is already wired up
+# for the control assertions, so use it to read the journal before dumping.
+if [ -n "$SSH_KEY" ] && [ "$SSH_ASSERT" = "true" ]; then
+	echo "--- guest service state ---" >&2
+	ssh_guest 'systemctl --no-pager --failed --plain || true' >&2 2>&1 || true
+	ssh_guest 'systemctl is-active lumonasd.service lumonas-web.service docker.service containerd.service' >&2 2>&1 || true
+	echo "--- docker.service journal ---" >&2
+	ssh_guest 'journalctl -u docker.service -n 40 --no-pager || true' >&2 2>&1 || true
+	echo "--- lumonasd.service journal ---" >&2
+	ssh_guest 'journalctl -u lumonasd.service -n 30 --no-pager || true' >&2 2>&1 || true
+	echo "--- last boot errors ---" >&2
+	ssh_guest 'journalctl -b -p err --no-pager -n 40 || true' >&2 2>&1 || true
+fi
+
 # Dump the guest console, not QEMU's own stdout. The guest console is what
 # explains a readiness failure, and it is captured separately because stdio
 # buffering used to truncate it.
