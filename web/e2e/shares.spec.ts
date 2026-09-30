@@ -12,7 +12,14 @@ test.describe('shares', () => {
 
   test('shares page lists seeded shares', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Shares' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Create share' })).toBeVisible()
+    // The page carries two "Create share" buttons: the header action, and the
+    // backup card's fallback while no compatible backup share exists. Which of
+    // them are present depends on whether the shares query has resolved, so an
+    // unqualified locator is a race against the query and fails strict mode as
+    // soon as it is evaluated during the loading window. The header button is
+    // first in DOM order and always rendered, which is the same one the other
+    // tests in this file open the wizard with.
+    await expect(page.getByRole('button', { name: 'Create share' }).first()).toBeVisible()
   })
 
   test('create wizard adds a share to the list', async ({ page }) => {
