@@ -67,7 +67,14 @@ qemu-img create -f qcow2 "$DATA_DIR/stage.qcow2" 5G >/dev/null
 cp "$OVMF_VARS_TEMPLATE" "$DATA_DIR/OVMF_VARS.fd"
 
 start_guest() {
-	qemu-system-x86_64 \
+	# exec so the background subshell is replaced by QEMU and QEMU_PID is
+	# QEMU's own pid; without it the shell forks QEMU as a child and killing
+	# QEMU_PID orphans it, leaving the forwarded ports and the image lock held.
+	#
+	# The system disk stays on virtio-blk here, unlike the BIOS harnesses:
+	# OVMF ships virtio drivers and reads it fine. grub-pc-bin does not, which
+	# is why qemu-smoke.sh and qemu-ab-smoke.sh attach theirs over ich9-ahci.
+	exec qemu-system-x86_64 \
 		-machine q35,accel=tcg \
 		-m "${LUMONAS_QEMU_MEMORY:-4096}" \
 		-smp 2 \
@@ -91,18 +98,24 @@ ssh_guest() {
 		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@127.0.0.1 "$@"
 }
 
-start_guest
-for attempt in $(seq 1 90); do
+# 90 attempts is not a readiness failure, it is a boot that has not finished:
+# TCG with no KVM, and the appliance needs well over three minutes to bring up
+# Docker, Samba, NFS and the privileged workers. Bounded by wall clock so the
+# budget means what it says.
+uefi_deadline=$(( $(date +%s) + "${LUMONAS_UEFI_AB_READY_TIMEOUT:-600}" ))
+guest_ready=0
+while [ "$(date +%s)" -lt "$uefi_deadline" ]; do
 	if curl $CURL_BOUNDS -kfsS "https://127.0.0.1:$WEB_PORT/healthz" >/dev/null 2>&1 && ssh_guest true >/dev/null 2>&1; then
+		guest_ready=1
 		break
-	fi
-	if [ "$attempt" = 90 ]; then
-		echo "UEFI guest never became ready" >&2
-		cat "$DATA_DIR/qemu.log" >&2 || true
-		exit 1
 	fi
 	sleep 2
 done
+if [ "$guest_ready" != "1" ]; then
+	echo "UEFI guest never became ready within ${LUMONAS_UEFI_AB_READY_TIMEOUT:-600}s" >&2
+	cat "$DATA_DIR/qemu.log" >&2 || true
+	exit 1
+fi
 
 ssh_guest 'set -eu
 SLOT_B_DEVICE=/dev/disk/by-id/virtio-LUMONAS-SLOTB

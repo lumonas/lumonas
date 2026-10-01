@@ -36,17 +36,30 @@ qemu-img create -f qcow2 "$DATA_DIR/slot-b.qcow2" 1G >/dev/null
 SSH_PORT="${LUMONAS_AB_SSH_PORT:-2223}"
 
 start_guest() {
-	qemu-system-x86_64 \
+	# The system disk is on AHCI, not virtio-blk. GRUB's BIOS disk layer speaks
+	# ATA/AHCI over int13h and grub-pc-bin ships no virtio driver, so a
+	# virtio-blk system disk is a disk the firmware can boot and GRUB cannot
+	# read. The main harness hit this and boots over ich9-ahci for the same
+	# reason.
+	#
+	# exec so the background subshell is replaced by QEMU and GUEST_PID is
+	# QEMU's own pid. Without it the function body is more than one command, so
+	# the shell forks QEMU as a child and stop_guest kills the subshell and
+	# orphans QEMU, which keeps the forwarded port and the image lock.
+	exec qemu-system-x86_64 \
 		-machine q35,accel=tcg \
 		-m "${LUMONAS_QEMU_MEMORY:-4096}" \
 		-smp 2 \
-		-drive "file=$LUMONAS_QEMU_IMAGE,if=virtio,format=$IMAGE_FORMAT" \
+		-device "ich9-ahci,id=lumonas-ahci" \
+		-drive "file=$LUMONAS_QEMU_IMAGE,if=none,id=system,format=$IMAGE_FORMAT" \
+		-device "ide-hd,drive=system,bus=lumonas-ahci.0" \
 		-drive "file=$DATA_DIR/slot-b.qcow2,if=none,id=slotb,format=qcow2" \
 		-device "virtio-blk-pci,drive=slotb,serial=LUMONAS-SLOTB" \
 		-netdev user,id=n1,restrict=on,hostfwd=tcp::"$SSH_PORT"-:22 \
 		-device virtio-net-pci,netdev=n1 \
-		-nographic \
-		-serial mon:stdio >/dev/null 2>&1 &
+		-display none \
+		-serial "file:$DATA_DIR/console.log" \
+		-no-reboot &
 }
 
 ssh_guest() {
@@ -70,15 +83,26 @@ trap cleanup EXIT INT TERM
 start_guest
 GUEST_PID=$!
 
+# 180s was not a boot that failed, it was a boot that had not finished. The
+# guest runs under TCG with no KVM, and a full appliance start -- Docker,
+# Samba, NFS, the privd workers -- takes well over 90s of wall clock here. The
+# main harness was given 600s for the same reason. Bounded by wall clock
+# rather than by a count of attempts, so the number means what it says.
+ssh_deadline=$(( $(date +%s) + "${LUMONAS_AB_SSH_TIMEOUT:-600}" ))
 guest_ready=0
-for _ in $(seq 1 90); do
+while [ "$(date +%s)" -lt "$ssh_deadline" ]; do
 	if ssh_guest true >/dev/null 2>&1; then
 		guest_ready=1
 		break
 	fi
 	sleep 2
 done
-[ "$guest_ready" = "1" ] || { echo "guest never became reachable over SSH" >&2; exit 1; }
+if [ "$guest_ready" != "1" ]; then
+	echo "guest never became reachable over SSH within ${LUMONAS_AB_SSH_TIMEOUT:-600}s" >&2
+	echo "--- guest console ---" >&2
+	[ -f "$DATA_DIR/console.log" ] && tail -n 200 "$DATA_DIR/console.log" >&2
+	exit 1
+fi
 
 # 1. Stage a fixture slot image inside the guest with a correct manifest.
 ssh_guest 'set -eu
